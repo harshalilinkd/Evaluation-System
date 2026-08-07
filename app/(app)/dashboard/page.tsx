@@ -15,49 +15,64 @@ export default async function Page() {
   // §9: the guard is the first statement, so nothing renders before it.
   const { profile, roles } = await requireAuth();
 
-  /* -- P16's six views, at last.
-        The old dashboard counted rows through the authenticated client and
-        showed everybody the same four tiles. `getAnalytics` picks the audience
-        from the roles and every view is `security_invoker`, so RLS is what
-        decides the numbers — an employee's dashboard is their own slice by
-        construction rather than by a filter somebody has to remember. -- */
-  const analytics = await getAnalytics(profile.id, roles);
+  const isAdmin = roles.includes("HR_ADMIN") || roles.includes("MD");
+  const isLead = roles.includes("HOD") || roles.includes("SUPERVISOR");
+  const supabase = await createClient();
+
+  /* -- Four independent reads, ISSUED TOGETHER.
+        They ran one after another, and each waited a full round trip to the
+        database before the next was sent — on the landing page, which is the
+        first thing anybody sees after signing in. Nothing here needs anything
+        another returns: the analytics, the due list and both personal counts
+        are keyed by the profile and the roles, and the guard has already
+        established both.
+
+        RLS still judges every query on its own — each carries the same session
+        and meets the same policies. Only the waiting is shared.
+
+        P16's six views: `getAnalytics` picks the audience from the roles and
+        every view is `security_invoker`, so RLS decides the numbers — an
+        employee's dashboard is their own slice by construction rather than by
+        a filter somebody has to remember.
+
+        P22: the due list is fetched only for the roles that can act on it. An
+        employee has no business seeing who is due an increment (§5), so the
+        query does not run rather than running and being hidden. -- */
+  const [analytics, due, { data: mine }, { count: toRate }] = await Promise.all([
+    getAnalytics(profile.id, roles),
+
+    isAdmin ? getDueList() : Promise.resolve(null),
+
+    // Their own open work, whatever their role. Everybody has an appraisal to
+    // fill in, HR and the MD included (§9's simultaneous-roles case).
+    supabase
+      .from("evaluations")
+      .select("id, status, due_self_on, self_submitted_at")
+      .eq("evaluatee_id", profile.id)
+      .eq("status", "OPEN")
+      .is("excluded_at", null)
+      .is("self_submitted_at", null)
+      .limit(1)
+      .maybeSingle(),
+
+    /* -- A lead's own queue: how many of their reports they have still to rate.
+          Counted from the LEAD layer only — reading the employee's side to
+          build a dashboard number would be the blindness leak by another route
+          (A3-10). -- */
+    isLead
+      ? supabase
+          .from("evaluations")
+          .select("id", { count: "exact", head: true })
+          .eq("lead_id", profile.id)
+          .eq("status", "OPEN")
+          .is("lead_submitted_at", null)
+          .is("excluded_at", null)
+      : Promise.resolve({ count: 0 }),
+  ]);
+
   if (!analytics.ok) {
     return <ErrorState title="Could not load your dashboard" body={analytics.error.message} />;
   }
-
-  /* -- P22: "This screen is how HR runs the year. It should be the first thing
-        on their dashboard." Only fetched for the roles that can act on it — an
-        employee has no business seeing who is due an increment (§5). -- */
-  const isAdmin = roles.includes("HR_ADMIN") || roles.includes("MD");
-  const due = isAdmin ? await getDueList() : null;
-
-  /* -- Their own open work, whatever their role. Everybody has an appraisal to
-        fill in, HR and the MD included (§9's simultaneous-roles case). -- */
-  const supabase = await createClient();
-  const { data: mine } = await supabase
-    .from("evaluations")
-    .select("id, status, due_self_on, self_submitted_at")
-    .eq("evaluatee_id", profile.id)
-    .eq("status", "OPEN")
-    .is("excluded_at", null)
-    .is("self_submitted_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  /* -- A lead's own queue: how many of their reports they have still to rate.
-        Counted from the LEAD layer only — reading the employee's side to build
-        a dashboard number would be the blindness leak by another route (A3-10). -- */
-  const isLead = roles.includes("HOD") || roles.includes("SUPERVISOR");
-  const { count: toRate } = isLead
-    ? await supabase
-        .from("evaluations")
-        .select("id", { count: "exact", head: true })
-        .eq("lead_id", profile.id)
-        .eq("status", "OPEN")
-        .is("lead_submitted_at", null)
-        .is("excluded_at", null)
-    : { count: 0 };
 
   return (
     <DashboardClient

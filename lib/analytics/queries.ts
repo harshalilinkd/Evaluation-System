@@ -133,11 +133,16 @@ export async function getAnalytics(
 
     const rows = late ?? [];
     if (rows.length > 0) {
-      const { data: people } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", rows.map((r) => r.evaluatee_id));
-      const { data: depts } = await supabase.from("departments").select("id, name");
+      /* -- Together: the names depend on `rows`, the departments on nothing at
+            all, and neither depends on the other. Sequentially they cost two
+            full round trips on the landing page. -- */
+      const [{ data: people }, { data: depts }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", rows.map((r) => r.evaluatee_id)),
+        supabase.from("departments").select("id, name"),
+      ]);
 
       const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
       const deptOf = new Map((depts ?? []).map((d) => [d.id, d.name]));

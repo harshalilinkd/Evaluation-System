@@ -156,7 +156,46 @@ Vercel's free plan allows one cron per day, which is exactly what this is.
 
 ---
 
-## 8 · Check it worked
+## 8 · Put the app in the same part of the world as the database
+
+**Do this if the deployed app feels slow while localhost feels fine.** It is
+almost always the whole explanation, and it is a two-minute setting.
+
+Vercel defaults new projects to **Washington DC (`iad1`)**. If your Supabase
+project is in Mumbai or Singapore, every single database query crosses an ocean
+and comes back — 200–300ms each. Nothing is "slow"; it is just far away.
+
+It compounds badly, because the app talks to the database more than once per
+page:
+
+- `middleware.ts` calls `supabase.auth.getUser()` on **every** request. That is
+  deliberate and cannot be removed — it revalidates the JWT with the auth
+  server rather than trusting the cookie, which is what stops a stale or forged
+  session getting through. But it is one round trip before the page even starts.
+- the page's own queries then follow.
+
+At 250ms a hop, a page needing four trips spends a second doing nothing but
+waiting. In the same region those same four trips cost under 50ms in total.
+
+**Find your database's region:** Supabase dashboard → **Settings** → **General**
+→ *Region*.
+
+**Set the app to match:** Vercel → your project → **Settings** → **Functions** →
+*Function Region* → pick the nearest, then redeploy.
+
+| Supabase region | Choose on Vercel |
+|---|---|
+| `ap-south-1` (Mumbai) | Mumbai — `bom1` |
+| `ap-southeast-1` (Singapore) | Singapore — `sin1` |
+| `ap-northeast-1` (Tokyo) | Tokyo — `hnd1` |
+| `us-east-1` (N. Virginia) | Washington DC — `iad1` (the default) |
+
+> If the region picker is not available on your plan, the alternative is to move
+> the Supabase project to a region near `iad1` instead. Same principle: the two
+> must be neighbours. What matters is not which continent — it is that they are
+> on the same one.
+
+## 9 · Check it worked
 
 1. Open the Vercel URL and sign in.
 2. Admin → Cycles → open a cycle → **Send links**.
