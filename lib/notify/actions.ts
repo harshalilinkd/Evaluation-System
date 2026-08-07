@@ -5,7 +5,7 @@
 import { revalidatePath } from "next/cache";
 
 import { checkRole } from "@/lib/auth/guards";
-import { checkAppUrl } from "@/lib/notify/preflight";
+import { checkAppUrl, resolveAppUrl } from "@/lib/notify/preflight";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
@@ -131,7 +131,7 @@ export async function sendEvaluationLink(
         because nothing tells HR until an employee phones to say the link does
         nothing (§0.7). Checked here rather than only on the screen, because the
         screen is not the only caller: launch and the nightly chase send too. -- */
-  const linkHealth = checkAppUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const linkHealth = checkAppUrl(resolveAppUrl());
   if (!linkHealth.ok) return cycleError(linkHealth.code, `${linkHealth.title}. ${linkHealth.fix}`);
 
   const target = await loadTarget(evaluationId, layer);

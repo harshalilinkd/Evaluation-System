@@ -70,7 +70,7 @@ Development) unless noted.
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://jzhgwcgiksraprmwrcpj.supabase.co` | already known |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | copy from `.env.local` | Supabase → Settings → API |
 | `SUPABASE_SERVICE_ROLE_KEY` | copy from `.env.local` | Supabase → Settings → API. **Secret — server only** |
-| `NEXT_PUBLIC_APP_URL` | the URL from step 2 | see step 4 |
+| `NEXT_PUBLIC_APP_URL` | **leave unset** on Vercel | detected automatically — see step 4 |
 | `MAYTAPI_PRODUCT_ID` | copy from `.env.local` | Maytapi console |
 | `MAYTAPI_PHONE_ID` | copy from `.env.local` | Maytapi console |
 | `MAYTAPI_API_TOKEN` | copy from `.env.local` | Maytapi console. **Secret** |
@@ -86,19 +86,40 @@ Development) unless noted.
 
 ## 4 · Point the app at itself
 
-`NEXT_PUBLIC_APP_URL` is what every invite link is built from. Until it is the
-real address, links open nothing — see §P28 in CLAUDE.md.
+**On Vercel there is nothing to do here.** The app reads Vercel's own
+`VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets for every project
+automatically, and builds its invite links from that. Leave
+`NEXT_PUBLIC_APP_URL` unset.
 
-Set it to the URL from step 2, with **no trailing slash**:
+Set it **only** if you want links to use something other than the
+`*.vercel.app` address:
 
-```
-https://appraise-xxxx.vercel.app
-```
+| Situation | What to do |
+|---|---|
+| Deployed on Vercel, `*.vercel.app` address is fine | nothing |
+| Deployed on Vercel with your own domain | set `NEXT_PUBLIC_APP_URL=https://appraise.linkdprints.com` |
+| Running on your own laptop | see below |
+| Hosted somewhere that is not Vercel | set it to the public address |
 
-**Then redeploy.** `NEXT_PUBLIC_*` values are baked in when the app is built, so
-changing one does nothing until the next build:
+No trailing slash, and include `https://`.
 
+**If you set it, redeploy.** `NEXT_PUBLIC_*` values are baked in when the app is
+built, so changing one does nothing until the next build:
 Deployments → the top one → ⋯ → **Redeploy**
+
+### Running locally
+
+Invite links cannot work from a laptop — a phone has no route to it, and
+WhatsApp will not even make `localhost` tappable. The app refuses to send one
+rather than sending a dead link.
+
+To test the real flow from a phone, run a tunnel and point the app at it:
+
+```
+npx cloudflared tunnel --url http://localhost:3000
+# then, in .env.local:
+NEXT_PUBLIC_APP_URL=https://the-address-cloudflared-printed.trycloudflare.com
+```
 
 ---
 

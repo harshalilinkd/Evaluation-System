@@ -3,7 +3,7 @@
 import "server-only";
 
 import { cycleError, plural, today, type CycleResult, type ReadinessIssue, type ReadinessReport } from "@/lib/cycles/schema";
-import { checkAppUrl } from "@/lib/notify/preflight";
+import { checkAppUrl, resolveAppUrl } from "@/lib/notify/preflight";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
 
@@ -299,7 +299,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
 
         Saying it here means HR reads it on the readiness screen, before
         pressing Launch, which is when they can do something about it. */
-  const appUrl = checkAppUrl(process.env.NEXT_PUBLIC_APP_URL);
+  const appUrl = checkAppUrl(resolveAppUrl());
   if (!appUrl.ok) {
     warnings.push({
       code: appUrl.code,

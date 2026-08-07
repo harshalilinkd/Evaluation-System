@@ -23,6 +23,51 @@ export type Preflight =
   | { ok: true }
   | { ok: false; code: string; title: string; detail: string; fix: string };
 
+/**
+ * Where this app is reachable, WITHOUT anybody having to say so.
+ *
+ * `NEXT_PUBLIC_APP_URL` being unset was the single most likely thing to go
+ * wrong on a deploy, and its failure is silent at exactly the wrong moment:
+ * the messages send, the log says Sent, and nobody can open the form. Worse,
+ * `NEXT_PUBLIC_*` is inlined at BUILD time, so setting it after the fact does
+ * nothing until somebody remembers to redeploy.
+ *
+ * Vercel already knows the answer and publishes it, so ask it rather than
+ * asking a person. The order matters:
+ *
+ *   1. NEXT_PUBLIC_APP_URL — an explicit setting always wins. This is how a
+ *      custom domain gets used in preference to the *.vercel.app one, and how
+ *      a tunnel is pointed at during local testing.
+ *   2. VERCEL_PROJECT_PRODUCTION_URL — the project's STABLE production domain,
+ *      set automatically. Not VERCEL_URL first: that is deployment-specific
+ *      and changes on every push, so an invite link built from it would name a
+ *      deployment that is three versions old by the time somebody opens it.
+ *   3. VERCEL_URL — the per-deployment address, as a last resort. Better than
+ *      nothing on a preview where no production domain exists yet.
+ *
+ * Server-side only, deliberately. These two are not `NEXT_PUBLIC_`, so they
+ * never reach the browser — and every link this app builds is built on the
+ * server, so none of them needs to.
+ *
+ * Localhost is NOT a fallback. There is no value that makes a link work from a
+ * phone in development, so inventing one would only move the failure from a
+ * clear refusal to a message nobody can open.
+ */
+export function resolveAppUrl(): string | undefined {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (explicit) return explicit;
+
+  // Vercel publishes these without a scheme. Always https — every Vercel
+  // domain is served over TLS, and WhatsApp will not linkify a bare host.
+  const stable = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  if (stable) return `https://${stable.replace(/^https?:\/\//, "")}`;
+
+  const deployment = process.env.VERCEL_URL?.trim();
+  if (deployment) return `https://${deployment.replace(/^https?:\/\//, "")}`;
+
+  return undefined;
+}
+
 /** Hosts that exist only on the machine running the app. */
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"]);
 
@@ -50,8 +95,14 @@ export function checkAppUrl(raw: string | undefined): Preflight {
       ok: false,
       code: "APP_URL_MISSING",
       title: "There is no address to send people to",
-      detail: "NEXT_PUBLIC_APP_URL is empty, so every invite link would be a path with no site in front of it.",
-      fix: "Set NEXT_PUBLIC_APP_URL to the address where this app is running, then restart it.",
+      detail:
+        "This app could not work out its own address, so every invite link would be a path with " +
+        "no site in front of it. On Vercel the address is detected automatically, so seeing this " +
+        "means the app is running somewhere else — most often a developer's own machine.",
+      fix:
+        "If you are running it locally, links cannot reach a phone from here at all — use a tunnel " +
+        "(cloudflared / ngrok) and set NEXT_PUBLIC_APP_URL to the address it gives you. On a server, " +
+        "set NEXT_PUBLIC_APP_URL to the public address and restart.",
     };
   }
 
@@ -196,7 +247,7 @@ export function checkMailFrom(raw: string | undefined, smtpUser?: string): Prefl
  * a message nobody can use.
  */
 export function absoluteUrl(path: string): string {
-  const raw = process.env.NEXT_PUBLIC_APP_URL;
+  const raw = resolveAppUrl();
   const health = checkAppUrl(raw);
   if (!health.ok) {
     throw new Error(

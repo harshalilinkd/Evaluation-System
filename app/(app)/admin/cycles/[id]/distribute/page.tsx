@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { getDistributionBoard } from "@/lib/notify/queries";
-import { preflightAll } from "@/lib/notify/preflight";
+import { preflightAll, resolveAppUrl } from "@/lib/notify/preflight";
 
 export const metadata: Metadata = { title: "Send links" };
 
@@ -45,7 +45,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
         button rather than after (§0.7). Only the verdicts cross to the client
         — never the values. -- */
   const preflight = preflightAll({
-    appUrl: process.env.NEXT_PUBLIC_APP_URL,
+    appUrl: resolveAppUrl(),
     mailFrom: process.env.MAIL_FROM,
     smtpUser: process.env.SMTP_USER,
   });
