@@ -36,6 +36,25 @@ function gapText(value: number | null): string {
   return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
 }
 
+/**
+ * A tier-marked column heading: the hue as a dot, the word in readable ink.
+ *
+ * The tier used to be the VALUE's text colour, and cyan on white is 2.3:1
+ * against §13.8's 4.5:1 floor. §13.1 is unchanged — the tier still says who
+ * spoke, it just says it on the heading instead of inside every numeral.
+ */
+function TierHead({ tier, children }: { tier: "self" | "lead"; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        aria-hidden
+        className={cn("size-2 shrink-0 rounded-pill", tier === "self" ? "bg-self" : "bg-lead")}
+      />
+      {children}
+    </span>
+  );
+}
+
 export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: boolean }) {
   const [cycle, setCycle] = React.useState(ANY);
   const [type, setType] = React.useState(ANY);
@@ -268,28 +287,32 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
               ? `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review · the oldest has waited ${queue.oldestWaiting} ${queue.oldestWaiting === 1 ? "day" : "days"}`
               : `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review`
         }
-        stats={
-          <>
-            {/* Cyan, pink and indigo were on these three before. They are
-                pipeline stages, not layers — §13.1 reserves those hues for who
-                said a thing, and a stage borrowing one makes every screen's
-                tier legend mean less. */}
-            <Tally label="Pending you" value={queue.pendingHr} />
-            <Tally label="With the MD" value={queue.withMd} />
-            <Tally label="Closed" value={queue.closedThisCycle} />
-          </>
-        }
       />
+
+      {/* The three coloured counts, restored at the owner's instruction — half
+          the height they were, and the numeral is ink rather than the tint's
+          own hue, which is what makes them readable (§13.8). */}
+      <KpiRow>
+        <KpiCard label="Pending your review" value={queue.pendingHr} tone="self" />
+        <KpiCard label="With the MD" value={queue.withMd} tone="lead" />
+        <KpiCard label="Closed" value={queue.closedThisCycle} tone="final" />
+      </KpiRow>
 
       {/* ---------- Filters ---------- */}
       <ScreenToolbar>
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, code or department"
-          aria-label="Search reports"
-          className="min-h-11 border-rule bg-surface sm:w-[260px]"
-        />
+        <div className="relative w-full sm:w-[260px]">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, code or department"
+            aria-label="Search reports"
+            className="min-h-11 border-rule bg-surface pl-9"
+          />
+        </div>
         <select value={cycle} onChange={(e) => setCycle(e.target.value)} aria-label="Filter by cycle" className={SELECT_CLASS}>
           <option value={ANY}>Every cycle</option>
           {queue.cycles.map((c) => (
@@ -344,154 +367,28 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         </p>
       </ScreenToolbar>
 
-      <ScreenBody>
-        {groups.length === 0 ? (
-          <div className="p-6">
-            <EmptyState
-              title="Nothing matches"
-              body={
-                queue.rows.length === 0
-                  ? "No evaluation has reached review yet. A report appears here once both sides have submitted."
-                  : "No report matches these filters. Clear one and try again."
-              }
-            />
-          </div>
-        ) : (
-          groups.map(([cycleId, group]) => (
-            <section key={cycleId}>
-              {/* A sticky rule, not a 60px card header. The group's name and its
-                  count are one line, and it stays visible while its rows scroll
-                  under it — which is what the heading was for. */}
-              <header className="sticky top-0 z-10 flex flex-wrap items-baseline gap-x-2 border-b border-rule bg-surface-mute px-4 py-1.5">
-                <h2 className="font-sans text-body-sm font-semibold text-ink">{group.name}</h2>
-                <p className="font-sans text-body-sm text-ink-faint">
-                  {group.rows.length} {group.rows.length === 1 ? "report" : "reports"}, largest
-                  difference first
-                </p>
-              </header>
-
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-rule">
-                      {["Employee", "Department", "Type", "Self", "Lead", "Gap", "Flagged", "Status", "Waiting", ""].map(
-                        (h) => (
-                          <th key={h} className="type-label px-4 py-1.5 text-left text-ink-faint">
-                            {h}
-                          </th>
-                        ),
-                      )}
-                    </tr>
-                  </thead>
-                  {/* §4's compact density: 44px rows, not 64px. This is an
-                      administrative queue, not an employee-facing form. */}
-                  <tbody>
-                    {group.rows.map((row) => {
-                      const skipped = row.selfSkipped || row.leadSkipped;
-                      return (
-                        <tr
-                          key={row.evaluationId}
-                          className="h-11 border-b border-rule last:border-b-0 hover:bg-surface-mute"
-                        >
-                          <td className="px-4 py-1.5">
-                            <span className="block font-sans text-body-sm text-ink">
-                              {row.employeeName}
-                            </span>
-                            {row.employeeCode ? (
-                              <span className="tabular block text-[11px] leading-tight text-ink-faint">
-                                {row.employeeCode}
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="px-4 py-1.5 font-sans text-body-sm text-ink-muted">
-                            {row.department ?? "—"}
-                          </td>
-                          <td className="px-4 py-1.5">
-                            <span
-                              className={cn(
-                                "type-label rounded-pill border px-2 py-0.5",
-                                row.cycleType === "Increment"
-                                  ? "border-primary/40 bg-accent text-primary"
-                                  : "border-rule bg-surface-mute text-ink-muted",
-                              )}
-                            >
-                              {row.cycleType}
-                            </span>
-                          </td>
-                          {/* Self and Lead DO keep their tier colours — here
-                              they genuinely mean "who said this" (§13.1). */}
-                          <td className="tabular px-4 py-1.5 text-body-sm text-self">
-                            {score(row.selfAverage)}
-                          </td>
-                          <td className="tabular px-4 py-1.5 text-body-sm text-lead">
-                            {score(row.leadAverage)}
-                          </td>
-                          <td
-                            className={cn(
-                              "tabular px-4 py-1.5 text-body-sm",
-                              row.gap !== null && Math.abs(row.gap) >= 2
-                                ? "text-critical"
-                                : "text-ink-muted",
-                            )}
-                          >
-                            {gapText(row.gap)}
-                          </td>
-                          <td className="px-4 py-1.5">
-                            {row.flaggedCount > 0 ? (
-                              // A glyph as well as the colour — §13.8, colour is
-                              // never the only signal.
-                              <span className="tabular inline-flex items-center gap-1 text-body-sm text-critical">
-                                <Flag className="size-3.5" aria-hidden />
-                                {row.flaggedCount}
-                              </span>
-                            ) : (
-                              <span className="font-sans text-body-sm text-ink-faint">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-1.5">
-                            <span className="flex items-center gap-2">
-                              <StatusChip status={row.status} />
-                              {skipped ? (
-                                // §13.4: a marker with no explanation is a dead
-                                // end. The reason is in `title` and repeated as
-                                // sr-only text, because a tooltip is not an
-                                // explanation on a touch screen.
-                                <span
-                                  className="inline-flex items-center gap-1 text-critical"
-                                  title={
-                                    row.skipReason ??
-                                    `${row.selfSkipped ? "The self" : "The lead"} layer was skipped.`
-                                  }
-                                >
-                                  <AlertTriangle className="size-3.5" aria-hidden />
-                                  <span className="sr-only">
-                                    {row.selfSkipped ? "Self layer skipped." : "Lead layer skipped."}{" "}
-                                    {row.skipReason ?? ""}
-                                  </span>
-                                </span>
-                              ) : null}
-                            </span>
-                          </td>
-                          <td className="tabular px-4 py-1.5 text-body-sm text-ink-muted">
-                            {row.daysWaiting === null ? "—" : `${row.daysWaiting}d`}
-                          </td>
-                          <td className="px-4 py-1.5 text-right">
-                            <Button asChild variant="ghost" size="sm" className="h-8">
-                              <Link href={`/reports/${row.evaluationId}`}>
-                                {isHr ? "Open" : "Read"}
-                              </Link>
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ))
-        )}
-      </ScreenBody>
+      <DataGrid
+        data={rows}
+        columns={columns}
+        storageKey="appraise.reports-queue.column-widths"
+        minWidth={1320}
+        empty={
+          <EmptyState
+            title="Nothing matches"
+            body={
+              queue.rows.length === 0
+                ? "No evaluation has reached review yet. A report appears here once both sides have submitted."
+                : "No report matches these filters. Clear one and try again."
+            }
+          />
+        }
+        status={
+          <span className="tabular text-body-sm text-ink">
+            {rows.length} of {queue.rows.length}{" "}
+            {queue.rows.length === 1 ? "report" : "reports"} · largest difference first
+          </span>
+        }
+      />
     </TableScreen>
   );
 }

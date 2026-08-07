@@ -290,7 +290,7 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
   return (
     <section className="space-y-4">
       <BandHeading
-        index={2}
+        index={1}
         title="Ratings"
         hint="Every question both sides answered, in the order they were asked."
         action={

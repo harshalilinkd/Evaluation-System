@@ -32,12 +32,12 @@ export function OutcomeCard({ outcome }: { outcome: EmployeeOutcome }) {
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-control border border-rule bg-surface p-4">
             <dt className="type-label text-ink-muted">Your new salary</dt>
-            <dd className="tabular text-num-lg text-ink">{formatInr(outcome.newCtc)}</dd>
+            <dd className="tabular text-display-md text-ink">{formatInr(outcome.newCtc)}</dd>
           </div>
           {outcome.effectiveFrom ? (
             <div className="rounded-control border border-rule bg-surface p-4">
               <dt className="type-label text-ink-muted">Effective from</dt>
-              <dd className="tabular text-num-lg text-ink">{formatDate(outcome.effectiveFrom)}</dd>
+              <dd className="tabular text-display-md text-ink">{formatDate(outcome.effectiveFrom)}</dd>
             </div>
           ) : null}
         </dl>

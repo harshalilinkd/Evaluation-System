@@ -4,7 +4,6 @@ import type { Metadata } from "next";
 
 import { HrRail, MdRail } from "@/app/(app)/reports/[evaluationId]/action-rail";
 import {
-  BandHeading,
   HeaderBand,
   LearningBand,
   MetaPanel,
@@ -61,20 +60,17 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="space-y-8">
-          <section className="space-y-4">
-            <BandHeading
-              index={1}
-              title="At a glance"
-              hint="Both averages, the difference between them, and where this record stands."
-            />
-            <HeaderBand report={data} />
-          </section>
+          {/* No heading over this one, at the owner's instruction. It is the
+              identity card — the employee's name IS its title, and "1 · At a
+              glance" above their name read as a label on a form rather than the
+              top of a document. The numbered headings start at Ratings. */}
+          <HeaderBand report={data} />
 
           <RatingsBand report={data} />
           <LearningBand report={data} />
 
           <NarrativeBand
-            index={4}
+            index={3}
             title={`${employeeFirst}'s own words`}
             hint="Achievements, difficulties, ideas and the support they asked for. Shown in full."
             blocks={data.narratives.employeeVoice}
@@ -82,7 +78,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
           />
 
           <NarrativeBand
-            index={5}
+            index={4}
             title="The lead's assessment"
             hint="Strengths, improvement, training, responsibility, promotion, concerns and final remarks."
             blocks={data.narratives.leadAssessment}

@@ -8,11 +8,12 @@ import { ArrowRight, Search } from "lucide-react";
 
 import { EmptyState } from "@/components/appraise/states";
 import {
+  KpiCard,
+  KpiRow,
   ScreenBody,
   ScreenHeader,
   ScreenToolbar,
   TableScreen,
-  Tally,
 } from "@/components/appraise/screen";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
@@ -76,22 +77,31 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
             ? `${queue.periodLabel} · your review is due ${formatDate(queue.leadDueOn)}`
             : "No cycle is running at the moment."
         }
-        stats={
-          <>
-            {/* AMEND-3: all three count the LEAD's OWN side. The old middle one
-                counted "not yet submitted BY THE EMPLOYEE", which is precisely
-                the signal about the other side that blindness withholds.
-
-                Two of them carried the lead and final tints. All three are the
-                lead's, so tinting one of them "lead" said nothing — and indigo
-                on "Submitted" claimed a layer that has not spoken yet. The
-                labels carry the meaning; §13.1 keeps the hues. */}
-            <Tally label="Not started" value={queue.counts.notStarted} />
-            <Tally label="In progress" value={queue.counts.inProgress} />
-            <Tally label="Submitted" value={queue.counts.submitted} />
-          </>
-        }
       />
+
+      {/* AMEND-3: all three count the LEAD's OWN side. The old middle one
+          counted "not yet submitted BY THE EMPLOYEE", which is precisely the
+          signal about the other side that blindness withholds. */}
+      <KpiRow>
+        <KpiCard
+          label="Not started"
+          value={queue.counts.notStarted}
+          caption="You have not opened these yet"
+          tone="plain"
+        />
+        <KpiCard
+          label="In progress"
+          value={queue.counts.inProgress}
+          caption="Started, not submitted"
+          tone="lead"
+        />
+        <KpiCard
+          label="Submitted"
+          value={queue.counts.submitted}
+          caption="Now with HR"
+          tone="final"
+        />
+      </KpiRow>
 
       <ScreenToolbar>
         <div className="relative w-full sm:w-[300px]">

@@ -45,7 +45,7 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
   return (
     <figure className="rounded-control border border-rule bg-surface-mute p-4">
       <figcaption className="type-label text-ink-muted">{label}</figcaption>
-      <p className="tabular text-num-lg text-ink">{value}</p>
+      <p className="tabular text-display-md text-ink">{value}</p>
       {hint ? <p className="font-sans text-body-sm text-ink-faint">{hint}</p> : null}
     </figure>
   );
@@ -112,7 +112,7 @@ export function SalaryBand({
       {/* Numbered like the other five, so the document reads as one thing. It
           is band 6 on an increment cycle and does not exist otherwise. */}
       <BandHeading
-        index={6}
+        index={5}
         title="Salary"
         hint="Every figure here is for HR and the MD only."
       />
@@ -178,7 +178,7 @@ export function SalaryBand({
             </p>
           ) : (
             <>
-              <p className="mt-2 tabular text-num-lg text-ink">{pctText(data.departmentMedianPct)}</p>
+              <p className="mt-2 tabular text-display-md text-ink">{pctText(data.departmentMedianPct)}</p>
               <p className="font-sans text-body-sm text-ink-faint">
                 Median across {data.departmentSampleSize}{" "}
                 {data.departmentSampleSize === 1 ? "person" : "people"} with an approved or final
@@ -287,7 +287,7 @@ function HrProposal({
           <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
           {review?.employee_expectation_ctc ? (
             <>
-              <p className="mt-1 tabular text-num-lg text-ink">
+              <p className="mt-1 tabular text-display-md text-ink">
                 {money(review.employee_expectation_ctc)}
               </p>
               {review.employee_expectation_note ? (
@@ -309,7 +309,7 @@ function HrProposal({
             </p>
           ) : (
             <>
-              <p className={cn("mt-1 tabular text-num-lg", gap.amount < 0 ? "text-critical" : "text-ink")}>
+              <p className={cn("mt-1 tabular text-display-md", gap.amount < 0 ? "text-critical" : "text-ink")}>
                 {gap.amount > 0 ? "+" : ""}
                 {money(gap.amount)}
               </p>
@@ -459,7 +459,7 @@ function MdApproval({
           <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
           {review?.employee_expectation_ctc ? (
             <>
-              <p className="mt-1 tabular text-num-lg text-ink">{money(review.employee_expectation_ctc)}</p>
+              <p className="mt-1 tabular text-display-md text-ink">{money(review.employee_expectation_ctc)}</p>
               {review.employee_expectation_note ? (
                 <p className="mt-1 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
                   {review.employee_expectation_note}
@@ -474,7 +474,7 @@ function MdApproval({
         {/* HR's figures, read-only for the MD — the trigger refuses a write. */}
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">HR proposed</h3>
-          <p className="mt-1 tabular text-num-lg text-ink">{money(review?.hr_proposed_ctc ?? null)}</p>
+          <p className="mt-1 tabular text-display-md text-ink">{money(review?.hr_proposed_ctc ?? null)}</p>
           <p className="font-sans text-body-sm text-ink-faint">
             {pctText(review?.hr_proposed_hike_pct ?? null)}
           </p>

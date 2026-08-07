@@ -10,11 +10,12 @@ import { AlertTriangle, Search, Upload } from "lucide-react";
 import { EmploymentImportDialog } from "@/app/(app)/admin/increments/import-panel";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
+  KpiCard,
+  KpiRow,
   SCREEN_SELECT_CLASS as SELECT_CLASS,
   ScreenHeader,
   ScreenToolbar,
   TableScreen,
-  Tally,
 } from "@/components/appraise/screen";
 import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
@@ -202,21 +203,6 @@ export function IncrementsClient({
       <ScreenHeader
         title="Increment calendar"
         subtitle={`${calendar.next90} ${calendar.next90 === 1 ? "increment is" : "increments are"} due in the next 90 days · overdue people first`}
-        stats={
-          <>
-            <Tally label="This month" value={calendar.dueThisMonth} />
-            {/* "Due next month" carried the SELF tint before. §13.1 reserves
-                cyan for "the employee said this" — a month is not a layer. */}
-            <Tally label="Next month" value={calendar.dueNextMonth} />
-            {/* Overdue is not a tier either — it is a failure. The word carries
-                it too; colour is never the only signal (§13.8). */}
-            <Tally
-              label="Overdue"
-              value={calendar.overdue}
-              tone={calendar.overdue > 0 ? "critical" : "neutral"}
-            />
-          </>
-        }
         action={
           /* §13.3: the one primary action on this screen. The import is a
              write, so it exists for HR alone — and `import_employment`
@@ -230,6 +216,17 @@ export function IncrementsClient({
           ) : null
         }
       />
+
+      <KpiRow>
+        <KpiCard label="Due this month" value={calendar.dueThisMonth} tone="self" />
+        <KpiCard label="Due next month" value={calendar.dueNextMonth} tone="lead" />
+        <KpiCard
+          label="Overdue"
+          value={calendar.overdue}
+          tone={calendar.overdue > 0 ? "critical" : "plain"}
+          caption={calendar.overdue > 0 ? "Already past their date" : "Nobody is late"}
+        />
+      </KpiRow>
 
       {/* ---------- Toolbar ---------- */}
       <ScreenToolbar>
