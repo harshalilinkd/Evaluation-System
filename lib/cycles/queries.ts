@@ -19,6 +19,13 @@ export type CycleListRow = {
   leadDueOn: string | null;
   mdDueOn: string | null;
   launchedAt: string | null;
+  /**
+   * EVALUATION or INCREMENT. §1: the two share the same form and the same blind
+   * parallel flow, and differ only in how they END — an increment cycle carries
+   * on into salary. Nothing on screen said which was which, so HR could not
+   * tell two live cycles apart.
+   */
+  cycleType: "EVALUATION" | "INCREMENT";
   participants: number;
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
@@ -102,7 +109,9 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
 
   const { data: cycles, error } = await supabase
     .from("evaluation_cycles")
-    .select("id, name, period_label, status, starts_on, self_due_on, lead_due_on, md_due_on, launched_at, created_at")
+    .select(
+      "id, name, period_label, status, starts_on, self_due_on, lead_due_on, md_due_on, launched_at, created_at, cycle_type",
+    )
     // 0032: binned cycles are hidden here and listed only in the recycle bin.
     // Filtered in the query rather than after it, so a screen cannot forget.
     .is("deleted_at", null)
@@ -144,6 +153,10 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         leadDueOn: c.lead_due_on,
         mdDueOn: c.md_due_on,
         launchedAt: c.launched_at,
+        // Narrowed rather than cast: the column is text with a CHECK (PR-1),
+        // so anything unexpected reads as an ordinary evaluation rather than
+        // silently claiming to be an increment cycle.
+        cycleType: c.cycle_type === "INCREMENT" ? "INCREMENT" : "EVALUATION",
         participants: counts.participants,
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
       };

@@ -10,6 +10,7 @@ import { Archive, CalendarClock, Check, MoreHorizontal, Printer, Search, Send } 
 
 import { SegmentedLegend, SegmentedProgress } from "@/components/appraise/segmented-bar";
 import { StatusChip } from "@/components/appraise/status-chip";
+import { CycleTypeChip } from "@/components/appraise/cycle-type-chip";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -288,6 +289,10 @@ export function BoardClient({
             <BackLink href="/admin/cycles" label="All cycles" />
             <span aria-hidden className="h-5 w-px bg-rule" />
             <h1 className="text-display-sm font-semibold text-ink">{board.cycle.name}</h1>
+            {/* Beside the name, because this is the screen somebody is on when
+                they press Launch or Send links — and an increment cycle ends
+                somewhere entirely different from an evaluation one (§1). */}
+            <CycleTypeChip type={board.cycle.cycleType} />
             <StatusChip
               status={board.cycle.status === "ACTIVE" ? "CYCLE_ACTIVE" : board.cycle.status}
             />

@@ -6,20 +6,13 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import {
-  CalendarPlus,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Send,
-  SquareArrowOutUpRight,
-  Trash2,
-} from "lucide-react";
+import { CalendarPlus, MoreHorizontal, Pencil, Plus, Send, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { SegmentedProgress } from "@/components/appraise/segmented-bar";
 import { EmptyState } from "@/components/appraise/states";
 import { StatusChip } from "@/components/appraise/status-chip";
+import { CycleTypeChip } from "@/components/appraise/cycle-type-chip";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -99,6 +92,26 @@ export function CyclesClient({
             status={row.original.status === "ACTIVE" ? "CYCLE_ACTIVE" : row.original.status}
           />
         ),
+      },
+      /*
+        WHAT KIND OF CYCLE THIS IS.
+
+        §1: the two types share the same form and the same blind parallel flow
+        and differ only in how they end — an increment cycle carries on into
+        salary, a plain evaluation stops when the MD has read the report. That
+        is a large difference in what happens to the people in it, and until now
+        nothing on this screen said which was which. Two live cycles were
+        indistinguishable.
+
+        Its own column rather than a tint on the name: a colour alone would be
+        unreadable to anybody who cannot see it and meaningless to everybody who
+        has not been told the convention (§13.8). The word is the signal.
+      */
+      {
+        id: "cycleType",
+        header: "Type",
+        size: 118,
+        cell: ({ row }) => <CycleTypeChip type={row.original.cycleType} />,
       },
       {
         accessorKey: "participants",
@@ -268,7 +281,7 @@ export function CyclesClient({
         data={rows}
         columns={columns}
         storageKey="appraise.cycles.column-widths"
-        minWidth={1420}
+        minWidth={1540}
         empty={
           <EmptyState
             icon={<CalendarPlus className="size-6" aria-hidden />}
