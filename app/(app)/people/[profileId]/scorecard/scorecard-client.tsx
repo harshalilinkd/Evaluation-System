@@ -60,12 +60,16 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
         appraisal history, and 0 is the worst score there is. Recharts leaves a
         gap for a null point, which is the honest drawing — nothing is claimed
         about a period nobody scored. -- */
-  const trend = card.history.map((h) => ({
-    period: h.period_label,
-    self: h.self_overall ?? null,
-    lead: h.lead_overall ?? null,
-    final: h.final_overall ?? null,
-  }));
+  const trend = card.history
+    .filter(
+      (h) => h.self_overall !== null || h.lead_overall !== null || h.final_overall !== null,
+    )
+    .map((h) => ({
+      period: h.period_label,
+      self: h.self_overall ?? null,
+      lead: h.lead_overall ?? null,
+      final: h.final_overall ?? null,
+    }));
 
   /* -- Which cycle the detail below is about.
         "" is every cycle. The picker is the thing that turns this from a page
@@ -76,8 +80,20 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
     ? card.history.filter((h) => String(h.evaluation_id) === cycleFilter)
     : card.history;
 
-  const latest = card.history[card.history.length - 1] ?? null;
-  const previous = card.history[card.history.length - 2] ?? null;
+  /* -- The headline numbers describe the last appraisal that PRODUCED one.
+        Reading the last row outright meant a draft cycle sitting above a rated
+        one turned all three tiles to "not rated" while the table below listed
+        the scores — the card contradicting itself on the same screen.
+
+        `previous` is the rated cycle before that one, so the delta compares
+        two appraisals rather than an appraisal against an empty draft. Where
+        this cycle STANDS is a different question and still reads `card.current`,
+        which is deliberately the newest cycle whatever state it is in. -- */
+  const ratedHistory = card.history.filter(
+    (h) => h.self_overall !== null || h.lead_overall !== null || h.final_overall !== null,
+  );
+  const latest = ratedHistory[ratedHistory.length - 1] ?? card.history[card.history.length - 1] ?? null;
+  const previous = ratedHistory[ratedHistory.length - 2] ?? null;
 
   /* -- Their OWN section averages, from their own answers.
         This used to read `v_section_scores`, which is a DEPARTMENT average — on
@@ -109,6 +125,25 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
       }))
       .sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
   }, [card.questions]);
+
+  /* -- The gap per section. Only sections BOTH sides rated: a difference
+        against a blank is not a difference, and drawing one would invent a
+        disagreement out of a layer that never submitted. -- */
+  const sectionGaps = React.useMemo(
+    () =>
+      sections
+        .filter((s) => s.self !== null && s.lead !== null)
+        .map((s) => ({
+          section: s.section,
+          label: s.label,
+          self: s.self,
+          lead: s.lead,
+          delta: Math.round(((s.lead ?? 0) - (s.self ?? 0)) * 100) / 100,
+        })),
+    [sections],
+  );
+
+  const [gapsAsTable, setGapsAsTable] = React.useState(false);
 
   /* -- What the scores actually say.
         The settled value per question is the final where one exists, else the
@@ -231,8 +266,13 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
             </DashboardCard>
           ) : null}
 
-          {/* ---------- Trend ---------- */}
-          {card.history.length > 1 ? (
+          {/* ---------- Trend ----------
+              Gated on RATED cycles, not on cycles. Four periods of which one
+              carries a score draws a single dot adrift in three-quarters of
+              empty axis — which reads as a broken chart rather than as a person
+              with one appraisal behind them. N3-8's rule, applied to the row
+              set the line is actually made of. */}
+          {ratedHistory.length > 1 ? (
             <DashboardCard
               title="Overall score across cycles"
               action={
@@ -271,6 +311,68 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 <QuestionList rows={focus} settled={settled} tone="warning" />
               </DashboardCard>
             </div>
+          ) : null}
+
+          {/* ---------- Where the two sides disagreed, by section ----------
+              The one figure on this page that answers "did my lead and I see
+              this the same way", which is the conversation the appraisal
+              exists to have. §11 defines the gap as Lead − Self, so pink to
+              the right means the lead rated higher and cyan to the left means
+              the employee did — the reserved tier hues carrying exactly the
+              meaning §13.1 gives them (UI-1's collision-chart exception).
+
+              Diverging, so it needs a NEUTRAL midpoint and two hues, never a
+              ramp: zero is agreement, and agreement is not a small amount of
+              disagreement. Every bar is directly labelled, which is also what
+              discharges the validator's contrast warning on cyan. */}
+          {sectionGaps.length > 0 ? (
+            <DashboardCard
+              title="Where you and your lead agreed — and did not"
+              action={
+                <Button
+                  variant="ghost"
+                  className="min-h-11"
+                  aria-pressed={gapsAsTable}
+                  onClick={() => setGapsAsTable((v) => !v)}
+                >
+                  {gapsAsTable ? "Chart" : "View as table"}
+                </Button>
+              }
+            >
+              {gapsAsTable ? (
+                <table className="w-full text-left">
+                  <caption className="sr-only">
+                    Difference between the lead&apos;s average and your own, by section.
+                  </caption>
+                  <thead>
+                    <tr className="border-b border-rule text-body-sm text-ink-muted">
+                      <th className="py-2 font-medium">Section</th>
+                      <th className="py-2 font-medium">Self</th>
+                      <th className="py-2 font-medium">Lead</th>
+                      <th className="py-2 font-medium">Difference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sectionGaps.map((g) => (
+                      <tr key={g.section} className="border-b border-rule/60 last:border-0">
+                        <td className="py-2 text-body text-ink">{g.label}</td>
+                        <td className="tabular py-2 text-body text-self">{formatScore(g.self)}</td>
+                        <td className="tabular py-2 text-body text-lead">{formatScore(g.lead)}</td>
+                        <td className="tabular py-2 text-body text-ink">{signed(g.delta)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <>
+                  <DivergingGapChart rows={sectionGaps} />
+                  <p className="mt-4 text-body-sm text-ink-muted">
+                    A difference is not a mistake — it is the part of the review worth
+                    talking about.
+                  </p>
+                </>
+              )}
+            </DashboardCard>
           ) : null}
 
           {/* ---------- Section profile + verdict ---------- */}
@@ -649,6 +751,111 @@ function TierScore({
           {value === null ? "not rated" : "first cycle"}
         </div>
       )}
+    </div>
+  );
+}
+
+/** A signed score, so a reader never has to work out which way a gap runs. */
+function signed(n: number): string {
+  if (n === 0) return "0.00";
+  return `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(2)}`;
+}
+
+/**
+ * Diverging bars: how far the lead's section average sits from the employee's.
+ *
+ * Hand-built rather than charted. A diverging bar is a centre line and two
+ * rectangles, and Recharts spends more effort being talked out of its axis
+ * defaults than the geometry costs to state directly — which also keeps the
+ * 2px surface gap and the rounded data-end under our control rather than the
+ * library's.
+ *
+ * The domain is symmetric and taken from the largest gap present, so the two
+ * sides are always comparable in length. Floored at 1 point: without it, a
+ * person whose worst disagreement is 0.2 gets a full-width bar that reads as a
+ * chasm.
+ */
+function DivergingGapChart({
+  rows,
+}: {
+  rows: { section: string; label: string; self: number | null; lead: number | null; delta: number }[];
+}) {
+  const bound = Math.max(1, ...rows.map((r) => Math.abs(r.delta)));
+
+  return (
+    <div className="space-y-3">
+      {rows.map((r) => {
+        const pct = (Math.abs(r.delta) / bound) * 50;
+        const higher = r.delta > 0;
+        return (
+          <div key={r.section}>
+            <div className="mb-1 flex items-baseline justify-between gap-3">
+              <span className="truncate text-body-sm text-ink">{r.label}</span>
+              <span className="tabular shrink-0 text-body-sm text-ink">
+                {formatScore(r.self)} → {formatScore(r.lead)}
+              </span>
+            </div>
+
+            <div className="relative h-6">
+              {/* The centre line IS the neutral midpoint. A diverging scale
+                  needs one, and it must not be a third hue. */}
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-rule" />
+
+              {r.delta === 0 ? (
+                <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 items-center">
+                  <span className="tabular rounded-pill bg-surface-mute px-2 py-0.5 text-[11px] text-ink-muted">
+                    agreed
+                  </span>
+                </div>
+              ) : (
+                <div
+                  className={cn(
+                    "absolute inset-y-1 flex items-center",
+                    higher ? "left-1/2 justify-start" : "right-1/2 justify-end",
+                  )}
+                  style={{ width: `${pct}%` }}
+                >
+                  <div
+                    className={cn(
+                      "h-full w-full",
+                      // 4px rounded data-end, square against the baseline.
+                      higher ? "rounded-r-[4px] bg-lead" : "rounded-l-[4px] bg-self",
+                    )}
+                  />
+                </div>
+              )}
+
+              {/* Direct label, outside the bar so it is legible whatever the
+                  fill does — and the relief the palette validator requires. */}
+              {r.delta === 0 ? null : (
+                <div
+                  className={cn(
+                    "absolute inset-y-0 flex items-center px-2",
+                    higher ? "left-1/2" : "right-1/2",
+                  )}
+                  style={higher ? { marginLeft: `${pct}%` } : { marginRight: `${pct}%` }}
+                >
+                  <span className="tabular text-[11px] font-medium text-ink">
+                    {signed(r.delta)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Legend — identity is never colour alone (§13.8). */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-rule pt-3 text-[11px] text-ink-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-[2px] bg-self" />
+          You rated higher
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-[2px] bg-lead" />
+          Your lead rated higher
+        </span>
+      </div>
     </div>
   );
 }

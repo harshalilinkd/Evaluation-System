@@ -182,6 +182,13 @@ export function RecycleBinTab({ cycles }: { cycles: BinnedCycleRow[] }) {
         data={cycles}
         columns={columns}
         storageKey="appraise.recycle-bin.column-widths"
+        rowNoun="binned cycle"
+        rowTitle={(c) => `${c.name} · ${c.periodLabel}`}
+        rowActions={(c) => (
+          <Button className="min-h-11" disabled={busyId === c.id} onClick={() => void restore(c.id)}>
+            {busyId === c.id ? "Restoring…" : "Restore"}
+          </Button>
+        )}
         // The real column total (~1116), so the filler absorbs the slack and
         // the grid only scrolls on a screen narrower than its own columns. It
         // was 1180 — wider than the space it sits in, which is why every row

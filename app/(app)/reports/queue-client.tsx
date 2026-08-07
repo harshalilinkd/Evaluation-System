@@ -393,6 +393,13 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         data={rows}
         columns={columns}
         storageKey="appraise.reports-queue.column-widths"
+        rowNoun="report"
+        rowTitle={(r) => r.employeeName}
+        rowActions={(r) => (
+          <Button asChild className="min-h-11">
+            <Link href={`/reports/${r.evaluationId}`}>{isHr ? "Open report" : "Read report"}</Link>
+          </Button>
+        )}
         minWidth={1320}
         empty={
           <EmptyState

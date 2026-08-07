@@ -843,7 +843,38 @@ export function QuestionsClient({
             <tbody>
               {table.getRowModel().rows.map((row) => (
                 // §4: 44px rows, compact density on an HR table.
-                <tr key={row.id} className="group h-11">
+                <tr
+                  key={row.id}
+                  /* -- OPENING A ROW OPENS THE QUESTION.
+                        Every grid in the product opens its row now, and this
+                        table is hand-rolled rather than a `DataGrid`, so it
+                        needs wiring by hand. Its details view already exists
+                        and is better than a generic dialog: the drawer shows
+                        the question with its options, its condition and a live
+                        preview, which is what somebody clicking a row wants.
+
+                        Suppressed in delete mode — there the row's job is to be
+                        ticked, and opening a drawer over a selection somebody
+                        is building would lose it. -- */
+                  className={cn("group h-11", !deleteMode && "cursor-pointer")}
+                  onClick={
+                    deleteMode
+                      ? undefined
+                      : (event) => {
+                          // A click on a control inside the row belongs to that
+                          // control, not to the row behind it.
+                          if (
+                            (event.target as HTMLElement).closest(
+                              "button, a, input, select, textarea, [role='menuitem']",
+                            )
+                          ) {
+                            return;
+                          }
+                          setEditing(row.original);
+                          setDrawerOpen(true);
+                        }
+                  }
+                >
                   {row.getVisibleCells().map((cell) => {
                     const layout = layoutFor(cell.column.id);
                     return (

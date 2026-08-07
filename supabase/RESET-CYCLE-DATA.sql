@@ -18,6 +18,11 @@
 --
 -- Run it in two passes. STEP 1 only counts and reports; nothing changes until
 -- you uncomment STEP 2 and run again.
+--
+-- IF THE COUNTS CAME BACK UNCHANGED, that is this file working as designed —
+-- STEP 2 is still commented out and no delete was attempted. Either uncomment
+-- it below, or run RESET-CYCLE-DATA-ARMED.sql, which is the same delete already
+-- armed and in one transaction.
 
 /* ============================================================================
    STEP 1 · What is there, and is anything in the way?

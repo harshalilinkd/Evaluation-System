@@ -387,6 +387,24 @@ export function CyclesClient({
         data={rows}
         columns={columns}
         storageKey="appraise.cycles.column-widths"
+        rowNoun="cycle"
+        rowTitle={(c) => `${c.name} · ${c.periodLabel}`}
+        // The dialog SHOWS the row; these are what can be done with it. Without
+        // them it is a read-only summary of a row the reader is looking at,
+        // which is the least useful thing it could be.
+        rowActions={(c) => (
+          <>
+            <Button asChild variant="secondary" className="min-h-11">
+              <Link href={`/admin/cycles/${c.id}/distribute`}>
+                <Send className="size-4" aria-hidden />
+                {c.linksSent === 0 ? "Send links" : "Links"}
+              </Link>
+            </Button>
+            <Button asChild className="min-h-11">
+              <Link href={`/admin/cycles/${c.id}`}>Open cycle</Link>
+            </Button>
+          </>
+        )}
         minWidth={1540}
         empty={
           // The empty state speaks for the TAB, not the whole list. "Nothing

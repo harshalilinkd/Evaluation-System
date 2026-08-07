@@ -91,6 +91,8 @@ const SENTENCES: Record<string, (n: Names) => string> = {
     `Both sides were in, so ${n.theirSubject} report went to HR for review automatically.`,
   "evaluation.advance_with_skip": (n) =>
     `${n.actor} sent ${n.theirSubject} report to HR without one of the two submissions.`,
+  "evaluation.hr_advance": (n) =>
+    `${n.actor} sent ${n.theirSubject} report to HR without one of the two submissions.`,
 
   /* -- HR -- */
   "evaluation.hr_return": (n) => `${n.actor} returned ${n.theirSubject} form for changes.`,
@@ -101,6 +103,8 @@ const SENTENCES: Record<string, (n: Names) => string> = {
   /* -- The MD -- */
   "evaluation.md_review": (n) => `${n.actor} read ${n.theirSubject} report and approved it.`,
   "evaluation.md_return_to_hr": (n) => `${n.actor} sent ${n.theirSubject} report back to HR.`,
+  "evaluation.md_return": (n) => `${n.actor} sent ${n.theirSubject} report back to HR.`,
+  "evaluation.md_send_back": (n) => `${n.actor} sent ${n.theirSubject} report back to HR.`,
   "evaluation.md_correct": (n) => `${n.actor} reopened ${n.theirSubject} report for a correction.`,
   "evaluation.md_finalize": (n) => `${n.actor} finalised ${n.theirSubject} report.`,
   "evaluation.md_override": (n) => `${n.actor} changed a score on ${n.theirSubject} report.`,

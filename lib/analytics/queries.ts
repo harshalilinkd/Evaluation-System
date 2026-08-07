@@ -293,11 +293,32 @@ export async function getScorecard(
   const rows = history ?? [];
   const latest = rows[rows.length - 1];
 
-  const { data: sections } = latest
+  /* -- The newest cycle and the newest RATED cycle are not the same row, and
+        conflating them is what made this card show "not rated" beside a table
+        of real scores.
+
+        `v_employee_history` is ordered by start date, so `latest` is whatever
+        is happening NOW — frequently a draft nobody has opened. That is the
+        right row for "where this cycle stands" and the wrong one for every
+        number on the page: a person's Self/Lead/Final, their section profile
+        and their verdict all describe the last appraisal that actually
+        produced a score, not the one that has yet to start.
+
+        Falls back to `latest` so a person with no scores at all still gets a
+        card built around their live cycle rather than around nothing. -- */
+  const rated =
+    [...rows]
+      .reverse()
+      .find(
+        (r) =>
+          r.self_overall !== null || r.lead_overall !== null || r.final_overall !== null,
+      ) ?? latest;
+
+  const { data: sections } = rated
     ? await supabase
         .from("v_section_scores")
         .select("*")
-        .eq("cycle_id", latest.cycle_id)
+        .eq("cycle_id", rated.cycle_id)
         .eq("department_id", profile.department_id ?? "")
         .eq("is_comparable", true)
     : { data: [] };
@@ -334,17 +355,17 @@ export async function getScorecard(
         second time and eventually disagreeing with the policy. -- */
   const questions: ScorecardQuestion[] = [];
 
-  if (latest) {
+  if (rated) {
     const [{ data: snapshot }, { data: responses }] = await Promise.all([
       supabase
         .from("evaluation_questions")
         .select("question_id, text, section, response_type, sort_order")
-        .eq("evaluation_id", latest.evaluation_id)
+        .eq("evaluation_id", rated.evaluation_id)
         .order("sort_order"),
       supabase
         .from("evaluation_responses")
         .select("layer, answers")
-        .eq("evaluation_id", latest.evaluation_id),
+        .eq("evaluation_id", rated.evaluation_id),
     ]);
 
     const answersFor = (layer: string) =>
@@ -385,7 +406,9 @@ export async function getScorecard(
   // §9: the employee sees their own result only as far as the cycle's policy
   // allows. Somebody looking at their own card under NONE gets the shape of
   // their history without the numbers behind the decision.
-  const redacted = viewerId === profileId && latest?.disclosure === "NONE";
+  // Judged on the cycle whose numbers are being shown, not on a later draft
+  // whose policy says nothing about them.
+  const redacted = viewerId === profileId && rated?.disclosure === "NONE";
 
   return {
     ok: true,

@@ -288,6 +288,13 @@ export function IncrementsClient({
         data={filtered}
         columns={columns}
         storageKey="appraise.increments.column-widths"
+        rowNoun="person"
+        rowTitle={(r) => r.name}
+        rowActions={(r) => (
+          <Button asChild className="min-h-11">
+            <Link href={`/admin/cycles/new?increment_for=${r.profileId}`}>Start increment</Link>
+          </Button>
+        )}
         minWidth={1380}
         empty={
           <EmptyState

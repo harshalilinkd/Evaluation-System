@@ -237,6 +237,26 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         data={list.rows}
         columns={columns}
         storageKey="appraise.due.column-widths"
+        rowNoun="item"
+        rowTitle={(r) => `${r.name} · ${r.what}`}
+        // §13.4: the reason a control is unavailable sits beside it, never in a
+        // tooltip — and the dialog is where somebody reads the whole row, so it
+        // is the right place to say why this one cannot go ahead.
+        rowActions={(r) =>
+          !canAct ? (
+            <span className="text-body-sm text-ink-muted">HR acts on this</span>
+          ) : r.blockedBecause ? (
+            <span className="text-body-sm text-critical">{r.blockedBecause}</span>
+          ) : (
+            <Button
+              className="min-h-11"
+              disabled={busyId === r.id}
+              onClick={() => onCreate(r)}
+            >
+              {busyId === r.id ? "Working…" : "Create and send"}
+            </Button>
+          )
+        }
         minWidth={1240}
         empty={
           <EmptyState

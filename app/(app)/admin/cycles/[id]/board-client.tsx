@@ -491,6 +491,13 @@ export function BoardClient({
             data={laneFiltered}
             columns={boardColumns}
             storageKey="appraise.cycle-board.column-widths"
+            rowNoun="person"
+            rowTitle={(c) => c.name}
+            rowActions={(c) => (
+              <Button asChild className="min-h-11">
+                <Link href={`/reports/${c.evaluationId}`}>Open their report</Link>
+              </Button>
+            )}
             // Sum of the column sizes above (~1000px). Setting it at the real
             // total means the filler absorbs everything spare and the grid only
             // scrolls on a screen genuinely narrower than its own columns.
