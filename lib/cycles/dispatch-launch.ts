@@ -17,12 +17,57 @@ import { formatDate } from "@/lib/utils/date";
  */
 const MAX_PER_LEAD_PER_LAUNCH = 10;
 
-export type LaunchDispatch = { sent: number; failed: number; queued: number };
+export type LaunchDispatch = {
+  sent: number;
+  failed: number;
+  queued: number;
+  /**
+   * Why nothing went out, when nothing could.
+   *
+   * Not an error — the cycle is launched and durable by the time this runs. It
+   * is the sentence HR needs in order to know the links still have to be sent,
+   * and it is shown on the launch confirmation rather than thrown.
+   */
+  blocked?: string;
+};
 
+/**
+ * Send the invites for a freshly launched cycle.
+ *
+ * ⚠ THIS FUNCTION MUST NEVER THROW. It is called AFTER `launch_cycle` has
+ * committed — the evaluations, the frozen snapshots, both response rows per
+ * person and every token are already written and audited. A throw here does not
+ * undo any of that; it only turns a successful launch into a runtime error on
+ * screen, with the dialog stuck on "Launching…" while the cycle is in fact
+ * live. That is the worst available outcome: durable work reported as a crash,
+ * and HR pressing Launch again on a cycle that has already launched.
+ *
+ * PW-2 made exactly this call for transitions — "the hook runs after the commit
+ * and cannot throw" — and PR-11 restated it for this path. The rule was written
+ * down in both places and enforced in neither: `absoluteUrl` throws when
+ * NEXT_PUBLIC_APP_URL is localhost (a real and correct refusal — §10 links have
+ * to be reachable from a phone), and nothing caught it.
+ */
 export async function dispatchLaunchInvites(
   cycleId: string,
   plan: LaunchPlan,
 ): Promise<LaunchDispatch> {
+  try {
+    return await sendLaunchInvites(cycleId, plan);
+  } catch (cause) {
+    /* -- The one place the rule above is actually enforced. Every failure
+          becomes an advisory the launch carries back, never an exception the
+          launch dies on. -- */
+    return {
+      sent: 0,
+      failed: plan.links.length,
+      queued: 0,
+      blocked: cause instanceof Error ? cause.message : "The invite links could not be sent.",
+    };
+  }
+}
+
+async function sendLaunchInvites(cycleId: string, plan: LaunchPlan): Promise<LaunchDispatch> {
   const out: LaunchDispatch = { sent: 0, failed: 0, queued: 0 };
   if (plan.links.length === 0) return out;
 

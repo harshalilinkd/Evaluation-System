@@ -71,6 +71,16 @@ export type VerifyResult =
 export async function issueInviteToken(
   evaluationId: string,
   channel: InviteChannel,
+  /**
+   * Whose link this is.
+   *
+   * 0022 (PR-5) gave `issue_invite_token` a layer and moved the unique index to
+   * (evaluation, LAYER, channel), so the employee's link and the HOD's coexist
+   * and resending one no longer revokes the other. This parameter was never
+   * passed — every caller took the `'SELF'` default, so there was no way to mint
+   * a HOD's link outside of launch.
+   */
+  layer: "SELF" | "LEAD" = "SELF",
 ): Promise<IssueResult> {
   const supabase = await createClient();
 
@@ -80,6 +90,7 @@ export async function issueInviteToken(
     p_evaluation_id: evaluationId,
     p_channel: channel,
     p_token_hash: hashToken(token),
+    p_layer: layer,
   });
 
   if (error) {

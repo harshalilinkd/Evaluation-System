@@ -95,6 +95,15 @@ export function DistributeClient({
   const [progress, setProgress] = React.useState<{ done: number; total: number } | null>(null);
   const [outcomes, setOutcomes] = React.useState<SendOutcome[]>([]);
   const [confirm, setConfirm] = React.useState<{ channels: Channel[] } | null>(null);
+  /* -- WHO the links go to.
+        The screen has always sent to the employee and only the employee — it
+        never read `lead_id` at all. P10-REV made the HOD a recipient from
+        launch (PR-7), so the only time a HOD ever got their link was the launch
+        dispatch; if that failed, there was no way to send it.
+
+        Employee is the default because it is the common case and because a
+        mis-aimed bulk send cannot be recalled. -- */
+  const [recipients, setRecipients] = React.useState<Array<"SELF" | "LEAD">>(["SELF"]);
   const [copyWarning, setCopyWarning] = React.useState<DistributionRow | null>(null);
   const [copied, setCopied] = React.useState<{ link: string; name: string } | null>(null);
   const [fixing, setFixing] = React.useState<DistributionRow | null>(null);
@@ -134,12 +143,12 @@ export function DistributeClient({
   };
 
   /* -- The run -- */
-  const run = async (ids: string[], channels: Channel[]) => {
+  const run = async (ids: string[], channels: Channel[], layers = recipients) => {
     setRunning(true);
     setOutcomes([]);
     setConfirm(null);
 
-    const total = ids.length * channels.length;
+    const total = ids.length * channels.length * layers.length;
     setProgress({ done: 0, total });
 
     // Driven one person at a time from the client so each row updates as it
@@ -147,7 +156,7 @@ export function DistributeClient({
     // per person is what makes the progress real rather than a guess.
     const collected: SendOutcome[] = [];
     for (const id of ids) {
-      const result = await sendBulk([id], channels);
+      const result = await sendBulk([id], channels, layers);
       if (result.ok) collected.push(...result.data.outcomes);
       else {
         collected.push({
@@ -168,9 +177,13 @@ export function DistributeClient({
     router.refresh();
   };
 
-  const sendOne = async (row: DistributionRow, channel: Channel) => {
+  const sendOne = async (
+    row: DistributionRow,
+    channel: Channel,
+    layer: "SELF" | "LEAD" = "SELF",
+  ) => {
     setRunning(true);
-    const result = await sendEvaluationLink(row.evaluationId, channel);
+    const result = await sendEvaluationLink(row.evaluationId, channel, layer);
     setOutcomes(
       result.ok
         ? [result.data]
@@ -286,6 +299,50 @@ export function DistributeClient({
                 different action, not a retry. */}
             <option value="NO_CONTACT">No contact details ({board.totals.noContact})</option>
           </select>
+
+          {/* ---------- WHO the links go to ----------
+              Both people rate the same form at the same time (§1), so both need
+              a link — and this screen only ever sent to the employee. Two
+              checkboxes rather than a segmented control because "both" is a
+              real and common choice, not a third mode.
+
+              The HOD's message is a DIFFERENT template: `leadReviewInvite`
+              states only that their form is open and when it is due. It says
+              nothing about whether the employee has submitted, which is what
+              blind rating withholds (PR-10). */}
+          <fieldset className="flex min-h-11 items-center gap-3 rounded-control border border-rule bg-surface px-3">
+            <legend className="sr-only">Who receives the link</legend>
+            <span className="text-body-sm text-ink-muted">Send to</span>
+            {(
+              [
+                { value: "SELF" as const, label: "Employee" },
+                { value: "LEAD" as const, label: "HOD" },
+              ]
+            ).map((option) => (
+              <label
+                key={option.value}
+                className="flex cursor-pointer items-center gap-1.5 text-body-sm text-ink"
+              >
+                <input
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  checked={recipients.includes(option.value)}
+                  onChange={(e) =>
+                    setRecipients((prev) =>
+                      e.target.checked
+                        ? [...new Set([...prev, option.value])]
+                        : /* Never empty: unticking the last one would leave a
+                             Send button that silently messages nobody. */
+                          prev.length === 1
+                          ? prev
+                          : prev.filter((r) => r !== option.value),
+                    )
+                  }
+                />
+                {option.label}
+              </label>
+            ))}
+          </fieldset>
         </ScreenToolbar>
 
         {/* The hero's progress bar, kept — it is information — at 3px instead of
@@ -508,7 +565,12 @@ export function DistributeClient({
                         configured={configured}
                         disabled={running}
                         onSend={(channel) => void sendOne(row, channel)}
-                        onSendBoth={() => void run([row.evaluationId], ["WHATSAPP", "EMAIL"])}
+                        onSendBoth={() => void run([row.evaluationId], ["WHATSAPP", "EMAIL"], ["SELF"])}
+                        /* Explicitly the HOD, whatever the toolbar is set to:
+                           chasing one missing HOD is the case this exists for,
+                           and making it depend on a toggle elsewhere on the
+                           screen is how the wrong person gets messaged. */
+                        onSendLead={() => void sendOne(row, "WHATSAPP", "LEAD")}
                         onCopy={() => setCopyWarning(row)}
                         onHistory={() => setHistory(row)}
                       />
@@ -532,7 +594,16 @@ export function DistributeClient({
         {selected.size > 0 ? (
           <div className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-card bg-ink px-5 py-4 shadow-dashboard">
             <p className="text-body text-ink-invert">
-              <span className="tabular font-medium">{selected.size}</span> selected
+              <span className="tabular font-medium">{selected.size}</span> selected ·{" "}
+              {/* Naming the recipients here is the last chance to notice the
+                  toggle is set the wrong way before forty messages go out. */}
+              <span className="text-ink-invert/70">
+                {recipients.length === 2
+                  ? "employees and HODs"
+                  : recipients[0] === "LEAD"
+                    ? "HODs only"
+                    : "employees only"}
+              </span>
             </p>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" className="min-h-11" disabled={running || !configured.whatsapp}
@@ -580,8 +651,10 @@ export function DistributeClient({
           open={confirm !== null}
           count={selected.size}
           channels={confirm?.channels ?? []}
+          recipients={recipients}
+          onRecipientsChange={setRecipients}
           onCancel={() => setConfirm(null)}
-          onConfirm={() => void run([...selected], confirm?.channels ?? [])}
+          onConfirm={() => void run([...selected], confirm?.channels ?? [], recipients)}
         />
 
         <CopyLinkDialog
@@ -671,6 +744,7 @@ function RowMenu({
   disabled,
   onSend,
   onSendBoth,
+  onSendLead,
   onCopy,
   onHistory,
 }: {
@@ -679,6 +753,8 @@ function RowMenu({
   disabled: boolean;
   onSend: (channel: Channel) => void;
   onSendBoth: () => void;
+  /** The HOD's rating link — a different person and a different message. */
+  onSendLead: () => void;
   onCopy: () => void;
   onHistory: () => void;
 }) {
@@ -706,6 +782,19 @@ function RowMenu({
 
         <DropdownMenuSeparator />
 
+        {/* The HOD's own link. Separated by a rule because it goes to a
+            DIFFERENT PERSON — the three items above all message the employee,
+            and an item that quietly messages somebody else does not belong in
+            the same group. Disabled with a reason when nobody is assigned. */}
+        <DropdownMenuItem
+          disabled={disabled || !row.sendable || !configured.whatsapp}
+          onSelect={() => onSendLead()}
+        >
+          Send the HOD&rsquo;s rating link
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
         <DropdownMenuItem disabled={!row.sendable} onSelect={() => onCopy()}>
           Copy link
         </DropdownMenuItem>
@@ -721,17 +810,31 @@ function ConfirmSendDialog({
   open,
   count,
   channels,
+  recipients,
+  onRecipientsChange,
   onCancel,
   onConfirm,
 }: {
   open: boolean;
   count: number;
   channels: Channel[];
+  /** Whose links. Chosen HERE, at the moment of sending. */
+  recipients: Array<"SELF" | "LEAD">;
+  onRecipientsChange: (next: Array<"SELF" | "LEAD">) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const channelText =
     channels.length === 2 ? "WhatsApp and email" : channels[0] === "WHATSAPP" ? "WhatsApp" : "email";
+
+  const who =
+    recipients.length === 2
+      ? "the employee and their HOD"
+      : recipients[0] === "LEAD"
+        ? "the HOD only"
+        : "the employee only";
+
+  const messages = count * channels.length * recipients.length;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
@@ -739,14 +842,70 @@ function ConfirmSendDialog({
         <DialogHeader>
           <DialogTitle>Send to {plural(count, "person")}?</DialogTitle>
           <DialogDescription>
-            Each person gets a fresh link over {channelText}. Any link already sent to them stops
-            working — a person only ever has one live link per channel.
+            Each recipient gets a fresh link over {channelText}. Any link already sent to that
+            person stops working — one live link each, per channel.
           </DialogDescription>
         </DialogHeader>
+
+        {/* ---------- WHO ----------
+            Asked at the moment of sending rather than only in the toolbar. The
+            toolbar setting is easy to have set the wrong way an hour ago; this
+            is the last screen before forty messages go out, so the choice is
+            restated here and is changeable without leaving the dialog.
+
+            Both people rate the same form at the same time (§1), and they get
+            DIFFERENT messages: the HOD's says only that their form is open and
+            when it is due, never whether the employee has submitted (PR-10). */}
+        <fieldset className="space-y-2">
+          <legend className="type-label pb-1 text-ink-muted">Who receives a link</legend>
+          {(
+            [
+              { value: "SELF" as const, label: "The employee", hint: "Their own self-evaluation." },
+              { value: "LEAD" as const, label: "Their HOD", hint: "The rating they fill in about the employee." },
+            ]
+          ).map((option) => {
+            const checked = recipients.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-start gap-3 rounded-control border p-3",
+                  checked ? "border-primary/40 bg-accent" : "border-rule bg-surface",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-primary"
+                  checked={checked}
+                  onChange={(e) =>
+                    onRecipientsChange(
+                      e.target.checked
+                        ? [...new Set([...recipients, option.value])]
+                        : // Never empty — a Send button that messages nobody is
+                          // worse than a checkbox that will not untick.
+                          recipients.length === 1
+                          ? recipients
+                          : recipients.filter((r) => r !== option.value),
+                    )
+                  }
+                />
+                <span>
+                  <span className="block text-body text-ink">{option.label}</span>
+                  <span className="block text-body-sm text-ink-muted">{option.hint}</span>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+
+        <p className="rounded-control bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
+          {plural(messages, "message")} to {who}.
+        </p>
+
         <DialogFooter>
           <Button variant="outline" className="min-h-11" onClick={onCancel}>Cancel</Button>
           <Button className="min-h-11" onClick={onConfirm}>
-            Send {count} × {channels.length === 2 ? "2" : "1"}
+            Send {plural(messages, "message")}
           </Button>
         </DialogFooter>
       </DialogContent>

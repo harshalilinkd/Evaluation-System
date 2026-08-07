@@ -455,6 +455,13 @@ export type LaunchOutcome = {
   questions: number;
   /** Two per participant — one per layer (item 14e). */
   tokens: number;
+  /**
+   * Why no invite went out, when none could.
+   *
+   * The cycle is launched and durable regardless — this is the sentence that
+   * tells HR the links still have to be sent, and from where.
+   */
+  messagesBlocked?: string | null;
   messagesSent: number;
   /** Held back by the per-HOD cap; the cron sweep picks them up (item 16). */
   messagesQueued: number;
@@ -544,6 +551,9 @@ export async function launchCycle(cycleId: string): Promise<CycleResult<LaunchOu
       tokens: result.tokens ?? 0,
       messagesSent: dispatched.sent,
       messagesQueued: dispatched.queued,
+      /* Advisory, never a failure. The cycle is launched either way; this says
+         whether anybody has been told yet. */
+      messagesBlocked: dispatched.blocked ?? null,
     },
   };
 }

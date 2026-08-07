@@ -132,6 +132,8 @@ export function WizardClient({
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [launching, setLaunching] = React.useState(false);
   const [launchError, setLaunchError] = React.useState<string | null>(null);
+  /** Launched, but no invite could be sent. Not an error — see `onLaunch`. */
+  const [launchNotice, setLaunchNotice] = React.useState<string | null>(null);
 
   /* ---------- saving ---------- */
 
@@ -284,6 +286,16 @@ export function WizardClient({
 
   const onLaunch = async () => {
     if (!cycleId) return;
+
+    /* -- Already launched, and the dialog is showing the "no links went out"
+          notice: this button is now "Open the cycle" and must not launch
+          again. Pressing it twice would be a second launch on a live cycle. -- */
+    if (launchNotice) {
+      setDialogOpen(false);
+      router.push(`/admin/cycles/${cycleId}?launched=1`);
+      return;
+    }
+
     setLaunching(true);
     setLaunchError(null);
 
@@ -296,6 +308,15 @@ export function WizardClient({
       // and the button being pressed, which is exactly what the server-side
       // re-check exists to catch.
       void refreshReport(cycleId);
+      return;
+    }
+
+    /* -- Launched. If nothing could be SENT, hold here and say so rather than
+          navigating past it: the cycle is live and nobody has been told, which
+          is the one thing HR has to know before they walk away from this
+          screen. Not an error — the launch worked (PW-2, PR-11). -- */
+    if (result.data.messagesBlocked) {
+      setLaunchNotice(result.data.messagesBlocked);
       return;
     }
 
@@ -694,6 +715,7 @@ export function WizardClient({
         cycleKind={basics.cycle_kind}
         pending={launching}
         error={launchError}
+        notice={launchNotice}
         onConfirm={() => void onLaunch()}
       />
     </div>

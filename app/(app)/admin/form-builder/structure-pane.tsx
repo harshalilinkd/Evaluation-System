@@ -11,10 +11,12 @@ import {
   GripVertical,
   Lock,
   Plus,
+  Search,
   Settings2,
   Trash2,
   UserCog,
   Users,
+  X,
 } from "lucide-react";
 
 import type { BuilderQuestion } from "@/app/(app)/admin/form-builder/use-builder";
@@ -113,8 +115,17 @@ export function StructurePane({
 
   const [dragId, setDragId] = React.useState<string | null>(null);
   const [overId, setOverId] = React.useState<string | null>(null);
+  const [query, setQuery] = React.useState("");
   const reduced = useReducedMotion();
 
+  const searching = query.trim().length > 0;
+  const needle = query.trim().toLowerCase();
+
+  /* -- The section's REAL contents, in form order.
+        Deliberately unfiltered: reordering computes positions from this list,
+        so handing it a filtered one would move a question to the index it held
+        among the matches rather than among its actual neighbours. Search is a
+        view; the order is the form. -- */
   const rowsIn = React.useCallback(
     (section: QuestionSection) =>
       draft
@@ -122,6 +133,24 @@ export function StructurePane({
         .filter((q) => (section === DEPARTMENT_SECTION ? mappedIds.has(q.id) : true))
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [draft, mappedIds],
+  );
+
+  /** What the list draws. Identical to `rowsIn` unless somebody is searching. */
+  const visibleIn = React.useCallback(
+    (section: QuestionSection) =>
+      searching
+        ? rowsIn(section).filter(
+            (q) =>
+              q.text.toLowerCase().includes(needle) ||
+              (q.helpText ?? "").toLowerCase().includes(needle),
+          )
+        : rowsIn(section),
+    [rowsIn, searching, needle],
+  );
+
+  const matchCount = React.useMemo(
+    () => (searching ? order.reduce((n, s) => n + visibleIn(s).length, 0) : 0),
+    [searching, order, visibleIn],
   );
 
   /** Drops the dragged row where the pointer left it. */
@@ -140,7 +169,7 @@ export function StructurePane({
 
   return (
     <aside className="flex min-h-0 flex-col overflow-hidden rounded-card-lg bg-ink">
-      <header className="shrink-0 px-4 pb-3 pt-4">
+      <header className="shrink-0 space-y-2.5 px-4 pb-3 pt-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-body font-semibold text-ink-invert">Form structure</h2>
           {/* The way in to renaming and reordering. Beside the heading it
@@ -150,15 +179,54 @@ export function StructurePane({
           <button
             type="button"
             onClick={() => setSectionsOpen(true)}
-            className="rounded-control px-2 py-1 text-body-sm text-ink-invert/70 underline underline-offset-2 hover:text-ink-invert"
+            className="min-h-11 rounded-control px-2 py-1 text-body-sm font-medium text-ink-invert underline underline-offset-2 hover:text-ink-invert sm:min-h-0"
           >
             Edit sections
           </button>
         </div>
-        <p className="mt-1 text-body-sm leading-snug text-ink-invert/45">
+        <p className="text-body-sm leading-snug text-ink-invert/80">
           Every employee answers the same form. Only {labelFor(DEPARTMENT_SECTION)} changes
           by department.
         </p>
+
+        {/* -- Find a question.
+              The bank runs to hundreds of rows across eight sections, so
+              "where is the one about wastage" was a scroll through all of
+              them with the sections opened one at a time. Typing opens every
+              section that matches and hides the rest, which is the difference
+              between a list and something you can navigate. -- */}
+        <div className="relative">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-invert/60"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Find a question…"
+            aria-label="Find a question"
+            className="h-11 w-full rounded-control bg-black/30 pl-8 pr-8 text-body-sm text-ink-invert placeholder:text-ink-invert/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear the search"
+              className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-control text-ink-invert/70 hover:bg-white/10 hover:text-ink-invert"
+            >
+              <X aria-hidden className="size-4" />
+            </button>
+          ) : null}
+        </div>
+
+        {searching ? (
+          <p aria-live="polite" className="text-body-sm text-ink-invert/80">
+            {matchCount === 0
+              ? "Nothing matches that."
+              : `${matchCount} ${matchCount === 1 ? "question" : "questions"} match`}
+          </p>
+        ) : null}
       </header>
 
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2.5 pb-2">
@@ -167,20 +235,29 @@ export function StructurePane({
             remove one; only order and contents move. */}
         {order.map((section, i) => {
           const isDept = section === DEPARTMENT_SECTION;
-          const rows = rowsIn(section);
-          const isOpen = openSection === section;
+          const allRows = rowsIn(section);
+          const rows = visibleIn(section);
           // METADATA comes from the profile and the evaluation record, never
           // authored — an editable field here would let somebody type a name
           // that disagrees with the record it was drawn from (P12-14).
           const isAuto = section === "METADATA";
-          const isEmpty = !isAuto && rows.length === 0;
+
+          // A search drops sections with no hit and opens the ones that have
+          // them. A collapsed section holding the answer is the same as no
+          // answer, and leaving the empties in place buries the matches.
+          if (searching && (isAuto || rows.length === 0)) return null;
+          const isOpen = searching ? true : openSection === section;
+          const isEmpty = !isAuto && allRows.length === 0;
 
           return (
             <section
               key={section}
               className={cn(
                 "overflow-hidden rounded-card transition-colors",
-                isOpen ? "bg-white/[0.07]" : "bg-transparent",
+                // A darker well rather than a lighter one: an open section used
+                // to lift AWAY from the panel, which washed the whole pane out.
+                // Recessing it keeps the ground dark and the type on top of it.
+                isOpen ? "bg-black/25" : "bg-transparent",
               )}
             >
               <button
@@ -188,8 +265,8 @@ export function StructurePane({
                 onClick={() => onOpenSectionChange(isOpen ? null : section)}
                 aria-expanded={isOpen}
                 className={cn(
-                  "group flex w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
-                  isOpen ? "text-ink-invert" : "text-ink-invert/70 hover:bg-white/[0.05]",
+                  "group flex min-h-11 w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
+                  isOpen ? "text-ink-invert" : "text-ink-invert/85 hover:bg-white/[0.06]",
                 )}
               >
                 <span
@@ -211,24 +288,26 @@ export function StructurePane({
                       {labelFor(section)}
                     </span>
                     {isDept ? (
-                      <span className="shrink-0 rounded-pill bg-primary/30 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                      <span className="shrink-0 rounded-pill bg-primary px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
                         By team
                       </span>
                     ) : null}
                   </span>
                   {/* The count in words, not a bare numeral. An "8" beside a
                       section name reads as an index as easily as a total. */}
-                  <span className="mt-0.5 block truncate text-[10.5px] text-ink-invert/40">
+                  <span className="mt-0.5 block truncate text-body-sm text-ink-invert/70">
                     {isAuto
                       ? "Filled in from the person's record"
                       : isEmpty
                         ? "No questions yet"
-                        : `${rows.length} ${rows.length === 1 ? "question" : "questions"}`}
+                        : searching
+                          ? `${rows.length} of ${allRows.length} match`
+                          : `${allRows.length} ${allRows.length === 1 ? "question" : "questions"}`}
                   </span>
                 </span>
 
                 {isAuto ? (
-                  <Lock aria-hidden className="size-3.5 shrink-0 text-ink-invert/30" />
+                  <Lock aria-hidden className="size-4 shrink-0 text-ink-invert/60" />
                 ) : (
                   <motion.span
                     animate={{ rotate: isOpen ? 90 : 0 }}
@@ -237,7 +316,7 @@ export function StructurePane({
                     }
                     className="shrink-0"
                   >
-                    <ChevronRight aria-hidden className="size-4 text-ink-invert/40" />
+                    <ChevronRight aria-hidden className="size-4 text-ink-invert/70" />
                   </motion.span>
                 )}
               </button>
@@ -262,7 +341,7 @@ export function StructurePane({
                       ) : null}
 
                       {isEmpty ? (
-                        <p className="rounded-control bg-white/[0.04] px-2.5 py-2.5 text-[11px] leading-snug text-ink-invert/45">
+                        <p className="rounded-control bg-white/[0.06] px-2.5 py-2.5 text-body-sm leading-snug text-ink-invert/80">
                           {isDept
                             ? "This team has no questions of its own yet. It cannot be launched until it has at least one."
                             : "Nothing here yet. Add the first question below."}
@@ -281,7 +360,10 @@ export function StructurePane({
                               animate={{ opacity: 1, x: 0 }}
                               exit={reduced ? undefined : { opacity: 0, height: 0, marginBottom: 0 }}
                               transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
-                              draggable
+                              // Reordering a filtered list would move a row to
+                              // its position among the MATCHES, not among its
+                              // neighbours. Off while searching.
+                              draggable={!searching}
                               onDragStart={() => setDragId(q.id)}
                               onDragEnd={() => {
                                 setDragId(null);
@@ -314,11 +396,14 @@ export function StructurePane({
                                 />
                               ) : null}
 
+                              {/* Drag is a pointer affordance, so it hides on a
+                                  touch screen where it cannot be used and the
+                                  space is better spent on the question. */}
                               <span
                                 aria-hidden
-                                className="cursor-grab pl-2 pt-2 text-ink-invert/20 opacity-0 transition-opacity group-hover/row:opacity-100 active:cursor-grabbing"
+                                className="hidden cursor-grab pl-2 pt-2.5 text-ink-invert/60 opacity-0 transition-opacity active:cursor-grabbing group-hover/row:opacity-100 lg:block"
                               >
-                                <GripVertical className="size-3.5" />
+                                <GripVertical className="size-4" />
                               </span>
 
                               <button
@@ -326,14 +411,14 @@ export function StructurePane({
                                 onClick={() => onSelect(q.id)}
                                 aria-current={isSelected ? "true" : undefined}
                                 className={cn(
-                                  "min-w-0 flex-1 py-1.5 pr-1 text-left",
+                                  "min-w-0 flex-1 py-2 pl-2 pr-1 text-left lg:pl-0",
                                   isSelected
                                     ? "text-ink-invert"
-                                    : "text-ink-invert/65 group-hover/row:text-ink-invert",
+                                    : "text-ink-invert/85 group-hover/row:text-ink-invert",
                                 )}
                               >
                                 <span className="flex items-baseline gap-1.5">
-                                  <span className="tabular shrink-0 text-[10px] text-ink-invert/30">
+                                  <span className="tabular shrink-0 text-[11px] text-ink-invert/55">
                                     {index + 1}
                                   </span>
                                   {/* Two lines, not one truncated one. A
@@ -359,23 +444,30 @@ export function StructurePane({
                                 onClick={() => onRemove(q.id)}
                                 aria-label={`Remove "${q.text}"`}
                                 title="Remove from the form"
-                                className="mr-1 mt-1.5 grid size-7 shrink-0 place-items-center rounded-control text-ink-invert/30 opacity-0 transition-all hover:bg-critical/25 hover:text-critical focus-visible:opacity-100 group-hover/row:opacity-100"
+                                // Always reachable on a touch screen: there is
+                                // no hover there, and a control that only
+                                // appears on hover simply does not exist.
+                                className="mr-1 mt-1.5 grid size-9 shrink-0 place-items-center rounded-control text-ink-invert/55 transition-all hover:bg-critical/25 hover:text-critical focus-visible:opacity-100 lg:size-8 lg:opacity-0 lg:group-hover/row:opacity-100"
                               >
-                                <Trash2 aria-hidden className="size-3.5" />
+                                <Trash2 aria-hidden className="size-4" />
                               </button>
                             </motion.div>
                           );
                         })}
                       </AnimatePresence>
 
-                      <button
-                        type="button"
-                        onClick={() => onAdd(section)}
-                        className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-white/15 py-2 text-body-sm font-medium text-ink-invert/45 transition-colors hover:border-white/30 hover:bg-white/[0.05] hover:text-ink-invert"
-                      >
-                        <Plus aria-hidden className="size-3.5" />
-                        Add question
-                      </button>
+                      {/* Adding while a search is narrowing the list would drop
+                          the new question straight out of view. */}
+                      {searching ? null : (
+                        <button
+                          type="button"
+                          onClick={() => onAdd(section)}
+                          className="mt-1 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-white/30 py-2 text-body-sm font-medium text-ink-invert/80 transition-colors hover:border-white/50 hover:bg-white/[0.06] hover:text-ink-invert"
+                        >
+                          <Plus aria-hidden className="size-4" />
+                          Add question
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 ) : null}
@@ -390,16 +482,16 @@ export function StructurePane({
         layout={!reduced}
         className={cn(
           "m-2.5 shrink-0 rounded-card p-3.5 transition-colors",
-          estimate.tooLong ? "bg-critical/20" : "bg-white/[0.07]",
+          estimate.tooLong ? "bg-critical/25" : "bg-black/25",
         )}
       >
         <div className="grid grid-cols-2 gap-2">
           <Stat icon={Users} label="Employee answers" value={estimate.employeeQuestions} />
           <Stat icon={UserCog} label="Lead answers" value={estimate.leadQuestions} />
         </div>
-        <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2">
-          <span className="flex items-center gap-1.5 text-body-sm text-ink-invert/55">
-            <Clock aria-hidden className="size-3.5" />
+        <div className="mt-2 flex items-center justify-between border-t border-white/20 pt-2">
+          <span className="flex items-center gap-1.5 text-body-sm text-ink-invert/80">
+            <Clock aria-hidden className="size-4" />
             Est. time to fill
           </span>
           <motion.span
@@ -413,7 +505,7 @@ export function StructurePane({
           </motion.span>
         </div>
         {estimate.tooLong ? (
-          <p className="mt-2 text-[11px] font-medium leading-snug text-critical">
+          <p className="mt-2 text-body-sm font-medium leading-snug text-critical">
             This is a long form. People rush the end of a long form.
           </p>
         ) : null}
@@ -430,7 +522,7 @@ function Tag({ children, title }: { children: React.ReactNode; title?: string })
   return (
     <span
       title={title}
-      className="rounded-[5px] bg-white/[0.12] px-1.5 py-0.5 text-[9px] font-semibold tracking-wide text-ink-invert/70"
+      className="rounded-[5px] bg-white/20 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-invert/90"
     >
       {children}
     </span>
@@ -448,8 +540,8 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1 text-[10.5px] text-ink-invert/50">
-        <Icon aria-hidden className="size-3" />
+      <div className="flex items-center gap-1 text-body-sm text-ink-invert/80">
+        <Icon aria-hidden className="size-3.5 shrink-0" />
         {label}
       </div>
       <div className="tabular text-body-lg font-semibold text-ink-invert">{value}</div>
@@ -470,10 +562,10 @@ function DepartmentPicker({
 }) {
   const people = headcount[value] ?? 0;
   return (
-    <div className="mb-1.5 rounded-control bg-white/[0.06] p-2">
+    <div className="mb-1.5 rounded-control bg-white/[0.08] p-2">
       <label
         htmlFor="builder-department"
-        className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-ink-invert/40"
+        className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-invert/75"
       >
         Showing
       </label>
@@ -481,7 +573,7 @@ function DepartmentPicker({
         id="builder-department"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-9 w-full rounded-control border border-white/15 bg-white/10 px-2 text-body-sm text-ink-invert"
+        className="h-11 w-full rounded-control border border-white/25 bg-white/10 px-2 text-body-sm text-ink-invert"
       >
         {departments.map((d) => (
           <option key={d.id} value={d.id} className="text-ink">
@@ -489,8 +581,8 @@ function DepartmentPicker({
           </option>
         ))}
       </select>
-      <p className="mt-1.5 flex items-center gap-1 text-[10.5px] text-ink-invert/40">
-        <Users aria-hidden className="size-3" />
+      <p className="mt-1.5 flex items-center gap-1 text-body-sm text-ink-invert/75">
+        <Users aria-hidden className="size-3.5 shrink-0" />
         {people === 0
           ? "Nobody is in this team right now"
           : `${people} ${people === 1 ? "person is" : "people are"} in this team`}
@@ -501,9 +593,9 @@ function DepartmentPicker({
           stale department survives another cycle. */}
       <Link
         href="/admin/settings?tab=departments"
-        className="mt-1 flex items-center gap-1 text-[10.5px] font-medium text-ink-invert/50 underline-offset-2 transition-colors hover:text-ink-invert hover:underline"
+        className="mt-1 flex min-h-11 items-center gap-1 text-body-sm font-medium text-ink-invert/80 underline-offset-2 transition-colors hover:text-ink-invert hover:underline sm:min-h-0"
       >
-        <Settings2 aria-hidden className="size-3" />
+        <Settings2 aria-hidden className="size-3.5 shrink-0" />
         Add, rename or retire a team
       </Link>
     </div>

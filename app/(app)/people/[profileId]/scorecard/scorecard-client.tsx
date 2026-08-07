@@ -5,7 +5,11 @@
 import * as React from "react";
 import { EyeOff, Minus, Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react";
 
-import { TrendAreaChart } from "@/components/appraise/charts";
+import {
+  RATING_BANDS,
+  SectionRadarChart,
+  TrendAreaChart,
+} from "@/components/appraise/charts";
 import { DashboardCard } from "@/components/appraise/metric-widget";
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { EmptyState } from "@/components/appraise/states";
@@ -144,6 +148,56 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
   );
 
   const [gapsAsTable, setGapsAsTable] = React.useState(false);
+
+  /* -- The radar's rows. Only sections at least one layer rated: an axis with
+        nothing on it draws a zero-length spoke, which reads as "scored nothing
+        here" rather than "not asked here" (P14-10 made the same call about
+        KPI). Final is offered only where it DIFFERS from the lead — otherwise
+        it lies exactly on the lead polygon and just thickens the line. -- */
+  const radar = React.useMemo(
+    () =>
+      sections
+        .filter((s) => s.self !== null || s.lead !== null || s.final !== null)
+        .map((s) => ({
+          section: s.label,
+          self: s.self,
+          lead: s.lead,
+          final: s.final,
+        })),
+    [sections],
+  );
+
+  const radarHasFinal = radar.some((r) => r.final !== null && r.final !== r.lead);
+
+  /* -- How their answers spread across the scale.
+        Two averages that match can still be built from completely different
+        answers — a steady 3.5 everywhere and a mix of 5s and 2s are the same
+        mean and very different reviews. This is the panel that tells them
+        apart, and it is the only place the SHAPE of somebody's rating shows. -- */
+  const distribution = React.useMemo(() => {
+    const bandOf = (v: number) => Math.min(Math.floor(v), 4);
+    const counts = RATING_BANDS.map((band) => ({ band, self: 0, lead: 0 }));
+    for (const q of card.questions) {
+      if (q.self !== null) counts[bandOf(q.self)]!.self += 1;
+      if (q.lead !== null) counts[bandOf(q.lead)]!.lead += 1;
+    }
+    return counts;
+  }, [card.questions]);
+
+  const distributionTotal = distribution.reduce((n, b) => n + b.self + b.lead, 0);
+
+  /* -- The four numbers worth reading before any chart.
+        "Agreed" is where both sides landed on the same score — the single
+        clearest signal of whether this review is settled, and nothing on the
+        page stated it. -- */
+  const bothRated = card.questions.filter((q) => q.self !== null && q.lead !== null);
+  const agreed = bothRated.filter((q) => q.self === q.lead).length;
+  const widest = [...bothRated].sort(
+    (a, b) => Math.abs((b.lead ?? 0) - (b.self ?? 0)) - Math.abs((a.lead ?? 0) - (a.self ?? 0)),
+  )[0];
+  const strongestSection = [...sections]
+    .filter((s) => (s.final ?? s.lead ?? s.self) !== null)
+    .sort((a, b) => (b.final ?? b.lead ?? b.self ?? 0) - (a.final ?? a.lead ?? a.self ?? 0))[0];
 
   /* -- What the scores actually say.
         The settled value per question is the final where one exists, else the
@@ -299,6 +353,126 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
               )}
               {asTable ? <HistoryTable history={card.history} /> : null}
             </DashboardCard>
+          ) : null}
+
+          {/* ---------- The four numbers, before any chart ----------
+              A reader should be able to take the review in without parsing a
+              single figure. These are the ones a conversation actually opens
+              with, and every one of them was previously only derivable by
+              reading the whole table at the bottom. */}
+          {bothRated.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <MiniStat
+                label="Questions rated"
+                value={String(card.questions.length)}
+                hint="by at least one side"
+              />
+              <MiniStat
+                label="Agreed exactly"
+                value={`${agreed} of ${bothRated.length}`}
+                hint={
+                  bothRated.length > 0
+                    ? `${Math.round((agreed / bothRated.length) * 100)}% of the form`
+                    : undefined
+                }
+              />
+              <MiniStat
+                label="Widest difference"
+                value={widest ? signed((widest.lead ?? 0) - (widest.self ?? 0)) : "—"}
+                hint={widest?.text}
+              />
+              <MiniStat
+                label="Strongest section"
+                value={
+                  strongestSection
+                    ? formatScore(
+                        strongestSection.final ?? strongestSection.lead ?? strongestSection.self,
+                      )
+                    : "—"
+                }
+                hint={strongestSection?.label}
+              />
+            </div>
+          ) : null}
+
+          {/* ---------- Shape, and spread ----------
+              The radar answers "where is this person strong" in one glance;
+              the distribution answers "what kind of rating is this" — a steady
+              3.5 everywhere and a mix of 5s and 2s share a mean and are
+              completely different reviews. Neither question was on the page. */}
+          {radar.length >= 3 || distributionTotal > 0 ? (
+            <div className="grid gap-5 lg:grid-cols-2">
+              {radar.length >= 3 ? (
+                <DashboardCard title="Section profile">
+                  <SectionRadarChart
+                    data={radar}
+                    series={[
+                      { key: "self", label: "Self", color: "cyan" },
+                      { key: "lead", label: "Lead", color: "pink" },
+                      ...(radarHasFinal
+                        ? [{ key: "final", label: "Final", color: "primary" as const }]
+                        : []),
+                    ]}
+                  />
+                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-muted">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden className="size-2.5 rounded-[2px] bg-self" />
+                      Self
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden className="size-2.5 rounded-[2px] bg-lead" />
+                      Lead
+                    </span>
+                    {radarHasFinal ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span aria-hidden className="size-2.5 rounded-[2px] bg-final" />
+                        Final
+                      </span>
+                    ) : null}
+                  </div>
+                </DashboardCard>
+              ) : null}
+
+              {distributionTotal > 0 ? (
+                <DashboardCard title="How the ratings were spread">
+                  <table className="w-full text-left">
+                    <caption className="sr-only">
+                      Number of questions at each score band, self against lead.
+                    </caption>
+                    <thead>
+                      <tr className="border-b border-rule text-body-sm text-ink-muted">
+                        <th className="py-2 font-medium">Band</th>
+                        <th className="py-2 font-medium">Self</th>
+                        <th className="py-2 font-medium">Lead</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {distribution.map((b) => {
+                        const max = Math.max(
+                          1,
+                          ...distribution.map((d) => Math.max(d.self, d.lead)),
+                        );
+                        return (
+                          <tr key={b.band} className="border-b border-rule/60 last:border-0">
+                            <td className="py-2 text-body text-ink">{b.band}</td>
+                            <td className="py-2">
+                              <CountBar tier="self" n={b.self} max={max} />
+                            </td>
+                            <td className="py-2">
+                              <CountBar tier="lead" n={b.lead} max={max} />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="mt-3 text-[11px] text-ink-muted">
+                    A band counts questions, not people. 4-5 means the answer scored
+                    between 4 and 5.
+                  </p>
+                </DashboardCard>
+              ) : null}
+            </div>
           ) : null}
 
           {/* ---------- Strengths and focus ---------- */}
@@ -751,6 +925,46 @@ function TierScore({
           {value === null ? "not rated" : "first cycle"}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * One headline number with its label above and its context below.
+ *
+ * Deliberately not `MetricWidget`: that carries a trend pill and a sparkline,
+ * neither of which exists here, and a widget rendering half its parts reads as
+ * something that failed to load rather than as something smaller.
+ */
+function MiniStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string | null;
+}) {
+  return (
+    <div className="card-surface p-4">
+      <p className="text-[11px] uppercase tracking-wide text-ink-muted">{label}</p>
+      <p className="tabular mt-1 text-h3 text-ink">{value}</p>
+      {hint ? <p className="mt-1 line-clamp-2 text-body-sm text-ink-muted">{hint}</p> : null}
+    </div>
+  );
+}
+
+/** A count as a bar plus the number. Never the bar alone — a length is not a value. */
+function CountBar({ tier, n, max }: { tier: "self" | "lead"; n: number; max: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-2 min-w-16 flex-1 overflow-hidden rounded-pill bg-surface-mute">
+        <div
+          className={cn("h-full rounded-pill", tier === "self" ? "bg-self" : "bg-lead")}
+          style={{ width: `${max > 0 ? (n / max) * 100 : 0}%` }}
+        />
+      </div>
+      <span className="tabular w-6 shrink-0 text-right text-body-sm text-ink">{n}</span>
     </div>
   );
 }

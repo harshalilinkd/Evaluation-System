@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, RotateCcw, Send } from "lucide-react";
 
+import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
@@ -367,14 +368,15 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
 
       {/* ---------- Submitted confirmation ---------- */}
       {submitted ? (
-        <section className="mb-4 rounded-card-lg bg-ink p-6">
+        <section className="mb-4 rounded-card-lg bg-ink p-5 sm:p-6">
+          <FormLetterhead tone="dark" className="mb-4" />
           <div className="flex items-start gap-3">
             <Check aria-hidden className="mt-1 size-5 shrink-0 text-accent-green" />
             <div>
               <h1 className="text-display-sm text-ink-invert">
                 Your evaluation is submitted and locked.
               </h1>
-              <p className="mt-1 text-body text-ink-invert/70">
+              <p className="mt-1 text-body text-ink-invert/80">
                 {meta.leadName
                   ? `${meta.leadName} rates the same form separately. HR reads both together.`
                   : "Your manager rates the same form separately. HR reads both together."}
@@ -402,11 +404,14 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
         </section>
       ) : (
         /* ---------- Sticky header ---------- */
-        <header className="sticky top-topbar z-10 mb-4 rounded-card-lg bg-ink p-5">
+        <header className="sticky top-topbar z-10 mb-4 rounded-card-lg bg-ink p-4 sm:p-5">
+          {/* The mark, above the fold on the phone most people open this on. */}
+          <FormLetterhead tone="dark" className="mb-3" />
+
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-display-sm text-ink-invert">Your self-evaluation</h1>
-              <p className="mt-1 text-body-sm text-ink-invert/70">
+              <p className="mt-1 text-body-sm text-ink-invert/80">
                 {meta.periodLabel} · due {formatDate(meta.selfDueOn)}
                 {meta.leadName ? ` · reviewed by ${meta.leadName}` : ""}
               </p>

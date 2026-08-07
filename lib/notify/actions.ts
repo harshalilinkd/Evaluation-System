@@ -10,7 +10,7 @@ import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
-import { selfEvaluationInvite } from "@/lib/notify/templates";
+import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils/date";
 
@@ -37,31 +37,68 @@ async function guard() {
  * §9 — "Every server action re-checks the role and the state machine guard
  * before writing."
  */
-async function loadTarget(evaluationId: string) {
+/**
+ * The evaluation, the RECIPIENT and the cycle.
+ *
+ * `layer` decides who the recipient is. It was hardcoded to the evaluatee, and
+ * so was everything downstream of it — the token, the template and the due
+ * date. P10-REV made the HOD a recipient from launch (PR-7: both tokens, both
+ * messages), but the DISTRIBUTION screen was built in P11, before that, and
+ * still knew about one person. So the only time a HOD ever received their link
+ * was the launch dispatch — and if that failed, as it did here on a localhost
+ * app URL, there was no way to send it at all.
+ */
+async function loadTarget(evaluationId: string, layer: "SELF" | "LEAD" = "SELF") {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("evaluations")
-    .select("id, status, evaluatee_id, cycle_id, excluded_at")
+    .select("id, status, evaluatee_id, lead_id, cycle_id, excluded_at, due_self_on, due_lead_on")
     .eq("id", evaluationId)
     .maybeSingle();
 
   if (error || !data) return null;
 
-  const { data: person } = await supabase
+  const recipientId = layer === "LEAD" ? data.lead_id : data.evaluatee_id;
+  if (!recipientId) return null;
+
+  /* The evaluatee is loaded whichever layer this is: the HOD's message names
+     the person they are rating, so both are needed to render it. */
+  const { data: people } = await supabase
     .from("profiles")
     .select("id, full_name, email, phone_e164")
-    .eq("id", data.evaluatee_id)
-    .maybeSingle();
+    .in("id", [...new Set([recipientId, data.evaluatee_id])]);
+
+  const byId = new Map((people ?? []).map((p) => [p.id, p]));
+  const person = byId.get(recipientId);
+  const evaluatee = byId.get(data.evaluatee_id);
 
   const { data: cycle } = await supabase
     .from("evaluation_cycles")
-    .select("id, name, period_label, self_due_on")
+    .select("id, name, period_label, self_due_on, lead_due_on")
     .eq("id", data.cycle_id)
     .maybeSingle();
 
-  if (!person || !cycle) return null;
-  return { evaluation: data, person, cycle };
+  if (!person || !evaluatee || !cycle) return null;
+
+  const { data: department } = data.evaluatee_id
+    ? await supabase
+        .from("profiles")
+        .select("department_id, departments(name)")
+        .eq("id", data.evaluatee_id)
+        .maybeSingle()
+    : { data: null };
+
+  return {
+    evaluation: data,
+    /** Who the message goes TO. */
+    person,
+    /** Who it is ABOUT. The same row on a SELF send. */
+    evaluatee,
+    cycle,
+    departmentName:
+      (department?.departments as { name?: string } | null)?.name ?? "their department",
+  };
 }
 
 /* ---------- sendEvaluationLink ---------- */
@@ -82,6 +119,8 @@ async function loadTarget(evaluationId: string) {
 export async function sendEvaluationLink(
   evaluationId: string,
   channel: Channel,
+  /** Whose link. Defaults to the employee, which is every existing caller. */
+  layer: "SELF" | "LEAD" = "SELF",
 ): Promise<CycleResult<SendOutcome>> {
   const auth = await guard();
   if (!auth.ok) return auth;
@@ -95,10 +134,17 @@ export async function sendEvaluationLink(
   const linkHealth = checkAppUrl(process.env.NEXT_PUBLIC_APP_URL);
   if (!linkHealth.ok) return cycleError(linkHealth.code, `${linkHealth.title}. ${linkHealth.fix}`);
 
-  const target = await loadTarget(evaluationId);
-  if (!target) return cycleError("NOT_FOUND", "That evaluation no longer exists.");
+  const target = await loadTarget(evaluationId, layer);
+  if (!target) {
+    return cycleError(
+      "NOT_FOUND",
+      layer === "LEAD"
+        ? "That evaluation has no HOD assigned, so there is nobody to send a rating link to."
+        : "That evaluation no longer exists.",
+    );
+  }
 
-  const { evaluation, person, cycle } = target;
+  const { evaluation, person, evaluatee, cycle, departmentName } = target;
 
   if (evaluation.excluded_at) {
     return cycleError(
@@ -128,25 +174,49 @@ export async function sendEvaluationLink(
     );
   }
 
-  /* -- Mint the link -- */
-  const issued = await issueInviteToken(evaluationId, channel === "WHATSAPP" ? "whatsapp" : "email");
+  /* -- Mint the link, for THIS layer.
+        0022 keys a token on (evaluation, layer, channel), so minting the HOD's
+        does not revoke the employee's and resending either leaves the other
+        alone (PR-5). -- */
+  const issued = await issueInviteToken(
+    evaluationId,
+    channel === "WHATSAPP" ? "whatsapp" : "email",
+    layer,
+  );
   if (!issued.ok) {
     return cycleError("TOKEN_FAILED", `Could not create a link for ${person.full_name}.`);
   }
 
   const link = inviteUrl(issued.data.token);
 
-  const message = selfEvaluationInvite({
-    name: person.full_name,
-    period: cycle.period_label,
-    dueDate: formatDate(cycle.self_due_on),
-    link,
-  });
+  /* -- Two different messages, and that is not cosmetic.
+        `leadReviewInvite` states only that the form is open and when it is due.
+        The employee's template names their own deadline. Sending the employee's
+        wording to a HOD would tell them about somebody else's form — and PR-10
+        replaced the older lead template precisely because it leaked the
+        employee's progress ("{employee} has submitted"), which blind rating
+        withholds (§5). -- */
+  const message =
+    layer === "LEAD"
+      ? leadReviewInvite({
+          leadName: person.full_name,
+          employeeName: evaluatee.full_name,
+          department: departmentName,
+          period: cycle.period_label,
+          dueDate: formatDate(evaluation.due_lead_on ?? cycle.lead_due_on),
+          link,
+        })
+      : selfEvaluationInvite({
+          name: person.full_name,
+          period: cycle.period_label,
+          dueDate: formatDate(evaluation.due_self_on ?? cycle.self_due_on),
+          link,
+        });
 
   const result = await sendNotification({
     channel,
     recipient,
-    template: "selfEvaluationInvite",
+    template: layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite",
     message,
     evaluationId,
     profileId: person.id,
@@ -187,33 +257,47 @@ export async function sendEvaluationLink(
 export async function sendBulk(
   evaluationIds: string[],
   channels: Channel[],
+  /**
+   * Whose links to send.
+   *
+   * Both by default is NOT the default: a bulk send has to be a deliberate
+   * choice about who is being messaged, because the two audiences are told
+   * different things and a HOD receiving forty employee invites would be a
+   * mess nobody could undo. The screen asks.
+   */
+  layers: ReadonlyArray<"SELF" | "LEAD"> = ["SELF"],
 ): Promise<CycleResult<{ outcomes: SendOutcome[]; sent: number; failed: number }>> {
   const auth = await guard();
   if (!auth.ok) return auth;
 
   if (evaluationIds.length === 0) return cycleError("NOTHING_SELECTED", "Nobody is selected.");
   if (channels.length === 0) return cycleError("NO_CHANNEL", "Choose WhatsApp, email, or both.");
+  if (layers.length === 0) {
+    return cycleError("NO_RECIPIENT", "Choose whether to send to the employee, the HOD, or both.");
+  }
 
   const outcomes: SendOutcome[] = [];
 
   for (const evaluationId of evaluationIds) {
-    for (const channel of channels) {
-      const result = await sendEvaluationLink(evaluationId, channel);
+    for (const layer of layers) {
+      for (const channel of channels) {
+        const result = await sendEvaluationLink(evaluationId, channel, layer);
 
-      outcomes.push(
-        result.ok
-          ? result.data
-          : {
-              evaluationId,
-              name: "",
-              channel,
-              ok: false,
-              // The action's message already names the person.
-              message: result.error.message,
-            },
-      );
+        outcomes.push(
+          result.ok
+            ? result.data
+            : {
+                evaluationId,
+                name: "",
+                channel,
+                ok: false,
+                // The action's message already names the person.
+                message: result.error.message,
+              },
+        );
 
-      await new Promise((resolve) => setTimeout(resolve, BULK_GAP_MS));
+        await new Promise((resolve) => setTimeout(resolve, BULK_GAP_MS));
+      }
     }
   }
 

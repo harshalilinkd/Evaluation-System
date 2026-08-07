@@ -20,6 +20,7 @@ import { AlertTriangle, Loader2, MessageSquarePlus, RotateCcw, Send } from "luci
 
 import { AutosaveIndicator, type AutosaveState } from "@/components/appraise/autosave-indicator";
 import { BackLink } from "@/components/appraise/back-link";
+import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
@@ -353,7 +354,10 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
       {/* ---------- Header ---------- */}
       <BackLink href="/team" label="My team" />
 
-      <header className="card-surface space-y-3 p-6">
+      <header className="card-surface space-y-3 p-5 sm:p-6">
+        {/* The same mark the employee's form and the printed pack carry. */}
+        <FormLetterhead caption="Performance evaluation" className="pb-1" />
+
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-display-md text-ink">{meta.employeeName}</h1>

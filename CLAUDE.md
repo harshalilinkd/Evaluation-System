@@ -4013,3 +4013,61 @@ together; as it stands a screen would offer the action and the database would
 reject it. **Not fixed here — it belongs to whoever is adding it.**
 
 Typecheck 0 errors, lint 0 errors, build clean. p23 42/42.
+
+---
+
+### P31 — The form builder made legible, and the mark on the forms themselves
+
+`components/appraise/form-letterhead.tsx` is new. `structure-pane.tsx`,
+`preview-pane.tsx` and `builder-client.tsx` edited section by section (§0.1 —
+no whole-file rewrite), plus the letterhead threaded into both rating screens.
+No route, query, server action or business rule changed.
+
+**Four things were asked for and all four are done.** Recorded together because
+three of them are the same problem seen from different angles: the builder was
+designed on a wide monitor by somebody who already knew what every control did.
+
+| # | Decision | Why |
+|---|---|---|
+| P31-1 | **Below 1150px the builder shows ONE pane, not three stacked** | The previous fallback rendered all three in a column, which PC-10 chose over hiding two of them — right at the time, and still not usable. Each pane owns its own scroller, so three of them inside a page that also scrolls gave three short windows: the structure list about 200px tall, and the editor two full screens below the question you had just tapped. One at a time gives each pane the height it was built for. Nothing is hidden — that was PC-10's actual objection, and it still holds: every pane is one tap away and the tab says what is behind it. |
+| P31-2 | Tapping a question **moves you to the editor**; removing the open one moves you back | On a phone the panes are not side by side, so selecting a question and leaving the reader on the list makes the tap look ignored. The same is true in reverse: staying in an editor whose subject has just been removed is a screen about nothing. |
+| P31-3 | Each tab carries a **second line** saying what is behind it | "Structure · Edit · Preview" is three nouns that all sound like the same screen to somebody opening the builder for the first time. The Edit tab reads "Pick one first" when nothing is selected rather than opening an empty pane (§13.4). |
+| P31-4 | **A search, and it is a VIEW — never the order** | The bank runs to hundreds of rows across eight sections, so finding the one about wastage meant opening every section in turn. Typing opens the sections that match and drops the rest. The critical detail: `visibleIn` is a separate list from `rowsIn`, because reordering computes positions from the list it is given — hand it a filtered one and a drag moves the row to its index among the *matches* rather than among its neighbours. Dragging is off while searching, and Add is hidden, since a new question would land straight out of view. |
+| P31-5 | **White at 40% reads as grey, not as a lighter weight** | This is what "make the font readable" was pointing at. The structure pane is white on ink, where opacity does not behave like a type weight — it desaturates to the background. Body text was at 45%, counts at 40%, the row index at 30%, the drag handle at 20%. Everything is now at 70% or above, and a suite check fails on anything under 55%. |
+| P31-6 | **Nothing under 11px**, and the 9px tags are gone | Six distinct sizes below the type scale had accumulated — `text-[9px]`, `[10px]`, `[10.5px]`, `[11px]` — each one added because the previous one was too big for the space. The space was the problem. Asserted, so the next squeeze fails rather than shipping. |
+| P31-7 | An open section is a **darker well, not a lighter one** | It was `bg-white/[0.07]`, which lifted the open section away from the panel and washed the whole pane toward grey — the thing that made the type look faint in the first place. Recessing it to `bg-black/25` keeps the ground dark and the text on top of it. Same for the footer. This is the "a little darker" half of the request; the other half was P31-5. |
+| P31-8 | The remove button is **reachable without a hover** | It was `opacity-0` until hover. There is no hover on a touch screen, so on a phone that control did not exist — the row could be read and selected but never removed. Visible below `lg`, hover-revealed above it. The drag handle goes the other way: it is a pointer affordance, so it is hidden where it cannot be used rather than sitting there doing nothing. |
+| P31-9 | **The mark is one component, four callers** | P27 put the logo on the printed pack. A form filled in on a phone is the same document before it is signed and should say whose it is. Written once — the print routes had already drifted into four spellings of one header (P27 addendum) and had to be reconciled; starting from one is cheaper than converging on one. It goes on the employee's form, the lead's review, the builder preview and the submitted confirmation. |
+| P31-10 | `alt` is **empty**, and the tile is white | Both inherited from P27 and both load-bearing. Empty alt means decorative, and a browser renders *nothing* for a broken decorative image — so a deployment missing `public/logo.png` shows a clean gap rather than a broken-image glyph on somebody's appraisal. The white plate is P27-8: the artwork is multi-coloured on a transparent ground, and a dark header swallows the strokes that give the wordmark its shape. |
+| P31-11 | The preview shows the letterhead too | The point of that pane is "if it renders here it renders identically for the employee" (P9B-1). A preview of the questions alone is a preview of part of the document. |
+
+**Verification — p9b 88 checks, 0 failed**, up from 66. New coverage: the small
+screen shows one pane and every pane has a tab; the switcher is at module scope
+(P14-12); tapping moves you to the editor and removing brings you back; search
+filters a list that reorder does not read, and reorder still reads the
+unfiltered one; dragging is off while filtered; **no type under 11px and no
+white text under 55% anywhere in the structure pane**, both asserted with the
+offending values reported; the remove button is reachable without a hover; and
+the mark is one component used by all four screens with an empty alt and a
+white plate on ink.
+
+**A suite assertion was wrong and was fixed, not deleted.** p9b's "sections come
+from SECTION_ORDER, not from state" tested `!/setSections/` — which also matches
+`setSectionsOpen`, the dialog boolean P25 added. It had been reporting a section
+*list* setter that has never existed. Now `/setSections\s*\(/`, with a
+self-test proving it catches a real setter and not the dialog's. **This is the
+substring trap, and it is the comment trap's cousin** — §18 has recorded that
+one eight times. The general rule now covers both: an absence check targets the
+call syntax, never the bare identifier.
+
+**Regression: 1506 passed, 9 failed across 29 suites.** Every one of the nine
+was verified against a baseline with this phase's edits removed and is
+**identical** — they belong to the concurrent work, not to this: p4-pure (§8's
+table has gained a 14th row), p8patch (`data-grid.tsx` restates "Details"),
+p11 (`smtp.ts` imports a provider, which AMEND-4 intended), p12, p13, p20 and
+p22. Typecheck 0 errors, lint 0 errors, build clean.
+
+**p6 needs `NEXT_PUBLIC_APP_URL` set to run at all**, and that is P30 working
+rather than a failure: `absoluteUrl` now refuses to build a link with no site
+in front of it, and the suite calls `inviteUrl` directly. With any public
+address set it is 66/0. Worth knowing before somebody reads the crash as a bug.

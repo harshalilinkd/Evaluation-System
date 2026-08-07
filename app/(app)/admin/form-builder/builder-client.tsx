@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, Loader2, TriangleAlert, Undo2 } from "lucide-react";
+import { Check, Eye, ListTree, Loader2, PencilLine, TriangleAlert, Undo2 } from "lucide-react";
 
 import { BuilderTabs } from "@/app/(app)/admin/form-builder/builder-tabs";
 import { EditorPane } from "@/app/(app)/admin/form-builder/editor-pane";
@@ -20,12 +20,15 @@ import { DEPARTMENT_SECTION, SECTION_ORDER } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { FormDefinition, FormQuestion } from "@/lib/forms/types";
 import { estimateFill } from "@/lib/questions/estimate";
+import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/date";
 
 export type { BuilderQuestion };
 
 const PANE_LABELS = ["Form structure", "Question editor", "Live preview"] as const;
 const DEFAULT_LAYOUT = [0.22, 0.31, 0.47] as const;
+
+type MobilePane = "structure" | "editor" | "preview";
 
 export function BuilderClient({
   questions,
@@ -48,6 +51,8 @@ export function BuilderClient({
   // Lifted out of StructurePane: the preview scrolls to whichever section is
   // open, so both panes must read the same value rather than each holding one.
   const [openSection, setOpenSection] = React.useState<QuestionSection | null>("CORE_PERFORMANCE");
+  /** Which pane is on screen below 1150px. Ignored above it — all three show. */
+  const [mobilePane, setMobilePane] = React.useState<MobilePane>("structure");
   const reduced = useReducedMotion();
 
   const builder = useBuilder({
@@ -241,52 +246,87 @@ export function BuilderClient({
         </ResizablePanes>
       </div>
 
-      {/* ---------- Below 1150px: stacked, nothing hidden ---------- */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto xl:hidden">
-        <StructurePane
-          draft={builder.draft}
-          mappedIds={mappedIds}
-          departments={departments}
-          departmentId={departmentId}
-          onDepartmentChange={setDepartmentId}
-          selectedId={builder.selectedId}
-          onSelect={builder.setSelectedId}
-          openSection={openSection}
-          onOpenSectionChange={setOpenSection}
-          onAdd={builder.addQuestion}
-          onRemove={handleRemove}
-          onReorder={builder.reorderSection}
-          estimate={estimate}
-          headcount={headcount}
-        />
-        <EditorPane
-          question={selected}
-          options={builder.options}
-          allQuestions={builder.draft}
-          departments={departments}
-          mappedDepartmentIds={
-            selected
-              ? builder.mappings
-                  .filter((m) => m.questionId === selected.id)
-                  .map((m) => m.departmentId)
-              : []
-          }
-          onPatch={(changes) => selected && builder.patch(selected.id, changes)}
-          onRemove={() => selected && void handleRemove(selected.id)}
-          onOptionsChange={(next) => selected && builder.setQuestionOptions(selected.id, next)}
-          onDepartmentsChange={(ids) => selected && builder.setDepartments(selected.id, ids)}
-        />
-        <PreviewPane
-          form={previewForm}
-          audience={audience}
-          onAudienceChange={setAudience}
-          phone={phone}
-          onPhoneChange={setPhone}
-          departmentName={departmentName}
+      {/* ---------- Below 1150px: one pane at a time ---------- */}
+      {/* -- Stacking all three was worse than it sounds. Each pane owns its own
+            scroller, so three of them in a column gave three short windows
+            inside one long page — the structure list 200px tall, the preview
+            scrolling inside a page that also scrolled. On a phone the editor
+            was two full screens below the question you had just tapped.
+
+            One at a time gives each pane the whole height, which is what they
+            were built for, and tapping a question moves you to it. Nothing is
+            hidden: every pane is a tap away and the switcher says which is
+            which. -- */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:hidden">
+        <PaneSwitcher
+          value={mobilePane}
+          onChange={setMobilePane}
           questionCount={previewForm.questions.length}
-          focusQuestionId={builder.selectedId}
-          focusSection={openSection}
+          hasSelection={Boolean(selected)}
         />
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          {mobilePane === "structure" ? (
+            <StructurePane
+              draft={builder.draft}
+              mappedIds={mappedIds}
+              departments={departments}
+              departmentId={departmentId}
+              onDepartmentChange={setDepartmentId}
+              selectedId={builder.selectedId}
+              // Tapping a question is a request to edit it. Selecting it and
+              // leaving the reader on the list makes the tap look ignored.
+              onSelect={(id) => {
+                builder.setSelectedId(id);
+                setMobilePane("editor");
+              }}
+              openSection={openSection}
+              onOpenSectionChange={setOpenSection}
+              onAdd={(section) => {
+                builder.addQuestion(section);
+                setMobilePane("editor");
+              }}
+              onRemove={handleRemove}
+              onReorder={builder.reorderSection}
+              estimate={estimate}
+              headcount={headcount}
+            />
+          ) : mobilePane === "editor" ? (
+            <EditorPane
+              question={selected}
+              options={builder.options}
+              allQuestions={builder.draft}
+              departments={departments}
+              mappedDepartmentIds={
+                selected
+                  ? builder.mappings
+                      .filter((m) => m.questionId === selected.id)
+                      .map((m) => m.departmentId)
+                  : []
+              }
+              onPatch={(changes) => selected && builder.patch(selected.id, changes)}
+              onRemove={() => {
+                if (!selected) return;
+                void handleRemove(selected.id);
+                setMobilePane("structure");
+              }}
+              onOptionsChange={(next) => selected && builder.setQuestionOptions(selected.id, next)}
+              onDepartmentsChange={(ids) => selected && builder.setDepartments(selected.id, ids)}
+            />
+          ) : (
+            <PreviewPane
+              form={previewForm}
+              audience={audience}
+              onAudienceChange={setAudience}
+              phone={phone}
+              onPhoneChange={setPhone}
+              departmentName={departmentName}
+              questionCount={previewForm.questions.length}
+              focusQuestionId={builder.selectedId}
+              focusSection={openSection}
+            />
+          )}
+        </div>
       </div>
 
       <SaveBar
@@ -298,6 +338,98 @@ export function BuilderClient({
         }}
         onDismissUndo={() => setUndo(null)}
       />
+    </div>
+  );
+}
+
+/* ---------- The small-screen pane switcher ---------- */
+//
+// Module scope, not defined inside BuilderClient: a component created during
+// render is a new type on every render, so the subtree remounts and any control
+// inside it loses focus mid-interaction (P14-12).
+//
+// Each tab carries a second line saying what is behind it, because "Structure /
+// Edit / Preview" alone is three nouns that all sound like the same screen to
+// somebody opening the builder for the first time.
+function PaneSwitcher({
+  value,
+  onChange,
+  questionCount,
+  hasSelection,
+}: {
+  value: MobilePane;
+  onChange: (next: MobilePane) => void;
+  questionCount: number;
+  hasSelection: boolean;
+}) {
+  const reduced = useReducedMotion();
+
+  const tabs = [
+    { value: "structure" as const, label: "Structure", icon: ListTree, hint: "The whole form" },
+    {
+      value: "editor" as const,
+      label: "Edit",
+      icon: PencilLine,
+      // Naming the state rather than showing an enabled-looking tab that opens
+      // an empty pane (§13.4 — no dead ends).
+      hint: hasSelection ? "One question" : "Pick one first",
+    },
+    {
+      value: "preview" as const,
+      label: "Preview",
+      icon: Eye,
+      hint: `${questionCount} ${questionCount === 1 ? "question" : "questions"}`,
+    },
+  ];
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Builder panes"
+      className="grid shrink-0 grid-cols-3 gap-1 rounded-card bg-surface-mute p-1"
+    >
+      {tabs.map((tab) => {
+        const active = value === tab.value;
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(tab.value)}
+            className="relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-control px-2 py-1.5"
+          >
+            {active ? (
+              <motion.span
+                layoutId="builder-pane-tab"
+                transition={
+                  reduced ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 38 }
+                }
+                aria-hidden
+                className="absolute inset-0 rounded-control bg-surface shadow-dashboard"
+              />
+            ) : null}
+            <span
+              className={cn(
+                "relative flex items-center gap-1.5 text-body-sm font-semibold",
+                active ? "text-ink" : "text-ink-muted",
+              )}
+            >
+              <Icon aria-hidden className="size-4" />
+              {tab.label}
+            </span>
+            <span
+              className={cn(
+                "relative truncate text-[11px]",
+                active ? "text-ink-muted" : "text-ink-faint",
+              )}
+            >
+              {tab.hint}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

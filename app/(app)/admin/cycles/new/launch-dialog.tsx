@@ -43,6 +43,7 @@ export function LaunchDialog({
   cycleKind,
   pending,
   error,
+  notice = null,
   onConfirm,
 }: {
   open: boolean;
@@ -54,6 +55,13 @@ export function LaunchDialog({
   cycleKind: "BATCH" | "ROLLING";
   pending: boolean;
   error: string | null;
+  /**
+   * Set when the launch SUCCEEDED but no invite went out.
+   *
+   * Distinct from `error` on purpose — the cycle is live either way, and the
+   * two need to look different or HR will relaunch something already launched.
+   */
+  notice?: string | null;
   onConfirm: () => void;
 }) {
   // Both start empty for a given opening. The caller keys this component on
@@ -144,30 +152,67 @@ export function LaunchDialog({
           </div>
         )}
 
+        {/* ---------- Launched, but nobody has been told ----------
+            AMBER, not rose, and that distinction is the whole point: the cycle
+            IS launched — the evaluations, the frozen snapshots and every token
+            are written and audited. Only the messages did not go. Showing this
+            as an error would have HR pressing Launch again on a cycle that is
+            already live. */}
+        {notice ? (
+          <div
+            role="status"
+            className="space-y-2 rounded-control border border-warning/40 bg-warning-tint px-3 py-2"
+          >
+            <p className="text-body-sm font-medium text-ink">
+              The cycle is launched, but no invite links were sent.
+            </p>
+            <p className="text-body-sm text-ink-muted">{notice}</p>
+            <p className="text-body-sm text-ink-muted">
+              Nothing is lost. Fix that, then send the links from the cycle&rsquo;s Send links
+              screen.
+            </p>
+          </div>
+        ) : null}
+
         {error ? (
           <p role="alert" className="rounded-control bg-critical-tint px-3 py-2 text-body-sm text-critical">
             {error}
           </p>
         ) : null}
 
+        {/* Once launched there is nothing left to confirm and no way to undo
+            it, so the footer stops offering both — one button, forward. */}
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11"
-            disabled={pending}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button type="button" className="min-h-11" disabled={!confirmed || pending} onClick={onConfirm}>
-            {pending ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden />
-            ) : (
-              <Rocket className="size-4" aria-hidden />
-            )}
-            {pending ? "Launching…" : `Launch ${participantCount} evaluations`}
-          </Button>
+          {notice ? (
+            <Button type="button" className="min-h-11" onClick={onConfirm}>
+              Open the cycle
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={pending}
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="min-h-11"
+                disabled={!confirmed || pending}
+                onClick={onConfirm}
+              >
+                {pending ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <Rocket className="size-4" aria-hidden />
+                )}
+                {pending ? "Launching…" : `Launch ${participantCount} evaluations`}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

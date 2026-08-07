@@ -6,6 +6,7 @@ import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Eye, Monitor, Smartphone } from "lucide-react";
 
+import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
@@ -95,9 +96,9 @@ export function PreviewPane({
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card-lg bg-canvas">
       {/* ---------- Controls ---------- */}
-      <header className="shrink-0 space-y-3 border-b border-border/60 bg-surface px-5 py-4">
+      <header className="shrink-0 space-y-3 border-b border-border/60 bg-surface px-4 py-4 sm:px-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+          <span className="flex items-center gap-1.5 text-body-sm font-semibold uppercase tracking-wide text-ink-muted">
             <Eye aria-hidden className="size-3.5" />
             Live preview
           </span>
@@ -129,10 +130,10 @@ export function PreviewPane({
           initial={reduced ? false : { opacity: 0, y: -3 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.2 }}
-          className="text-body-sm leading-snug text-ink-muted"
+          className="text-body-sm leading-snug text-ink"
         >
           <strong className="font-semibold text-ink">{current.heading}</strong> · {current.blurb}
-          <span className="mt-0.5 block text-[11px]">
+          <span className="mt-0.5 block text-body-sm text-ink-muted">
             {departmentName} · {questionCount}{" "}
             {questionCount === 1 ? "question" : "questions"} · {NOT_AN_ANSWER}
           </span>
@@ -160,6 +161,10 @@ export function PreviewPane({
             {/* p-4 because `.app-main` is px-4 — the preview must not be
                 roomier than the screen it claims to be. */}
             <div className={cn(phone && "max-h-[70vh] overflow-y-auto p-4")}>
+              {/* The mark the real form carries, so the preview is the whole
+                  document rather than only its questions. */}
+              <FormLetterhead caption="Performance evaluation" className="mb-4" />
+
               {form.questions.length === 0 ? (
                 <p className="rounded-card border border-dashed border-border p-8 text-center text-body-sm text-ink-muted">
                   No questions are on this side of the form yet.

@@ -3,6 +3,7 @@
 import "server-only";
 
 import { cycleError, plural, today, type CycleResult, type ReadinessIssue, type ReadinessReport } from "@/lib/cycles/schema";
+import { checkAppUrl } from "@/lib/notify/preflight";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
 
@@ -286,6 +287,27 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
     const entry = perLead.get(p.leadId) ?? { name: p.leadName ?? "A lead", count: 0 };
     entry.count += 1;
     perLead.set(p.leadId, entry);
+  }
+
+  /* -- Can an invite link even be built? --
+        A WARNING, not a block. The cycle is perfectly launchable with an
+        unreachable app URL — the evaluations, the snapshots and the tokens are
+        all written and the forms work for anybody already signed in. What does
+        not work is MESSAGING people, and until now that only surfaced as a
+        runtime error thrown after the launch had already committed: HR saw a
+        crash on a cycle that was in fact live.
+
+        Saying it here means HR reads it on the readiness screen, before
+        pressing Launch, which is when they can do something about it. */
+  const appUrl = checkAppUrl(process.env.NEXT_PUBLIC_APP_URL);
+  if (!appUrl.ok) {
+    warnings.push({
+      code: appUrl.code,
+      message: `${appUrl.title}. The cycle will launch, but no invite link can be sent until this is fixed.`,
+      subjects: [appUrl.detail, appUrl.fix],
+      href: `/admin/cycles/${cycleId}/distribute`,
+      hrefLabel: "Send links later",
+    });
   }
 
   const overloaded = [...perLead.values()].filter((l) => l.count > 12);

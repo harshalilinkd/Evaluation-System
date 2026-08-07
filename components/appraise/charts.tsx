@@ -14,6 +14,10 @@ import {
   Pie,
   PieChart,
   PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
   RadialBar,
   RadialBarChart,
   ReferenceLine,
@@ -794,5 +798,75 @@ export function BucketBarChart({
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+/* ---------- Radar ---------- */
+
+/**
+ * One person's shape across the sections, with every layer that rated them
+ * drawn on the same axes.
+ *
+ * WHY A RADAR HERE, when a radar is usually the wrong answer. Its two ordinary
+ * failures do not apply: the axes are not arbitrary (the sections are a fixed,
+ * ordered set that everybody's form shares) and the scale is not mixed (every
+ * axis is the same 0–5). What it buys is the one thing a stack of bars cannot
+ * show — the SHAPE of a disagreement. Two polygons that sit on top of each
+ * other mean the review is settled; one pulled in on two spokes says exactly
+ * where the conversation is, at a glance and before reading a number.
+ *
+ * At most three series, structurally: self, lead and final are the only layers
+ * there are (§1). Final is passed only once it differs from the lead, since
+ * before that it sits exactly on the lead polygon and just thickens the line.
+ *
+ * The axis starts at 0 and is never truncated. On an appraisal chart a floor of
+ * 2 would make a 3 look like nothing, and 0 is a real score (§6).
+ */
+export function SectionRadarChart({
+  data,
+  series,
+  height = 300,
+}: {
+  data: { section: string; [key: string]: string | number | null }[];
+  series: { key: string; label: string; color: ChartColor | string }[];
+  height?: number;
+}) {
+  const reduced = usePrefersReducedMotion();
+  const colorOf = (c: ChartColor | string) =>
+    c in CHART_COLORS ? CHART_COLORS[c as ChartColor] : c;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <RadarChart data={data} outerRadius="72%">
+        <PolarGrid stroke={GRID.stroke} strokeWidth={GRID.strokeWidth} />
+        <PolarAngleAxis
+          dataKey="section"
+          tick={{ ...AXIS.style, fill: "rgb(var(--ink-muted))" }}
+        />
+        {/* The rings are labelled once, faintly. Without a radius axis a radar
+            is a shape with no scale, and a reader cannot tell a 4 from a 2. */}
+        <PolarRadiusAxis
+          domain={[0, 5]}
+          tickCount={6}
+          tick={{ ...AXIS.style, fill: "rgb(var(--ink-faint))" }}
+          axisLine={false}
+        />
+        {series.map((s) => (
+          <Radar
+            key={s.key}
+            name={s.label}
+            dataKey={s.key}
+            stroke={colorOf(s.color)}
+            strokeWidth={2}
+            fill={colorOf(s.color)}
+            // Low enough that three overlapping polygons stay individually
+            // readable — the case this chart exists for.
+            fillOpacity={0.14}
+            isAnimationActive={!reduced}
+          />
+        ))}
+        <ChartTooltip />
+      </RadarChart>
+    </ResponsiveContainer>
   );
 }
