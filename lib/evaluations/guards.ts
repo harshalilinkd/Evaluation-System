@@ -20,7 +20,10 @@ export type GuardContext = {
   evaluation: Tables<"evaluations">;
   cycle: Pick<Tables<"evaluation_cycles">, "id" | "status" | "disclosure" | "variance_threshold">;
   transition: TransitionDefinition;
-  options: { reason?: string };
+  /* The caller's whole options object. `finalScore` is here because
+     `requireDisclosureReady` has to see a figure that is arriving in the same
+     call as the transition it gates — see the note there. */
+  options: { reason?: string; finalScore?: number | null };
 };
 
 function deny(code: string, message: string): GuardResult {
@@ -172,14 +175,47 @@ async function requireDisclosureReady(ctx: GuardContext): Promise<GuardResult> {
     );
   }
 
-  if (ctx.cycle.disclosure !== "NONE" && ctx.evaluation.final_overall === null) {
-    return deny(
-      "NO_FINAL_SCORE",
-      "There is no final score to disclose. Finalise the MD layer before closing.",
-    );
+  /* -- THIS GUARD USED TO DEMAND `final_overall`, AND NOTHING WRITES IT.
+        It read "there is no final score to disclose — finalise the MD layer
+        before closing", and that sentence describes a product that no longer
+        exists. `final_overall` is only ever set when an MD LAYER is locked, and
+        AMEND-3 left no transition that locks one: grep `locks:` in
+        transitions.ts and there are exactly two, SELF and LEAD. AMEND-2 said as
+        much outright — §11: "There is no final score column and no override."
+
+        So this refused every close on any cycle whose disclosure was not NONE,
+        which is both endings: HR completing it (0039) and the older
+        MD_REVIEWED -> CLOSED. The feature could not have worked even with the
+        migration applied, and neither could the path that shipped before it.
+
+        §11 names the replacement in the same breath: "If a single headline
+        figure is needed, use the Lead average and label it as such." So that is
+        what has to exist before a score can be disclosed. -- */
+  if (ctx.cycle.disclosure === "NONE") return { ok: true };
+
+  /* -- What counts as "there is something to disclose", widest first.
+
+        `options.finalScore` is checked because HR types the agreed figure and
+        presses Complete in ONE call: the guard runs against the row as it was
+        read, before the patch is applied, so a guard that only looked at stored
+        columns would refuse the very score being supplied. That is a real trap
+        — the field would appear to do nothing. -- */
+  const suppliedNow = ctx.options.finalScore != null;
+  const alreadyStored = ctx.evaluation.final_overall !== null;
+  const hasLeadAverage = ctx.evaluation.lead_overall !== null;
+
+  /* A skipped lead layer is not a missing score, it is an evaluation nobody
+     rated — HR advanced past it deliberately (§8) and there is genuinely
+     nothing to show. Refusing would strand exactly the records HR had already
+     made a decision about, so it closes and the disclosure carries no figure. */
+  if (suppliedNow || alreadyStored || hasLeadAverage || ctx.evaluation.lead_skipped) {
+    return { ok: true };
   }
 
-  return { ok: true };
+  return deny(
+    "NO_RATING_TO_DISCLOSE",
+    "There is no rating to disclose — the lead's review has not been submitted. Return it to them, or advance past it with a reason.",
+  );
 }
 
 /* ---------- Registry ---------- */

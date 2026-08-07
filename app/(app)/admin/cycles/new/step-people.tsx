@@ -222,9 +222,12 @@ export function StepPeople({
         The form goes to both people at the same time. Neither can see the other&rsquo;s answers.
       </p>
 
+      {/* `appraisable`, not `people` — with the MD in the denominator the line
+          read "1 of 4" on a roster of three, which is a count nobody can make
+          add up. */}
       <p className="tabular text-body-sm text-ink-muted">
-        {includedCount} of {people.length} people included
-        {visible.length !== people.length ? ` · showing ${visible.length}` : ""}
+        {includedCount} of {appraisable.length} people included
+        {visible.length !== appraisable.length ? ` · showing ${visible.length}` : ""}
       </p>
 
       {/* -- Table -- */}

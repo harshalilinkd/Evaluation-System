@@ -3959,3 +3959,52 @@ hold. Typecheck 0, lint 0.
 **Still true:** email is not what is blocking anybody. `NEXT_PUBLIC_APP_URL` is
 still `http://localhost:3000`, so every invite link on the deployment is a bare
 path (P30) — on both channels.
+
+---
+
+### P30 — The dashboard's density, and the gap made visible
+
+Two things: the dashboard stopped rendering chart-shaped holes when it has no
+data, and the product's central comparison — self against lead — became a chart
+instead of four numbers in a row.
+
+#### Why the dashboard looked wrong when nothing was wrong
+
+`EmptyState` is the FULL-PAGE affordance: a dashed block sized to fill a screen.
+Dropped inside a dashboard panel it holds ~300px open to say one sentence. Early
+in a cycle every panel is empty, so the page became whitespace with captions
+floating in it — which reads as broken rather than as early, and early is where
+every cycle starts.
+
+| # | Decision | Why |
+|---|---|---|
+| P30-1 | A panel with nothing to show **collapses to a line** | `PanelEmpty` instead of the full-page block. The card sizes to its content, so a young cycle looks young rather than faulty. |
+| P30-2 | **The hero earns its size, or it does not get it** | A full-bleed dark slab announcing "Nothing needs you" was the loudest element on a page whose entire message was that there is nothing to do. It takes the night treatment only when the reader has something outstanding; otherwise it steps back to a quiet card and lets the numbers lead. Weight follows importance. |
+| P30-3 | Rows are **equal height** | Two panels side by side with different content left a gap under the shorter one, which reads as a rendering fault rather than a layout. |
+| P30-4 | The four counts gained a **denominator and a progress bar** | Four bare numbers with nothing to divide by are four facts nobody can act on. The bar uses `--primary`, not a tier: it is the cycle's progress, not any one layer's (§13.1, UI2-12). |
+| P30-5 | When a cycle has produced **no ratings at all**, the four analysis panels collapse into one | Four empty charts is the wrong shape for "this has just launched". |
+
+#### The gap, as a chart
+
+| # | Decision | Why |
+|---|---|---|
+| P30-6 | **A dumbbell, not paired bars** | The question is "where do the two sides disagree", and a table of four numbers per row made the reader subtract in their head. Paired bars would ask them to compare two lengths from a shared baseline; a dumbbell puts both points on one track and makes the DISTANCE the visible thing. The gap becomes the shape. |
+| P30-7 | The palette was **computed, not judged** | The dataviz skill's validator was run rather than the pair being eyeballed. The full five-colour set FAILS — green↔pink at ΔE 4.9 under deuteranopia — so those two must never sit adjacent, which is already the rule (green is the trend colour, pink a tier). The §13.1 tier pair **passes**: ΔE 8.9 deutan, 31.2 normal. It was mandated anyway; it is good to know it is also correct. |
+| P30-8 | Cyan's contrast WARN is **discharged, not dismissed** | The validator flags cyan below 3:1 on white and the skill says that "obligates visible labels or a table view — it is not dismissable". Both ship: the gap is direct-labelled on every row, and `ChartFigure` keeps the table one click away. |
+| P30-9 | The **gap** is the only number on every row | "Label selectively — never a number on every point." The two values ride the dots on hover and live in the table; flooding the rows would make the labels stop working. |
+| P30-10 | Two series, so a **legend is always present** | Identity is never left to colour alone. The swatch carries the hue; the text stays in ink tokens, never the series colour. |
+| P30-11 | Markers are 12px with a **2px surface ring**, and the connector is 4px | The skill's mark spec. The ring is what keeps the two dots legible where they overlap, which is exactly the case that matters — a small gap is the interesting one. |
+
+#### Found in the parallel work, and fixed because it blocked the build
+
+`cycles-client.tsx` had a `//` comment sitting **between JSX attributes**, which
+is a syntax error — `{/* */}` is only valid between children, so neither form
+works there. Moved above the element. Recorded because it is not mine.
+
+`transitions.ts` has also gained a row §8 does not contain —
+`PENDING_HR_REVIEW → CLOSED` — and `apply_evaluation_transition` refuses it. P5-1
+duplicated that table into SQL deliberately, noting both halves must change
+together; as it stands a screen would offer the action and the database would
+reject it. **Not fixed here — it belongs to whoever is adding it.**
+
+Typecheck 0 errors, lint 0 errors, build clean. p23 42/42.

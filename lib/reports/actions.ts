@@ -111,6 +111,21 @@ export async function sendToMd(input: {
 }
 
 /**
+ * The agreed final score. §6's scale, to two decimals.
+ *
+ * `coerce` because the field hands back a string. The range is the rating
+ * scale's, not an arbitrary bound: a final score has to be readable against the
+ * same 0-5 anchors every question uses, or the number on the record means
+ * nothing next to the two averages beside it.
+ */
+const finalScoreSchema = z.coerce
+  .number({ invalid_type_error: "Enter a score between 0 and 5." })
+  .min(0, "The lowest score is 0.")
+  .max(5, "The highest score is 5.")
+  // Two decimals, matching every other stored average (§11).
+  .transform((value) => Math.round(value * 100) / 100);
+
+/**
  * Approve and complete, without the MD. PENDING_HR_REVIEW → CLOSED.
  *
  * EVALUATION cycles only — `requireEvaluationCycle` runs inside `transition()`
@@ -127,6 +142,8 @@ export async function hrCompleteEvaluation(input: {
   evaluationId: string;
   summary: string;
   recommendation: string;
+  /** The agreed figure, typed by HR after speaking to the MD. Optional. */
+  finalScore?: string | number | null;
 }): Promise<CycleResult<{ status: string; notified: unknown }>> {
   const auth = await requireHr();
   if (!auth.ok) return auth;
@@ -136,10 +153,27 @@ export async function hrCompleteEvaluation(input: {
     return cycleError("NO_SUMMARY", parsed.error.issues[0]?.message ?? "Write a summary first.");
   }
 
+  /* -- The agreed final score.
+        Validated HERE and not merely on the field, because the field is a
+        courtesy and this action is callable directly. The range is §6's rating
+        scale — a "final score" of 9 on a form that runs 0 to 5 is corrupt data,
+        and P4-10 already established that out-of-range input is refused rather
+        than clamped: clamping launders a mistake into a real-looking number. -- */
+  let finalScore: number | null = null;
+  if (input.finalScore !== undefined && input.finalScore !== null && input.finalScore !== "") {
+    const parsedScore = finalScoreSchema.safeParse(input.finalScore);
+    if (!parsedScore.success) {
+      return cycleError("INVALID_SCORE", parsedScore.error.issues[0]?.message ?? "Check the score.");
+    }
+    finalScore = parsedScore.data;
+  }
+
   const saved = await saveHrReview(input);
   if (!saved.ok) return saved;
 
-  const moved = await transition(parsed.data.evaluationId, "CLOSED", actorOf(auth.session));
+  const moved = await transition(parsed.data.evaluationId, "CLOSED", actorOf(auth.session), {
+    finalScore,
+  });
   if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
 
   revalidatePath("/reports");

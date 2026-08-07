@@ -66,11 +66,10 @@ export function CyclesClient({
         approval, a plain evaluation does not (0039). Those are different jobs
         on different timetables, and mixing them in one list meant reading the
         Type column on every row to know which was which. -- */
-  const [kind, setKind] = React.useState<"ALL" | "EVALUATION" | "INCREMENT">("ALL");
+  const [kind, setKind] = React.useState<"EVALUATION" | "INCREMENT">("EVALUATION");
 
   const counts = React.useMemo(
     () => ({
-      all: cycles.length,
       evaluation: cycles.filter((c) => c.cycleType === "EVALUATION").length,
       increment: cycles.filter((c) => c.cycleType === "INCREMENT").length,
     }),
@@ -80,7 +79,7 @@ export function CyclesClient({
   const rows = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
     return cycles.filter((c) => {
-      if (kind !== "ALL" && c.cycleType !== kind) return false;
+      if (c.cycleType !== kind) return false;
       if (!needle) return true;
       return (
         c.name.toLowerCase().includes(needle) || c.periodLabel.toLowerCase().includes(needle)
@@ -321,45 +320,57 @@ export function CyclesClient({
         </Button>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface-mute px-3 py-2">
-        {/* ---------- Evaluation and Increment, kept apart ----------
-            A segmented control rather than a dropdown: there are exactly three
-            choices, they are mutually exclusive, and the counts belong beside
-            the words — "Increment 0" is the answer to "do we have any running?"
-            without anybody having to select it and find out. */}
-        <div
-          role="group"
-          aria-label="Which kind of cycle"
-          className="flex items-center gap-0.5 rounded-control border border-rule bg-surface p-0.5"
-        >
-          {(
-            [
-              { value: "ALL", label: "All", count: counts.all },
-              { value: "EVALUATION", label: "Evaluation", count: counts.evaluation },
-              { value: "INCREMENT", label: "Increment", count: counts.increment },
-            ] as const
-          ).map((option) => {
-            const active = kind === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => setKind(option.value)}
+      {/* ---------- Two tabs: Evaluation, Increment ----------
+          Not a filter with an "All" — the two are different jobs on different
+          timetables, and since 0039 they even END differently: an evaluation
+          can be completed by HR alone, an increment still needs the MD on the
+          salary. A list mixing them means reading the Type column on every row
+          to know which kind you are looking at.
+
+          Tabs rather than a segmented control because this is navigation
+          between two views, not a filter over one. The count is on each tab so
+          "do we have any increments running?" is answered without switching. */}
+      <div
+        role="tablist"
+        aria-label="Which kind of cycle"
+        className="flex shrink-0 items-end gap-1 border-b border-rule px-4 lg:px-6"
+      >
+        {(
+          [
+            { value: "EVALUATION", label: "Evaluation", count: counts.evaluation },
+            { value: "INCREMENT", label: "Increment", count: counts.increment },
+          ] as const
+        ).map((tab) => {
+          const active = kind === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setKind(tab.value)}
+              className={cn(
+                "-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 text-body-sm font-medium transition-colors",
+                active
+                  ? "border-b-primary text-ink"
+                  : "border-b-transparent text-ink-muted hover:text-ink",
+              )}
+            >
+              {tab.label}
+              <span
                 className={cn(
-                  "flex min-h-9 items-center gap-1.5 rounded-[6px] px-3 text-body-sm font-medium transition-colors",
-                  active ? "bg-ink text-ink-invert" : "text-ink-muted hover:text-ink",
+                  "tabular rounded-pill px-1.5 py-0.5 text-[11px]",
+                  active ? "bg-primary/10 text-primary" : "bg-surface-mute text-ink-muted",
                 )}
               >
-                {option.label}
-                <span className={cn("tabular", active ? "text-ink-invert/70" : "text-ink-muted")}>
-                  {option.count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface-mute px-3 py-2">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -378,16 +389,27 @@ export function CyclesClient({
         storageKey="appraise.cycles.column-widths"
         minWidth={1540}
         empty={
+          // The empty state speaks for the TAB, not the whole list. "Nothing
+          // matches that" on an untouched Increment tab reads as a broken
+          // search when the truth is that none exist yet.
           <EmptyState
             icon={<CalendarPlus className="size-6" aria-hidden />}
-            title={cycles.length === 0 ? "No evaluation cycles yet" : "Nothing matches that"}
+            title={
+              counts[kind === "EVALUATION" ? "evaluation" : "increment"] === 0
+                ? kind === "EVALUATION"
+                  ? "No evaluation cycles yet"
+                  : "No increment cycles yet"
+                : "Nothing matches that"
+            }
             body={
-              cycles.length === 0
-                ? "Create one to open self-evaluations for your team."
+              counts[kind === "EVALUATION" ? "evaluation" : "increment"] === 0
+                ? kind === "EVALUATION"
+                  ? "Create one to open self-evaluations for your team."
+                  : "An increment cycle runs the same form and then carries on into salary."
                 : "Try a different name or period."
             }
             action={
-              cycles.length === 0 ? (
+              counts[kind === "EVALUATION" ? "evaluation" : "increment"] === 0 ? (
                 <Button asChild className="min-h-11">
                   <Link href="/admin/cycles/new">
                     <Plus className="size-4" aria-hidden />

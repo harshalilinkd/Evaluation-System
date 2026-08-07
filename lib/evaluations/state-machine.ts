@@ -49,6 +49,25 @@ export type TransitionOptions = {
   returnedTo?: "SELF" | "LEAD" | "BOTH";
   /** HR advancing past a layer that never came in. Marks it skipped, not done. */
   skip?: { self?: boolean; lead?: boolean };
+  /**
+   * The agreed final score, recorded by HR on the MD's behalf.
+   *
+   * ⚠ DIVERGES FROM §11 AS AMENDED, AT THE OWNER'S EXPLICIT INSTRUCTION.
+   * AMEND-2 rewrote §11 to say "There is no final score column and no
+   * override... If a single headline figure is needed, use the Lead average and
+   * label it as such." This puts a deliberate figure back.
+   *
+   * What it is NOT: an override of anybody's question score. §17's prohibition
+   * stands untouched — no answer is rewritten, both layers stay exactly as they
+   * were submitted, and the report still carries both numbers and the gap. This
+   * is one overall figure for the record, agreed between HR and the MD out of
+   * band and typed in by HR.
+   *
+   * Written through `p_evaluation_patch`, which is the only route: P5-2 makes
+   * `evaluations` UPDATE-able solely inside the window this RPC opens, so there
+   * is no direct write to reach for.
+   */
+  finalScore?: number | null;
 };
 
 export type TransitionResult =
@@ -205,6 +224,13 @@ export async function transition(
   if (options.returnedTo) Object.assign(patch, returnPatch(options.returnedTo));
   if (options.skip?.self) patch.self_skipped = true;
   if (options.skip?.lead) patch.lead_skipped = true;
+
+  /* -- The agreed final score, when HR supplies one.
+        `!= null` rather than a truthiness test: 0 is a real score on a 0-5
+        scale — §6 calls it "Very dissatisfied (Not implemented)" — and dropping
+        it would silently turn the lowest possible rating into "not recorded"
+        (P4-9, P12-3, the same trap twice already in this codebase). -- */
+  if (options.finalScore != null) patch.final_overall = options.finalScore;
 
   let sectionScores: Json | null = null;
   let overallScore: number | null = null;

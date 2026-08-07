@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MIN_REASON_LENGTH } from "@/lib/evaluations/transitions";
@@ -89,6 +90,14 @@ export function HrRail({ report }: { report: EvaluationReport }) {
   // Completing is the one irreversible act on this screen — §8 has no path out
   // of CLOSED for anybody — so it is confirmed rather than done on one click.
   const [completeOpen, setCompleteOpen] = React.useState(false);
+  /* -- The agreed final score, typed by HR on the MD's behalf.
+        Seeded from whatever is already stored, so reopening the dialog shows
+        the figure rather than an empty box that looks like nothing was set. -- */
+  const [finalScore, setFinalScore] = React.useState(
+    report.summary.leadOverall !== null && report.summary.leadOverall !== undefined
+      ? String(report.summary.leadOverall)
+      : "",
+  );
 
   const atHr = report.header.status === "PENDING_HR_REVIEW";
   const reviewed = report.header.status === "MD_REVIEWED";
@@ -145,6 +154,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
       evaluationId: report.evaluationId,
       summary,
       recommendation,
+      finalScore,
     });
     setBusy(false);
     if (!result.ok) setError(result.error.message);
@@ -316,6 +326,46 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               It will not go to the MD, and your review is what the record carries.
             </DialogDescription>
           </DialogHeader>
+
+          {/* ---------- The agreed final score ----------
+              HR speaks to the MD, the MD gives a figure, HR types it here. It
+              is asked for at the moment of completing rather than sitting in
+              the rail all along, because that is when the conversation has
+              happened — a field filled in an hour earlier is a figure nobody
+              agreed to.
+
+              NOT AN OVERRIDE. §17 forbids rewriting a submitted question score
+              and nothing here does: both layers stay exactly as they were
+              submitted, every answer is untouched, and the report still carries
+              both averages and the gap. This is one headline number for the
+              record. */}
+          <div className="space-y-2">
+            <Label htmlFor="final_score" className="type-label text-ink-muted">
+              Final score
+              <span className="ml-2 font-sans text-body-sm normal-case tracking-normal text-ink-muted">
+                agreed with the MD
+              </span>
+            </Label>
+            <div className="flex flex-wrap items-center gap-3">
+              <Input
+                id="final_score"
+                value={finalScore}
+                onChange={(e) => setFinalScore(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+                aria-describedby="final_score_hint"
+                className="tabular min-h-11 w-28"
+              />
+              <span className="font-sans text-body-sm text-ink-muted">
+                out of 5 · self {report.summary.selfOverall?.toFixed(2) ?? "—"} · lead{" "}
+                {report.summary.leadOverall?.toFixed(2) ?? "—"}
+              </span>
+            </div>
+            <p id="final_score_hint" className="font-sans text-body-sm text-ink-muted">
+              This is what the employee sees if the cycle discloses a score. It starts at the
+              lead&rsquo;s average — change it to whatever you and the MD agreed.
+            </p>
+          </div>
 
           <p className="rounded-control border border-warning/40 bg-warning-tint px-3 py-2 font-sans text-body-sm text-ink">
             There is no way back from completed. If you want the MD to read it first, cancel and

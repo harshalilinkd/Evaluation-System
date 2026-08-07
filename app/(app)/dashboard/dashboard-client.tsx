@@ -15,6 +15,7 @@ import { ArrowRight, ClipboardList, FileText, Flag, Users } from "lucide-react";
 
 import { LabelledBarChart, RankedBarChart, StatusDonutChart, ratingBandColor, ratingBandIndex } from "@/components/appraise/charts";
 import { ChartFigure } from "@/components/appraise/chart-figure";
+import { GapChart } from "@/components/appraise/gap-chart";
 import { HeroCard, StatTile } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import { SECTION_LABELS } from "@/lib/forms/labels";
@@ -506,31 +507,41 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           title="By section"
           subtitle="Company-wide averages, self against lead"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse">
-              <thead>
-                <tr className="border-b border-rule">
-                  {["Section", "Self", "Lead", "Gap"].map((h) => (
-                    <th key={h} className="type-label px-3 py-2 text-left font-bold text-ink">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {pivotSections(sections).map((row) => (
-                  <tr key={row.section} className="border-b border-rule last:border-b-0">
-                    <td className="px-3 py-2 font-sans text-body-sm text-ink">{row.label}</td>
-                    <td className="px-3 py-2 tabular text-body-sm text-self">{score(row.self)}</td>
-                    <td className="px-3 py-2 tabular text-body-sm text-lead">{score(row.lead)}</td>
-                    <td className="px-3 py-2 tabular text-body-sm text-ink-muted">
-                      {row.gap === null ? "—" : `${row.gap > 0 ? "+" : ""}${row.gap.toFixed(2)}`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/*
+            A TABLE OF FOUR NUMBERS PER ROW IS NOT HOW YOU READ A GAP.
+
+            The question this panel answers is "where do the two sides
+            disagree", and a reader had to subtract in their head across a
+            column. A dumbbell puts the two points on one track and makes the
+            distance between them the most visible thing — the gap becomes the
+            shape, not an arithmetic exercise.
+
+            `ChartFigure` keeps the table a click away, which is also what
+            discharges the cyan contrast warning the palette validator raised.
+          */}
+          <ChartFigure
+            caption="Company-wide section averages, self against lead"
+            rows={pivotSections(sections)}
+            columns={[
+              { header: "Section", cell: (r) => r.label },
+              { header: "Self", cell: (r) => score(r.self), align: "right" },
+              { header: "Lead", cell: (r) => score(r.lead), align: "right" },
+              {
+                header: "Gap",
+                cell: (r) =>
+                  r.gap === null ? "—" : `${r.gap > 0 ? "+" : ""}${r.gap.toFixed(2)}`,
+                align: "right",
+              },
+            ]}
+          >
+            <GapChart
+              rows={pivotSections(sections).map((r) => ({
+                label: r.label,
+                self: r.self,
+                lead: r.lead,
+              }))}
+            />
+          </ChartFigure>
         </Panel>
       ) : null}
     </>

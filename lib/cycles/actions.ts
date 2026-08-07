@@ -46,11 +46,30 @@ function revalidateCycles(cycleId?: string) {
 
 /* ============================================================ createCycle == */
 
+/*
+   HOW FOUR FIELDS WENT MISSING WITHOUT A COMPILE ERROR.
+
+   The wizard has always sent `cycle_type`, `cycle_kind`, `default_self_days`
+   and `default_lead_days`; this type never declared them and neither write
+   stored them. It did not fail to compile because the wizard passes a
+   VARIABLE rather than an object literal, and TypeScript's excess-property
+   check only fires on literals — so the extra keys were accepted in silence
+   and dropped on the floor. Declared here now, which makes the same mistake a
+   compile error next time.
+*/
 export type CycleDraftInput = {
   name: string;
   period_label: string;
   variance_threshold: number;
   disclosure: string;
+  cycle_type?: "EVALUATION" | "INCREMENT";
+  cycle_kind?: "BATCH" | "ROLLING";
+  /* `string | number`, because the wizard's number inputs hand back strings and
+     `cycleBasicsSchema` coerces them. Typing these as `number` would compile
+     only by everybody remembering to convert first — which is the same class of
+     silence that let all four be dropped in the first place. */
+  default_self_days?: string | number;
+  default_lead_days?: string | number;
   starts_on?: string;
   self_due_on?: string;
   lead_due_on?: string;
@@ -89,6 +108,18 @@ export async function createCycle(input: CycleDraftInput): Promise<CycleResult<{
       // else, so §5's module boundary holds by construction rather than by
       // remembering to tick a box.
       track_scope: "STAFF",
+      /* -- THE FOUR FIELDS THE WIZARD COLLECTED AND THIS INSERT THREW AWAY.
+            `cycleBasicsSchema` parses all four and the wizard sends all four,
+            and none of them was written — so every cycle silently took the
+            column default and every one of them came out EVALUATION however
+            the picker had been set. An increment cycle created this way is not
+            a cosmetic problem: `cycle_type` decides whether the salary band
+            exists (P20-3), whether the MD's approval is required (0039), and
+            which questions assembly includes (`cycle_scope`, PR-2). -- */
+      cycle_type: basics.data.cycle_type,
+      cycle_kind: basics.data.cycle_kind,
+      default_self_days: basics.data.default_self_days,
+      default_lead_days: basics.data.default_lead_days,
       starts_on: input.starts_on || null,
       self_due_on: input.self_due_on || null,
       lead_due_on: input.lead_due_on || null,
@@ -134,7 +165,11 @@ export async function updateCycle(
 
   const { data: cycle, error: readError } = await supabase
     .from("evaluation_cycles")
-    .select("id, name, status, starts_on, self_due_on, lead_due_on, md_due_on")
+    // The four below are read so an autosave that omits them keeps what is
+    // stored rather than resetting it to the schema default.
+    .select(
+      "id, name, status, starts_on, self_due_on, lead_due_on, md_due_on, cycle_type, cycle_kind, default_self_days, default_lead_days",
+    )
     .eq("id", cycleId)
     .maybeSingle();
 
@@ -194,6 +229,16 @@ export async function updateCycle(
         period_label: input.period_label ?? "",
         variance_threshold: input.variance_threshold ?? 2,
         disclosure: input.disclosure ?? "SCORE_AND_DECISION",
+        /* -- The four the wizard sends and this branch used to ignore. Not
+              defaulted from the schema and then written blind: the wizard
+              autosaves on every keystroke, so a payload that omitted the type
+              would silently reset a cycle already marked INCREMENT back to
+              EVALUATION. `?? cycle.…` keeps what is stored when nothing is
+              sent, and only an explicit value changes it. -- */
+        cycle_type: input.cycle_type ?? cycle.cycle_type ?? "EVALUATION",
+        cycle_kind: input.cycle_kind ?? cycle.cycle_kind ?? "BATCH",
+        default_self_days: input.default_self_days ?? cycle.default_self_days ?? 14,
+        default_lead_days: input.default_lead_days ?? cycle.default_lead_days ?? 21,
       });
       if (!basics.success) {
         return cycleError("INVALID_INPUT", basics.error.issues[0]?.message ?? "Check the highlighted fields.");
@@ -202,6 +247,10 @@ export async function updateCycle(
       patch.period_label = basics.data.period_label;
       patch.variance_threshold = basics.data.variance_threshold;
       patch.disclosure = basics.data.disclosure;
+      patch.cycle_type = basics.data.cycle_type;
+      patch.cycle_kind = basics.data.cycle_kind;
+      patch.default_self_days = basics.data.default_self_days;
+      patch.default_lead_days = basics.data.default_lead_days;
     }
 
     const dates = {
@@ -312,28 +361,22 @@ export async function setCycleParticipants(
         Nobody in this product is above them to rate them: §8's flow needs an
         evaluatee AND a lead, and the MD is the top of the chain the lead picker
         offers. An MD participant would either have no rater at all or be rated
-        by somebody they approve the pay of.
+        by somebody whose pay they approve.
 
-        Refused here as well as hidden in the wizard, for the reason the worker
-        rule states directly above: the roster filter is one refactor away from
-        being dropped, and this action is what actually writes the rows. -- */
+        DROPPED SILENTLY, not refused — which is the opposite of the worker rule
+        directly above, and deliberately so. A worker in a staff cycle means
+        somebody's track changed underneath HR and is worth stopping for. An MD
+        in the list means only that the cycle was drafted before this rule
+        existed: the wizard no longer offers them, so HR cannot tick one, and
+        refusing the save made every such draft unsaveable with an error about
+        a row they could not even see. Nothing is lost by leaving them out. -- */
   const { data: mdRoles } = await supabase
     .from("user_roles")
     .select("profile_id")
     .eq("role", "MD")
     .in("profile_id", included.length > 0 ? included.map((r) => r.profileId) : ["00000000-0000-0000-0000-000000000000"]);
 
-  if (mdRoles && mdRoles.length > 0) {
-    const names = mdRoles
-      .map((r) => byId.get(r.profile_id)?.full_name)
-      .filter((n): n is string => Boolean(n));
-    return cycleError(
-      "MD_NOT_EVALUATED",
-      names.length > 0
-        ? `${names.join(", ")} ${names.length === 1 ? "holds" : "hold"} the MD role and cannot be appraised in a cycle.`
-        : "The MD cannot be appraised in a cycle.",
-    );
-  }
+  const mdIds = new Set((mdRoles ?? []).map((r) => r.profile_id));
 
   const { data: existing } = await supabase
     .from("evaluations")
@@ -342,10 +385,10 @@ export async function setCycleParticipants(
 
   const existingByProfile = new Map((existing ?? []).map((e) => [e.evaluatee_id, e.id]));
 
-  /* -- Upsert the included. -- */
+  /* -- Upsert the included, minus anyone holding MD. -- */
   if (included.length > 0) {
     const payload = included
-      .filter((r) => byId.has(r.profileId))
+      .filter((r) => byId.has(r.profileId) && !mdIds.has(r.profileId))
       .map((r) => {
         const person = byId.get(r.profileId);
         return {
@@ -372,8 +415,15 @@ export async function setCycleParticipants(
   // A plain delete, and safe: the cycle is DRAFT, so these rows carry no frozen
   // snapshot and no answers. After launch the delete policy no longer matches
   // and exclude_evaluation() is the only route, which archives instead.
-  const toRemove = excluded
-    .map((r) => existingByProfile.get(r.profileId))
+  const toRemove = [
+    ...excluded.map((r) => r.profileId),
+    /* -- And anyone holding MD who is already on a draft roster. Skipping them
+          in the upsert above only stops them being ADDED; a draft built before
+          this rule existed still carries their row, and it would go on to
+          launch. This is what actually takes them out. -- */
+    ...included.filter((r) => mdIds.has(r.profileId)).map((r) => r.profileId),
+  ]
+    .map((profileId) => existingByProfile.get(profileId))
     .filter((id): id is string => Boolean(id));
 
   if (toRemove.length > 0) {
@@ -382,7 +432,10 @@ export async function setCycleParticipants(
   }
 
   revalidateCycles(cycleId);
-  return { ok: true, data: { included: included.length, removed: toRemove.length } };
+  return {
+    ok: true,
+    data: { included: included.filter((r) => !mdIds.has(r.profileId)).length, removed: toRemove.length },
+  };
 }
 
 /* =================================================== validateCycleForLaunch */
