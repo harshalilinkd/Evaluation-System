@@ -197,8 +197,12 @@ export function StepReview({
             <section className="flex items-center gap-3 rounded-card border border-success/40 bg-success-tint p-5">
               <Check aria-hidden className="size-4 shrink-0 text-success" />
               <p className="text-body text-ink">
+                {/* `plural`, not a bare count. "1 people are ready" on the
+                    screen that gates a launch reads as a number the app has
+                    not looked at. */}
                 Nothing is blocking this launch.{" "}
-                <span className="tabular">{report.participantCount}</span> people are ready.
+                <span className="tabular">{plural(report.participantCount, "person")}</span>{" "}
+                {report.participantCount === 1 ? "is" : "are"} ready.
               </p>
             </section>
           )}

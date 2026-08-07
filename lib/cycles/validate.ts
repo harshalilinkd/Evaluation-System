@@ -259,6 +259,30 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
     });
   }
 
+  /* -- 3. Nobody at all in a department. --
+        The check above is keyed on `departmentId`, so somebody who has NONE
+        falls straight through it — neither blocked nor warned. Their form
+        would launch with the Job Specific Skills section EMPTY, which is the
+        precise failure P9-7 exists to prevent, arrived at from the one
+        direction that check does not cover.
+
+        §1 makes that section the defining idea of the form: every employee
+        answers the same questions except this one part, which is mapped to
+        their department. A participant with no department is not a person
+        with a thin form; it is a person the form cannot be assembled for. -- */
+  const departmentless = participants.filter((p) => !p.departmentId);
+  if (departmentless.length > 0) {
+    blocking.push({
+      code: "PERSON_HAS_NO_DEPARTMENT",
+      message: `${plural(departmentless.length, "person")} ${
+        departmentless.length === 1 ? "has" : "have"
+      } no department, so there are no Job Specific Skills questions to ask them.`,
+      subjects: departmentless.map((p) => p.name),
+      href: `/admin/settings?tab=users`,
+      hrefLabel: "Set their department",
+    });
+  }
+
   /* -- 4. Dates. -- */
   const dateIssues: string[] = [];
   if (!cycle.starts_on || !cycle.self_due_on || !cycle.lead_due_on || !cycle.md_due_on) {
