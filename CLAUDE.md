@@ -1926,72 +1926,77 @@ lint 0 errors (3 pre-existing warnings), build clean.
 
 ---
 
-### STATUS — where the build stands (as of P23)
+### STATUS — where the build stands (as of P30)
 
-**This section supersedes every earlier "Still to do" list in §18, and replaces
-the version written at NAV-3.** That one predated AMEND-2, AMEND-3 and
-everything from P19 onward, and named several things that have since been
-delivered. The phase entries above are the record of what each phase did and are
-never edited; this is the single current answer to "what is left". **Rewrite this
-section when it drifts, rather than adding a second list somewhere else.**
+**This section supersedes every earlier "Still to do" list in §18**, including
+the version written at P23, which predated everything from P24 onward. The phase
+entries above are the record of what each phase did and are never edited; this
+is the single current answer to "what is left". **Rewrite this section when it
+drifts, rather than adding a second list somewhere else.**
 
-#### Must happen before the next cycle launch
+#### Deployed
 
-- **Migrations 0028–0031 are written but NOT applied.** 0024–0027 were confirmed
-  applied by the owner. Everything from P19-D, P20, P21 and P22 depends on the
-  four that follow, and the product will fail at runtime without them:
-  `0028_employment_import`, `0029_reports`, `0030_increment`, `0031_due_items`.
-- **Rolling, Calendar and Operations may still carry no Job Specific Skills
-  questions.** Per P9-7 a department with none cannot be launched, and
-  `/admin/due` now says so per row rather than failing at launch.
+The app is on Vercel from `github.com/harshalilinkd/Evaluation-System` (private),
+functions pinned to `bom1` because Supabase is `ap-south-1` — they were on
+opposite sides of the world, which was the whole of the "deployed app is slow"
+report.
+
+#### Must happen before anybody is appraised for real
+
+1. **`NEXT_PUBLIC_APP_URL` is still `http://localhost:3000` on the deployment.**
+   Every invite link on both channels is therefore a bare path that opens
+   nothing. `absoluteUrl()` now refuses to build one (P30) rather than sending
+   it, so this fails loudly instead of silently — but it is still the single
+   thing standing between the system and working end to end. Set it and
+   **redeploy**: `NEXT_PUBLIC_*` is baked in at build time.
+2. **Email needs its credentials.** AMEND-4 added SMTP so it can send from a
+   Gmail account; `SMTP_USER`, `SMTP_PASSWORD` (a 16-character App Password)
+   and a matching `MAIL_FROM` are not set yet. WhatsApp works without this.
+3. **Migrations 0038 and 0039 may be unapplied.** 0020–0037 were confirmed by
+   the owner. Without 0038 an evaluation with both sides submitted sits at OPEN
+   and never reaches HR. `supabase/whats-applied.sql` answers this in one paste.
 
 #### Built and working
 
-Schema and RLS (P1–P5) · auth, invites and route guards (P6) · the shared
-component set (P7) · the question bank, users and the single-form model (P8,
-P8-PATCH, P19-C) · departments and Job Specific Skills mapping (P9) · cycles and
-the all-or-nothing launch (P10, P10-REV) · WhatsApp and email distribution (P11,
-P11-WIRE) · the self-evaluation (P12) · the lead review (P13) · **blind parallel
-rating (AMEND-3)** · the print pack (P15) · the analytics views (P16) · the
-notification engine, quiet hours and the pause switch (P17) · the textile
-question bank (P2-RESEED) · the form builder (P9B, P9B-CRUD, NAV-2) · navigation,
-the roster and the scorecard (NAV-1, NAV-2, NAV-3) · employment and compensation
-master data with the bulk import (P19, P19-B, P19-C, P19-D) · **the combined
-report at /reports (P20)** · **salary review, MD approval and the interview
-record (P21)** · **automatic scheduling and the digests (P22)** · the pause
-switch UI, the message log, the wording preview, the role-aware dashboard and
-the increment-bands editor (P23).
+Everything in §18 above, and since P23: the worker appraisal form in the Form
+Builder (P24) · editable section names and order (P25) · the thank-you dialog
+(P26) · the redesigned print pack and the company mark (P27) · the invite-link
+and email preflight (P28) · corrected dashboard encodings with table views
+(P29) · one link builder that cannot emit a broken URL (P30) · SMTP email
+(AMEND-4) · the cycle type on screen · the cycle activity trail · bulk question
+import with the 116 job-specific questions prepared.
 
-**The full path now exists end to end**: launch → both sides rate blind → HR
-reviews → the MD approves → close, or on an increment cycle → interview →
-salary written → close.
+Repairs since P23 worth knowing about, because each was invisible until it bit:
+autosave gated on retired statuses (FIX-2), a save/submit contract that lost
+work (FIX-3), a draft mirror that destroyed the draft (FIX-4/6), `INSERT …
+RETURNING` needing a SELECT policy so only the HOD could submit (FIX-10), and
+§8's both-sides-in transition that nobody had the standing to make (FIX-11).
 
 #### Genuinely outstanding
 
-| Area | What is missing | Notes |
-|---|---|---|
-| **A real end-to-end run** | Nothing has been driven through the whole path against a live database. Every phase is verified in isolation. | The single highest-value thing left. Four of the last six phases each found a user-facing bug that only appeared when something downstream finally exercised the code. |
-| **Two test suites** | `p4-sql` and `p18` drive the pre-AMEND-3 state machine — one transitions `OPEN → OPEN`, the other inserts a retired status. Both need their fixtures rewritten. | Deliberate work, not a patch. They are the only two red suites. |
-| **Worker module (§7)** | Never built. No `worker_` table exists, §8's worker transition table describes something that does not run. | The largest single gap against the constitution. The boundary is structural — 0008's CHECK refuses a WORKER row in a core table — so nothing is at risk; the module is simply absent. |
-| **Exports** | CSV exists for department scores and the employee/employment imports. P16 asked for it on every table. | |
-| **Performance** | P16's "under one second with 500 evaluations" is indexed for but has never been measured. | |
-| **CSV import: update** | The employee import creates people but cannot amend them. Re-uploading a corrected file fails on the duplicate email. The employment import (P19-D) *does* update. | |
-| **`?increment_for=`** | `/admin/increments` links to `/admin/cycles/new?increment_for={id}` and the wizard ignores the parameter. | |
-| **On-demand sweep** | `compute_due_items` runs only from the nightly cron, so somebody entered today does not appear on `/admin/due` until tomorrow. | |
-| **`/styleguide`** | Still present, still not in the nav. P0-9 called it temporary. | Harmless. |
+| Area | What is missing |
+|---|---|
+| **A real end-to-end run** | Still the highest-value thing left. Nothing has been driven from launch to close against live data. Every fix since P23 was found by the owner using the product, not by the suites. |
+| **The test suites** | Live in a scratch directory outside the repository and are largely gone. Every claim in §18 up to P23 rests on them. New work since is covered by one-off scripts, also outside the repo. |
+| **Worker module (§7)** | The FORM exists (P24). The appraisal does not: no `worker_evaluations`, no worker cycle, no supervisor screen, no worker print pack. §8's worker transition table still describes something that does not run. |
+| **Section names are half-dynamic** | Every rendered FORM uses HR's names (P25). Screens that call `sectionLabel()` for their own chrome — the question-bank filter, the departments mapping screen, the scorecard section profile, the cycle wizard — still show the shipped defaults. |
+| **Palette** | The validator reports two real failures nobody has acted on: light-mode green↔cyan below the normal-vision floor, and dark-mode green and amber outside the lightness band (P29). Both are §2 token changes. |
+| **Exports** | CSV exists for department scores, the employee and employment imports, and the question bank. P16 asked for it on every table. |
+| **Performance** | P16's "under one second with 500 evaluations" is indexed for and has never been measured. |
+| **CSV import: update** | The employee import creates people but cannot amend them; re-uploading a corrected file fails on the duplicate email. The employment and question imports do update. |
+| **`?increment_for=`** | `/admin/increments` links to `/admin/cycles/new?increment_for={id}` and the wizard ignores the parameter. |
+| **On-demand due sweep** | `compute_due_items` runs only from the nightly cron, so somebody entered today does not appear on `/admin/due` until tomorrow. |
 
 #### Standing risks
 
 - **The Maytapi token has never been rotated** after being handled in a session;
   the owner declined at the time.
-- **The test suites live in a scratch directory, not in the repository.** They
-  are the only thing standing behind every claim in §18, and a machine change
-  loses them. 1449 checks across 30 suites.
 - **`finalise_evaluation` still exists in the database** with no caller. 0014 is
-  applied and §0.8 forbids editing it, so it stays; P23 removed every reference
-  and p14 now asserts that rather than its behaviour.
-
----
+  applied and §0.8 forbids editing it, so it stays.
+- **Gmail as the mail sender** (AMEND-4) caps at ~500/day, locks the account
+  rather than failing the message, and ties company mail to a personal account.
+  `send.linkdprints.com` via Resend remains the better answer and is a settings
+  change, not a code change.
 
 ### AMEND-2 — Two cycle types, blind parallel rating, and HR/MD split again
 
