@@ -19,6 +19,8 @@ export type QueueRow = {
   status: Enums<"evaluation_status">;
   selfAverage: number | null;
   leadAverage: number | null;
+  /** The agreed figure recorded at completion. Null until a cycle is closed. */
+  finalAverage: number | null;
   /** Lead − Self. §11: HR and the MD only. */
   gap: number | null;
   flaggedCount: number;
@@ -62,7 +64,9 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
   const { data: evaluations, error } = await supabase
     .from("evaluations")
     .select(
-      "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, updated_at",
+      // `final_overall` is the score HR agreed with the MD at completion. It
+      // was never selected, so nothing downstream could show it.
+      "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall, updated_at",
     )
     .in("status", ["PENDING_HR_REVIEW", "HR_APPROVED", "MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"])
     .is("excluded_at", null)
@@ -169,6 +173,7 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
       status: e.status,
       selfAverage: scores.self,
       leadAverage: scores.lead,
+      finalAverage: e.final_overall === null ? null : Number(e.final_overall),
       gap: scores.self === null || scores.lead === null ? null : Math.round((scores.lead - scores.self) * 100) / 100,
       flaggedCount: flagged,
       // Waiting is measured from the later of the two submissions — the moment

@@ -44,7 +44,10 @@ export async function buildEvaluationReport(
   const { data: evaluation, error } = await supabase
     .from("evaluations")
     .select(
-      "id, cycle_id, evaluatee_id, lead_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped",
+      // P3-11: written out in full, never concatenated — supabase-js infers the
+      // row type from this string and degrades everything to GenericStringError
+      // on anything it cannot statically parse.
+      "id, cycle_id, evaluatee_id, lead_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -285,6 +288,10 @@ export async function buildEvaluationReport(
     summary: {
       selfOverall: selfScores.overallScore,
       leadOverall: leadScores.overallScore,
+      // Read from the row, never recomputed: §5 says a stored score is never
+      // recalculated on read, and this one was agreed between two people
+      // rather than derived from anything.
+      finalOverall: evaluation.final_overall === null ? null : Number(evaluation.final_overall),
       overallGap:
         selfScores.overallScore === null || leadScores.overallScore === null
           ? null

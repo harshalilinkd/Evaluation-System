@@ -32,6 +32,16 @@ export type SectionAverages = {
 export type ReportSummary = {
   selfOverall: number | null;
   leadOverall: number | null;
+  /**
+   * The agreed final score, recorded by HR on the MD's behalf at completion.
+   *
+   * It was being STORED and shown nowhere: `evaluations.final_overall` had no
+   * reader in the report at all, so HR typed a figure, closed the cycle, and
+   * the record appeared to have swallowed it. The employee sees this number
+   * (per the cycle's disclosure), so it has to be visible to the people who
+   * set it.
+   */
+  finalOverall: number | null;
   /** Lead − Self. §11: a reporting figure, visible to HR and the MD alone. */
   overallGap: number | null;
   flaggedCount: number;

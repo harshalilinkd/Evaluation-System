@@ -178,7 +178,14 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           2.3:1 the cyan gave it (§13.8). The gap is labelled because §11
           confines it to HR and the MD, and a number nobody can explain is a
           number somebody will repeat. */}
-      <div className="grid divide-y divide-rule sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+      <div
+        className={cn(
+          "grid divide-y divide-rule sm:divide-x sm:divide-y-0",
+          // A fourth panel only once there is a final score. An empty "Final —"
+          // on a report still with HR would read as a figure somebody forgot.
+          summary.finalOverall === null ? "sm:grid-cols-3" : "sm:grid-cols-4",
+        )}
+      >
         <figure className="bg-self-tint/50 px-6 py-4">
           <figcaption>
             <TierTag tier="self">Self average</TierTag>
@@ -196,6 +203,25 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             What {firstName(header.leadName)} said about them
           </p>
         </figure>
+
+        {/* ---------- The agreed final score ----------
+            §13.1's third tier, and legitimately so: indigo means "the final,
+            authoritative answer", which is exactly what this is. It only
+            renders once one exists — before that there is nothing agreed. */}
+        {summary.finalOverall !== null ? (
+          <figure className="bg-final-tint/50 px-6 py-4">
+            <figcaption>
+              <span className="flex items-center gap-2">
+                <span aria-hidden className="size-2 shrink-0 rounded-pill bg-final" />
+                <span className="type-label font-bold text-ink">Final score</span>
+              </span>
+            </figcaption>
+            <p className="tabular mt-1 text-display-lg text-ink">{score(summary.finalOverall)}</p>
+            <p className="font-sans text-body-sm text-ink-muted">
+              Agreed with the MD and recorded by HR
+            </p>
+          </figure>
+        ) : null}
 
         <figure className={cn("px-6 py-4", flagged ? "bg-critical-tint/50" : "bg-surface-mute")}>
           <figcaption className="type-label flex items-center gap-1.5 text-ink-muted">

@@ -176,6 +176,28 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         ),
       },
       {
+        /* The agreed figure. Indigo IS the right tier here — §13.1 gives it to
+           "the final, authoritative answer", which is what this is. An em dash
+           until a cycle closes, never 0.00 (§11, P7-9). */
+        id: "final",
+        header: () => (
+          <span className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 shrink-0 rounded-pill bg-final" />
+            Final
+          </span>
+        ),
+        size: 80,
+        meta: { align: "right" },
+        cell: ({ row }) =>
+          row.original.finalAverage === null ? (
+            <span className="tabular text-body-sm text-ink-muted">—</span>
+          ) : (
+            <span className="tabular text-body-sm font-semibold text-ink">
+              {row.original.finalAverage.toFixed(2)}
+            </span>
+          ),
+      },
+      {
         accessorKey: "gap",
         header: "Gap",
         size: 80,

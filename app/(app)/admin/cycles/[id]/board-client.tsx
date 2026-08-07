@@ -22,7 +22,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { archiveCycle } from "@/lib/cycles/actions";
 import { BackLink } from "@/components/appraise/back-link";
+import { ActivityPanel } from "@/app/(app)/admin/cycles/[id]/activity-panel";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
+import type { ActivityEntry } from "@/lib/cycles/activity";
 import { EmptyState } from "@/components/appraise/states";
 import type { BoardColumnKey, CycleBoard } from "@/lib/cycles/queries";
 import { daysBetween, plural, today } from "@/lib/cycles/schema";
@@ -60,10 +62,13 @@ export function BoardClient({
   board,
   candidates,
   justLaunched,
+  activity,
 }: {
   board: CycleBoard;
   candidates: SelectablePerson[];
   justLaunched: boolean;
+  /** §12's trail, made readable. See lib/cycles/activity.ts. */
+  activity: ActivityEntry[];
 }) {
   const router = useRouter();
 
@@ -509,6 +514,15 @@ export function BoardClient({
           />
         </div>
       </div>
+
+      {/* ---------- Everything that has happened, and who did it ----------
+          §12 has required an audit row for every status change since P4, and
+          nothing in the product displayed one — the trail was real and only
+          readable from a SQL console, which for the person accountable for a
+          cycle is the same as not existing. It sits under the board because
+          that is the screen somebody is on when they ask "who returned this,
+          and when?". */}
+      <ActivityPanel entries={activity} />
 
       {/* ---------- The one thing worth saying about departments ----------
           The per-department cohort cards were removed at the owner's request:

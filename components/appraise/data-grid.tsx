@@ -14,6 +14,14 @@ import {
   type RowData,
 } from "@tanstack/react-table";
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 /**
@@ -84,6 +92,29 @@ export type DataGridProps<TData> = {
    * action out of reach of anybody not using a mouse (§13.8).
    */
   onRowClick?: (row: TData) => void;
+  /**
+   * What the details dialog calls a row. "person", "cycle", "report".
+   *
+   * Only ever used in the dialog's title and its accessible label, so a grid
+   * that says nothing still works — it just says "Details".
+   */
+  rowNoun?: string;
+  /**
+   * A title for the open row, taken from the row itself.
+   *
+   * Defaults to the first column's value, which is the name column on every
+   * grid in this product. Override when the first column is not the label —
+   * a grid whose leading column is a date, say.
+   */
+  rowTitle?: (row: TData) => string;
+  /**
+   * Actions for the open row, rendered in the dialog footer.
+   *
+   * The dialog SHOWS; it does not decide what can be done. A screen that wants
+   * "Open scorecard" or "Send links" there passes it, and the grid stays
+   * ignorant of what its rows mean.
+   */
+  rowActions?: (row: TData) => React.ReactNode;
 };
 
 /**
@@ -108,8 +139,16 @@ export function DataGrid<TData>({
   empty,
   status,
   onRowClick,
+  rowNoun,
+  rowTitle,
+  rowActions,
 }: DataGridProps<TData>) {
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  /* -- The open row, by index rather than by value.
+        An index survives the data being refetched under it; a captured object
+        would go on showing a stale copy after a `router.refresh()`, which on a
+        screen whose actions change the row is exactly wrong. -- */
+  const [openRowIndex, setOpenRowIndex] = useState<number | null>(null);
 
   // Read after mount rather than during render: the server has no localStorage,
   // so seeding state from it directly would render one width on the server and
@@ -143,8 +182,27 @@ export function DataGrid<TData>({
     size: GUTTER_WIDTH,
     enableResizing: false,
     meta: { align: "right", frozen: true },
+    /* -- THE KEYBOARD PATH TO OPENING A ROW.
+          A clickable `<tr>` cannot be focused, cannot be reached by Tab and is
+          not announced — which is why `onRowClick` has always been documented
+          as an enhancement and never the only way in. Now that EVERY row opens,
+          that warning would apply to every grid in the product at once.
+
+          So the row number is the control: one focusable button per row, in a
+          column that already exists, with a real accessible name. It costs no
+          width and adds no column. -- */
     cell: ({ row }) => (
-      <span className="tabular text-body-sm text-ink-muted">{row.index + 1}</span>
+      <button
+        type="button"
+        onClick={() => {
+          if (onRowClick) onRowClick(row.original);
+          else setOpenRowIndex(row.index);
+        }}
+        aria-label={`Open ${rowTitle ? rowTitle(row.original) : `row ${row.index + 1}`}`}
+        className="tabular w-full rounded-control text-right text-body-sm text-ink-muted hover:text-ink"
+      >
+        {row.index + 1}
+      </button>
     ),
   };
 
@@ -179,6 +237,16 @@ export function DataGrid<TData>({
   }
 
   const hasRows = table.getRowModel().rows.length > 0;
+
+  /* Resolved from the CURRENT row model, so a refetch behind an open dialog
+     shows the new values rather than a snapshot taken when it was clicked.
+     `?? null` because a row can disappear — a filter typed underneath, a
+     deletion — and a dialog about a row that no longer exists should close
+     rather than render a stale one. */
+  const openRow =
+    openRowIndex === null
+      ? null
+      : (table.getRowModel().rows.find((r) => r.index === openRowIndex) ?? null);
 
   return (
     <>
@@ -310,26 +378,30 @@ export function DataGrid<TData>({
             <tbody>
               {table.getRowModel().rows.map((row) => (
                 // §4: 44px rows, compact density on an admin table.
+                /* -- EVERY ROW OPENS.
+                      `onRowClick` when the screen supplies one — Settings ›
+                      Users opens its edit dialog, the roster navigates to a
+                      scorecard — and otherwise the built-in details dialog
+                      below. A grid with neither used to be inert, and "why does
+                      clicking work on that table and not this one" is the kind
+                      of inconsistency nobody reports and everybody notices. -- */
                 <tr
                   key={row.id}
-                  className={cn("group h-11", onRowClick && "cursor-pointer")}
-                  onClick={
-                    onRowClick
-                      ? (event) => {
-                          // A click that landed on a control inside the row
-                          // belongs to that control. Without this, opening the
-                          // ⋯ menu would also open the row behind it.
-                          if (
-                            (event.target as HTMLElement).closest(
-                              "button, a, input, select, textarea, [role='menuitem']",
-                            )
-                          ) {
-                            return;
-                          }
-                          onRowClick(row.original);
-                        }
-                      : undefined
-                  }
+                  className="group h-11 cursor-pointer"
+                  onClick={(event) => {
+                    // A click that landed on a control inside the row belongs
+                    // to that control. Without this, opening the ⋯ menu or
+                    // following a link would also open the row behind it.
+                    if (
+                      (event.target as HTMLElement).closest(
+                        "button, a, input, select, textarea, [role='menuitem']",
+                      )
+                    ) {
+                      return;
+                    }
+                    if (onRowClick) onRowClick(row.original);
+                    else setOpenRowIndex(row.index);
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta;
@@ -363,6 +435,75 @@ export function DataGrid<TData>({
         )}
       </div>
 
+      {/* ---------- The row details dialog ----------
+
+          BUILT FROM THE COLUMN DEFINITIONS, which is the whole reason this
+          lives in the grid rather than being written once per screen. Every
+          table already declares a header and a cell renderer for each field;
+          a details view is those same two things stacked instead of laid out
+          in a row. Adding a column to any grid adds it here for free, and the
+          two can never disagree about what a row contains.
+
+          A wide table is the case it exists for: at fourteen columns the tail
+          is off-screen, and the row a person clicked is exactly the row whose
+          hidden columns they want. */}
+      <Dialog
+        open={openRow !== null}
+        onOpenChange={(next) => {
+          if (!next) setOpenRowIndex(null);
+        }}
+      >
+        <DialogContent className="max-h-[85dvh] max-w-lg overflow-y-auto border-rule bg-surface">
+          <DialogHeader>
+            <DialogTitle className="font-sans text-display-sm text-ink">
+              {openRow ? (rowTitle ? rowTitle(openRow.original) : firstCellText(openRow)) : ""}
+            </DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              {rowNoun ? `Everything on this ${rowNoun}.` : "Everything on this row."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {openRow ? (
+            <dl className="divide-y divide-rule">
+              {openRow
+                .getVisibleCells()
+                /* The gutter is the row number, and a column with no heading is
+                   an actions column — neither is a FIELD, and listing them
+                   would put a ⋯ menu in a list of values under a blank label. */
+                .filter((cell) => cell.column.id !== GUTTER_ID && hasHeading(cell.column.columnDef))
+                .map((cell) => (
+                  <div
+                    key={cell.id}
+                    className="grid grid-cols-[9rem_1fr] items-baseline gap-3 py-2.5"
+                  >
+                    <dt className="type-label font-bold text-ink">
+                      {/* Rendered from the real HEADER, not a synthesised
+                          context: a function header (the tier-dot ones) needs
+                          the header object `flexRender` expects, and the table
+                          already has it. Matched by column id. */}
+                      {(() => {
+                        const header = table
+                          .getFlatHeaders()
+                          .find((h) => h.column.id === cell.column.id);
+                        return header
+                          ? flexRender(header.column.columnDef.header, header.getContext())
+                          : cell.column.id;
+                      })()}
+                    </dt>
+                    <dd className="min-w-0 font-sans text-body text-ink">
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </dd>
+                  </div>
+                ))}
+            </dl>
+          ) : null}
+
+          {openRow && rowActions ? (
+            <DialogFooter className="gap-2">{rowActions(openRow.original)}</DialogFooter>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
       {/* A spreadsheet's status bar. */}
       <div className="flex shrink-0 items-center gap-3 border-t border-rule bg-surface-mute px-3 py-1.5">
         {status}
@@ -383,6 +524,29 @@ export function DataGrid<TData>({
       </div>
     </>
   );
+}
+
+/* ---------- Details-dialog helpers ---------- */
+
+/**
+ * Does this column have a heading worth showing as a field label?
+ *
+ * An actions column declares `header: ""` — it holds a ⋯ menu, not a value, and
+ * listing it would put a control in a definition list under a blank term.
+ */
+function hasHeading(columnDef: { header?: unknown }): boolean {
+  const header = columnDef.header;
+  if (typeof header === "string") return header.trim().length > 0;
+  // A function header is a rendered element — the tier-dot headings do this —
+  // and those are real labels.
+  return typeof header === "function";
+}
+
+/** The dialog's fallback title: whatever the first real column says. */
+function firstCellText(row: { getVisibleCells: () => Array<{ column: { id: string }; getValue: () => unknown }> }): string {
+  const first = row.getVisibleCells().find((cell) => cell.column.id !== GUTTER_ID);
+  const value = first?.getValue();
+  return typeof value === "string" || typeof value === "number" ? String(value) : "Details";
 }
 
 /** Every data cell is one truncated line, with the full value on hover. */

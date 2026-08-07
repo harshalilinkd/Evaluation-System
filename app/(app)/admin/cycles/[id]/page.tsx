@@ -7,6 +7,7 @@ import { BoardClient } from "@/app/(app)/admin/cycles/[id]/board-client";
 import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
+import { getCycleActivity } from "@/lib/cycles/activity";
 import { getCycleBoard, listStaffProfiles } from "@/lib/cycles/queries";
 
 export const metadata: Metadata = { title: "Cycle" };
@@ -24,7 +25,12 @@ export default async function Page({
   const { id } = await params;
   const { launched } = await searchParams;
 
-  const [board, people] = await Promise.all([getCycleBoard(id), listStaffProfiles()]);
+  // Issued together — none of the three depends on another's result.
+  const [board, people, activity] = await Promise.all([
+    getCycleBoard(id),
+    listStaffProfiles(),
+    getCycleActivity(id),
+  ]);
 
   if (!board.ok) {
     if (board.error.code === "CYCLE_NOT_FOUND") notFound();
@@ -36,6 +42,10 @@ export default async function Page({
       board={board.data}
       candidates={people.ok ? people.data : []}
       justLaunched={launched === "1"}
+      /* An unreadable log is an empty one, never a broken page: RLS decides
+         what this caller may see, and a failure here must not take down the
+         board they came for. */
+      activity={activity.ok ? activity.data : []}
     />
   );
 }
