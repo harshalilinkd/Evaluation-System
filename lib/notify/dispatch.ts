@@ -96,6 +96,39 @@ export async function sendNotification(
     recipient = email;
   }
 
+  /* -- 1b. Is this channel even switched on?
+        A provider with no credentials is not a failed send — it is a channel
+        the company has chosen not to use, and nothing is attempted. P11-11
+        made exactly this call for a bad phone number: a `notifications_log`
+        row means somebody tried, so writing one here would fill the log with
+        red rows no retry can ever fix and inflate the failure count on HR's
+        screen.
+
+        This is what makes "we only use WhatsApp" a clean configuration rather
+        than a permanent column of errors: clear RESEND_API_KEY and the email
+        channel simply stops being attempted. The distribution screen still
+        states it once, up front, so nobody wonders where the emails went. -- */
+  const configured =
+    input.channel === "WHATSAPP"
+      ? Boolean(
+          process.env.MAYTAPI_PRODUCT_ID &&
+            process.env.MAYTAPI_PHONE_ID &&
+            process.env.MAYTAPI_API_TOKEN,
+        )
+      : Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+
+  if (!configured) {
+    return {
+      ok: false,
+      notificationId: null,
+      code: "NOT_CONFIGURED",
+      message:
+        input.channel === "WHATSAPP"
+          ? "WhatsApp is not set up, so nothing was sent on it."
+          : "Email is not set up, so nothing was sent on it.",
+    };
+  }
+
   /* -- 2. QUEUED, before anything is attempted -- */
   const { data: queuedId, error: queueError } = await supabase.rpc("queue_notification", {
     p_channel: input.channel,
