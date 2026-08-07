@@ -6,7 +6,16 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarPlus, MoreHorizontal, Pencil, Plus, Send, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import {
+  CalendarPlus,
+  Check,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Send,
+  SquareArrowOutUpRight,
+  Trash2,
+} from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { SegmentedProgress } from "@/components/appraise/segmented-bar";
@@ -34,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { moveCycleToBin } from "@/lib/cycles/actions";
 import type { CycleListRow } from "@/lib/cycles/queries";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils";
 
 /** §11 / P7-9: absent is an em dash, never blank and never a zero. */
 function dash(value: string | null): string {
@@ -50,15 +60,33 @@ export function CyclesClient({
   const router = useRouter();
   const [search, setSearch] = React.useState("");
   const [binning, setBinning] = React.useState<CycleListRow | null>(null);
+  /* -- The two kinds of cycle, kept apart.
+        §1: they share the form and the blind parallel flow and differ only in
+        how they END — an increment carries on into salary and needs the MD's
+        approval, a plain evaluation does not (0039). Those are different jobs
+        on different timetables, and mixing them in one list meant reading the
+        Type column on every row to know which was which. -- */
+  const [kind, setKind] = React.useState<"ALL" | "EVALUATION" | "INCREMENT">("ALL");
+
+  const counts = React.useMemo(
+    () => ({
+      all: cycles.length,
+      evaluation: cycles.filter((c) => c.cycleType === "EVALUATION").length,
+      increment: cycles.filter((c) => c.cycleType === "INCREMENT").length,
+    }),
+    [cycles],
+  );
 
   const rows = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return cycles;
-    return cycles.filter(
-      (c) =>
-        c.name.toLowerCase().includes(needle) || c.periodLabel.toLowerCase().includes(needle),
-    );
-  }, [cycles, search]);
+    return cycles.filter((c) => {
+      if (kind !== "ALL" && c.cycleType !== kind) return false;
+      if (!needle) return true;
+      return (
+        c.name.toLowerCase().includes(needle) || c.periodLabel.toLowerCase().includes(needle)
+      );
+    });
+  }, [cycles, search, kind]);
 
   const columns = React.useMemo<ColumnDef<CycleListRow>[]>(
     () => [
@@ -120,6 +148,26 @@ export function CyclesClient({
         meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular text-body-sm text-ink">{row.original.participants}</span>
+        ),
+      },
+      /*
+        WHETHER THE LINKS HAVE GONE OUT.
+
+        The row menu offered "Send links" with nothing beside it to say they
+        already had, so the only ways to find out were to open the distribution
+        screen or to send them a second time and watch. On the one action that
+        messages the whole company, "have I already done this?" has to be
+        answerable from the list.
+
+        A word AND a count, never a tick alone — a partial send is the state
+        that matters most and a tick cannot express it (§13.8).
+      */
+      {
+        id: "links",
+        header: "Links",
+        size: 122,
+        cell: ({ row }) => (
+          <LinksCell sent={row.original.linksSent} of={row.original.participants} />
         ),
       },
       /*
@@ -215,10 +263,19 @@ export function CyclesClient({
                   </Link>
                 </DropdownMenuItem>
               ) : null}
+              {/* The label says what pressing it would DO, given what has
+                  already happened. "Send links" on a cycle whose links all went
+                  out last week invites somebody to message the whole company
+                  twice — the menu is the last place that should stay silent
+                  about it. */}
               <DropdownMenuItem asChild>
                 <Link href={`/admin/cycles/${row.original.id}/distribute`}>
                   <Send className="size-4" aria-hidden />
-                  Send links
+                  {row.original.linksSent === 0
+                    ? "Send links"
+                    : row.original.linksSent >= row.original.participants
+                      ? "Links sent · resend"
+                      : `Send the remaining ${row.original.participants - row.original.linksSent}`}
                 </Link>
               </DropdownMenuItem>
 
@@ -265,12 +322,50 @@ export function CyclesClient({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface-mute px-3 py-2">
+        {/* ---------- Evaluation and Increment, kept apart ----------
+            A segmented control rather than a dropdown: there are exactly three
+            choices, they are mutually exclusive, and the counts belong beside
+            the words — "Increment 0" is the answer to "do we have any running?"
+            without anybody having to select it and find out. */}
+        <div
+          role="group"
+          aria-label="Which kind of cycle"
+          className="flex items-center gap-0.5 rounded-control border border-rule bg-surface p-0.5"
+        >
+          {(
+            [
+              { value: "ALL", label: "All", count: counts.all },
+              { value: "EVALUATION", label: "Evaluation", count: counts.evaluation },
+              { value: "INCREMENT", label: "Increment", count: counts.increment },
+            ] as const
+          ).map((option) => {
+            const active = kind === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setKind(option.value)}
+                className={cn(
+                  "flex min-h-9 items-center gap-1.5 rounded-[6px] px-3 text-body-sm font-medium transition-colors",
+                  active ? "bg-ink text-ink-invert" : "text-ink-muted hover:text-ink",
+                )}
+              >
+                {option.label}
+                <span className={cn("tabular", active ? "text-ink-invert/70" : "text-ink-muted")}>
+                  {option.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search cycles"
           aria-label="Search cycles"
-          className="min-h-11 w-full border-rule bg-surface sm:w-[260px]"
+          className="min-h-11 w-full border-rule bg-surface sm:w-[240px]"
         />
         <p className="ml-auto hidden text-body-sm text-ink-muted lg:block">
           Deleted cycles go to Settings › Recycle bin, and can be restored.
@@ -327,8 +422,44 @@ export function CyclesClient({
 function Count({ value, of }: { value: number; of: number }) {
   return (
     <span className="tabular text-body-sm">
-      <span className={value > 0 ? "text-ink" : "text-ink-faint"}>{value}</span>
-      <span className="text-ink-faint">/{of}</span>
+      <span className={value > 0 ? "text-ink" : "text-ink-muted"}>{value}</span>
+      <span className="text-ink-muted">/{of}</span>
+    </span>
+  );
+}
+
+/**
+ * Have the links gone out?
+ *
+ * Three states, and the middle one is why this is not a tick: a cycle where
+ * some people have been sent a link and some have not is the state HR most
+ * needs to notice, and it is the one a boolean cannot express. The count is
+ * always shown once anything has been sent.
+ */
+function LinksCell({ sent, of }: { sent: number; of: number }) {
+  if (of === 0) return <span className="text-body-sm text-ink-muted">—</span>;
+
+  if (sent === 0) {
+    return <span className="text-body-sm text-ink-muted">Not sent</span>;
+  }
+
+  const all = sent >= of;
+  return (
+    <span
+      title={
+        all
+          ? `A link has been sent to all ${of} ${of === 1 ? "person" : "people"}.`
+          : `${of - sent} of ${of} have not been sent a link yet.`
+      }
+      className={cn(
+        "tabular inline-flex items-center gap-1.5 rounded-pill px-2 py-0.5 text-body-sm font-medium",
+        // Green means "done" here, not a tier — UI2-2 keeps it out of §13.1's
+        // reserved three for exactly this kind of use. The words carry it too.
+        all ? "bg-final-tint text-ink" : "bg-warning-tint text-ink",
+      )}
+    >
+      {all ? <Check className="size-3.5" aria-hidden /> : <Send className="size-3.5" aria-hidden />}
+      {all ? "Sent" : `${sent}/${of}`}
     </span>
   );
 }

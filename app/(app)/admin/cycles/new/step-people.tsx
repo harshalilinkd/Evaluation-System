@@ -88,19 +88,32 @@ export function StepPeople({
   const byId = React.useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const mdCandidates = React.useMemo(() => people.filter((p) => p.isMd), [people]);
   const mdIds = React.useMemo(() => new Set(mdCandidates.map((p) => p.id)), [mdCandidates]);
+
+  /* -- WHO CAN BE APPRAISED.
+        The MD is not, at the owner's instruction, and the reason is structural
+        rather than a preference: an evaluation needs an evaluatee and a lead,
+        and the MD is the top of the chain this very screen offers as the lead
+        of last resort. They would have either nobody to rate them or somebody
+        whose pay they approve.
+
+        They stay in `people`, because `mdCandidates` above is what puts them in
+        the HOD picker for a department head with nobody above them (PR-8). Only
+        the ROSTER loses them. `setCycleParticipants` refuses them again on the
+        server — this filter is a courtesy, not the guarantee. -- */
+  const appraisable = React.useMemo(() => people.filter((p) => !p.isMd), [people]);
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState<string>("all");
   const [dueOnly, setDueOnly] = React.useState(preset === "due");
 
   const departments = React.useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of people) if (p.departmentId) map.set(p.departmentId, p.departmentName ?? "Unnamed");
+    for (const p of appraisable) if (p.departmentId) map.set(p.departmentId, p.departmentName ?? "Unnamed");
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [people]);
+  }, [appraisable]);
 
   const visible = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return people.filter((p) => {
+    return appraisable.filter((p) => {
       if (department !== "all" && p.departmentId !== department) return false;
       if (dueOnly && !isIncrementDue(p.nextIncrementOn)) return false;
       if (!needle) return true;
@@ -110,15 +123,15 @@ export function StepPeople({
         (p.designation ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [people, search, department, dueOnly]);
+  }, [appraisable, search, department, dueOnly]);
 
   const dueCount = React.useMemo(
-    () => people.filter((p) => isIncrementDue(p.nextIncrementOn)).length,
-    [people],
+    () => appraisable.filter((p) => isIncrementDue(p.nextIncrementOn)).length,
+    [appraisable],
   );
 
-  const includedCount = people.filter((p) => state[p.id]?.included).length;
-  const leaderless = people.filter((p) => state[p.id]?.included && !state[p.id]?.leadId);
+  const includedCount = appraisable.filter((p) => state[p.id]?.included).length;
+  const leaderless = appraisable.filter((p) => state[p.id]?.included && !state[p.id]?.leadId);
 
   const patch = (id: string, next: Partial<PersonState>) => {
     const current = state[id] ?? { included: true, leadId: null };

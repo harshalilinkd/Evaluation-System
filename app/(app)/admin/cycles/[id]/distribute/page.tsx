@@ -31,7 +31,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     whatsapp: Boolean(
       process.env.MAYTAPI_PRODUCT_ID && process.env.MAYTAPI_PHONE_ID && process.env.MAYTAPI_API_TOKEN,
     ),
-    email: Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM),
+    email: Boolean(
+      process.env.MAIL_FROM &&
+        (process.env.RESEND_API_KEY || (process.env.SMTP_USER && process.env.SMTP_PASSWORD)),
+    ),
   };
 
   /* -- Whether a link sent from here would actually WORK.
@@ -44,6 +47,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const preflight = preflightAll({
     appUrl: process.env.NEXT_PUBLIC_APP_URL,
     mailFrom: process.env.MAIL_FROM,
+    smtpUser: process.env.SMTP_USER,
   });
 
   return <DistributeClient board={board.data} configured={configured} preflight={preflight} />;

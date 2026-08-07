@@ -102,21 +102,46 @@ Deployments → the top one → ⋯ → **Redeploy**
 
 ---
 
-## 5 · Make email reach people other than you
+## 5 · Email
 
-`onboarding@resend.dev` is Resend's test sender and delivers **only** to the
-address that owns the Resend account. Everyone else is silently dropped.
+Two ways. Pick one — whichever credentials you set decide which is used.
 
-1. resend.com → **Domains** → Add domain (e.g. `linkdprints.com`)
-2. Add the DNS records it gives you, at your domain registrar
-3. Wait for it to say Verified
-4. Set `MAIL_FROM` in Vercel to an address on that domain:
-   `Appraise <noreply@linkdprints.com>`
-5. Redeploy
+### Option A · Your Gmail account (no DNS, quickest)
 
-Until this is done, WhatsApp will work and email will not.
+Sends as `harshali.linkd@gmail.com`. Roughly **500 emails a day**, and the
+address your employees see is a personal one.
 
----
+1. Turn on **2-Step Verification**: myaccount.google.com/security
+   (App Passwords do not exist without it)
+2. Go to **myaccount.google.com/apppasswords**
+3. Name it `Appraise` → **Create** → copy the **16-character** password
+4. Set these:
+
+```
+SMTP_USER      = harshali.linkd@gmail.com
+SMTP_PASSWORD  = the 16-character App Password (not your Google password)
+MAIL_FROM      = Appraise <harshali.linkd@gmail.com>
+```
+
+> `MAIL_FROM` **must** contain `SMTP_USER`. Gmail rewrites a From address it
+> does not own, so the message would arrive from somebody other than the app
+> recorded — the app refuses rather than let that happen silently.
+
+Leave `RESEND_API_KEY` blank. If both are set, SMTP wins.
+
+### Option B · Your own domain via Resend (better long term)
+
+Sends as `noreply@linkdprints.com`. No daily cap, not tied to a personal
+account, and better deliverability.
+
+1. resend.com → **Domains** → add `send.linkdprints.com` (a subdomain, so your
+   existing Google Workspace mail records are untouched)
+2. Add the three DNS records it gives you, at your registrar
+3. Wait for **Verified**
+4. Set `MAIL_FROM = Appraise <noreply@send.linkdprints.com>` and leave the
+   `SMTP_*` keys blank
+
+Switching later is a settings change, not a code change.
 
 ## 6 · Tell Supabase about the new address
 

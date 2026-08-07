@@ -115,7 +115,11 @@ export async function sendNotification(
             process.env.MAYTAPI_PHONE_ID &&
             process.env.MAYTAPI_API_TOKEN,
         )
-      : Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+      : Boolean(
+          process.env.MAIL_FROM &&
+            // Either transport counts as configured (AMEND-4).
+            (process.env.RESEND_API_KEY || (process.env.SMTP_USER && process.env.SMTP_PASSWORD)),
+        );
 
   if (!configured) {
     return {

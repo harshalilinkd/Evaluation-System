@@ -15,7 +15,6 @@ import { ArrowRight, ClipboardList, FileText, Flag, Users } from "lucide-react";
 
 import { LabelledBarChart, RankedBarChart, StatusDonutChart, ratingBandColor, ratingBandIndex } from "@/components/appraise/charts";
 import { ChartFigure } from "@/components/appraise/chart-figure";
-import { EmptyState } from "@/components/appraise/states";
 import { HeroCard, StatTile } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import { SECTION_LABELS } from "@/lib/forms/labels";
@@ -29,7 +28,13 @@ export type DueSummary = {
   increments: number;
 };
 
-/** A titled panel. `card-surface` is the borderless 16px card from UI-REFRESH. */
+/**
+ * A titled panel. `card-surface` is the borderless 16px card from UI-REFRESH.
+ *
+ * `h-full` and the column layout are what stop a row going ragged: two panels
+ * side by side with different amounts of content used to leave a gap under the
+ * shorter one, which reads as a rendering fault rather than as a design.
+ */
 function Panel({
   title,
   subtitle,
@@ -42,16 +47,38 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="card-surface space-y-4 p-6">
+    <section className="card-surface flex h-full flex-col gap-4 p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-0.5">
+        <div className="min-w-0 space-y-1">
           <h2 className="font-sans text-body font-medium text-ink">{title}</h2>
-          {subtitle ? <p className="font-sans text-body-sm text-ink-faint">{subtitle}</p> : null}
+          {subtitle ? (
+            <p className="max-w-prose font-sans text-body-sm leading-relaxed text-ink-faint">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
-        {action}
+        {action ? <div className="shrink-0">{action}</div> : null}
       </header>
-      {children}
+      <div className="flex-1">{children}</div>
     </section>
+  );
+}
+
+/**
+ * "Nothing here yet", INSIDE a panel.
+ *
+ * `EmptyState` is the full-page affordance — a dashed block sized to fill a
+ * screen. Dropping one into a dashboard panel is what produced the voids: a
+ * card reserving 300px of chart height to say one sentence. Early on, when
+ * every panel is empty, that turns the whole page into whitespace with captions
+ * floating in it.
+ *
+ * So a panel with nothing to show COLLAPSES to a line instead of holding a
+ * chart-shaped hole open.
+ */
+function PanelEmpty({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="flex h-full items-center font-sans text-body-sm text-ink-faint">{children}</p>
   );
 }
 
@@ -82,46 +109,51 @@ export function DashboardClient({
           Whatever their role, everybody has their own appraisal. A dashboard
           that opens on company statistics while the reader's own form is
           outstanding has its priorities the wrong way round. */}
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid items-stretch gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <HeroCard
-            label={`Namaste ${firstName}`}
-            value={
-              myEvaluationId
-                ? "Your evaluation is open"
-                : toRate > 0
-                  ? `${toRate} to rate`
-                  : "Nothing needs you"
-            }
-            caption={
-              myEvaluationId
-                ? myDueOn
-                  ? `Due ${formatDate(myDueOn)}. It takes about ten minutes.`
-                  : "It takes about ten minutes."
-                : toRate > 0
-                  ? "Your team is waiting on your ratings."
-                  : activeCycle
-                    ? `${activeCycle.name} · ${activeCycle.periodLabel}`
-                    : "No cycle is running at the moment."
-            }
-            action={
-              myEvaluationId ? (
+          {/*
+            THE HERO EARNS ITS SIZE, OR IT DOES NOT GET IT.
+
+            A full-bleed dark slab announcing "Nothing needs you" was the
+            loudest element on a page whose whole message was that there is
+            nothing to do. Weight should follow importance: when the reader has
+            something outstanding this is a call to action and takes the night
+            treatment; when they do not, it steps back to a quiet strip and lets
+            the numbers below lead.
+          */}
+          {myEvaluationId || toRate > 0 ? (
+            <HeroCard
+              label={`Namaste ${firstName}`}
+              value={myEvaluationId ? "Your evaluation is open" : `${toRate} to rate`}
+              caption={
+                myEvaluationId
+                  ? myDueOn
+                    ? `Due ${formatDate(myDueOn)}. It takes about ten minutes.`
+                    : "It takes about ten minutes."
+                  : "Your team is waiting on your ratings."
+              }
+              action={
                 <Button asChild variant="secondary">
-                  <Link href={`/my-evaluation/${myEvaluationId}`}>
-                    Fill it in
+                  <Link href={myEvaluationId ? `/my-evaluation/${myEvaluationId}` : "/team"}>
+                    {myEvaluationId ? "Fill it in" : "Open my team"}
                     <ArrowRight className="ml-2 size-4" aria-hidden />
                   </Link>
                 </Button>
-              ) : toRate > 0 ? (
-                <Button asChild variant="secondary">
-                  <Link href="/team">
-                    Open my team
-                    <ArrowRight className="ml-2 size-4" aria-hidden />
-                  </Link>
-                </Button>
-              ) : undefined
-            }
-          />
+              }
+            />
+          ) : (
+            <div className="card-surface flex h-full flex-col justify-center gap-1 p-6">
+              <p className="type-label text-ink-muted">Namaste {firstName}</p>
+              <p className="font-sans text-h3 text-ink">
+                {activeCycle ? activeCycle.name : "No cycle is running"}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {activeCycle
+                  ? `${activeCycle.periodLabel} · nothing is waiting on you`
+                  : "Nothing is waiting on you."}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* P22: "It should be the first thing on their dashboard." */}
@@ -161,12 +193,21 @@ export function DashboardClient({
         <EmployeeView analytics={analytics} />
       ) : (
         <>
+          {/*
+            The four counts, and then the one line that makes them mean
+            something. A row of bare numbers with no denominator is four facts
+            nobody can act on; the bar says how far through the cycle is, which
+            is the question the numbers were being read to answer.
+          */}
+          <section className="space-y-4">
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               label="In progress"
               value={String(progress?.not_started ?? 0)}
               icon={<ClipboardList className="size-4" aria-hidden />}
-              caption="Nobody has submitted yet"
+              caption={
+                progress ? `of ${progress.total} in this cycle` : "Nobody has submitted yet"
+              }
             />
             <StatTile
               label="Self submitted"
@@ -185,10 +226,40 @@ export function DashboardClient({
               value={String(progress?.md_finalized ?? 0)}
               tone="final"
               icon={<FileText className="size-4" aria-hidden />}
-              caption={
-                progress ? `${Number(progress.percent_complete ?? 0).toFixed(0)}% of the cycle done` : undefined
-              }
             />
+          </section>
+
+          {progress ? (
+            <div className="card-surface space-y-2 p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="font-sans text-body-sm text-ink-muted">
+                  {activeCycle ? `${activeCycle.name} · ${activeCycle.periodLabel}` : "This cycle"}
+                </p>
+                <p className="tabular text-body-sm text-ink">
+                  {Number(progress.percent_complete ?? 0).toFixed(0)}% complete
+                </p>
+              </div>
+              {/*
+                Three steps per person — self, lead, review — so the bar moves as
+                work happens rather than only when somebody finishes entirely.
+                `--primary` and not a tier colour: the bar is the cycle's
+                progress, not any one layer's (§13.1, UI2-12).
+              */}
+              <div
+                className="h-2 w-full overflow-hidden rounded-pill bg-surface-mute"
+                role="progressbar"
+                aria-valuenow={Math.round(Number(progress.percent_complete ?? 0))}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Cycle completion"
+              >
+                <div
+                  className="h-full rounded-pill bg-primary transition-[width] duration-500 motion-reduce:transition-none"
+                  style={{ width: `${Math.min(100, Number(progress.percent_complete ?? 0))}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
           </section>
 
           {isAdmin ? <AdminView analytics={analytics} /> : <LeadView analytics={analytics} />}
@@ -198,20 +269,99 @@ export function DashboardClient({
   );
 }
 
+/** Who is late, oldest first. Shared by the admin and lead panels. */
+function LateList({
+  people,
+  limit,
+}: {
+  people: Analytics["needsAttention"];
+  limit: number;
+}) {
+  return (
+    <ul className="space-y-2">
+      {people.slice(0, limit).map((person) => (
+        <li
+          key={person.evaluationId}
+          className="flex items-center justify-between gap-3 rounded-control bg-surface-mute px-3 py-2"
+        >
+          <span className="min-w-0">
+            <span className="block truncate font-sans text-body-sm text-ink">{person.name}</span>
+            {person.department ? (
+              <span className="block truncate font-sans text-body-sm text-ink-faint">
+                {person.department}
+              </span>
+            ) : null}
+          </span>
+          {/* A number AND the word — colour is never the only signal (§13.8). */}
+          <span className="shrink-0 tabular text-body-sm text-critical">
+            {person.daysLate}d late
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /* ---------- HR and the MD ---------- */
 
 function AdminView({ analytics }: { analytics: Analytics }) {
   const { departments, sections, variance, distribution, needsAttention } = analytics;
 
+  /*
+    A CYCLE THAT HAS PRODUCED NOTHING YET IS NOT FOUR EMPTY CHARTS.
+
+    Early on — which is where every cycle starts and where the product is most
+    often seen — distribution, departments and variance are all empty, and the
+    grid rendered four chart-shaped holes with a caption in each. That reads as
+    broken rather than as early.
+
+    So the analytics section only appears once there is something to analyse.
+    Until then one line says so, and the counts and the progress bar above it
+    are doing the real work.
+  */
+  const hasAnalytics =
+    distribution.length > 0 || departments.length > 0 || variance.length > 0;
+
+  if (!hasAnalytics) {
+    return (
+      <section className="grid items-stretch gap-6 lg:grid-cols-2">
+        <Panel
+          title="Analysis"
+          subtitle="Rating bands, department averages and how each lead rates."
+        >
+          <PanelEmpty>
+            These appear as ratings come in. Nothing has been submitted on this cycle yet.
+          </PanelEmpty>
+        </Panel>
+
+        <Panel
+          title="Needs chasing"
+          subtitle="Oldest first"
+          action={
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/admin/cycles">Open cycles</Link>
+            </Button>
+          }
+        >
+          {needsAttention.length === 0 ? (
+            <PanelEmpty>Nobody is late. Everything outstanding is still within its date.</PanelEmpty>
+          ) : (
+            <LateList people={needsAttention} limit={6} />
+          )}
+        </Panel>
+      </section>
+    );
+  }
+
   return (
     <>
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid items-stretch gap-6 lg:grid-cols-2">
         <Panel
           title="Where the ratings sit"
           subtitle="Every scored answer this cycle, by band"
         >
           {distribution.length === 0 ? (
-            <EmptyState title="Nothing rated yet" body="Bands appear once ratings come in." />
+            <PanelEmpty>Bands appear here once ratings come in.</PanelEmpty>
           ) : (
             <ChartFigure
               caption="Scored answers by band"
@@ -264,7 +414,7 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           subtitle="Lead averages. Job Specific Skills is excluded — the questions differ per team, so the numbers are not comparable."
         >
           {departments.length === 0 ? (
-            <EmptyState title="No department has a score yet" body="Averages appear as leads submit." />
+            <PanelEmpty>Averages appear as each team&rsquo;s ratings arrive.</PanelEmpty>
           ) : (
             <ChartFigure
               caption="Lead averages by department"
@@ -288,13 +438,13 @@ function AdminView({ analytics }: { analytics: Analytics }) {
         </Panel>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
+      <section className="grid items-stretch gap-6 lg:grid-cols-2">
         <Panel
           title="How each lead rates"
           subtitle="Mean difference from the employee's own score. A lead who is consistently high or low is worth a conversation — for HR and the MD only."
         >
           {variance.length === 0 ? (
-            <EmptyState title="No leads have submitted yet" body="This fills in as reviews arrive." />
+            <PanelEmpty>This fills in as reviews arrive.</PanelEmpty>
           ) : (
             <ChartFigure
               caption="How each lead rates, against their team's own scores"
@@ -344,26 +494,9 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           }
         >
           {needsAttention.length === 0 ? (
-            <EmptyState title="Nobody is late" body="Everything outstanding is still within its date." />
+            <PanelEmpty>Nobody is late. Everything outstanding is still within its date.</PanelEmpty>
           ) : (
-            <ul className="space-y-2">
-              {needsAttention.slice(0, 6).map((person) => (
-                <li
-                  key={person.evaluationId}
-                  className="flex items-center justify-between gap-3 rounded-control border border-rule px-3 py-2"
-                >
-                  <span>
-                    <span className="block font-sans text-body-sm text-ink">{person.name}</span>
-                    <span className="block font-sans text-body-sm text-ink-faint">
-                      {person.department ?? "—"}
-                    </span>
-                  </span>
-                  <span className="tabular text-body-sm text-critical">
-                    {person.daysLate}d late
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <LateList people={needsAttention} limit={6} />
           )}
         </Panel>
       </section>
@@ -443,7 +576,7 @@ function LeadView({ analytics }: { analytics: Analytics }) {
   const { needsAttention } = analytics;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-2">
+    <section className="grid items-stretch gap-6 lg:grid-cols-2">
       <Panel
         title="Your team"
         subtitle="Who has not been rated yet"
@@ -454,19 +587,9 @@ function LeadView({ analytics }: { analytics: Analytics }) {
         }
       >
         {needsAttention.length === 0 ? (
-          <EmptyState title="Nothing outstanding" body="Everyone in your team is up to date." />
+          <PanelEmpty>Everyone in your team is up to date.</PanelEmpty>
         ) : (
-          <ul className="space-y-2">
-            {needsAttention.slice(0, 8).map((person) => (
-              <li
-                key={person.evaluationId}
-                className="flex items-center justify-between gap-3 rounded-control border border-rule px-3 py-2"
-              >
-                <span className="font-sans text-body-sm text-ink">{person.name}</span>
-                <span className="tabular text-body-sm text-critical">{person.daysLate}d late</span>
-              </li>
-            ))}
-          </ul>
+          <LateList people={needsAttention} limit={8} />
         )}
       </Panel>
 
@@ -495,19 +618,18 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
   const { ownHistory } = analytics;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-2">
+    <section className="grid items-stretch gap-6 lg:grid-cols-2">
       <Panel title="Your appraisals" subtitle="How they have gone">
         {ownHistory.length === 0 ? (
-          <EmptyState
-            title="Nothing completed yet"
-            body="Your first result appears here once your evaluation closes."
-          />
+          <PanelEmpty>
+            Your first result appears here once your evaluation closes.
+          </PanelEmpty>
         ) : (
           <ul className="space-y-2">
             {ownHistory.slice(0, 5).map((row, i) => (
               <li
                 key={`${row.cycle_id}-${i}`}
-                className="flex items-center justify-between gap-3 rounded-control border border-rule px-3 py-2"
+                className="flex items-center justify-between gap-3 rounded-control bg-surface-mute px-3 py-2"
               >
                 <span className="font-sans text-body-sm text-ink">
                   {String(row.period_label ?? row.cycle_name ?? "—")}

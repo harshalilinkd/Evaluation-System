@@ -20,6 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MIN_REASON_LENGTH } from "@/lib/evaluations/transitions";
 import {
   closeEvaluation,
+  hrCompleteEvaluation,
   mdApprove,
   mdSendBack,
   returnForChanges,
@@ -85,6 +86,9 @@ export function HrRail({ report }: { report: EvaluationReport }) {
   const [returnOpen, setReturnOpen] = React.useState(false);
   const [returnedTo, setReturnedTo] = React.useState<"SELF" | "LEAD" | "BOTH">("SELF");
   const [reason, setReason] = React.useState("");
+  // Completing is the one irreversible act on this screen — §8 has no path out
+  // of CLOSED for anybody — so it is confirmed rather than done on one click.
+  const [completeOpen, setCompleteOpen] = React.useState(false);
 
   const atHr = report.header.status === "PENDING_HR_REVIEW";
   const reviewed = report.header.status === "MD_REVIEWED";
@@ -131,6 +135,25 @@ export function HrRail({ report }: { report: EvaluationReport }) {
     else router.refresh();
   }
 
+  /* -- Finish it here, without the MD (0039). EVALUATION cycles only; the
+        button is not offered on an increment and the server refuses it twice
+        over if it were. -- */
+  async function onComplete() {
+    setBusy(true);
+    setError(null);
+    const result = await hrCompleteEvaluation({
+      evaluationId: report.evaluationId,
+      summary,
+      recommendation,
+    });
+    setBusy(false);
+    if (!result.ok) setError(result.error.message);
+    else {
+      setCompleteOpen(false);
+      router.refresh();
+    }
+  }
+
   /* -- What a return actually does, named exactly. §13.4: an irreversible
         action whose consequence is described vaguely is how somebody clears a
         submission they meant to keep. -- */
@@ -169,7 +192,9 @@ export function HrRail({ report }: { report: EvaluationReport }) {
             placeholder="What should the MD know before they read this?"
           />
           <p className="font-sans text-body-sm text-ink-muted">
-            Required before this can go to the MD.
+            {report.isIncrement
+              ? "Required before this can go to the MD."
+              : "Required either way — to complete this yourself, or to send it to the MD."}
           </p>
         </div>
 
@@ -201,10 +226,39 @@ export function HrRail({ report }: { report: EvaluationReport }) {
 
         {atHr ? (
           <div className="space-y-2">
-            {/* One primary action (§13.3). */}
-            <Button type="button" className="min-h-11 w-full" disabled={busy} onClick={onSend}>
+            {/* ---------- The two endings ----------
+                0039 makes the MD OPTIONAL on an evaluation. Completing is the
+                primary action because it is the ordinary case — HR reads the
+                report, talks it over with the MD in person, and finishes it.
+                Sending to the MD is a deliberate choice for when a second
+                reading in the product is wanted, so it stays and is secondary.
+
+                On an INCREMENT there is only one ending: the MD approves the
+                salary. The complete button is not rendered at all rather than
+                rendered disabled — §13.4 wants a disabled control explained,
+                and the honest explanation here is that the action does not
+                exist on this track (AMEND-2's second pair of eyes on pay). */}
+            {report.isIncrement ? null : (
+              <Button
+                type="button"
+                className="min-h-11 w-full"
+                disabled={busy}
+                onClick={() => setCompleteOpen(true)}
+              >
+                {busy ? "Working…" : "Approve and complete"}
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant={report.isIncrement ? "default" : "secondary"}
+              className="min-h-11 w-full"
+              disabled={busy}
+              onClick={onSend}
+            >
               {busy ? "Working…" : "Send to MD"}
             </Button>
+
             <Button
               type="button"
               variant="secondary"
@@ -248,6 +302,43 @@ export function HrRail({ report }: { report: EvaluationReport }) {
 
         <PrintActions evaluationId={report.evaluationId} />
       </div>
+
+      {/* ---------- Confirming the completion ----------
+          §13.4: an irreversible action described vaguely is how somebody ends a
+          cycle they meant to send on. This names all three consequences —
+          it closes, the MD does not see it, and it cannot be undone. */}
+      <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
+        <DialogContent className="border-rule bg-surface">
+          <DialogHeader>
+            <DialogTitle>Complete this evaluation?</DialogTitle>
+            <DialogDescription>
+              {report.header.employeeName}&rsquo;s evaluation will be marked completed and closed.
+              It will not go to the MD, and your review is what the record carries.
+            </DialogDescription>
+          </DialogHeader>
+
+          <p className="rounded-control border border-warning/40 bg-warning-tint px-3 py-2 font-sans text-body-sm text-ink">
+            There is no way back from completed. If you want the MD to read it first, cancel and
+            choose <span className="font-medium">Send to MD</span> instead.
+          </p>
+
+          {error ? <Notice tone="error">{error}</Notice> : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => setCompleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" className="min-h-11" disabled={busy} onClick={onComplete}>
+              {busy ? "Completing…" : "Complete it"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {report.review.mdRemarks ? (
         <div className="card-surface space-y-2 p-4">
@@ -394,7 +485,19 @@ export function MdRail({ report }: { report: EvaluationReport }) {
       </div>
 
       <div className="card-surface space-y-4 p-4">
-        <h2 className="font-sans text-body font-medium text-ink">Your remarks</h2>
+        <div className="space-y-1">
+          <h2 className="flex items-baseline gap-2 font-sans text-body font-medium text-ink">
+            Your remarks
+            {/* Said on the field, not discovered by pressing Approve. A control
+                whose rules only appear as an error after the click is §13.4's
+                dead end wearing a friendlier face. */}
+            <span className="font-sans text-body-sm font-normal text-ink-muted">optional</span>
+          </h2>
+          <p className="font-sans text-body-sm text-ink-muted">
+            Anything you write is kept with the record. Approving without it is fine — the approval
+            is still dated and attributed to you.
+          </p>
+        </div>
 
         {error ? <Notice tone="error">{error}</Notice> : null}
 
@@ -403,8 +506,9 @@ export function MdRail({ report }: { report: EvaluationReport }) {
           onChange={(e) => setRemarks(e.target.value)}
           rows={5}
           disabled={!atMd}
-          aria-label="Management remarks"
-          placeholder="Your remarks on this report."
+          maxLength={4000}
+          aria-label="Management remarks (optional)"
+          placeholder="Anything the record should carry. Leave blank to approve without a note."
         />
 
         {atMd ? (

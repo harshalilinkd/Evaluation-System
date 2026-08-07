@@ -110,6 +110,43 @@ export async function sendToMd(input: {
   return { ok: true, data: { status: "HR_APPROVED", notified: moved.data.notified ?? null } };
 }
 
+/**
+ * Approve and complete, without the MD. PENDING_HR_REVIEW → CLOSED.
+ *
+ * EVALUATION cycles only — `requireEvaluationCycle` runs inside `transition()`
+ * and 0039 re-checks it in SQL. Not re-implemented here: a third copy of "is
+ * this an increment" is a third thing to keep in step, and the one that would
+ * drift is whichever is checked least (P20-11's call, and PC-1's).
+ *
+ * The summary is saved FIRST and the transition second, for `sendToMd`'s
+ * reason: a failure to save must not leave a CLOSED record carrying no review.
+ * Closing is the more final of the two, so the ordering matters more here — §8
+ * has no path out of CLOSED at all.
+ */
+export async function hrCompleteEvaluation(input: {
+  evaluationId: string;
+  summary: string;
+  recommendation: string;
+}): Promise<CycleResult<{ status: string; notified: unknown }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const parsed = hrReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("NO_SUMMARY", parsed.error.issues[0]?.message ?? "Write a summary first.");
+  }
+
+  const saved = await saveHrReview(input);
+  if (!saved.ok) return saved;
+
+  const moved = await transition(parsed.data.evaluationId, "CLOSED", actorOf(auth.session));
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { status: "CLOSED", notified: moved.data.notified ?? null } };
+}
+
 const returnSchema = z.object({
   evaluationId: z.string().uuid(),
   returnedTo: z.enum(["SELF", "LEAD", "BOTH"]),
@@ -151,9 +188,16 @@ export async function returnForChanges(input: {
 
 /* ---------- The MD's review ---------- */
 
+/* -- The MD's remark is OPTIONAL, at the owner's explicit instruction.
+      This schema's `.min(1)` was the check that actually fired — §8's
+      `requireMdRemarks` guard read the wrong table and could never pass, so
+      this was the whole enforcement. Both are gone.
+
+      A cap is kept: unbounded free text into a column nothing truncates is a
+      different problem from a missing one. -- */
 const mdReviewSchema = z.object({
   evaluationId: z.string().uuid(),
-  remarks: z.string().trim().min(1, "Record your remarks before approving."),
+  remarks: z.string().trim().max(4000, "Keep your remarks under 4000 characters."),
 });
 
 /**
@@ -172,7 +216,7 @@ export async function mdApprove(input: {
 
   const parsed = mdReviewSchema.safeParse(input);
   if (!parsed.success) {
-    return cycleError("NO_REMARKS", parsed.error.issues[0]?.message ?? "Record your remarks.");
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check your remarks.");
   }
 
   const supabase = await createClient();
@@ -181,7 +225,10 @@ export async function mdApprove(input: {
   const { error } = await supabase
     .from("evaluation_reviews")
     .update({
-      md_remarks: parsed.data.remarks,
+      // NULL, not "". An empty string reads as "they wrote something and it was
+      // blank"; null is the truthful "they did not write anything", and it is
+      // what every reader of this column already tests for.
+      md_remarks: parsed.data.remarks || null,
       md_outcome: "APPROVED",
       md_reviewed_by: auth.session.profile.id,
       md_reviewed_at: new Date().toISOString(),

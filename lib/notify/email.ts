@@ -3,6 +3,7 @@
 import "server-only";
 
 import { redact, type SendResult } from "@/lib/notify/maytapi";
+import { sendEmailViaSmtp, smtpConfigured } from "@/lib/notify/smtp";
 
 /**
  * Resend over `fetch` rather than the `resend` npm package.
@@ -45,6 +46,15 @@ export async function sendEmail(
   text: string,
   html: string,
 ): Promise<SendResult> {
+  /* -- SMTP first, if it is configured (AMEND-4).
+        Chosen by which credentials are present rather than by a flag, so there
+        is no third setting that can disagree with the other two. Resend stays
+        the path when its key is the one set, which makes moving to a verified
+        domain later a settings change rather than another code change. -- */
+  if (smtpConfigured()) {
+    return sendEmailViaSmtp(to, subject, text, html);
+  }
+
   const creds = credentials();
   if (!creds.ok) {
     return {

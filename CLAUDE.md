@@ -3918,3 +3918,44 @@ but currently theoretical, because no chart uses green. The dark-mode lightness
 failures are in the tokens themselves (§2), and re-stepping those is a design
 system change rather than a dashboard one — recorded here so the next person
 does not have to re-derive it.
+
+---
+
+### AMEND-4 — Email may go over SMTP as well as Resend
+
+**§2's email row is amended at the owner's explicit instruction**, and recorded
+here rather than quietly diverged from. It read *Resend (server-side only)*; it
+now reads **Resend, or SMTP where the company sends from its own mailbox**.
+`nodemailer` is added to the pinned dependency list for that purpose, which §17
+otherwise forbids.
+
+**Why it was asked for.** Resend will only send from a domain verified with it.
+The owner wanted to send from `harshali.linkd@gmail.com`, which Resend cannot
+do at any price — Gmail speaks SMTP and nothing else. The alternative offered
+(verify `send.linkdprints.com`, no code change) was declined in favour of the
+personal account.
+
+**The costs, stated because they land on somebody later.** Gmail allows roughly
+500 messages a day and locks the ACCOUNT rather than failing the message when
+that is passed. Every employee sees a personal address as the sender of their
+appraisal. If that account goes, the system's email goes with it.
+
+| # | Decision | Why |
+|---|---|---|
+| A4-1 | **Resend is not removed** | The transport is chosen by which credentials are present, not by a flag — so there is no third setting that can disagree with the other two, and moving to a verified domain later is a settings change rather than another code change. The tested path is untouched. |
+| A4-2 | SMTP wins when both are set | An explicit `SMTP_USER` is a deliberate act; a leftover `RESEND_API_KEY` is usually just a key nobody cleared. Choosing the deliberate one is the safer read of the ambiguity. |
+| A4-3 | **`MAIL_FROM` must contain `SMTP_USER`, and the send is refused otherwise** | Gmail silently rewrites a From address it does not own. The message then arrives from somebody other than the person `notifications_log` records as the sender — a quiet disagreement between what was sent and what was logged, which is exactly the kind of thing nobody notices until it matters. Refusing is louder and cheaper. |
+| A4-4 | The preflight has **two rule sets**, not one with exceptions | The `resend.dev` sandbox warning is about Resend and is nonsense under SMTP; the "From must be the account" rule is about Gmail and is nonsense under Resend. A single function with both would fire the wrong advice at whoever read it. |
+| A4-5 | A rejected App Password gets its **own message** | Gmail answers `535 Username and Password not accepted`, which sends people to reset the account password — the wrong fix. The message names the App Password and the 2-Step Verification prerequisite instead. |
+| A4-6 | The provider's error is `redact`ed before it is returned | An SMTP failure echoes the envelope, and a bad login echoes the username. §0.3 keeps credentials out of logs, and P11-2's CHECK would refuse the row anyway. |
+| A4-7 | Both transports keep the **same contract** | `sendEmailViaSmtp` never throws and returns the same `SendResult` as `sendEmail` and `sendWhatsApp`. A caller that has to wrap one of the three in a try/catch is a caller that will forget. |
+
+**Verification — 10 checks, 0 failed.** Under SMTP: a matching From passes, a
+non-matching one is refused with the rewrite explained and the exact line to
+paste, an empty one is refused with the account filled in, the sandbox warning
+does not fire, and case is ignored. Under Resend, all three original rules still
+hold. Typecheck 0, lint 0.
+
+**Still true:** email is not what is blocking anybody. `NEXT_PUBLIC_APP_URL` is
+still `http://localhost:3000`, so every invite link on the deployment is a bare
+path (P30) — on both channels.

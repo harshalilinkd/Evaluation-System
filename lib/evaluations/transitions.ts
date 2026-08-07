@@ -41,7 +41,7 @@ export type GuardName =
   | "requireDisclosureReady"
   | "requireBothLayersIn"
   | "requireSalaryComplete"
-  | "requireMdRemarks"
+  | "requireEvaluationCycle"
   | "requireInterviewRecord";
 
 export type TransitionDefinition = {
@@ -157,6 +157,29 @@ export const TRANSITIONS: readonly TransitionDefinition[] = [
     action: "evaluation.hr_approve",
     label: "Send to the MD",
   },
+  {
+    /* ⚠ DIVERGES FROM §8, AT THE OWNER'S EXPLICIT INSTRUCTION (0039).
+       §8 has one path to CLOSED and it runs through MD_REVIEWED. HR may now
+       finish an EVALUATION outright, having discussed it with the MD in person
+       rather than in the product. Sending to the MD remains available and
+       unchanged; it is now a choice rather than a step.
+
+       `requireEvaluationCycle` is not a formality. AMEND-2 un-merged HR and MD
+       so that a PAY decision has a second pair of eyes, and AMEND-1 recorded
+       what merging them cost. HR proposing and HR approving the same increment
+       is the thing that separation exists to prevent — so this row refuses an
+       INCREMENT, and 0039 refuses it again in SQL, because a guard that lives
+       only in TypeScript is not a guard (P5-1).
+
+       To restore §8: delete this row, and revert 0039. */
+    from: "PENDING_HR_REVIEW",
+    to: "CLOSED",
+    actors: ["HR_ADMIN"],
+    guards: ["requireEvaluationCycle", "requireDisclosureReady"],
+    isReturn: false,
+    action: "evaluation.hr_close",
+    label: "Approve and complete",
+  },
 
   /* -- The MD's rows. HR cannot stand in for the MD on any of them: that
         separation IS the second pair of eyes AMEND-2 restored. -- */
@@ -170,10 +193,22 @@ export const TRANSITIONS: readonly TransitionDefinition[] = [
     label: "Send back to HR",
   },
   {
+    /* ⚠ DIVERGES FROM §8, AT THE OWNER'S EXPLICIT INSTRUCTION.
+       The constitution's guard on this row reads "MD has read the report;
+       remarks recorded", and this row carried `requireMdRemarks` to enforce it.
+       The MD may now approve without writing anything.
+
+       The cost, stated once so it is on the record: the remark was the only
+       part of the MD's reading that survived the click. Approving in silence
+       leaves `md_reviewed_by` and `md_reviewed_at` as the whole trace — who and
+       when, never why. §12's audit row still records the transition, so nothing
+       becomes unaccountable; it becomes unexplained.
+
+       To restore: put "requireMdRemarks" back here, and back in guards.ts. */
     from: "HR_APPROVED",
     to: "MD_REVIEWED",
     actors: ["MD"],
-    guards: ["requireMdRemarks"],
+    guards: [],
     isReturn: false,
     action: "evaluation.md_review",
     label: "Record review",

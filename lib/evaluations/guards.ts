@@ -245,22 +245,49 @@ async function requireSalaryComplete(ctx: GuardContext): Promise<GuardResult> {
   return { ok: true };
 }
 
-/** §8: "MD has read the report; remarks recorded". */
-async function requireMdRemarks(ctx: GuardContext): Promise<GuardResult> {
+/**
+ * The cycle is an EVALUATION, not an INCREMENT.
+ *
+ * The gate on HR closing without the MD (0039). It reads the cycle rather than
+ * taking anybody's word for it, and it FAILS CLOSED: a cycle row that cannot be
+ * read, or a `cycle_type` that is neither value, is refused. The alternative —
+ * defaulting to "probably an evaluation" — would let an unreadable row become a
+ * way to close a pay decision one-handed, which is exactly what AMEND-2's split
+ * of HR and MD exists to prevent.
+ */
+async function requireEvaluationCycle(ctx: GuardContext): Promise<GuardResult> {
   const { createClient } = await import("@/lib/supabase/server");
   const supabase = await createClient();
+
   const { data } = await supabase
-    .from("evaluation_decisions")
-    .select("md_remarks")
-    .eq("evaluation_id", ctx.evaluation.id)
+    .from("evaluation_cycles")
+    .select("cycle_type")
+    .eq("id", ctx.evaluation.cycle_id)
     .maybeSingle();
 
-  if (data?.md_remarks && data.md_remarks.trim().length > 0) return { ok: true };
+  if (data?.cycle_type === "EVALUATION") return { ok: true };
+
   return deny(
-    "REMARKS_REQUIRED",
-    "Record a line of remarks before marking this reviewed. It is the only part of the MD's reading that survives.",
+    "NOT_AN_EVALUATION_CYCLE",
+    data?.cycle_type === "INCREMENT"
+      ? "This is an increment cycle. The MD approves the salary before it can be completed — send it to them."
+      : "Could not confirm this is an evaluation cycle, so it cannot be completed here. Send it to the MD.",
   );
 }
+
+/* `requireMdRemarks` stood here and enforced §8's "remarks recorded" on
+   HR_APPROVED → MD_REVIEWED. Removed at the owner's explicit instruction — the
+   MD may approve without writing anything. The reasoning and how to restore it
+   are recorded on the transition row itself, in transitions.ts, which is where
+   somebody looking for the rule would go.
+
+   It also read the WRONG TABLE. The MD's remark is written to
+   `evaluation_reviews.md_remarks` by `mdApprove` (0029), and this selected
+   `evaluation_decisions` — 0003's table, which nothing on the current path
+   writes. So it could only ever have found null, and the transition would have
+   been refused for every MD however much they typed. Nobody hit it because the
+   Zod schema in `lib/reports/actions.ts` rejected the empty case first. Worth
+   knowing: removing this took out a guard that was already broken. */
 
 /**
  * §8: "interview date and final approved amount recorded".
@@ -284,6 +311,6 @@ export const GUARDS: Record<GuardName, (ctx: GuardContext) => Promise<GuardResul
   requireDisclosureReady,
   requireBothLayersIn,
   requireSalaryComplete,
-  requireMdRemarks,
+  requireEvaluationCycle,
   requireInterviewRecord,
 };

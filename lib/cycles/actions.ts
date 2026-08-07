@@ -308,6 +308,33 @@ export async function setCycleParticipants(
     );
   }
 
+  /* -- THE MD IS NOT APPRAISED, at the owner's explicit instruction.
+        Nobody in this product is above them to rate them: §8's flow needs an
+        evaluatee AND a lead, and the MD is the top of the chain the lead picker
+        offers. An MD participant would either have no rater at all or be rated
+        by somebody they approve the pay of.
+
+        Refused here as well as hidden in the wizard, for the reason the worker
+        rule states directly above: the roster filter is one refactor away from
+        being dropped, and this action is what actually writes the rows. -- */
+  const { data: mdRoles } = await supabase
+    .from("user_roles")
+    .select("profile_id")
+    .eq("role", "MD")
+    .in("profile_id", included.length > 0 ? included.map((r) => r.profileId) : ["00000000-0000-0000-0000-000000000000"]);
+
+  if (mdRoles && mdRoles.length > 0) {
+    const names = mdRoles
+      .map((r) => byId.get(r.profile_id)?.full_name)
+      .filter((n): n is string => Boolean(n));
+    return cycleError(
+      "MD_NOT_EVALUATED",
+      names.length > 0
+        ? `${names.join(", ")} ${names.length === 1 ? "holds" : "hold"} the MD role and cannot be appraised in a cycle.`
+        : "The MD cannot be appraised in a cycle.",
+    );
+  }
+
   const { data: existing } = await supabase
     .from("evaluations")
     .select("id, evaluatee_id")

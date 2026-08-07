@@ -116,8 +116,39 @@ export function checkAppUrl(raw: string | undefined): Preflight {
  * who owns the Resend account, which is exactly the case somebody is in while
  * testing. Refusing would block the only path that currently succeeds.
  */
-export function checkMailFrom(raw: string | undefined): Preflight {
+export function checkMailFrom(raw: string | undefined, smtpUser?: string): Preflight {
   const value = (raw ?? "").trim();
+  const user = (smtpUser ?? "").trim();
+
+  /* -- SMTP is the transport (AMEND-4). Different rules entirely.
+        The resend.dev sandbox warning below is about Resend and would be
+        nonsense here; what matters on SMTP is that the From address IS the
+        account being signed in as, because Gmail rewrites anything else and the
+        message then arrives from somebody other than the app believes. -- */
+  if (user !== "") {
+    if (value === "") {
+      return {
+        ok: false,
+        code: "MAIL_FROM_MISSING",
+        title: "There is no From address for email",
+        detail: "MAIL_FROM is empty, so no email can be sent.",
+        fix: `Set MAIL_FROM="Appraise <${user}>".`,
+      };
+    }
+    if (!value.toLowerCase().includes(user.toLowerCase())) {
+      return {
+        ok: false,
+        code: "MAIL_FROM_NOT_THE_ACCOUNT",
+        title: "Email would arrive from a different address",
+        detail:
+          `MAIL_FROM is "${value}" but you are signed in to SMTP as ${user}. ` +
+          "Gmail rewrites a From address it does not own, so the message would " +
+          "arrive from somebody other than the one recorded here.",
+        fix: `Set MAIL_FROM="Appraise <${user}>".`,
+      };
+    }
+    return { ok: true };
+  }
 
   if (value === "") {
     return {
@@ -180,6 +211,11 @@ export function absoluteUrl(path: string): string {
 export function preflightAll(env: {
   appUrl: string | undefined;
   mailFrom: string | undefined;
+  /** Present when SMTP is the transport — it changes what a valid From is. */
+  smtpUser?: string | undefined;
 }): { appUrl: Preflight; mailFrom: Preflight } {
-  return { appUrl: checkAppUrl(env.appUrl), mailFrom: checkMailFrom(env.mailFrom) };
+  return {
+    appUrl: checkAppUrl(env.appUrl),
+    mailFrom: checkMailFrom(env.mailFrom, env.smtpUser),
+  };
 }

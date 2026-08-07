@@ -29,6 +29,20 @@ export type CycleListRow = {
   participants: number;
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
+  /**
+   * How many participants have had an invite link sent to them.
+   *
+   * The row menu offered "Send links" with nothing beside it to say whether
+   * they had already gone out, so the only way to find out was to open the
+   * distribution screen — or to send them a second time and see. On a screen
+   * whose action messages the whole company, "have I already done this?" has to
+   * be answerable from the list.
+   *
+   * Counted from `notifications_log`, which is the record that a send was
+   * ATTEMPTED (P11-6 writes the row before calling the provider). A person is
+   * counted once however many channels or retries they took.
+   */
+  linksSent: number;
 };
 
 /**
@@ -122,7 +136,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
 
   const { data: evaluations, error: evaluationError } = await supabase
     .from("evaluations")
-    .select("cycle_id, status, self_submitted_at, lead_submitted_at")
+    .select("id, cycle_id, status, self_submitted_at, lead_submitted_at")
     .is("excluded_at", null);
 
   if (evaluationError) {
@@ -130,6 +144,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
   }
 
   const tally = new Map<string, { participants: number; self: number; lead: number; final: number }>();
+  const cycleOfEvaluation = new Map<string, string>();
   for (const row of evaluations ?? []) {
     const entry = tally.get(row.cycle_id) ?? { participants: 0, self: 0, lead: 0, final: 0 };
     entry.participants += 1;
@@ -137,6 +152,35 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     if (reachedLead(row)) entry.lead += 1;
     if (reachedFinal(row)) entry.final += 1;
     tally.set(row.cycle_id, entry);
+    cycleOfEvaluation.set(row.id, row.cycle_id);
+  }
+
+  /* -- Who has been sent a link.
+        `notifications_log` is the record that a send was ATTEMPTED — P11-6
+        writes the row BEFORE calling the provider, so a process that died
+        mid-send still leaves the evidence. That is the right thing to count
+        here: the question this answers is "have I already done this?", not
+        "did every message arrive", which is the distribution screen's job.
+
+        Counted per EVALUATION and then rolled up, so somebody sent both a
+        WhatsApp and an email, or retried twice, is one person. -- */
+  const evaluationIds = [...cycleOfEvaluation.keys()];
+  const sentPerCycle = new Map<string, Set<string>>();
+
+  if (evaluationIds.length > 0) {
+    const { data: sends } = await supabase
+      .from("notifications_log")
+      .select("evaluation_id")
+      .in("evaluation_id", evaluationIds)
+      .not("evaluation_id", "is", null);
+
+    for (const row of sends ?? []) {
+      const cycleId = row.evaluation_id ? cycleOfEvaluation.get(row.evaluation_id) : undefined;
+      if (!cycleId || !row.evaluation_id) continue;
+      const set = sentPerCycle.get(cycleId) ?? new Set<string>();
+      set.add(row.evaluation_id);
+      sentPerCycle.set(cycleId, set);
+    }
   }
 
   return {
@@ -159,6 +203,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         cycleType: c.cycle_type === "INCREMENT" ? "INCREMENT" : "EVALUATION",
         participants: counts.participants,
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
+        linksSent: sentPerCycle.get(c.id)?.size ?? 0,
       };
     }),
   };
