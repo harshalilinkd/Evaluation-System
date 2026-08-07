@@ -134,8 +134,23 @@ Supabase dashboard → **Authentication** → **URL Configuration**:
 
 ## 7 · The nightly job
 
-`vercel.json` already schedules it — 04:30 UTC, which is 10:00 in Kolkata. It
-needs no setup beyond `CRON_SECRET` being present.
+`vercel.json` schedules it and needs no setup beyond `CRON_SECRET` being present.
+
+```
+"schedule": "30 4 * * *"
+```
+
+**That is 04:30 UTC, which is 10:00 Asia/Kolkata.** Vercel runs crons in UTC and
+offers no timezone setting, so the offset is baked into the number — if India
+ever changed its offset, or you wanted a different send time, this is the line
+to edit. P17-5 chose 10:00 local deliberately: a reminder that arrives at
+half past four in the morning is a reminder people learn to ignore.
+
+> The explanation used to live in `vercel.json` as a `"//"` key. Vercel
+> validates that file against a strict schema and rejects any property it does
+> not recognise, so the whole deployment failed with
+> *"crons[0] should NOT have additional property //"*. **`vercel.json` cannot
+> carry comments** — anything worth saying about it belongs here.
 
 Vercel's free plan allows one cron per day, which is exactly what this is.
 
