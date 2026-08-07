@@ -1,0 +1,117 @@
+﻿department,question_text,helper_text,answer_type,who_answers,required
+Design,Fabric & Printing Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Design,Color Matching & Design Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+Design,Software Skills (Photoshop / Illustrator / CAD),,Rating 0 to 5,The employee and their manager,Yes
+Design,Understanding Buyer Requirements,,Rating 0 to 5,The employee and their manager,Yes
+Design,System / Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Design,Design Creativity & Innovation,,Rating 0 to 5,The employee and their manager,Yes
+Design,Timely Completion of Assigned Work,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Data Entry Speed & Productivity,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Google Sheets / MS Excel Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Attention to Detail,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Record Maintenance & Organization,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Work Process Compliance (SOP Following),,Rating 0 to 5,The employee and their manager,Yes
+Operations,Timely Completion of Assigned Work,,Rating 0 to 5,The employee and their manager,Yes
+Operations,Documentation Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+HR,Recruitment & Hiring Efficiency,,Rating 0 to 5,The employee and their manager,Yes
+HR,Employee Documentation Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+HR,"HRMS, Attendance & Leave Management Knowledge",,Rating 0 to 5,The employee and their manager,Yes
+HR,Policy & Process Compliance,,Rating 0 to 5,The employee and their manager,Yes
+HR,Timely Completion of Assigned Work,,Rating 0 to 5,The employee and their manager,Yes
+HR,Google Sheets / MS Excel Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+HR,Work Process Compliance (SOP Following),,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Accuracy of Data,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Report Preparation,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Data Analysis & Interpretation,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Excel / Google Sheets Skills,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Data Validation & Error Checking,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Timeliness of Report Submission,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Dashboard Creation & Maintenance,,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Documentation & Record Management,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Buyer Communication,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Client Query Resolution,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Processing Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Follow-up,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,"Production,Sample,Dispatch  Coordination",,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Fabric Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Delivery Timeline Management,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Status Updates to Clients,,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,"Documentation Accuracy (PO, PI, Invoice, etc.)",,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,ERP / Excel Data Management,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Market Visit & Coverage,,Rating 0 to 5,The employee and their manager,Yes
+Sales,New Client Acquisition,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Client Follow-up,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Sales Target Achievement,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Order Generation,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Customer Relationship Management,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Product Presentation & Demonstration,,Rating 0 to 5,The employee and their manager,Yes
+Sales,Daily Visit Report Submission,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Planning & Allocation,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Review & Approval,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Buyer Requirement Understanding,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Color & Print Coordination,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Photoshop / Illustrator / APC Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Print File Verification,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Documentation,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Print Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Artwork Quality Check,,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Standard Compliance,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Flow Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Order Tracking,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,ERP / Google Sheet Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Documentation Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Production Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Vender Follow up,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Order Status Monitoring,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Compliance,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Report Preparation,,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Issue Identification,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Calendar Management,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Meeting Coordination,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Documentation & Drafting,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,ERP / Google Sheet Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Report Preparation,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Email Management,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,MOM (Minutes of Meeting) Preparation,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Data Confidentiality,,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Follow-up Tracking,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Planning,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Machine Utilization,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Quality Control,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Wastage Control,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Reporting,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Resource Planning,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Scheduling,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Safety Compliance,,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Process Improvement,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Digital Printing Machine Operation,,Rating 0 to 5,The employee and their manager,Yes
+Printing,RIP Software Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Color Matching,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Print Quality Inspection,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Print Alignment,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Fabric Handling,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Ink Management,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Machine Maintenance,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Defect Identification,,Rating 0 to 5,The employee and their manager,Yes
+Printing,Printing Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fusing Machine Operation,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Temperature Setting,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Pressure Setting,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Interlining Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fabric Handling,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Quality Inspection,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Defect Identification,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Machine Maintenance,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fusing Process Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Wastage Control,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,SAB ERP Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Sales Order Entry,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Invoice Preparation,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,GST Documentation,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,E-Way Bill Generation,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Data Accuracy,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Report Generation,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Excel Knowledge,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Documentation Management,,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,ERP Troubleshooting,,Rating 0 to 5,The employee and their manager,Yes
