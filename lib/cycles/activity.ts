@@ -137,7 +137,56 @@ function possessive(name: string): string {
   return name.endsWith("s") ? `${name}'` : `${name}'s`;
 }
 
-function sentenceFor(action: string, names: Names): string {
+/* -- Which fields a cycle edit touched, in words HR uses.
+      "changed the cycle setup" nine times says nothing about what moved.
+      `updateCycle` now records a before/after diff, so the row can name the
+      thing rather than the table. Unlisted keys are skipped rather than
+      slugified: a column name in a history is worse than a slightly vaguer
+      sentence. -- */
+const FIELD_WORDS: Record<string, string> = {
+  name: "the name",
+  period_label: "the period",
+  starts_on: "the start date",
+  self_due_on: "the employee deadline",
+  lead_due_on: "the lead deadline",
+  md_due_on: "the final deadline",
+  variance_threshold: "the gap threshold",
+  disclosure: "what employees are shown",
+  cycle_type: "the cycle type",
+  cycle_kind: "how people join",
+  default_self_days: "the default employee window",
+  default_lead_days: "the default lead window",
+};
+
+function changedFields(diff: unknown): string[] {
+  if (!diff || typeof diff !== "object") return [];
+  const after = (diff as { after?: unknown }).after;
+  if (!after || typeof after !== "object") return [];
+  return Object.keys(after as Record<string, unknown>)
+    .map((k) => FIELD_WORDS[k])
+    .filter((w): w is string => Boolean(w));
+}
+
+/** "a, b and c" — an Oxford-less list, because these are read aloud in meetings. */
+function listOf(items: string[]): string {
+  if (items.length === 1) return items[0]!;
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+function sentenceFor(action: string, names: Names, diff?: unknown): string {
+  /* Named where we can. Falls through to the generic sentence when the diff
+     predates this change or holds only fields not worth naming. */
+  if (action === "cycle.updated") {
+    const fields = changedFields(diff);
+    if (fields.length > 0 && fields.length <= 3) {
+      return `${names.actor} changed ${listOf(fields)}.`;
+    }
+    if (fields.length > 3) {
+      return `${names.actor} changed ${fields.length} settings on the cycle.`;
+    }
+  }
+
   const build = SENTENCES[action];
   if (build) return build(names);
 
@@ -176,7 +225,13 @@ export async function getCycleActivity(
 
   const { data: rows, error } = await supabase
     .from("audit_log")
-    .select("id, actor_id, entity, entity_id, action, from_status, to_status, reason, created_at")
+    /* -- `diff` is here so a cycle edit can name what it changed. Written out
+          in full, never concatenated: supabase-js infers the row type from this
+          string at compile time and degrades everything to GenericStringError
+          on any string it cannot statically parse (P3-11). -- */
+    .select(
+      "id, actor_id, entity, entity_id, action, from_status, to_status, reason, diff, created_at",
+    )
     .in("entity_id", entityIds)
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -229,11 +284,11 @@ export async function getCycleActivity(
         id: row.id,
         at: row.created_at,
         action: row.action,
-        sentence: sentenceFor(row.action, {
-          actor,
-          subject,
-          theirSubject: possessive(subject),
-        }),
+        sentence: sentenceFor(
+          row.action,
+          { actor, subject, theirSubject: possessive(subject) },
+          row.diff,
+        ),
         reason: row.reason,
       };
     }),

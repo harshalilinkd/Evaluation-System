@@ -272,6 +272,39 @@ export async function updateCycle(
     Object.assign(patch, dates);
   }
 
+  /* -- What actually CHANGED, rather than what was sent.
+        The wizard autosaves on every step change and every edit, and each save
+        posts the whole draft — so nine saves in three minutes wrote nine
+        identical "changed the cycle setup" rows, most of them recording a save
+        in which nothing moved. The activity trail became unreadable, which
+        defeats the point of having one.
+
+        Not a display problem, so not fixed in the display. §12 wants an audit
+        row for every change; a save that changed nothing is not a change, and
+        a row claiming otherwise is a false record. Removing it costs no audit
+        fidelity — it removes a claim that was never true.
+
+        Cheap here because the current row was already read above for the
+        status check, so this needs no extra query. -- */
+  const before: Record<string, unknown> = {};
+  const after: Record<string, unknown> = {};
+  const current = cycle as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    // Loose, deliberately: a date comes back from Postgres as a string and
+    // goes in as one, but a numeric threshold can arrive as either.
+    if (String(current[key] ?? "") !== String(value ?? "")) {
+      before[key] = current[key] ?? null;
+      after[key] = value ?? null;
+    }
+  }
+
+  if (Object.keys(after).length === 0) {
+    // Nothing to write and nothing to record. Still `ok` — the caller asked for
+    // a state that is already true, and an autosave must not report a failure
+    // for having nothing to do.
+    return { ok: true, data: { id: cycleId } };
+  }
+
   const { error } = await supabase.from("evaluation_cycles").update(patch).eq("id", cycleId);
   if (error) return fromPostgres("QUERY_FAILED", error.message);
 
@@ -279,7 +312,10 @@ export async function updateCycle(
     p_entity: "cycle",
     p_entity_id: cycleId,
     p_action: cycle.status === "ACTIVE" ? "cycle.dates_extended" : "cycle.updated",
-    p_diff: patch as Json,
+    // §12 asks for before AND after. It logged only what was sent, so a row
+    // could not answer "changed from what" — the question anybody reading the
+    // trail is actually asking.
+    p_diff: { before, after } as Json,
   });
 
   revalidateCycles(cycleId);
