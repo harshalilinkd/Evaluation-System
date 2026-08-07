@@ -231,7 +231,7 @@ export function NotificationsTab({
                 <thead>
                   <tr className="border-b border-rule bg-surface-mute">
                     {["When", "Who", "Message", "Channel", "Outcome"].map((h) => (
-                      <th key={h} className="type-label px-6 py-2 text-left text-ink-muted">
+                      <th key={h} className="type-label px-6 py-2 text-left font-bold text-ink">
                         {h}
                       </th>
                     ))}

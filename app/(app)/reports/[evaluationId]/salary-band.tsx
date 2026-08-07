@@ -46,7 +46,7 @@ function Figure({ label, value, hint }: { label: string; value: string; hint?: s
     <figure className="rounded-control border border-rule bg-surface-mute p-4">
       <figcaption className="type-label text-ink-muted">{label}</figcaption>
       <p className="tabular text-display-md text-ink">{value}</p>
-      {hint ? <p className="font-sans text-body-sm text-ink-faint">{hint}</p> : null}
+      {hint ? <p className="font-sans text-body-sm text-ink-muted">{hint}</p> : null}
     </figure>
   );
 }
@@ -146,13 +146,13 @@ export function SalaryBand({
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">Their last three increments</h3>
           {data.history.length === 0 ? (
-            <p className="mt-2 font-sans text-body-sm text-ink-faint">Nothing on record yet.</p>
+            <p className="mt-2 font-sans text-body-sm text-ink-muted">Nothing on record yet.</p>
           ) : (
             <table className="mt-2 w-full border-collapse">
               <thead>
                 <tr className="border-b border-rule">
                   {["From", "Previous", "New", "Hike"].map((h) => (
-                    <th key={h} className="type-label py-1 text-left text-ink-muted">{h}</th>
+                    <th key={h} className="type-label py-1 text-left font-bold text-ink">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -173,13 +173,13 @@ export function SalaryBand({
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">This department, this cycle</h3>
           {data.departmentSampleSize === 0 ? (
-            <p className="mt-2 font-sans text-body-sm text-ink-faint">
+            <p className="mt-2 font-sans text-body-sm text-ink-muted">
               Nobody else in this department has an agreed figure yet.
             </p>
           ) : (
             <>
               <p className="mt-2 tabular text-display-md text-ink">{pctText(data.departmentMedianPct)}</p>
-              <p className="font-sans text-body-sm text-ink-faint">
+              <p className="font-sans text-body-sm text-ink-muted">
                 Median across {data.departmentSampleSize}{" "}
                 {data.departmentSampleSize === 1 ? "person" : "people"} with an approved or final
                 figure. Context, not a target.
@@ -297,14 +297,14 @@ function HrProposal({
               ) : null}
             </>
           ) : (
-            <p className="mt-1 font-sans text-body text-ink-faint">Not stated.</p>
+            <p className="mt-1 font-sans text-body text-ink-muted">Not stated.</p>
           )}
         </article>
 
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">Against your proposal</h3>
           {gap.amount === null ? (
-            <p className="mt-1 font-sans text-body text-ink-faint">
+            <p className="mt-1 font-sans text-body text-ink-muted">
               {review?.employee_expectation_ctc ? "Enter a proposal to compare." : "Nothing to compare."}
             </p>
           ) : (
@@ -313,7 +313,7 @@ function HrProposal({
                 {gap.amount > 0 ? "+" : ""}
                 {money(gap.amount)}
               </p>
-              <p className="font-sans text-body-sm text-ink-faint">
+              <p className="font-sans text-body-sm text-ink-muted">
                 {pctText(gap.pct)} against what they asked for.
               </p>
             </>
@@ -373,7 +373,7 @@ function HrProposal({
           <div>
             <dt className="type-label text-ink-muted">Annualised</dt>
             <dd className="tabular text-body text-ink">{pctText(annualised)}</dd>
-            <dd className="font-sans text-body-sm text-ink-faint">
+            <dd className="font-sans text-body-sm text-ink-muted">
               {data.monthsSinceLastIncrement
                 ? `What ${pctText(pct)} over ${data.monthsSinceLastIncrement} months is worth per year. Context only — the money paid is ${pctText(pct)}.`
                 : "No last-increment date to annualise against."}
@@ -394,7 +394,7 @@ function HrProposal({
             rows={4}
             placeholder="Why is this the right figure?"
           />
-          <p className="font-sans text-body-sm text-ink-faint">
+          <p className="font-sans text-body-sm text-ink-muted">
             Required. It goes to the MD with the number.
           </p>
         </div>
@@ -467,7 +467,7 @@ function MdApproval({
               ) : null}
             </>
           ) : (
-            <p className="mt-1 font-sans text-body text-ink-faint">Not stated.</p>
+            <p className="mt-1 font-sans text-body text-ink-muted">Not stated.</p>
           )}
         </article>
 
@@ -475,7 +475,7 @@ function MdApproval({
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">HR proposed</h3>
           <p className="mt-1 tabular text-display-md text-ink">{money(review?.hr_proposed_ctc ?? null)}</p>
-          <p className="font-sans text-body-sm text-ink-faint">
+          <p className="font-sans text-body-sm text-ink-muted">
             {pctText(review?.hr_proposed_hike_pct ?? null)}
           </p>
           {review?.hr_justification ? (
@@ -500,7 +500,7 @@ function MdApproval({
               inputMode="numeric"
               className="min-h-11 tabular"
             />
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               Defaults to HR&rsquo;s proposal. {pctText(pct)} on the current salary.
             </p>
           </div>
@@ -582,7 +582,7 @@ function InterviewCard({
     <article className="card-surface space-y-4 p-6">
       <div>
         <h3 className="font-sans text-body font-medium text-ink">The increment interview</h3>
-        <p className="font-sans text-body-sm text-ink-faint">
+        <p className="font-sans text-body-sm text-ink-muted">
           The MD approved {money(approvedCtc)} ({pctText(approvedPct)}). Record what was agreed in
           the call.
         </p>
@@ -605,7 +605,7 @@ function InterviewCard({
           <Label htmlFor="final_ctc" className="type-label text-ink-muted">Final CTC</Label>
           <Input id="final_ctc" value={finalText} onChange={(e) => setFinalText(e.target.value)}
             inputMode="numeric" className="min-h-11 tabular" />
-          <p className="font-sans text-body-sm text-ink-faint">{pctText(finalPct)} on the current salary.</p>
+          <p className="font-sans text-body-sm text-ink-muted">{pctText(finalPct)} on the current salary.</p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="effective_from" className="type-label text-ink-muted">Effective from</Label>

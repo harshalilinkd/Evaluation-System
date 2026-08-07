@@ -168,7 +168,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
             disabled={!atHr}
             placeholder="What should the MD know before they read this?"
           />
-          <p className="font-sans text-body-sm text-ink-faint">
+          <p className="font-sans text-body-sm text-ink-muted">
             Required before this can go to the MD.
           </p>
         </div>
@@ -254,7 +254,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
           <h3 className="type-label text-ink-muted">The MD said</h3>
           <p className="whitespace-pre-wrap font-sans text-body-sm text-ink">{report.review.mdRemarks}</p>
           {report.review.mdReviewedByName ? (
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               {report.review.mdReviewedByName}
               {report.review.mdReviewedAt ? ` · ${formatDateTime(report.review.mdReviewedAt)}` : ""}
             </p>
@@ -310,7 +310,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                 rows={4}
                 placeholder="What needs to change?"
               />
-              <p className="font-sans text-body-sm text-ink-faint">
+              <p className="font-sans text-body-sm text-ink-muted">
                 At least {MIN_REASON_LENGTH} characters. It is sent to them word for word.
               </p>
             </div>
@@ -380,7 +380,7 @@ export function MdRail({ report }: { report: EvaluationReport }) {
             <p className="whitespace-pre-wrap font-sans text-body-sm text-ink">
               {report.review.hrSummary}
             </p>
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               {report.review.hrRecommendation
                 ? RECOMMENDATIONS.find((r) => r.value === report.review.hrRecommendation)?.label
                 : ""}
@@ -389,7 +389,7 @@ export function MdRail({ report }: { report: EvaluationReport }) {
             </p>
           </>
         ) : (
-          <p className="font-sans text-body-sm text-ink-faint">HR has not written a summary yet.</p>
+          <p className="font-sans text-body-sm text-ink-muted">HR has not written a summary yet.</p>
         )}
       </div>
 
@@ -451,7 +451,7 @@ export function MdRail({ report }: { report: EvaluationReport }) {
               rows={4}
               placeholder="What needs to change?"
             />
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               At least {MIN_REASON_LENGTH} characters.
             </p>
             {error ? <Notice tone="error">{error}</Notice> : null}

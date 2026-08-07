@@ -9,14 +9,23 @@ import { cn } from "@/lib/utils";
  * available: each segment counts how many evaluations a given layer has spoken
  * on, which is precisely what cyan, pink and indigo mean (§13.1).
  *
- * THE SEGMENTS ARE CUMULATIVE, AND THE BAR IS DRAWN IN REVERSE.
+ * THE SEGMENTS SIT SIDE BY SIDE, AND THE BAR MEASURES WORK DONE OUT OF WORK DUE.
  *
- * Somebody at MD_FINALIZED has also submitted their self layer and had it
- * reviewed, so self >= lead >= final always. Three overlapping bars stacked
- * back to front — widest first — read as one bar filling up, with the darker
- * indigo advancing inside the cyan. Laying them side by side from exclusive
- * counts would make the bar shrink as work progressed.
+ * They used to be drawn as three CUMULATIVE bars stacked back to front — self
+ * widest, final narrowest — on the reasoning that somebody finalised has also
+ * self-submitted. It read correctly only while the three counts differed. The
+ * ordinary case is that they do not: with one person whose self and lead layers
+ * are both in, self and lead were each 100%, the pink painted straight over the
+ * cyan, and the bar was solid pink end to end. It said "finished" beside a
+ * figure saying 67%, which is worse than saying nothing.
+ *
+ * So the denominator is the work, not the people. Every participant owes three
+ * answers — their own, their lead's, the MD's — and each segment is its count
+ * over that total. The three add up to exactly the completion percentage shown
+ * beside the bar, and whatever is left is the track: **filled is done, empty is
+ * outstanding**, which is the one thing a progress bar has to say.
  */
+const STAGES_PER_PERSON = 3;
 export function SegmentedProgress({
   total,
   self,
@@ -32,22 +41,33 @@ export function SegmentedProgress({
   className?: string;
   height?: string;
 }) {
-  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const due = total * STAGES_PER_PERSON;
+  const share = (n: number) => (due > 0 ? (n / due) * 100 : 0);
+  const donePct = Math.round(share(self + lead + final));
 
   return (
     <div
-      className={cn("relative w-full overflow-hidden rounded-pill bg-surface-mute", height, className)}
+      className={cn(
+        // The track. A visible tone rather than a whisper: it is the half of
+        // the bar that says how much is still outstanding, so it has to be
+        // legible as a shape, not just as the absence of fill.
+        "flex w-full overflow-hidden rounded-pill bg-rule/70",
+        height,
+        className,
+      )}
       role="img"
       aria-label={
         total === 0
           ? "No participants yet"
-          : `${self} of ${total} self-submitted, ${lead} reviewed by a lead, ${final} finalised by the MD`
+          : `${donePct}% complete — ${self} of ${total} self-submitted, ${lead} reviewed by a lead, ${final} finalised by the MD`
       }
     >
-      {/* Back to front: self is the widest, final the narrowest and darkest. */}
-      <span className="absolute inset-y-0 left-0 bg-self" style={{ width: `${pct(self)}%` }} />
-      <span className="absolute inset-y-0 left-0 bg-lead" style={{ width: `${pct(lead)}%` }} />
-      <span className="absolute inset-y-0 left-0 bg-final" style={{ width: `${pct(final)}%` }} />
+      {/* Side by side, in the order the work happens. Each is its own share of
+          the whole, so together they fill exactly `donePct` and the rest of the
+          bar is visibly unfinished. */}
+      <span className="bg-self" style={{ width: `${share(self)}%` }} />
+      <span className="bg-lead" style={{ width: `${share(lead)}%` }} />
+      <span className="bg-final" style={{ width: `${share(final)}%` }} />
     </div>
   );
 }

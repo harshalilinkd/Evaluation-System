@@ -46,7 +46,7 @@ function TierTag({ tier, children }: { tier: "self" | "lead"; children: React.Re
   return (
     <span className="flex items-center gap-2">
       <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", TIER_DOT[tier])} />
-      <span className="type-label text-ink-muted">{children}</span>
+      <span className="type-label font-bold text-ink">{children}</span>
     </span>
   );
 }
@@ -91,7 +91,7 @@ export function ReportTopBar({ report }: { report: EvaluationReport }) {
         Reports
       </Link>
 
-      <span aria-hidden className="text-ink-faint">/</span>
+      <span aria-hidden className="text-ink-muted">/</span>
 
       <span className="truncate text-body-sm font-medium text-ink">{header.employeeName}</span>
 
@@ -109,9 +109,10 @@ export function ReportTopBar({ report }: { report: EvaluationReport }) {
  * A numbered section heading.
  *
  * What made this read as a pile of cards rather than a document was that its
- * five parts had no order and no weight — and `text-h3`, the class they used
- * for their headings, does not exist in the type scale, so Tailwind emitted
- * nothing and preflight rendered every one of them at plain body size.
+ * five parts had no order and no weight — and the class they used for their
+ * headings did not exist in the type scale at all, so Tailwind emitted nothing
+ * and preflight rendered every one of them at plain body size. Four such
+ * phantom utilities were in the tree; all four are gone.
  *
  * Numbering is what a reader uses to say "look at three" out loud, which is the
  * whole point of a document somebody discusses with the MD.
@@ -131,12 +132,12 @@ export function BandHeading({
     <div className="flex flex-wrap items-end justify-between gap-3 border-b border-rule pb-2">
       <div className="min-w-0">
         <h2 className="flex items-baseline gap-2 font-sans text-display-sm text-ink">
-          <span aria-hidden className="tabular text-body-sm font-semibold text-ink-faint">
+          <span aria-hidden className="tabular text-body-sm font-semibold text-ink-muted">
             {index}
           </span>
           {title}
         </h2>
-        {hint ? <p className="font-sans text-body-sm text-ink-faint">{hint}</p> : null}
+        {hint ? <p className="font-sans text-body-sm text-ink-muted">{hint}</p> : null}
       </div>
       {action}
     </div>
@@ -160,7 +161,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             .filter(Boolean)
             .join(" · ") || "—"}
         </p>
-        <p className="font-sans text-body-sm text-ink-faint">
+        <p className="font-sans text-body-sm text-ink-muted">
           {header.cycleName} · {header.period} · {header.cycleType}
           {header.leadName ? ` · rated by ${header.leadName}` : ""}
           {header.dateOfJoining ? ` · joined ${formatDate(header.dateOfJoining)}` : ""}
@@ -223,7 +224,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           <table className="w-full min-w-[520px] border-collapse">
             <thead>
               <tr className="border-b border-rule">
-                <th className="type-label px-6 py-2 text-left text-ink-muted">Section</th>
+                <th className="type-label px-6 py-2 text-left font-bold text-ink">Section</th>
                 {/* The heading carries the tier dot, and the column beneath it
                     carries the tint. Together they say who spoke without asking
                     anybody to read cyan text. */}
@@ -233,7 +234,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                 <th className={cn("px-3 py-2 text-right", TIER_COLUMN.lead)}>
                   <TierTag tier="lead">Lead</TierTag>
                 </th>
-                <th className="type-label px-6 py-2 text-right text-ink-muted">Gap</th>
+                <th className="type-label px-6 py-2 text-right font-bold text-ink">Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -242,10 +243,10 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   s.gap !== null && Math.abs(s.gap) >= summary.flagThreshold;
                 return (
                   <tr key={s.section} className="border-b border-rule last:border-b-0">
-                    <td className="px-6 py-2 font-sans text-body-sm text-ink">{s.label}</td>
+                    <td className="px-6 py-2 font-sans text-body text-ink">{s.label}</td>
                     <td
                       className={cn(
-                        "tabular px-3 py-2 text-right text-body-sm font-medium text-ink",
+                        "tabular px-3 py-2 text-right text-body font-semibold text-ink",
                         TIER_COLUMN.self,
                       )}
                     >
@@ -253,7 +254,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                     </td>
                     <td
                       className={cn(
-                        "tabular px-3 py-2 text-right text-body-sm font-medium text-ink",
+                        "tabular px-3 py-2 text-right text-body font-semibold text-ink",
                         TIER_COLUMN.lead,
                       )}
                     >
@@ -261,7 +262,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                     </td>
                     <td
                       className={cn(
-                        "tabular px-6 py-2 text-right text-body-sm font-medium",
+                        "tabular px-6 py-2 text-right text-body font-semibold",
                         wide ? "text-critical" : "text-ink-muted",
                       )}
                     >
@@ -332,14 +333,14 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
                 </colgroup>
                 <thead>
                   <tr className="border-b border-rule">
-                    <th className="type-label px-4 py-2 text-left text-ink-muted">Question</th>
+                    <th className="type-label px-4 py-2 text-left font-bold text-ink">Question</th>
                     <th className={cn("px-4 py-2 text-left", TIER_COLUMN.self)}>
                       <TierTag tier="self">Self</TierTag>
                     </th>
                     <th className={cn("px-4 py-2 text-left", TIER_COLUMN.lead)}>
                       <TierTag tier="lead">Lead</TierTag>
                     </th>
-                    <th className="type-label px-4 py-2 text-right text-ink-muted">Gap</th>
+                    <th className="type-label px-4 py-2 text-right font-bold text-ink">Gap</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -362,7 +363,7 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
                             <Flag className="mt-0.5 size-3.5 shrink-0 text-critical" aria-hidden />
                           ) : null}
                           <span>
-                            <span className="block font-sans text-body-sm text-ink">{row.text}</span>
+                            <span className="block font-sans text-body text-ink">{row.text}</span>
                             {row.flag !== "none" ? (
                               <span className="sr-only">Flagged difference.</span>
                             ) : null}
@@ -381,23 +382,23 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
                           what says who spoke; the wording stays readable. */}
                       <td
                         className={cn(
-                          "px-4 py-2.5 font-sans text-body-sm text-ink",
+                          "px-4 py-2.5 font-sans text-body text-ink",
                           TIER_COLUMN.self,
                         )}
                       >
-                        {row.selfAnswer ?? <span className="text-ink-faint">—</span>}
+                        {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
                       <td
                         className={cn(
-                          "px-4 py-2.5 font-sans text-body-sm text-ink",
+                          "px-4 py-2.5 font-sans text-body text-ink",
                           TIER_COLUMN.lead,
                         )}
                       >
-                        {row.leadAnswer ?? <span className="text-ink-faint">—</span>}
+                        {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
                       <td
                         className={cn(
-                          "tabular px-4 py-2.5 text-right text-body-sm font-medium",
+                          "tabular px-4 py-2.5 text-right text-body font-semibold",
                           row.flag !== "none" ? "text-critical" : "text-ink-muted",
                         )}
                       >
@@ -557,7 +558,7 @@ export function MetaPanel({ report }: { report: EvaluationReport }) {
                 {r.by ? ` · by ${r.by}` : ""}
               </p>
               {r.reason ? (
-                <p className="font-sans text-body-sm text-ink-faint">&ldquo;{r.reason}&rdquo;</p>
+                <p className="font-sans text-body-sm text-ink-muted">&ldquo;{r.reason}&rdquo;</p>
               ) : null}
             </div>
           ))}

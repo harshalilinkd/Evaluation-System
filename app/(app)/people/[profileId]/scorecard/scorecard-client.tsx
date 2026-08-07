@@ -279,7 +279,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   <thead>
                     <tr>
                       {["Section", "Self", "Lead", "Final"].map((h) => (
-                        <th key={h} scope="col" className="type-label py-2 text-left text-ink-faint">
+                        <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
                           {h}
                         </th>
                       ))}
@@ -417,7 +417,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   <thead>
                     <tr>
                       {["Question", "Self", "Lead", "Final"].map((h) => (
-                        <th key={h} scope="col" className="type-label py-2 text-left text-ink-faint">
+                        <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
                           {h}
                         </th>
                       ))}
@@ -452,7 +452,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 <thead>
                   <tr>
                     {["Period", "Self", "Lead", "Final", "Promotion", "Increment %"].map((h) => (
-                      <th key={h} scope="col" className="type-label py-2 text-left text-ink-faint">
+                      <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
                         {h}
                       </th>
                     ))}
@@ -494,7 +494,7 @@ function HistoryTable({ history }: { history: Scorecard["history"] }) {
       <thead>
         <tr>
           {["Period", "Self", "Lead", "Final"].map((h) => (
-            <th key={h} scope="col" className="type-label py-2 text-left text-ink-faint">
+            <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
               {h}
             </th>
           ))}

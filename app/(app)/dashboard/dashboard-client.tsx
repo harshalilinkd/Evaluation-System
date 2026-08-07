@@ -308,7 +308,7 @@ function AdminView({ analytics }: { analytics: Analytics }) {
               <thead>
                 <tr className="border-b border-rule">
                   {["Section", "Self", "Lead", "Gap"].map((h) => (
-                    <th key={h} className="type-label px-3 py-2 text-left text-ink-muted">
+                    <th key={h} className="type-label px-3 py-2 text-left font-bold text-ink">
                       {h}
                     </th>
                   ))}

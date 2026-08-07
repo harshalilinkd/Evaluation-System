@@ -247,7 +247,7 @@ export function EmploymentClient({
                 <tr className="border-b border-border/60">
                   {["Effective", "Previous", "New", "Hike", "%", "Reason", "Recorded by", "Note"].map(
                     (h) => (
-                      <th key={h} scope="col" className="type-label px-3 py-2 text-left text-ink-faint">
+                      <th key={h} scope="col" className="type-label px-3 py-2 text-left font-bold text-ink">
                         {h}
                       </th>
                     ),

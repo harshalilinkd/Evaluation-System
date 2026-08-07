@@ -187,11 +187,23 @@ export function DataGrid<TData>({
           <div className="p-6">{empty}</div>
         ) : (
           <table
-            // Exactly as wide as its columns; `min-w-full` only ever stretches
-            // the trailing filler. Were the sized columns allowed to absorb the
-            // slack, their rendered width would stop matching getSize() and the
-            // frozen offsets above would drift with it.
-            style={{ width: table.getTotalSize(), minWidth }}
+            /*
+              As wide as its columns, or `minWidth`, whichever is greater — and
+              then `min-w-full` stretches it the rest of the way to the
+              container, with the trailing filler absorbing every spare pixel.
+
+              `minWidth` used to be set INLINE alongside the class, and an
+              inline `min-width` beats a class. So `min-w-full` never applied:
+              the table sat at exactly its column total and everything to the
+              right of the last column was bare page. On a wide screen that is
+              a third of the grid missing its header band and its rules, which
+              is what "the table looks unstructured" was.
+
+              Folded into `width` instead. The sized columns still never absorb
+              the slack, so their rendered width keeps matching `getSize()` and
+              the frozen offsets stay aligned.
+            */
+            style={{ width: Math.max(table.getTotalSize(), minWidth) }}
             className={cn(
               "min-w-full table-fixed border-separate border-spacing-0",
               // A drag that selects the header text underneath it looks broken.

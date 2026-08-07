@@ -505,76 +505,28 @@ export function BoardClient({
         </div>
       </div>
 
-      {/* ---------- Per-department cohorts ----------
-          Hidden entirely until somebody is in the cycle.
+      {/* ---------- The one thing worth saying about departments ----------
+          The per-department cohort cards were removed at the owner's request:
+          a heading, a caption and a tile reading "Data Analyst · 5 questions ·
+          1 person" took a third of the screen to restate what the table above
+          already shows, on the screen HR uses to chase people.
 
-          It used to render three lines of nothing — a heading, a caption and
-          "No departments in this cycle." — on a screen that has no room to
-          spare. A section is worth its space when it answers a question the
-          reader has; before anybody is added there is no question to answer.
-
-          Once there ARE participants and still no cohorts, the emptiness stops
-          being nothing and becomes the P9-7 problem: nobody has a department,
-          so nobody will be asked a single Job Specific Skills question. That is
-          worth saying out loud, which is what the branch below does. */}
-      {board.totals.participants === 0 ? null : (
-      <section className="space-y-3">
-        <div>
-          {/* Section name from labels.ts, not retyped — see step-review.tsx. */}
-          <h2 className="text-display-sm text-ink">
-            {SECTION_LABELS.DEPARTMENT_SPECIFIC} frozen per department
-          </h2>
-          <p className="text-body-sm text-ink-muted">
-            {board.cycle.status === "DRAFT"
-              ? "Nothing is frozen yet — these are the questions currently mapped."
-              : "What was frozen at launch. Editing the bank since then has not changed these."}
-          </p>
-        </div>
-
-        <div className={cn(board.cohorts.length > 0 && "grid gap-3 sm:grid-cols-2 lg:grid-cols-4")}>
-          {board.cohorts.length === 0 ? (
-            <p className="flex items-start gap-3 rounded-card border-l-2 border-l-warning bg-warning-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
-              <span>
-                <span className="font-medium">
-                  Nobody in this cycle has a department set.
-                </span>{" "}
-                {SECTION_LABELS.DEPARTMENT_SPECIFIC} questions are chosen by department, so as it
-                stands every form here will have that section empty. Set each person&rsquo;s
-                department in Settings › Users
-                {board.cycle.status === "DRAFT" ? " before you launch." : "."}
-              </span>
-            </p>
-          ) : (
-            board.cohorts.map((cohort) => (
-              <div
-                key={cohort.departmentId}
-                className={cn(
-                  "rounded-card p-4",
-                  // A cohort that launched with nothing is worth seeing at a
-                  // glance: their form has no department section at all.
-                  cohort.jobSkillQuestions === 0 ? "bg-critical-tint" : "card-surface",
-                )}
-              >
-                <p className="truncate text-body font-medium text-ink">{cohort.departmentName}</p>
-                <p className="tabular mt-1 text-display-sm text-ink">{cohort.jobSkillQuestions}</p>
-                <p className="text-body-sm text-ink-muted">
-                  {cohort.jobSkillQuestions === 1 ? "question" : "questions"} ·{" "}
-                  {plural(cohort.people, "person")}
-                </p>
-                {cohort.jobSkillQuestions === 0 ? (
-                  <Link
-                    href={`/admin/departments/${cohort.departmentId}`}
-                    className="mt-2 inline-block text-body-sm font-medium text-critical underline underline-offset-2"
-                  >
-                    Map questions
-                  </Link>
-                ) : null}
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-      )}
+          This warning is NOT that, and is kept. It fires only when people are
+          in the cycle and NONE of them has a department — the P9-7 problem, and
+          a genuine blocker: Job Specific Skills questions are chosen by
+          department, so every form would launch with that section empty and
+          nobody would notice until the first person opened theirs. */}
+      {board.totals.participants > 0 && board.cohorts.length === 0 ? (
+        <p className="flex items-start gap-3 rounded-card border-l-2 border-l-warning bg-warning-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
+          <span>
+            <span className="font-medium">Nobody in this cycle has a department set.</span>{" "}
+            {SECTION_LABELS.DEPARTMENT_SPECIFIC} questions are chosen by department, so as it
+            stands every form here will have that section empty. Set each person&rsquo;s
+            department in Settings › Users
+            {board.cycle.status === "DRAFT" ? " before you launch." : "."}
+          </span>
+        </p>
+      ) : null}
 
       {/* ---------- Withdrawn ---------- */}
       {board.excluded.length > 0 ? (

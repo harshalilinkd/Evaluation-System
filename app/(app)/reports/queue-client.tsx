@@ -207,7 +207,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
               {row.original.flaggedCount}
             </span>
           ) : (
-            <span className="text-body-sm text-ink-faint">—</span>
+            <span className="text-body-sm text-ink-muted">—</span>
           ),
       },
       {
