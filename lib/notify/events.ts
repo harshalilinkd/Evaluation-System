@@ -1,6 +1,7 @@
 /** Transition-driven notifications. CLAUDE.md §8 events → §10 messages. */
 
 import "server-only";
+import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
@@ -60,8 +61,7 @@ const NOTHING: TransitionNotice = { sent: 0, failed: 0, problems: [] };
  * for someone who has none; it is not a convenience for someone who does.
  */
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return absoluteUrl(path);
 }
 
 async function employeeLink(evaluationId: string, channel: Channel): Promise<string | null> {

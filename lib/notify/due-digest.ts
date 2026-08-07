@@ -12,6 +12,7 @@
  */
 
 import "server-only";
+import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { sendNotification } from "@/lib/notify/dispatch";
 import { hrDueDigest, incrementsOverdue, mdReviewDigest } from "@/lib/notify/templates";
@@ -31,8 +32,7 @@ const CADENCE_HOURS = {
 } as const;
 
 function appUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return absoluteUrl(path);
 }
 
 /** Everyone holding a role, with the contact details a message needs. */

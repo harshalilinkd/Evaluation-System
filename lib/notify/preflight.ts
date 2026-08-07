@@ -147,6 +147,35 @@ export function checkMailFrom(raw: string | undefined): Preflight {
   return { ok: true };
 }
 
+/**
+ * The ONE place a link to this app is built.
+ *
+ * Every call site used to do `process.env.NEXT_PUBLIC_APP_URL ?? ""` and
+ * concatenate — four of them, in four files. When the variable is unset that
+ * produces `/invite/C3rpy9…`: a bare path with no site in front of it. It sends
+ * perfectly, logs as Sent, and arrives as plain grey text that no messaging app
+ * will linkify, because there is nothing there to link TO.
+ *
+ * Throwing is deliberate, and better than the alternatives. Returning the path
+ * anyway is what has been happening. Returning null would push the decision to
+ * four callers who would each have to remember to check. A throw stops the
+ * message being built at all — and every sending path already catches
+ * (PW-2: the notify hook must never turn a submitted form into a reported
+ * failure), so the outcome is an honest "we could not reach them" rather than
+ * a message nobody can use.
+ */
+export function absoluteUrl(path: string): string {
+  const raw = process.env.NEXT_PUBLIC_APP_URL;
+  const health = checkAppUrl(raw);
+  if (!health.ok) {
+    throw new Error(
+      `Cannot build a link: ${health.title}. ${health.detail} ${health.fix}`,
+    );
+  }
+  const base = (raw ?? "").trim().replace(/\/+$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 /** Both, for a screen that wants to show everything wrong at once. */
 export function preflightAll(env: {
   appUrl: string | undefined;

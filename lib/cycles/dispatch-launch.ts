@@ -1,6 +1,7 @@
 /** Sends both invite links after a launch commits. Never inside the transaction. */
 
 import "server-only";
+import { absoluteUrl } from "@/lib/notify/preflight";
 
 import type { LaunchPlan } from "@/lib/cycles/launch";
 import { sendNotification } from "@/lib/notify/dispatch";
@@ -131,6 +132,5 @@ export async function dispatchLaunchInvites(
 
 /** §10: the token appears in exactly one URL and is never re-shown. */
 function inviteLink(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return `${base}/invite/${token}`;
+  return absoluteUrl(`/invite/${token}`);
 }

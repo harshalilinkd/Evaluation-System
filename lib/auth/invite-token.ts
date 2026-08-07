@@ -1,6 +1,7 @@
 /** Token generation, hashing and display. Pure — kept out of the server-only module so it is testable. */
 
 import { createHash, randomBytes } from "node:crypto";
+import { absoluteUrl } from "@/lib/notify/preflight";
 
 /** §10: 32 bytes of cryptographic randomness, base64url. */
 export const TOKEN_BYTES = 32;
@@ -37,8 +38,9 @@ export function hashToken(token: string): string {
  * what analytics and access logs capture most readily.
  */
 export function inviteUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
-  return `${base}/invite/${token}`;
+  // One builder for every link this app sends (P30). It refuses to produce a
+  // bare path, which is what an unset NEXT_PUBLIC_APP_URL used to yield.
+  return absoluteUrl(`/invite/${token}`);
 }
 
 /**
