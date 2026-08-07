@@ -86,6 +86,15 @@ function PanelEmpty({ children }: { children: React.ReactNode }) {
 const score = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(2);
 
+/* -- A difference always carries its sign. "0.40" and "−0.40" are opposite
+      findings about a team and must never read alike (P29-7). -- */
+const signedScore = (v: number | null | undefined) => {
+  if (v === null || v === undefined) return "—";
+  const n = Number(v);
+  if (n === 0) return "0.00";
+  return `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(2)}`;
+};
+
 export function DashboardClient({
   analytics,
   firstName,
@@ -438,6 +447,87 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           )}
         </Panel>
       </section>
+
+      {/* ---------- Where each team stands ----------
+          The most actionable thing on an HR dashboard and it was not here.
+          Company-wide progress says the cycle is 60% in; it does not say WHICH
+          team to ring. `v_department_scores` has carried `people` and
+          `self_count` since P16 and nothing had ever read them.
+
+          Completion and divergence on one row deliberately: a team that is
+          behind AND disagreeing with itself is a different problem from one
+          that is merely late, and reading the two facts off separate panels is
+          how the combination gets missed. */}
+      {departments.length > 0 ? (
+        <section>
+          <Panel
+            title="Where each team stands"
+            subtitle="How far the self-evaluations have come, and how far apart the two sides are. A team can be finished and still disagree."
+          >
+            <ChartFigure
+              caption="Self-evaluation completion and self-versus-lead difference, by department"
+              rows={departments}
+              columns={[
+                { header: "Department", cell: (d) => String(d.department_name ?? "—") },
+                {
+                  header: "Self in",
+                  cell: (d) => `${Number(d.self_count ?? 0)} of ${Number(d.people ?? 0)}`,
+                  align: "right",
+                },
+                { header: "Difference", cell: (d) => signedScore(d.gap), align: "right" },
+              ]}
+            >
+              <ul className="space-y-3">
+                {[...departments]
+                  /* -- Least complete first. The list is a work queue, so its
+                        order has to be the order somebody would work it — not
+                        alphabetical, and not by score. -- */
+                  .sort(
+                    (a, b) =>
+                      Number(a.self_count ?? 0) / Math.max(1, Number(a.people ?? 0)) -
+                      Number(b.self_count ?? 0) / Math.max(1, Number(b.people ?? 0)),
+                  )
+                  .map((d) => {
+                    const people = Number(d.people ?? 0);
+                    const inCount = Number(d.self_count ?? 0);
+                    const pct = people > 0 ? (inCount / people) * 100 : 0;
+                    const gap = d.gap === null || d.gap === undefined ? null : Number(d.gap);
+                    const wide = gap !== null && Math.abs(gap) >= 1;
+                    return (
+                      <li key={String(d.department_id ?? d.department_name)}>
+                        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                          <span className="truncate text-body-sm text-ink">
+                            {String(d.department_name ?? "—")}
+                          </span>
+                          <span className="tabular shrink-0 text-body-sm text-ink-muted">
+                            {inCount} of {people}
+                            {gap === null ? null : (
+                              <>
+                                {" · "}
+                                {/* Never colour alone (§13.8): the number carries
+                                    its own sign and the word says what it means. */}
+                                <span className={wide ? "text-warning" : undefined}>
+                                  {signedScore(gap)}
+                                  {wide ? " apart" : ""}
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        </div>
+                        <div className="h-2 overflow-hidden rounded-pill bg-rule/70">
+                          <div
+                            className="h-full rounded-pill bg-self"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </ChartFigure>
+          </Panel>
+        </section>
+      ) : null}
 
       <section className="grid items-stretch gap-6 lg:grid-cols-2">
         <Panel
