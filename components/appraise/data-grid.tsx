@@ -188,24 +188,30 @@ export function DataGrid<TData>({
         ) : (
           <table
             /*
-              As wide as its columns, or `minWidth`, whichever is greater — and
-              then `min-w-full` stretches it the rest of the way to the
-              container, with the trailing filler absorbing every spare pixel.
+              WIDTH: at least its own columns, at least `minWidth`, and at least
+              the full width of the container.
 
-              `minWidth` used to be set INLINE alongside the class, and an
-              inline `min-width` beats a class. So `min-w-full` never applied:
-              the table sat at exactly its column total and everything to the
-              right of the last column was bare page. On a wide screen that is
-              a third of the grid missing its header band and its rules, which
-              is what "the table looks unstructured" was.
+              Both halves are inline and neither is a class. This started as
+              `minWidth` inline beside a `min-w-full` class — an inline
+              min-width beats a class, so the class never applied and the table
+              sat at exactly its column total, leaving everything to the right
+              of the last column as bare page. Folding the pixel minimum into
+              `width` should have freed the class to work, and it did not, so
+              the guessing stops here: `min-width: 100%` is stated where nothing
+              can override it, purge it, or lose to specificity.
 
-              Folded into `width` instead. The sized columns still never absorb
-              the slack, so their rendered width keeps matching `getSize()` and
-              the frozen offsets stay aligned.
+              The sized columns still never absorb the slack — the trailing
+              `<col />` in the colgroup above has no width, so under
+              `table-layout: fixed` every spare pixel goes there. That is what
+              keeps each column's rendered width equal to `getSize()`, which the
+              frozen-pane offsets depend on.
             */
-            style={{ width: Math.max(table.getTotalSize(), minWidth) }}
+            style={{
+              width: Math.max(table.getTotalSize(), minWidth),
+              minWidth: "100%",
+            }}
             className={cn(
-              "min-w-full table-fixed border-separate border-spacing-0",
+              "table-fixed border-separate border-spacing-0",
               // A drag that selects the header text underneath it looks broken.
               resizingColumnId && "select-none",
             )}
