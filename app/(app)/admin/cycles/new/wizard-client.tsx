@@ -22,6 +22,7 @@ import {
   updateCycle,
   validateCycleForLaunch,
 } from "@/lib/cycles/actions";
+import type { InviteRecipients } from "@/lib/cycles/dispatch-launch";
 import type { SelectablePerson } from "@/lib/cycles/queries";
 import {
   CYCLE_KIND_CHOICES,
@@ -276,7 +277,19 @@ export function WizardClient({
 
   const blockedBecause = report ? describeLaunchBlock(report) : "Readiness has not been checked yet.";
 
-  const canOpenDialog = Boolean(report?.canLaunch) && warningsOutstanding === 0 && Boolean(cycleId);
+  /* -- Who is told when the cycle opens.
+        `null` until HR chooses, deliberately — no default. A pre-ticked
+        "both" is a decision the app made and HR is presumed to have agreed
+        with, and this one sends a WhatsApp to every participant the moment
+        Launch is pressed. It is the last reversible moment before an
+        irreversible act, so it asks rather than assumes. -- */
+  const [recipients, setRecipients] = React.useState<InviteRecipients | null>(null);
+
+  const canOpenDialog =
+    Boolean(report?.canLaunch) &&
+    warningsOutstanding === 0 &&
+    recipients !== null &&
+    Boolean(cycleId);
 
   const disabledReason = !report
     ? "Readiness has not been checked yet."
@@ -284,7 +297,9 @@ export function WizardClient({
       ? blockedBecause
       : warningsOutstanding > 0
         ? `Tick ${plural(warningsOutstanding, "acknowledgement")} above first.`
-        : null;
+        : recipients === null
+          ? "Choose who gets the link first."
+          : null;
 
   const onLaunch = async () => {
     if (!cycleId) return;
@@ -301,7 +316,7 @@ export function WizardClient({
     setLaunching(true);
     setLaunchError(null);
 
-    const result = await launchCycle(cycleId);
+    const result = await launchCycle(cycleId, recipients ?? []);
 
     setLaunching(false);
     if (!result.ok) {
@@ -656,6 +671,8 @@ export function WizardClient({
           report={report}
           acknowledged={acknowledged}
           onAcknowledge={(code, value) => setAcknowledged((a) => ({ ...a, [code]: value }))}
+          recipients={recipients}
+          onRecipientsChange={setRecipients}
         />
       ) : null}
 

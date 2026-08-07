@@ -8,10 +8,27 @@ import { AlertTriangle, ArrowUpRight, Check, Info } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { SelectablePerson } from "@/lib/cycles/queries";
 import type { ReadinessReport } from "@/lib/cycles/schema";
+import type { InviteRecipients } from "@/lib/cycles/dispatch-launch";
 import { plural } from "@/lib/cycles/schema";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import { cn } from "@/lib/utils";
 import type { PersonState } from "@/app/(app)/admin/cycles/new/step-people";
+
+/* -- Three, not a pair of checkboxes.
+      Checkboxes allow "neither", which reads as a mistake rather than a
+      choice, and they make the common case — both — two clicks. Each option
+      says what actually happens rather than naming a role, because "HOD" does
+      not tell somebody what lands on a phone. -- */
+const RECIPIENT_CHOICES: Array<{
+  id: string;
+  label: string;
+  detail: string;
+  value: InviteRecipients;
+}> = [
+  { id: "both", label: "Both", detail: "The employee and their HOD", value: ["SELF", "LEAD"] },
+  { id: "self", label: "Employee only", detail: "The HOD can be sent theirs later", value: ["SELF"] },
+  { id: "lead", label: "HOD only", detail: "The employee can be sent theirs later", value: ["LEAD"] },
+];
 
 export function StepReview({
   people,
@@ -20,6 +37,8 @@ export function StepReview({
   report,
   acknowledged,
   onAcknowledge,
+  recipients,
+  onRecipientsChange,
 }: {
   people: SelectablePerson[];
   state: Record<string, PersonState>;
@@ -28,6 +47,8 @@ export function StepReview({
   report: ReadinessReport | null;
   acknowledged: Record<string, boolean>;
   onAcknowledge: (code: string, value: boolean) => void;
+  recipients: InviteRecipients | null;
+  onRecipientsChange: (next: InviteRecipients) => void;
 }) {
   const included = people.filter((p) => state[p.id]?.included);
   const excluded = people.filter((p) => !state[p.id]?.included);
@@ -206,6 +227,68 @@ export function StepReview({
               </p>
             </section>
           )}
+
+          {/* -- Who gets told. --
+                Launch does two things at once — it opens the forms and it
+                messages people — and only the first is reversible. So the
+                second is asked about explicitly, here, rather than happening
+                as a consequence of pressing a button labelled "Launch".
+
+                No default. A pre-selected "both" is a decision the app made
+                and HR is presumed to have agreed with, and this one puts a
+                WhatsApp on every participant's phone. Launch stays disabled
+                until somebody chooses.
+
+                Both TOKENS are always minted (PR-5, PR-7) — the HOD needs one
+                to open their form whenever they get to it. This is only about
+                who is told now, so nothing here can lock anybody out. -- */}
+          <section className="card-surface p-5">
+            <h3 className="text-display-sm text-ink">Who gets the link now?</h3>
+            <p className="mt-1 text-body-sm text-ink-muted">
+              Both forms open either way. This is only about who is messaged.
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {RECIPIENT_CHOICES.map((choice) => {
+                const chosen =
+                  recipients !== null &&
+                  recipients.length === choice.value.length &&
+                  choice.value.every((v) => recipients.includes(v));
+                return (
+                  <button
+                    key={choice.id}
+                    type="button"
+                    aria-pressed={chosen}
+                    onClick={() => onRecipientsChange([...choice.value])}
+                    className={cn(
+                      "rounded-card border p-4 text-left transition-colors min-h-11",
+                      chosen
+                        ? "border-primary bg-primary/10"
+                        : "border-rule bg-surface hover:bg-surface-mute",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block text-body font-medium",
+                        chosen ? "text-primary" : "text-ink",
+                      )}
+                    >
+                      {choice.label}
+                    </span>
+                    <span className="mt-0.5 block text-body-sm text-ink-muted">
+                      {choice.detail}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {recipients === null ? (
+              <p className="mt-3 text-body-sm text-ink-muted">
+                Pick one to enable Launch.
+              </p>
+            ) : null}
+          </section>
 
           {report.warnings.length > 0 ? (
             <section className="card-surface p-5">

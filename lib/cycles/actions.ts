@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { checkRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
-import { dispatchLaunchInvites } from "@/lib/cycles/dispatch-launch";
+import { dispatchLaunchInvites, type InviteRecipients } from "@/lib/cycles/dispatch-launch";
 import { transition } from "@/lib/evaluations/state-machine";
 import { buildLaunchPlan } from "@/lib/cycles/launch";
 import {
@@ -523,7 +523,13 @@ export type LaunchOutcome = {
  * failure mid-launch leaves zero rows behind", and it is the reason the write
  * side is a database function rather than a loop of PostgREST calls.
  */
-export async function launchCycle(cycleId: string): Promise<CycleResult<LaunchOutcome>> {
+export async function launchCycle(
+  cycleId: string,
+  /* -- Who gets told, chosen by HR on the review step.
+        Defaulted to both so every existing caller keeps its behaviour, and so
+        a launch triggered from anywhere else never silently tells nobody. -- */
+  recipients: InviteRecipients = ["SELF", "LEAD"],
+): Promise<CycleResult<LaunchOutcome>> {
   const auth = await guard();
   if (!auth.ok) return auth;
 
@@ -573,7 +579,7 @@ export async function launchCycle(cycleId: string): Promise<CycleResult<LaunchOu
   /* -- 4. Dispatch, AFTER the commit (item 15).
         Never inside: a provider outage must not roll back a launch that is
         already durable and audited. PW-2 made the same call for transitions. -- */
-  const dispatched = await dispatchLaunchInvites(cycleId, plan.data);
+  const dispatched = await dispatchLaunchInvites(cycleId, plan.data, recipients);
 
   revalidateCycles(cycleId);
   revalidatePath("/dashboard");

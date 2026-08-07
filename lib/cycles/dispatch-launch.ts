@@ -48,12 +48,27 @@ export type LaunchDispatch = {
  * NEXT_PUBLIC_APP_URL is localhost (a real and correct refusal — §10 links have
  * to be reachable from a phone), and nothing caught it.
  */
+/**
+ * Who a launch messages.
+ *
+ * BOTH tokens are always created (PR-5, PR-7) — the lead needs one to open
+ * their own form whenever they get to it, and minting it later would mean a
+ * second write path for the same secret. This decides only who is TOLD, which
+ * is a separate question and HR's to answer: a HOD who is sitting beside you
+ * does not need a WhatsApp about it.
+ */
+export type InviteRecipients = Array<"SELF" | "LEAD">;
+
 export async function dispatchLaunchInvites(
   cycleId: string,
   plan: LaunchPlan,
+  recipients: InviteRecipients = ["SELF", "LEAD"],
 ): Promise<LaunchDispatch> {
+  // Nobody chosen means nobody messaged. Not a failure — HR can send from the
+  // distribute screen whenever they are ready.
+  if (recipients.length === 0) return { sent: 0, failed: 0, queued: 0 };
   try {
-    return await sendLaunchInvites(cycleId, plan);
+    return await sendLaunchInvites(cycleId, plan, recipients);
   } catch (cause) {
     /* -- The one place the rule above is actually enforced. Every failure
           becomes an advisory the launch carries back, never an exception the
@@ -67,7 +82,11 @@ export async function dispatchLaunchInvites(
   }
 }
 
-async function sendLaunchInvites(cycleId: string, plan: LaunchPlan): Promise<LaunchDispatch> {
+async function sendLaunchInvites(
+  cycleId: string,
+  plan: LaunchPlan,
+  recipients: InviteRecipients,
+): Promise<LaunchDispatch> {
   const out: LaunchDispatch = { sent: 0, failed: 0, queued: 0 };
   if (plan.links.length === 0) return out;
 
@@ -111,7 +130,9 @@ async function sendLaunchInvites(cycleId: string, plan: LaunchPlan): Promise<Lau
     if (!evaluation) continue;
 
     /* -- The employee -- */
-    const employee = person.get(evaluation.evaluatee_id);
+    const employee = recipients.includes("SELF")
+      ? person.get(evaluation.evaluatee_id)
+      : undefined;
     if (employee) {
       const message = selfEvaluationInvite({
           name: employee.full_name,
@@ -137,7 +158,10 @@ async function sendLaunchInvites(cycleId: string, plan: LaunchPlan): Promise<Lau
     }
 
     /* -- The HOD -- */
-    const lead = evaluation.lead_id ? person.get(evaluation.lead_id) : undefined;
+    const lead =
+      recipients.includes("LEAD") && evaluation.lead_id
+        ? person.get(evaluation.lead_id)
+        : undefined;
     if (lead && link.leadToken) {
       const already = perLead.get(lead.id) ?? 0;
       if (already >= MAX_PER_LEAD_PER_LAUNCH) {
