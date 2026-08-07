@@ -1,0 +1,1607 @@
+﻿"use client";
+
+/** Settings → Users. HR creates people and decides their access level. */
+
+import { useActionState, useEffect, useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
+import Link from "next/link";
+import type { ColumnDef } from "@tanstack/react-table";
+import { MoreHorizontal, Pencil, Plus, Trash2, Upload, UserCheck, UserX } from "lucide-react";
+
+import {
+  createUser,
+  deletePerson,
+  getImportTemplate,
+  importUsers,
+  setUserActive,
+  updatePerson,
+  type ImportState,
+  type ProvisionState,
+} from "@/lib/auth/provisioning";
+import { IMPORT_COLUMNS } from "@/lib/auth/csv";
+import { ACCESS_LEVELS } from "@/lib/auth/schemas";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { DataGrid, GridCell } from "@/components/appraise/data-grid";
+import { EmptyState } from "@/components/appraise/states";
+import { ROLE_LABELS } from "@/components/appraise/nav-config";
+import { cn } from "@/lib/utils";
+import { formatDate, formatInr } from "@/lib/utils/date";
+import type { Enums } from "@/types/database";
+
+export type PersonRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  employee_code: string | null;
+  phone_e164: string | null;
+  designation: string | null;
+  date_of_joining: string | null;
+  department: string | null;
+  department_id: string | null;
+  reports_to: string | null;
+  reports_to_name: string | null;
+  employment_type: string | null;
+  /** §5: HR and the MD only. This screen is guarded to exactly those two. */
+  current_ctc: number | null;
+  last_increment_date: string | null;
+  next_increment_date: string | null;
+  increment_frequency_months: number | null;
+  roles: Enums<"app_role">[];
+  is_active: boolean;
+};
+
+export type DepartmentOption = { id: string; name: string };
+
+/** §11 / P7-9: absent is an em dash, never an empty cell and never a zero. */
+function dash(value: string | null | undefined): string {
+  return value && value.trim() ? value : "—";
+}
+
+const EMPLOYMENT_LABELS: Record<string, string> = {
+  PERMANENT: "Permanent",
+  PROBATION: "Probation",
+  CONTRACT: "Contract",
+  INTERN: "Intern",
+};
+
+/** §8's rule applied to any enum: never show the stored value to a person. */
+function employmentLabel(value: string | null): string {
+  if (!value) return "—";
+  return EMPLOYMENT_LABELS[value] ?? value;
+}
+
+/**
+ * The per-row menu.
+ *
+ * A three-dot trigger rather than three inline buttons: with fourteen columns
+ * the row has no width to spare, and Deactivate / Edit / Delete are all things
+ * somebody does occasionally and deliberately.
+ */
+function RowMenu({
+  person,
+  isSelf,
+  activeAction,
+  onEdit,
+  onDelete,
+}: {
+  person: PersonRow;
+  isSelf: boolean;
+  activeAction: (formData: FormData) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8 text-ink-faint hover:text-ink"
+          aria-label={`Actions for ${person.full_name}`}
+        >
+          <MoreHorizontal className="size-4" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-52 border-rule">
+        <DropdownMenuItem onSelect={onEdit}>
+          <Pencil className="size-4" aria-hidden />
+          Edit details
+        </DropdownMenuItem>
+
+        {/* §P8.4: HR cannot switch themselves off — locking the last
+            administrator out is a support call the database cannot undo. */}
+        {isSelf ? (
+          <DropdownMenuItem disabled>
+            <UserX className="size-4" aria-hidden />
+            You cannot deactivate yourself
+          </DropdownMenuItem>
+        ) : (
+          <form action={activeAction}>
+            <input type="hidden" name="profile_id" value={person.id} />
+            <input type="hidden" name="is_active" value={person.is_active ? "false" : "true"} />
+            <DropdownMenuItem asChild>
+              <button type="submit" className="w-full cursor-pointer">
+                {person.is_active ? (
+                  <>
+                    <UserX className="size-4" aria-hidden />
+                    Deactivate
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="size-4" aria-hidden />
+                    Reactivate
+                  </>
+                )}
+              </button>
+            </DropdownMenuItem>
+          </form>
+        )}
+
+        <DropdownMenuSeparator className="bg-rule" />
+
+        <DropdownMenuItem
+          disabled={isSelf}
+          onSelect={onDelete}
+          className="text-critical focus:text-critical"
+        >
+          <Trash2 className="size-4" aria-hidden />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function Submit({ children, pendingLabel }: { children: string; pendingLabel: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" className="min-h-11" disabled={pending}>
+      {pending ? pendingLabel : children}
+    </Button>
+  );
+}
+
+/**
+ * One band of the form: its name and purpose on the left, its fields on the
+ * right.
+ *
+ * The old form was a single `max-w-form` column pinned to the left edge, which
+ * is what left the right half of a 1180px page empty and made twelve unrelated
+ * fields read as one undifferentiated list. Naming the groups is what turns it
+ * into a structure somebody can scan: a person filling this in knows whether
+ * they are on identity, team, or money without reading every label.
+ *
+ * Collapses to a single column below `md` — §13.2, and the label column would
+ * otherwise eat half the width of a phone.
+ */
+function FormSection({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="grid gap-x-10 gap-y-4 border-t border-rule pt-6 md:grid-cols-[13rem_1fr] md:pt-7">
+      <div className="space-y-1">
+        <h3 className="font-sans text-body font-medium text-ink">{title}</h3>
+        <p className="font-sans text-body-sm text-ink-faint">{hint}</p>
+      </div>
+      <div className="space-y-5">{children}</div>
+    </section>
+  );
+}
+
+/** A labelled field with its hint and error in one place, so none is forgotten. */
+function Field({
+  id,
+  label,
+  hint,
+  error,
+  optional,
+  children,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  error?: string;
+  optional?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="type-label flex items-baseline gap-2 text-ink-muted">
+        {label}
+        {optional ? (
+          <span className="font-sans text-body-sm normal-case tracking-normal text-ink-faint">
+            optional
+          </span>
+        ) : null}
+      </Label>
+      {children}
+      {hint ? <p className="font-sans text-body-sm text-ink-faint">{hint}</p> : null}
+      {error ? <p className="font-sans text-body-sm text-critical">{error}</p> : null}
+    </div>
+  );
+}
+
+/** The native select, styled to match the shadcn Input it sits beside. */
+const SELECT_CLASS =
+  "min-h-11 w-full rounded-input border border-rule bg-surface px-3 font-sans text-body text-ink";
+
+/**
+ * Bulk import.
+ *
+ * The report is the feature. Creating an auth account is an Admin API call, not
+ * a database write, so a run cannot be wrapped in a transaction and rolled back
+ * — which means the only honest design is one that tells you exactly which rows
+ * landed. Every row is validated BEFORE any row is created, so the common case
+ * (a file with three bad dates in it) fails with nothing created and a list to
+ * fix, rather than leaving HR to work out which forty of sixty already exist.
+ */
+function ImportDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [state, action] = useActionState<ImportState, FormData>(importUsers, {});
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  async function downloadTemplate() {
+    const csv = await getImportTemplate();
+    if (!csv) return;
+    // A data URL rather than a route: the file is 16 headers and one example
+    // line, and an endpoint for it would be a third place the column list lives.
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "linkd-prints-employees.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const failed = state.rows?.filter((r) => !r.ok) ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        // The run report is the whole point of this screen and it arrives after
+        // the action returns — closing on a stray backdrop click would throw
+        // away the only record of which rows landed.
+        onInteractOutside={(event) => event.preventDefault()}
+        className="flex max-h-[92vh] w-[min(96vw,760px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+          <DialogTitle className="text-display-sm text-ink">Import from a spreadsheet</DialogTitle>
+          <DialogDescription className="text-body-sm text-ink-muted">
+            Add everybody in one go. Start from the template — its header row is what the importer
+            reads.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form action={action} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        {state.error ? (
+          <p
+            role="alert"
+            className="rounded-control border border-critical/40 bg-critical-tint px-3 py-2 font-sans text-body-sm text-critical"
+          >
+            {state.error}
+          </p>
+        ) : null}
+
+        {state.ran && !state.error ? (
+          <p
+            role="status"
+            className="rounded-control border border-final/40 bg-final-tint px-3 py-2 font-sans text-body-sm text-final"
+          >
+            {state.created} {state.created === 1 ? "person" : "people"} created
+            {state.failed ? `, ${state.failed} not imported — see below.` : "."}
+          </p>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" variant="secondary" className="min-h-11" onClick={downloadTemplate}>
+            Download the template
+          </Button>
+
+          <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-rule bg-surface px-4 font-sans text-body text-ink hover:bg-surface-mute">
+            <input
+              type="file"
+              name="file"
+              accept=".csv,text/csv"
+              required
+              className="sr-only"
+              onChange={(event) => setFileName(event.target.files?.[0]?.name ?? null)}
+            />
+            {fileName ?? "Choose a CSV file"}
+          </label>
+
+          <Submit pendingLabel="Importing…">Import</Submit>
+        </div>
+
+        <details className="rounded-control border border-rule bg-surface-mute p-4">
+          <summary className="cursor-pointer font-sans text-body text-ink">
+            What the columns mean
+          </summary>
+          <ul className="mt-3 space-y-1.5">
+            {IMPORT_COLUMNS.map((column) => (
+              <li key={column.key} className="font-sans text-body-sm text-ink-muted">
+                <span className="tabular text-ink">{column.header}</span>
+                {column.required ? (
+                  <span className="ml-2 type-label text-critical">required</span>
+                ) : null}
+                <span className="ml-2 text-ink-faint">{column.hint}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 font-sans text-body-sm text-ink-faint">
+            Dates are DD-MM-YYYY. Department is matched by name or code. Reports-to is the HOD&rsquo;s
+            email address, so import heads of department before their teams — or leave it blank and
+            set it afterwards.
+          </p>
+        </details>
+
+        {failed.length > 0 ? (
+          <div className="overflow-hidden rounded-control border border-critical/40">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b border-critical/30 bg-critical-tint">
+                  {["Row", "Name", "What is wrong"].map((h) => (
+                    <th key={h} className="type-label px-4 py-2 text-left text-critical">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {failed.map((row) => (
+                  <tr key={row.line} className="border-b border-rule last:border-b-0">
+                    <td className="px-4 py-2 tabular text-body-sm text-ink-muted">{row.line}</td>
+                    <td className="px-4 py-2 font-sans text-body-sm text-ink">{row.name || "—"}</td>
+                    <td className="px-4 py-2 font-sans text-body-sm text-ink-muted">{row.error}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The access-level checkboxes.
+ *
+ * Its state lives HERE rather than in UsersTab so that keying the form on a
+ * successful save resets it along with the fields. Held in the parent, the
+ * picker would survive the remount and the next person would inherit the last
+ * one's roles — which is worse than a stale text field, because nothing on
+ * screen would look wrong.
+ */
+function RolePicker({ initial }: { initial?: readonly string[] }) {
+  // Everyone is an employee; these are the levels granted on top.
+  const [selected, setSelected] = useState<string[]>([...new Set(["EMPLOYEE", ...(initial ?? [])])]);
+
+  function toggle(role: string, on: boolean) {
+    setSelected((prev) => (on ? [...new Set([...prev, role])] : prev.filter((r) => r !== role)));
+  }
+
+  return (
+    <fieldset className="space-y-3">
+      <legend className="sr-only">Access level</legend>
+      {ACCESS_LEVELS.map((level) => {
+        const isEmployee = level.always === true;
+        const checked = selected.includes(level.value) || isEmployee;
+
+        return (
+          <label
+            key={level.value}
+            className={cn(
+              "flex min-h-11 cursor-pointer items-start gap-3 rounded-control border p-3 transition-colors",
+              checked ? "border-primary/40 bg-accent" : "border-rule bg-surface hover:bg-surface-mute",
+              isEmployee && "cursor-default opacity-90",
+            )}
+          >
+            <Checkbox
+              checked={checked}
+              // Everyone fills in their own appraisal; there is no user of this
+              // system who does not.
+              disabled={isEmployee}
+              onCheckedChange={(value) => toggle(level.value, value === true)}
+              className="mt-0.5"
+            />
+            {/* Rendered only when ticked. It used to submit "" for every level
+                left unticked, and an empty string is not an `app_role` — one
+                of them failed the entire role insert, which is what "the
+                access level was not applied" was reporting. */}
+            {checked ? <input type="hidden" name="roles" value={level.value} /> : null}
+            <span className="space-y-0.5">
+              <span className="block font-sans text-body text-ink">{level.label}</span>
+              <span className="block font-sans text-body-sm text-ink-muted">
+                {level.description}
+              </span>
+            </span>
+          </label>
+        );
+      })}
+      <p className="font-sans text-body-sm text-ink-faint">
+        A head of department is also an employee — they fill in their own appraisal first, then
+        review their team.
+      </p>
+    </fieldset>
+  );
+}
+
+function Notice({ state }: { state: ProvisionState }) {
+  if (!state.error && !state.message) return null;
+  const isError = Boolean(state.error);
+
+  return (
+    <p
+      role={isError ? "alert" : "status"}
+      className={cn(
+        "rounded-control border px-3 py-2 font-sans text-body-sm",
+        isError
+          ? "border-critical/40 bg-critical-tint text-critical"
+          : "border-final/40 bg-final-tint text-final",
+      )}
+    >
+      {state.error ?? state.message}
+    </p>
+  );
+}
+
+/**
+ * The add-a-person dialog.
+ *
+ * It owns its own action state so the effect that closes it on success calls a
+ * PROP rather than setting state in this component — the pattern the React
+ * compiler requires, and the one DeleteDialog already uses.
+ */
+function AddPersonDialog({
+  open,
+  onOpenChange,
+  people,
+  departments,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  people: PersonRow[];
+  departments: DepartmentOption[];
+}) {
+  const [createState, createAction] = useActionState<ProvisionState, FormData>(createUser, {});
+
+  // Close on success, so the new row is visible in the table behind. A failure
+  // stays open holding its message next to the field it is about.
+  useEffect(() => {
+    if (createState.createdId) onOpenChange(false);
+  }, [createState.createdId, onOpenChange]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        // Nothing here closes on an outside click: this form holds a dozen
+        // unsaved fields and a stray backdrop click throwing them away is the
+        // kind of loss people do not report, they just stop trusting the screen.
+        onInteractOutside={(event) => event.preventDefault()}
+        className="flex max-h-[92vh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+          <DialogTitle className="text-display-sm text-ink">Add someone</DialogTitle>
+          <DialogDescription className="text-body-sm text-ink-muted">
+            They can sign in as soon as you save. Tell them their password yourself — it is not
+            emailed.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <Notice state={createState} />
+
+          {/*
+            Keyed on the id of the person just created, so a successful save
+            remounts the form with empty fields.
+
+            This is the bug that made a working save look like a failure: the
+            inputs are uncontrolled, so React left every value in place after the
+            action returned. A full form and a green message read as "nothing
+            happened", the natural next move is to press Save again, and the
+            second attempt reports "somebody already has that email address" —
+            about the person it created a second earlier.
+
+            A keyed remount rather than a reset effect, for the reason P10-11 and
+            PC-4 both give: it states the intent (this is a new form, not the old
+            one wiped) and it resets the role picker's state along with the
+            fields, which an imperative form.reset() would leave untouched.
+          */}
+          <form
+            key={createState.createdId ?? "new"}
+            action={createAction}
+            className="space-y-2"
+          >
+
+          {/* ---------- Identity ---------- */}
+          <FormSection
+            title="Identity"
+            hint="Who they are and how they sign in. The password is not emailed — read it out to them."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="full_name" label="Full name" error={createState.fieldErrors?.full_name}>
+                <Input id="full_name" name="full_name" required className="min-h-11" />
+              </Field>
+
+              <Field id="email" label="Work email" error={createState.fieldErrors?.email}>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  required
+                  className="min-h-11"
+                  placeholder="name@linkdprints.com"
+                />
+              </Field>
+
+              <Field
+                id="employee_code"
+                label="Employee code"
+                optional
+                hint="HR looks people up by this as often as by name."
+                error={createState.fieldErrors?.employee_code}
+              >
+                <Input id="employee_code" name="employee_code" className="min-h-11 tabular" />
+              </Field>
+
+              <Field
+                id="password"
+                label="Password"
+                hint="At least 10 characters. Shown in plain text so you can read it out."
+                error={createState.fieldErrors?.password}
+              >
+                <Input
+                  id="password"
+                  name="password"
+                  type="text"
+                  required
+                  minLength={10}
+                  className="min-h-11 tabular"
+                  autoComplete="new-password"
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ---------- Where they sit ---------- */}
+          <FormSection
+            title="Where they sit"
+            hint="Their team, their title, and who rates them."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                id="department_id"
+                label="Department"
+                hint="Decides which Job Specific Skills questions they are asked."
+              >
+                <Select name="department_id">
+                  <SelectTrigger id="department_id" className="min-h-11 border-rule bg-surface">
+                    <SelectValue placeholder="Choose a department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Field
+                id="designation"
+                label="Designation"
+                optional
+                hint="Their job title, as it should appear on a printed evaluation."
+              >
+                <Input id="designation" name="designation" className="min-h-11" />
+              </Field>
+
+              <Field
+                id="reports_to"
+                label="Reports to"
+                hint="Who rates them. This is the one people leave blank and regret — a missing HOD blocks the cycle launch."
+              >
+                <select id="reports_to" name="reports_to" className={SELECT_CLASS}>
+                  <option value="">Nobody yet</option>
+                  {people
+                    .filter((p) => p.is_active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+
+              <Field
+                id="phone"
+                label="Work mobile"
+                hint="Where their form link is sent. Indian numbers may be typed without +91."
+                error={createState.fieldErrors?.phone}
+              >
+                <Input
+                  id="phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  placeholder="+91 98765 43210"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ---------- Employment ---------- */}
+          <FormSection
+            title="Employment"
+            hint="The dates the increment reminder is worked out from."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                id="date_of_joining"
+                label="Date of joining"
+                optional
+                hint="Their first increment is worked out from this."
+              >
+                <Input
+                  id="date_of_joining"
+                  name="date_of_joining"
+                  type="date"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field
+                id="employment_type"
+                label="Employment type"
+              >
+                <select
+                  id="employment_type"
+                  name="employment_type"
+                  defaultValue="PERMANENT"
+                  className={SELECT_CLASS}
+                >
+                  <option value="PERMANENT">Permanent</option>
+                  <option value="PROBATION">Probation</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="TRAINEE">Trainee</option>
+                </select>
+              </Field>
+
+              <Field
+                id="last_increment_date"
+                label="Last increment"
+                optional
+                hint="Leave blank for a new joiner."
+              >
+                <Input
+                  id="last_increment_date"
+                  name="last_increment_date"
+                  type="date"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field id="increment_frequency_months" label="Increment every (months)">
+                <Input
+                  id="increment_frequency_months"
+                  name="increment_frequency_months"
+                  type="number"
+                  min={1}
+                  max={60}
+                  defaultValue={12}
+                  className="min-h-11 tabular"
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ---------- Compensation ----------
+              Every figure here is confined to HR and the MD (§5). It is written
+              as `salary_history` rows, not as a bare number on the record, so
+              the append-only history is right from the first save — and no
+              figure reaches an audit diff (P19-10). */}
+          <FormSection
+            title="Compensation"
+            hint="Optional, and visible only to HR and the MD. Recorded as their opening pay history."
+          >
+            <div className="grid gap-5 sm:grid-cols-3">
+              <Field
+                id="joining_ctc"
+                label="Joining salary"
+                optional
+                error={createState.fieldErrors?.joining_ctc}
+              >
+                <Input
+                  id="joining_ctc"
+                  name="joining_ctc"
+                  inputMode="numeric"
+                  placeholder="₹ 4,00,000"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field
+                id="current_ctc"
+                label="Current salary"
+                optional
+                error={createState.fieldErrors?.current_ctc}
+              >
+                <Input
+                  id="current_ctc"
+                  name="current_ctc"
+                  inputMode="numeric"
+                  placeholder="₹ 4,80,000"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field
+                id="last_increment_amount"
+                label="Last increment amount"
+                optional
+                error={createState.fieldErrors?.last_increment_amount}
+              >
+                <Input
+                  id="last_increment_amount"
+                  name="last_increment_amount"
+                  inputMode="numeric"
+                  placeholder="₹ 80,000"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+            </div>
+            <p className="font-sans text-body-sm text-ink-faint">
+              Figures may be typed with ₹ and commas. The joining salary is filed against their
+              joining date and the current salary against their last increment, so the increment
+              amount is only used when that date is set.
+            </p>
+          </FormSection>
+
+          {/* ---------- Access ---------- */}
+          <FormSection
+            title="Access"
+            hint="Everyone fills in their own appraisal. These are the powers granted on top."
+          >
+            <RolePicker />
+          </FormSection>
+
+          {/* §13.3: one primary action, and it stays reachable on a long form. */}
+          <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-3 border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur">
+            <p className="mr-auto font-sans text-body-sm text-ink-faint">
+              They can sign in as soon as you save.
+            </p>
+            <Submit pendingLabel="Creating…">Create account</Submit>
+          </div>
+          </form>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Amend somebody's details.
+ *
+ * THE SAME FIVE BANDS AS THE ADD FORM, in the same order, with the same names
+ * and the same hints — Identity · Where they sit · Employment · Compensation ·
+ * Access. It was a flat grid plus two afterthought blocks, and the two forms
+ * looked like different forms about different things, which is what "fields are
+ * missing" was actually reporting: some genuinely were, and the rest were there
+ * but unrecognisable.
+ *
+ * Two bands still hold no inputs, and each now SAYS SO rather than being absent:
+ *
+ *   Identity      the email and the password live on the auth account, not the
+ *                 profile. `updatePerson` writes neither.
+ *   Compensation  a pay change needs a reason and has to append to
+ *                 `salary_history` or that table stops being evidence (§19-8,
+ *                 P19C-2). A bare field here would write neither.
+ *
+ * §13.4: a missing control with no explanation is a dead end. Both bands name
+ * where the thing IS done.
+ */
+function EditPersonDialog({
+  person,
+  people,
+  departments,
+  onClose,
+}: {
+  person: PersonRow | null;
+  people: PersonRow[];
+  departments: DepartmentOption[];
+  onClose: () => void;
+}) {
+  const [state, action] = useActionState<ProvisionState, FormData>(updatePerson, {});
+
+  useEffect(() => {
+    if (state.ok) onClose();
+  }, [state.ok, onClose]);
+
+  if (!person) return null;
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent
+        onInteractOutside={(event) => event.preventDefault()}
+        // 900px, the add form's width. The bands need the label column, and two
+        // dialogs about the same person at two different widths read as two
+        // different screens.
+        className="flex max-h-[92vh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+          <DialogTitle className="text-display-sm text-ink">Edit {person.full_name}</DialogTitle>
+          <DialogDescription className="text-body-sm text-ink-muted">
+            Everything the add form asks for, apart from their sign-in details and their pay — both
+            are named below.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form action={action} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
+          <input type="hidden" name="profile_id" value={person.id} />
+          <Notice state={state} />
+
+          {/* ---------- Identity ---------- */}
+          <FormSection
+            title="Identity"
+            hint="Who they are and how they sign in. Changing the email or the password changes the account itself."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field id="e_full_name" label="Full name" error={state.fieldErrors?.full_name}>
+                <Input
+                  id="e_full_name"
+                  name="full_name"
+                  required
+                  defaultValue={person.full_name}
+                  className="min-h-11"
+                />
+              </Field>
+
+              <Field
+                id="e_email"
+                label="Work email"
+                error={state.fieldErrors?.email}
+                hint="What they sign in with, and where their mail goes. Changing it takes effect at once."
+              >
+                <Input
+                  id="e_email"
+                  name="email"
+                  type="email"
+                  defaultValue={person.email}
+                  className="min-h-11"
+                />
+              </Field>
+
+              <Field
+                id="e_employee_code"
+                label="Employee code"
+                optional
+                hint="HR looks people up by this as often as by name."
+              >
+                <Input
+                  id="e_employee_code"
+                  name="employee_code"
+                  defaultValue={person.employee_code ?? ""}
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              {/* Blank-by-default and blank-means-keep, so saving any other
+                  field cannot reset somebody's password by accident. Plain
+                  text for the same reason the add form uses it: HR has to read
+                  it out, and a masked field they cannot check is how somebody
+                  is handed a password with a typo in it. */}
+              <Field
+                id="e_new_password"
+                label="Set a new password"
+                optional
+                error={state.fieldErrors?.new_password}
+                hint="Leave blank to keep their current one. At least 10 characters, shown so you can read it out."
+              >
+                <Input
+                  id="e_new_password"
+                  name="new_password"
+                  type="text"
+                  minLength={10}
+                  autoComplete="new-password"
+                  placeholder="Leave blank to keep it"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+            </div>
+
+            <p className="rounded-control border border-warning/40 bg-warning-tint px-3 py-2 font-sans text-body-sm text-ink-muted">
+              A new password takes effect immediately and is not emailed — tell them yourself, or
+              they are locked out.
+            </p>
+          </FormSection>
+
+          {/* ---------- Where they sit ---------- */}
+          <FormSection title="Where they sit" hint="Their team, their title, and who rates them.">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                id="e_department"
+                label="Department"
+                optional
+                hint="Decides which Job Specific Skills questions they are asked."
+              >
+                <select
+                  id="e_department"
+                  name="department_id"
+                  defaultValue={person.department_id ?? ""}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">No department</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field
+                id="e_designation"
+                label="Designation"
+                optional
+                hint="Their job title, as it should appear on a printed evaluation."
+              >
+                <Input
+                  id="e_designation"
+                  name="designation"
+                  defaultValue={person.designation ?? ""}
+                  className="min-h-11"
+                />
+              </Field>
+
+              <Field
+                id="e_reports_to"
+                label="Reports to"
+                optional
+                error={state.fieldErrors?.reports_to}
+                hint="Who rates them. A missing HOD blocks the cycle launch."
+              >
+                <select
+                  id="e_reports_to"
+                  name="reports_to"
+                  defaultValue={person.reports_to ?? ""}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Nobody yet</option>
+                  {people
+                    // Their own lead is a cycle nobody can resolve, so it is not
+                    // offered — an option that always fails is not a choice.
+                    .filter((p) => p.id !== person.id && p.is_active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+
+              <Field
+                id="e_phone"
+                label="Work mobile"
+                optional
+                error={state.fieldErrors?.phone}
+                hint="Where their form link is sent. Indian numbers may be typed without +91."
+              >
+                <Input
+                  id="e_phone"
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  defaultValue={person.phone_e164 ?? ""}
+                  className="min-h-11 tabular"
+                  placeholder="+91 98765 43210"
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ---------- Employment ----------
+              Type, joining date, last increment and frequency are ordinary
+              personnel data. The NEXT increment date is not a field: 0023's
+              trigger derives it from these, and a second place to type it is a
+              second place to disagree (P19-5). */}
+          <FormSection
+            title="Employment"
+            hint="The dates the increment reminder is worked out from."
+          >
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field
+                id="e_doj"
+                label="Date of joining"
+                optional
+                hint="Their first increment is worked out from this."
+              >
+                <Input
+                  id="e_doj"
+                  name="date_of_joining"
+                  type="date"
+                  defaultValue={person.date_of_joining ?? ""}
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field id="e_emp_type" label="Employment type">
+                <select
+                  id="e_emp_type"
+                  name="employment_type"
+                  defaultValue={person.employment_type ?? "PERMANENT"}
+                  className={SELECT_CLASS}
+                >
+                  <option value="PERMANENT">Permanent</option>
+                  <option value="PROBATION">Probation</option>
+                  <option value="CONTRACT">Contract</option>
+                  <option value="TRAINEE">Trainee</option>
+                </select>
+              </Field>
+
+              <Field
+                id="e_last_inc"
+                label="Last increment"
+                optional
+                hint="Leave blank for a new joiner."
+              >
+                <Input
+                  id="e_last_inc"
+                  name="last_increment_date"
+                  type="date"
+                  defaultValue={person.last_increment_date ?? ""}
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field
+                id="e_freq"
+                label="Increment every (months)"
+                hint="Their next increment and HR's reminder are worked out from this."
+              >
+                <Input
+                  id="e_freq"
+                  name="increment_frequency_months"
+                  type="number"
+                  min={1}
+                  max={60}
+                  defaultValue={String(person.increment_frequency_months ?? 12)}
+                  className="min-h-11 tabular"
+                />
+              </Field>
+            </div>
+
+            {/* Derived, not typed — shown so the consequence of the two dates
+                above is visible while they are being changed. */}
+            <p className="font-sans text-body-sm text-ink-faint">
+              Next increment:{" "}
+              <span className="tabular text-ink-muted">
+                {person.next_increment_date ? formatDate(person.next_increment_date) : "—"}
+              </span>{" "}
+              · worked out for you, and not a field.
+            </p>
+          </FormSection>
+
+          {/* ---------- Compensation ----------
+
+              A pay change, not a field. §19-8 requires a reason and a note, and
+              it has to append a `salary_history` row or that table stops being
+              evidence — so the four inputs travel together and the server hands
+              them to `addSalaryChange`, the same function the Employment & pay
+              screen calls. There is one definition of a pay change, and this is
+              a caller of it, not a copy.
+
+              Every figure here is HR-and-MD only (§5), which this whole screen
+              already is. */}
+          <FormSection
+            title="Compensation"
+            hint="Visible only to HR and the MD. A change is filed against their pay history, so it carries a reason."
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-control border border-rule bg-surface-mute px-4 py-3">
+              <div>
+                <p className="type-label text-ink-muted">Current salary</p>
+                <p className="tabular text-body-lg font-medium text-ink">
+                  {person.current_ctc === null ? "Not recorded" : formatInr(person.current_ctc)}
+                </p>
+              </div>
+              <Link
+                href={`/admin/people/${person.id}/employment`}
+                className="font-sans text-body-sm font-medium text-primary underline underline-offset-2"
+              >
+                See their pay history
+              </Link>
+            </div>
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              {/* Blank means "not changing it", never "set it to nothing" —
+                  the rule the bulk import follows (P19D-4). Nothing below is
+                  read unless this carries a figure. */}
+              <Field
+                id="e_new_ctc"
+                label="New salary"
+                optional
+                hint="Leave blank to leave their pay alone. ₹ and commas are fine."
+              >
+                <Input
+                  id="e_new_ctc"
+                  name="new_ctc"
+                  inputMode="numeric"
+                  placeholder="Leave blank to keep it"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field
+                id="e_salary_from"
+                label="Effective from"
+                hint="A date before their current one is a correction to the past and will not move today's figure."
+              >
+                <Input
+                  id="e_salary_from"
+                  name="salary_effective_from"
+                  type="date"
+                  className="min-h-11 tabular"
+                />
+              </Field>
+
+              <Field id="e_salary_reason" label="Reason">
+                <select
+                  id="e_salary_reason"
+                  name="salary_reason"
+                  defaultValue="ANNUAL_INCREMENT"
+                  className={SELECT_CLASS}
+                >
+                  <option value="ANNUAL_INCREMENT">Annual increment</option>
+                  <option value="PROMOTION">Promotion</option>
+                  <option value="MARKET_ADJUSTMENT">Market adjustment</option>
+                  <option value="CORRECTION">Correction</option>
+                  <option value="JOINING">Joining salary</option>
+                </select>
+              </Field>
+
+              {/* Required by the server, never optional. A pay change with no
+                  explanation is the thing somebody has to reconstruct from
+                  memory two years later (P19-8). */}
+              <Field
+                id="e_salary_note"
+                label="Note"
+                hint="One line is enough. It is filed against the change and cannot be edited afterwards."
+              >
+                <Input
+                  id="e_salary_note"
+                  name="salary_note"
+                  placeholder="Why this changed"
+                  className="min-h-11"
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* ---------- Access ---------- */}
+          <FormSection
+            title="Access"
+            hint="Everyone fills in their own appraisal. These are the powers granted on top."
+          >
+            <RolePicker initial={person.roles} />
+          </FormSection>
+
+          <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-3 border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur">
+            <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
+              Cancel
+            </Button>
+            <Submit pendingLabel="Saving…">Save changes</Submit>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Delete somebody.
+ *
+ * §17 and §12 both say people are switched off, not erased, and that stands —
+ * so this only ever succeeds for somebody who has done nothing yet. The server
+ * counts what depends on them and names it; the dialog says so up front rather
+ * than making HR click to discover a refusal.
+ */
+function DeletePersonDialog({
+  person,
+  onClose,
+}: {
+  person: PersonRow | null;
+  onClose: () => void;
+}) {
+  const [state, action] = useActionState<ProvisionState, FormData>(deletePerson, {});
+
+  useEffect(() => {
+    if (state.ok) onClose();
+  }, [state.ok, onClose]);
+
+  if (!person) return null;
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {person.full_name}?</DialogTitle>
+          <DialogDescription>
+            This removes their account and they can no longer sign in. It cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+
+        <p className="rounded-control border border-warning/40 bg-warning-tint p-3 text-body-sm text-ink">
+          Deleting only works for somebody who has done nothing yet. Once they appear in an
+          evaluation, hold pay history, or have acted anywhere in the system, the record is kept —
+          deactivate them instead and they stop being able to sign in.
+        </p>
+
+        {state.error ? (
+          <p
+            role="alert"
+            className="rounded-control border border-critical/40 bg-critical-tint px-3 py-2 text-body-sm text-critical"
+          >
+            {state.error}
+          </p>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="outline" className="min-h-11" onClick={onClose}>
+            Keep the account
+          </Button>
+          <form action={action}>
+            <input type="hidden" name="profile_id" value={person.id} />
+            <DeleteSubmit />
+          </form>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteSubmit() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" variant="destructive" className="min-h-11" disabled={pending}>
+      {pending ? "Deleting…" : "Delete account"}
+    </Button>
+  );
+}
+
+/* ---------- The screen ---------- */
+
+export function UsersTab({
+  people,
+  departments,
+  currentProfileId,
+}: {
+  people: PersonRow[];
+  departments: DepartmentOption[];
+  currentProfileId: string;
+}) {
+  const [activeState, activeAction] = useActionState<ProvisionState, FormData>(setUserActive, {});
+  const [addOpen, setAddOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [editing, setEditing] = useState<PersonRow | null>(null);
+  const [deleting, setDeleting] = useState<PersonRow | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("ALL");
+
+  const rows = useMemo(
+    () =>
+      people.filter((person) => {
+        if (status === "ACTIVE" && !person.is_active) return false;
+        if (status === "INACTIVE" && person.is_active) return false;
+        if (!search.trim()) return true;
+        const needle = search.trim().toLowerCase();
+        return (
+          person.full_name.toLowerCase().includes(needle) ||
+          person.email.toLowerCase().includes(needle) ||
+          (person.department ?? "").toLowerCase().includes(needle)
+        );
+      }),
+    [people, search, status],
+  );
+
+  const columns = useMemo<ColumnDef<PersonRow>[]>(
+    () => [
+      {
+        accessorKey: "full_name",
+        header: "Name",
+        size: 220,
+        meta: { frozen: true },
+        cell: ({ row }) => (
+          <GridCell value={row.original.full_name} className="font-medium" />
+        ),
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        size: 260,
+        cell: ({ row }) => <GridCell value={row.original.email} className="tabular" />,
+      },
+      {
+        accessorKey: "employee_code",
+        header: "Code",
+        size: 110,
+        cell: ({ row }) => <GridCell value={dash(row.original.employee_code)} className="tabular" />,
+      },
+      {
+        accessorKey: "designation",
+        header: "Designation",
+        size: 180,
+        cell: ({ row }) => <GridCell value={dash(row.original.designation)} />,
+      },
+      {
+        accessorKey: "department",
+        header: "Department",
+        size: 150,
+        // §11 / P7-9: missing is not the same as empty, and never zero.
+        cell: ({ row }) => <GridCell value={dash(row.original.department)} />,
+      },
+      {
+        id: "reports_to",
+        header: "Reports to",
+        size: 170,
+        cell: ({ row }) => <GridCell value={dash(row.original.reports_to_name)} />,
+      },
+      {
+        accessorKey: "phone_e164",
+        header: "Work mobile",
+        size: 150,
+        cell: ({ row }) => <GridCell value={dash(row.original.phone_e164)} className="tabular" />,
+      },
+      {
+        accessorKey: "date_of_joining",
+        header: "Joined",
+        size: 120,
+        cell: ({ row }) => (
+          // §0.10: DD-MM-YYYY throughout.
+          <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
+        ),
+      },
+      {
+        accessorKey: "employment_type",
+        header: "Employment",
+        size: 130,
+        cell: ({ row }) => <GridCell value={employmentLabel(row.original.employment_type)} />,
+      },
+      {
+        id: "current_ctc",
+        header: "Current CTC",
+        size: 140,
+        meta: { align: "right" },
+        // §5: salary is readable by HR_ADMIN and MD only, and this screen is
+        // guarded to exactly those two. It appears here and nowhere a HOD or an
+        // employee can reach.
+        cell: ({ row }) => (
+          <GridCell value={row.original.current_ctc === null ? "—" : formatInr(row.original.current_ctc)} className="tabular" />
+        ),
+      },
+      {
+        accessorKey: "next_increment_date",
+        header: "Next increment",
+        size: 150,
+        cell: ({ row }) => (
+          <GridCell value={row.original.next_increment_date ? formatDate(row.original.next_increment_date) : "—"} className="tabular" />
+        ),
+      },
+      {
+        id: "access",
+        header: "Access",
+        size: 160,
+        cell: ({ row }) => (
+          <GridCell
+            value={
+              row.original.roles
+                .filter((r) => r !== "EMPLOYEE")
+                .map((r) => ROLE_LABELS[r])
+                .join(" · ") || "Employee"
+            }
+          />
+        ),
+      },
+      {
+        id: "status",
+        header: "Status",
+        size: 110,
+        meta: { align: "center" },
+        cell: ({ row }) => (
+          <span
+            className={cn(
+              "type-label inline-block whitespace-nowrap rounded-pill border px-2 py-0.5",
+              row.original.is_active
+                ? "border-final/40 bg-final-tint text-final"
+                : "border-rule bg-surface-mute text-ink-faint",
+            )}
+          >
+            {row.original.is_active ? "Active" : "Inactive"}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        size: 64,
+        enableResizing: false,
+        meta: { align: "center" },
+        cell: ({ row }) => (
+          <RowMenu
+            person={row.original}
+            isSelf={row.original.id === currentProfileId}
+            activeAction={activeAction}
+            onEdit={() => setEditing(row.original)}
+            onDelete={() => setDeleting(row.original)}
+          />
+        ),
+      },
+    ],
+    [activeAction, currentProfileId],
+  );
+
+  return (
+    // Fourteen columns need the whole screen, so this tab takes it.
+    // `data-full-bleed` drops the shell's 1180px cap AND its gutters (the
+    // :has() rule in globals.css) — so no negative margins here, which would
+    // pull the grid off the left edge of a page that already has no padding.
+    // The tab strip goes flush too, which is what the question bank does.
+    //
+    // The toolbar is a fixed band; the grid owns everything left over and
+    // scrolls inside itself.
+    <div
+      data-full-bleed
+      className="flex h-[calc(100dvh-theme(spacing.topbar)-5rem)] min-h-[24rem] flex-col overflow-hidden border-t border-rule bg-surface"
+    >
+      {activeState.error || activeState.message ? (
+        <div className="shrink-0 border-b border-rule px-3 py-2">
+          <Notice state={activeState} />
+        </div>
+      ) : null}
+
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface-mute px-3 py-2">
+        {/* Full width on a phone: a fixed 280px is wider than a 375px screen
+            once the padding is taken off, so it forced the toolbar to scroll. */}
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, email or department"
+          className="min-h-11 w-full border-rule bg-surface sm:w-[280px]"
+          aria-label="Search people"
+        />
+
+        <div className="flex items-center gap-1.5">
+          <span className="type-label whitespace-nowrap text-ink-muted">Status</span>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger
+              aria-label="Status"
+              className="min-h-11 w-[132px] border-rule bg-surface font-sans text-body-sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
+              <SelectItem value="INACTIVE">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Both ways in live here, in the header, rather than as two long forms
+            stacked above the list somebody actually came to read.
+
+            On a phone they share the row and their labels shorten — "Import
+            from a spreadsheet" is six words for a button, and at 375px the two
+            of them together are wider than the screen. */}
+        <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+          <Button
+            variant="outline"
+            className="min-h-11 flex-1 sm:flex-none"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Import from a spreadsheet</span>
+            <span className="sm:hidden">Import</span>
+          </Button>
+          <Button className="min-h-11 flex-1 sm:flex-none" onClick={() => setAddOpen(true)}>
+            <Plus className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Add new user</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
+        </div>
+      </div>
+
+      <DataGrid
+        data={rows}
+        columns={columns}
+        storageKey="appraise.people.column-widths"
+        minWidth={1060}
+        // Clicking anywhere on a row opens that person's record. The ⋯ menu's
+        // "Edit details" is the same action and stays — it is what a keyboard
+        // or screen-reader user reaches, since a clickable <tr> is neither
+        // focusable nor announced.
+        onRowClick={(person) => setEditing(person)}
+        empty={
+          people.length === 0 ? (
+            <EmptyState
+              title="Nobody has been added yet"
+              body="Add the first person. Start with yourself, so you do not lock yourself out."
+            />
+          ) : (
+            <EmptyState
+              title="Nobody matches those filters"
+              body="Widen the search, or clear the status filter."
+            />
+          )
+        }
+        status={
+          <span className="tabular text-body-sm text-ink">
+            {rows.length} of {people.length} {people.length === 1 ? "person" : "people"}
+          </span>
+        }
+      />
+
+      <AddPersonDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        people={people}
+        departments={departments}
+      />
+      <ImportDialog open={importOpen} onOpenChange={setImportOpen} />
+
+      {/* Keyed on the id, so opening a second person starts with a clean action
+          state rather than inheriting the previous one's error (P10-11). */}
+      <EditPersonDialog
+        key={`edit-${editing?.id ?? "none"}`}
+        person={editing}
+        people={people}
+        departments={departments}
+        onClose={() => setEditing(null)}
+      />
+      <DeletePersonDialog
+        key={`delete-${deleting?.id ?? "none"}`}
+        person={deleting}
+        onClose={() => setDeleting(null)}
+      />
+
+    </div>
+  );
+}

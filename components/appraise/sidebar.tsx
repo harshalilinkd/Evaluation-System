@@ -1,0 +1,92 @@
+/** The collapsible Slate Navy rail. DESIGN.md §6. */
+
+import Link from "next/link";
+
+import { ROUTES } from "@/lib/auth/landing";
+import { SidebarNav } from "@/components/appraise/sidebar-nav";
+import type { AppRole } from "@/components/appraise/nav-config";
+
+/**
+ * Shared by the rail and the mobile sheet so the two cannot drift apart.
+ *
+ * `onNavy` exists because the sheet is a white surface while the rail is Slate
+ * Navy — the same mark, two grounds. It is a prop rather than two components so
+ * a change to the brand lands in one place.
+ */
+export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
+  return (
+    <Link
+      href={ROUTES.dashboard}
+      className="rail-item flex items-center gap-3 rounded-control px-2 py-1.5"
+    >
+      {/*
+        The company mark, on a white tile.
+
+        The LinkD artwork is multi-coloured with heavy black strokes, so it
+        needs a light plate to sit on — the navy rail would swallow the outlines
+        that give the wordmark its shape. The tile is the plate.
+
+        It is a WIDE mark (2.11:1) in a square chip, which is the shape the
+        collapsed rail needs. `w-full` rather than `h-full` is what lets it use
+        the full 40px across and centre in the leftover height; sized to the
+        height instead it came out 28px wide and the stripes turned to mush.
+
+        `alt` is empty because the company name is written beside it: a screen
+        reader announcing "LinkD Prints" twice is noise, not access. If the file
+        is missing the tile simply renders blank rather than a broken icon, and
+        the name beside it still says what this is.
+      */}
+      <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-input bg-white p-0.5">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 40px mark; the optimiser has nothing to add and next/image would defer the one element that should paint first. */}
+        <img src="/logo.png" alt="" className="w-full object-contain" />
+      </span>
+
+      {/* Faded out by CSS on collapse rather than unmounted — the transition
+          has to animate a real element, and remounting the brand on every
+          toggle would flicker the logo. */}
+      <span className="rail-label min-w-0 overflow-hidden">
+        <span
+          className={`block truncate text-display-sm leading-tight ${
+            onNavy ? "text-sidebar-ink" : "text-ink"
+          }`}
+        >
+          Appraise
+        </span>
+        <span
+          className={`type-label block truncate ${
+            onNavy ? "text-sidebar-ink-muted" : "text-ink-faint"
+          }`}
+        >
+          LinkD Prints
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+export function Sidebar({ roles }: { roles: readonly AppRole[] }) {
+  return (
+    // Slate Navy, edge to edge, pinned left — the one large dark field in the
+    // light theme, and that is its job: it anchors the page, separates
+    // navigation from content without needing a border, and gives the indigo
+    // active state a ground to glow against.
+    //
+    // Width comes from --rail-w, flipped by the `data-rail` attribute the
+    // pre-paint script sets on <html>. No state lives here.
+    //
+    // Hidden below 1024px, where the topbar's sheet takes over.
+    <aside className="rail hidden shrink-0 bg-sidebar transition-[width] duration-panel ease-panel lg:block">
+      <div className="sticky top-0 flex h-dvh flex-col gap-6 overflow-x-hidden p-4">
+        <SidebarBrand />
+
+        <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
+          <SidebarNav roles={roles} />
+        </div>
+
+        <p className="rail-label tabular whitespace-nowrap px-3 text-body-sm text-sidebar-ink-muted">
+          v0.1.0
+        </p>
+      </div>
+    </aside>
+  );
+}

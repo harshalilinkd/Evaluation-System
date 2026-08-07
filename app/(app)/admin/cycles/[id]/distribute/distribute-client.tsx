@@ -1,0 +1,880 @@
+"use client";
+
+/** The distribution table. P11 screen — one row per person, one outcome per row. */
+
+import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Check,
+  Copy,
+  Loader2,
+  Mail,
+  MessageCircle,
+  MoreHorizontal,
+  RotateCw,
+  Search,
+} from "lucide-react";
+
+import { SegmentedProgress } from "@/components/appraise/segmented-bar";
+import {
+  SCREEN_SELECT_CLASS,
+  ScreenBody,
+  ScreenHeader,
+  ScreenToolbar,
+  TableScreen,
+  Tally,
+} from "@/components/appraise/screen";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { plural } from "@/lib/cycles/schema";
+import type { Channel } from "@/lib/notify/dispatch";
+import type { Preflight } from "@/lib/notify/preflight";
+import {
+  issueCopyableLink,
+  sendBulk,
+  sendEvaluationLink,
+  updatePhone,
+  type SendOutcome,
+} from "@/lib/notify/actions";
+import type { DistributionBoard, DistributionRow, LinkStatus } from "@/lib/notify/queries";
+import { HistoryDrawer } from "@/app/(app)/admin/cycles/[id]/distribute/history-drawer";
+import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils/date";
+
+/** DESIGN.md §5.3 pills. Tier tints carry tier meaning — cyan is the employee. */
+const LINK_STATUS: Record<LinkStatus, { label: string; classes: string }> = {
+  NOT_SENT: { label: "Not sent", classes: "bg-surface-mute text-ink-faint" },
+  // Lead tint for "we have acted"; the employee has not yet.
+  SENT: { label: "Sent", classes: "bg-lead-tint text-lead" },
+  // Self tint: the employee has done something — they opened it.
+  OPENED: { label: "Opened", classes: "bg-self-tint text-self" },
+  // Final, solid: the strongest state on this screen.
+  SUBMITTED: { label: "Submitted", classes: "bg-final text-ink-invert" },
+};
+
+export function DistributeClient({
+  board,
+  configured,
+  preflight,
+}: {
+  board: DistributionBoard;
+  configured: { whatsapp: boolean; email: boolean };
+  /** Whether a link sent from here would actually be openable. Verdicts only. */
+  preflight: { appUrl: Preflight; mailFrom: Preflight };
+}) {
+  const router = useRouter();
+
+  const [search, setSearch] = React.useState("");
+  const [department, setDepartment] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | LinkStatus | "FAILED" | "NO_CONTACT">("all");
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+
+  const [running, setRunning] = React.useState(false);
+  const [progress, setProgress] = React.useState<{ done: number; total: number } | null>(null);
+  const [outcomes, setOutcomes] = React.useState<SendOutcome[]>([]);
+  const [confirm, setConfirm] = React.useState<{ channels: Channel[] } | null>(null);
+  const [copyWarning, setCopyWarning] = React.useState<DistributionRow | null>(null);
+  const [copied, setCopied] = React.useState<{ link: string; name: string } | null>(null);
+  const [fixing, setFixing] = React.useState<DistributionRow | null>(null);
+  const [history, setHistory] = React.useState<DistributionRow | null>(null);
+
+  const visible = React.useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return board.rows.filter((row) => {
+      if (department !== "all" && row.departmentId !== department) return false;
+      if (statusFilter === "FAILED" && row.lastResult?.status !== "FAILED") return false;
+      if (statusFilter === "NO_CONTACT" && (row.phoneE164 || row.email)) return false;
+      if (
+        statusFilter !== "all" &&
+        statusFilter !== "FAILED" &&
+        statusFilter !== "NO_CONTACT" &&
+        row.linkStatus !== statusFilter
+      ) {
+        return false;
+      }
+      if (needle && !row.name.toLowerCase().includes(needle) && !(row.employeeCode ?? "").toLowerCase().includes(needle)) {
+        return false;
+      }
+      return true;
+    });
+  }, [board.rows, search, department, statusFilter]);
+
+  const selectable = visible.filter((r) => r.sendable);
+  const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.evaluationId));
+
+  const failedRows = board.rows.filter((r) => r.lastResult?.status === "FAILED");
+
+  const toggle = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  };
+
+  /* -- The run -- */
+  const run = async (ids: string[], channels: Channel[]) => {
+    setRunning(true);
+    setOutcomes([]);
+    setConfirm(null);
+
+    const total = ids.length * channels.length;
+    setProgress({ done: 0, total });
+
+    // Driven one person at a time from the client so each row updates as it
+    // lands. The server action is sequential and paced internally; calling it
+    // per person is what makes the progress real rather than a guess.
+    const collected: SendOutcome[] = [];
+    for (const id of ids) {
+      const result = await sendBulk([id], channels);
+      if (result.ok) collected.push(...result.data.outcomes);
+      else {
+        collected.push({
+          evaluationId: id,
+          name: "",
+          channel: channels[0] ?? "EMAIL",
+          ok: false,
+          message: result.error.message,
+        });
+      }
+      setOutcomes([...collected]);
+      setProgress({ done: collected.length, total });
+    }
+
+    setRunning(false);
+    setProgress(null);
+    setSelected(new Set());
+    router.refresh();
+  };
+
+  const sendOne = async (row: DistributionRow, channel: Channel) => {
+    setRunning(true);
+    const result = await sendEvaluationLink(row.evaluationId, channel);
+    setOutcomes(
+      result.ok
+        ? [result.data]
+        : [{ evaluationId: row.evaluationId, name: row.name, channel, ok: false, message: result.error.message }],
+    );
+    setRunning(false);
+    router.refresh();
+  };
+
+  const sentCount = board.totals.sent + board.totals.opened;
+
+  /* -- The worst offender of the four: a back link, a title, a subtitle, up to
+        three alert banners, a hero with two tiles beside it, and a toolbar whose
+        three controls each carried a stacked <Label>. Over 700px before the
+        first person. Same anatomy as the rest now, with the send progress as a
+        3px rule under the toolbar instead of a 150px card. -- */
+  return (
+    <TooltipProvider delayDuration={200}>
+      <TableScreen>
+        <ScreenHeader
+          title="Send links"
+          subtitle={
+            <span className="flex flex-wrap items-center gap-x-2">
+              <Link
+                href={`/admin/cycles/${board.cycle.id}`}
+                className="inline-flex items-center gap-1 hover:text-ink"
+              >
+                <ArrowLeft className="size-3" aria-hidden />
+                {board.cycle.name}
+              </Link>
+              <span aria-hidden>·</span>
+              {board.cycle.periodLabel}
+              {board.cycle.status === "DRAFT" ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-warning">not launched yet</span>
+                </>
+              ) : null}
+            </span>
+          }
+          stats={
+            <>
+              <Tally label="Sent" value={`${sentCount}/${board.totals.total}`} />
+              <Tally label="Not sent" value={board.totals.notSent} />
+              <Tally label="Opened" value={board.totals.opened} />
+              {board.totals.failed > 0 ? (
+                <Tally label="Failed" value={board.totals.failed} tone="critical" />
+              ) : null}
+            </>
+          }
+          action={
+            failedRows.length > 0 ? (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={running}
+                onClick={() => void run(failedRows.map((r) => r.evaluationId), ["WHATSAPP"])}
+              >
+                <RotateCw className="size-4" aria-hidden />
+                Retry all failed ({failedRows.length})
+              </Button>
+            ) : null
+          }
+        />
+
+        {/* ---------- Toolbar ----------
+            The stacked <Label> above each control is gone; each keeps its
+            accessible name on the control itself, which is what a toolbar of
+            three filters needs and what every other screen here does. */}
+        <ScreenToolbar>
+          <div className="relative w-full sm:w-[260px]">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+            />
+            <Input
+              id="dist-search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Name or employee code"
+              aria-label="Search people"
+              className="min-h-11 border-rule bg-surface pl-9"
+            />
+          </div>
+
+          <select
+            id="dist-department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            aria-label="Filter by department"
+            className={SCREEN_SELECT_CLASS}
+          >
+            <option value="all">All departments</option>
+            {board.departments.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+
+          <select
+            id="dist-status"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            aria-label="Filter by status"
+            className={SCREEN_SELECT_CLASS}
+          >
+            <option value="all">Everyone</option>
+            <option value="NOT_SENT">Not sent</option>
+            <option value="SENT">Sent</option>
+            <option value="OPENED">Opened</option>
+            <option value="SUBMITTED">Submitted</option>
+            <option value="FAILED">Failed</option>
+            {/* A first-class view, per the brief: these people need a
+                different action, not a retry. */}
+            <option value="NO_CONTACT">No contact details ({board.totals.noContact})</option>
+          </select>
+        </ScreenToolbar>
+
+        {/* The hero's progress bar, kept — it is information — at 3px instead of
+            inside a 150px card. */}
+        <div className="shrink-0 border-b border-rule">
+          <SegmentedProgress
+            height="h-1.5"
+            total={board.totals.total}
+            self={sentCount}
+            lead={board.totals.sent}
+            final={board.totals.opened}
+          />
+        </div>
+
+        <ScreenBody className="space-y-4 p-4 lg:p-5">
+        {/* Providers that are not configured are stated once, up front, rather
+            than as 47 identical failures after a bulk run. */}
+        {!configured.whatsapp || !configured.email ? (
+          <p className="flex items-start gap-2 rounded-card border border-warning/40 bg-warning-tint px-4 py-3 text-body-sm text-ink">
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+            <span>
+              {!configured.whatsapp && !configured.email
+                ? "Neither WhatsApp nor email is configured. Add the Maytapi and Resend keys to .env.local before sending."
+                : !configured.whatsapp
+                  ? "WhatsApp is not configured — add the three MAYTAPI_ keys to .env.local. Email will still work."
+                  : "Email is not configured — add RESEND_API_KEY and MAIL_FROM to .env.local. WhatsApp will still work."}
+            </span>
+          </p>
+        ) : null}
+
+        {/* A key being present is not the same as a message being usable.
+            These two are invisible until an employee says the link does
+            nothing, so they are stated before the send button, not after. */}
+        {!preflight.appUrl.ok ? (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-card border border-critical/40 bg-critical-tint px-4 py-3 text-body-sm text-ink"
+          >
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-critical" />
+            <div className="space-y-1">
+              <p className="font-medium text-critical">{preflight.appUrl.title}</p>
+              <p>{preflight.appUrl.detail}</p>
+              <p className="text-ink-muted">{preflight.appUrl.fix}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {preflight.appUrl.ok && !preflight.mailFrom.ok ? (
+          <div
+            role="status"
+            className="flex items-start gap-2 rounded-card border border-warning/40 bg-warning-tint px-4 py-3 text-body-sm text-ink"
+          >
+            <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+            <div className="space-y-1">
+              <p className="font-medium">{preflight.mailFrom.title}</p>
+              <p>{preflight.mailFrom.detail}</p>
+              <p className="text-ink-muted">{preflight.mailFrom.fix}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ---------- Outcomes from the last run ---------- */}
+        {outcomes.length > 0 ? (
+          <section className="card-surface p-4">
+            <h2 className="text-body font-medium text-ink">
+              Last run — {outcomes.filter((o) => o.ok).length} sent, {outcomes.filter((o) => !o.ok).length} failed
+            </h2>
+            <ul className="mt-2 space-y-1">
+              {outcomes.filter((o) => !o.ok).map((o, i) => (
+                <li key={`${o.evaluationId}-${i}`} className="flex items-start gap-2 text-body-sm text-critical">
+                  <AlertTriangle aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                  {o.message}
+                </li>
+              ))}
+              {outcomes.every((o) => o.ok) ? (
+                <li className="flex items-center gap-2 text-body-sm text-success">
+                  <Check aria-hidden className="size-3.5" />
+                  Everything went out.
+                </li>
+              ) : null}
+            </ul>
+          </section>
+        ) : null}
+
+        {/* ---------- Table ---------- */}
+        <section className="card-surface overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allSelected}
+                      aria-label="Select everyone shown"
+                      onCheckedChange={(checked) =>
+                        setSelected(checked === true ? new Set(selectable.map((r) => r.evaluationId)) : new Set())
+                      }
+                    />
+                  </TableHead>
+                  <TableHead>Person</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Link</TableHead>
+                  <TableHead>Last sent</TableHead>
+                  <TableHead>Result</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {visible.map((row) => (
+                  <TableRow key={row.evaluationId} className={cn(!row.sendable && "bg-surface-mute/50")}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selected.has(row.evaluationId)}
+                        disabled={!row.sendable}
+                        aria-label={`Select ${row.name}`}
+                        onCheckedChange={() => toggle(row.evaluationId)}
+                      />
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <span
+                          aria-hidden
+                          className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-accent text-body-sm font-medium text-primary"
+                        >
+                          {row.initials}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-ink">{row.name}</p>
+                          <p className="tabular truncate text-body-sm text-ink-muted">
+                            {row.employeeCode ?? "—"} · {row.departmentName ?? "No department"}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <ContactIcon
+                          kind="phone"
+                          present={Boolean(row.phoneE164)}
+                          // The specific reason, not "invalid" — the fix for a
+                          // landline differs from the fix for a typo.
+                          problem={row.phoneRaw && !row.phoneE164 ? row.phoneError?.message ?? null : null}
+                          value={row.phoneE164 ?? row.phoneRaw}
+                        />
+                        <ContactIcon kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
+
+                        {row.phoneRaw && !row.phoneE164 ? (
+                          <button
+                            type="button"
+                            onClick={() => setFixing(row)}
+                            className="text-body-sm font-medium text-critical underline underline-offset-2"
+                          >
+                            Fix number
+                          </button>
+                        ) : null}
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-pill px-2.5 py-1 text-body-sm font-medium",
+                          LINK_STATUS[row.linkStatus].classes,
+                        )}
+                      >
+                        {LINK_STATUS[row.linkStatus].label}
+                      </span>
+                    </TableCell>
+
+                    <TableCell className="tabular whitespace-nowrap text-body-sm text-ink-muted">
+                      {row.lastSentAt ? (
+                        <span className="flex items-center gap-2">
+                          {formatDateTime(row.lastSentAt)}
+                          {row.lastChannels.map((c) =>
+                            c === "WHATSAPP" ? (
+                              <MessageCircle key={c} aria-label="WhatsApp" className="size-3.5" />
+                            ) : (
+                              <Mail key={c} aria-label="Email" className="size-3.5" />
+                            ),
+                          )}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+
+                    <TableCell className="max-w-64">
+                      {!row.sendable ? (
+                        // P11: "with the reason shown rather than the button
+                        // silently disabled".
+                        <span className="text-body-sm text-ink-muted">{row.blockedReason}</span>
+                      ) : row.lastResult?.status === "FAILED" ? (
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-pill bg-critical-tint px-2 py-0.5 text-body-sm font-medium text-critical">
+                            Failed
+                          </span>
+                          <span className="text-body-sm text-ink-muted">{row.lastResult.error}</span>
+                          <button
+                            type="button"
+                            disabled={running}
+                            onClick={() => void sendOne(row, "WHATSAPP")}
+                            className="text-body-sm font-medium text-primary underline underline-offset-2"
+                          >
+                            Retry
+                          </button>
+                        </span>
+                      ) : row.lastResult?.status === "SENT" ? (
+                        <span className="text-body-sm text-ink-muted">Accepted by provider</span>
+                      ) : (
+                        <span className="text-body-sm text-ink-faint">—</span>
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      <RowMenu
+                        row={row}
+                        configured={configured}
+                        disabled={running}
+                        onSend={(channel) => void sendOne(row, channel)}
+                        onSendBoth={() => void run([row.evaluationId], ["WHATSAPP", "EMAIL"])}
+                        onCopy={() => setCopyWarning(row)}
+                        onHistory={() => setHistory(row)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {visible.length === 0 ? (
+            <p className="py-10 text-center text-body-sm text-ink-faint">
+              {statusFilter === "NO_CONTACT"
+                ? "Everybody has a phone number or an email address."
+                : "Nobody matches that filter."}
+            </p>
+          ) : null}
+        </section>
+
+        {/* ---------- Bulk bar ---------- */}
+        {selected.size > 0 ? (
+          <div className="sticky bottom-4 flex flex-wrap items-center justify-between gap-3 rounded-card bg-ink px-5 py-4 shadow-dashboard">
+            <p className="text-body text-ink-invert">
+              <span className="tabular font-medium">{selected.size}</span> selected
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" className="min-h-11" disabled={running || !configured.whatsapp}
+                onClick={() => setConfirm({ channels: ["WHATSAPP"] })}>
+                <MessageCircle className="size-4" aria-hidden />
+                WhatsApp
+              </Button>
+              <Button variant="outline" className="min-h-11" disabled={running || !configured.email}
+                onClick={() => setConfirm({ channels: ["EMAIL"] })}>
+                <Mail className="size-4" aria-hidden />
+                Email
+              </Button>
+              <Button className="min-h-11" disabled={running || !configured.whatsapp || !configured.email}
+                onClick={() => setConfirm({ channels: ["WHATSAPP", "EMAIL"] })}>
+                Send to {selected.size} selected
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* ---------- Progress ---------- */}
+        {progress ? (
+          <div className="fixed inset-x-0 bottom-0 z-50 bg-ink px-6 py-4" role="status" aria-live="polite">
+            <div className="mx-auto flex max-w-3xl items-center gap-4">
+              <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-ink-invert" />
+              <p className="tabular shrink-0 text-body-sm text-ink-invert">
+                {progress.done} of {progress.total}
+              </p>
+              <div className="h-2 flex-1 overflow-hidden rounded-pill bg-ink-invert/20">
+                <span
+                  className="block h-full rounded-pill bg-ink-invert transition-all"
+                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+        </ScreenBody>
+
+        {/* ---------- Dialogs ----------
+            Outside `ScreenBody`: a dialog portals to the document anyway, and
+            leaving it inside a scroller only invites a stray overflow rule. */}
+        <ConfirmSendDialog
+          key={`confirm-${confirm?.channels.join("-") ?? "none"}`}
+          open={confirm !== null}
+          count={selected.size}
+          channels={confirm?.channels ?? []}
+          onCancel={() => setConfirm(null)}
+          onConfirm={() => void run([...selected], confirm?.channels ?? [])}
+        />
+
+        <CopyLinkDialog
+          key={`copy-${copyWarning?.evaluationId ?? "none"}${copied ? "-done" : ""}`}
+          row={copyWarning}
+          copied={copied}
+          onCancel={() => {
+            setCopyWarning(null);
+            setCopied(null);
+          }}
+          onConfirm={async () => {
+            if (!copyWarning) return;
+            const result = await issueCopyableLink(copyWarning.evaluationId);
+            if (result.ok) setCopied(result.data);
+            router.refresh();
+          }}
+        />
+
+        <FixNumberDialog
+          key={`fix-${fixing?.profileId ?? "none"}`}
+          row={fixing}
+          onCancel={() => setFixing(null)}
+          onDone={() => {
+            setFixing(null);
+            router.refresh();
+          }}
+        />
+
+        <HistoryDrawer
+          key={`history-${history?.evaluationId ?? "none"}`}
+          row={history}
+          onClose={() => setHistory(null)}
+        />
+      </TableScreen>
+    </TooltipProvider>
+  );
+}
+
+/* ---------- Contact icons ---------- */
+
+function ContactIcon({
+  kind,
+  present,
+  problem,
+  value,
+}: {
+  kind: "phone" | "email";
+  present: boolean;
+  problem: string | null;
+  value: string | null;
+}) {
+  const Icon = kind === "phone" ? MessageCircle : Mail;
+  const label = kind === "phone" ? "Phone" : "Email";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="relative inline-flex">
+          <Icon
+            aria-label={
+              problem ? `${label}: ${problem}` : present ? `${label}: ${value}` : `No ${label.toLowerCase()}`
+            }
+            className={cn(
+              "size-4",
+              problem ? "text-critical" : present ? "text-ink-muted" : "text-ink-faint/40",
+            )}
+          />
+          {/* Struck through when missing — §13.8: colour is never the only
+              signal, and a greyed icon alone is invisible to a lot of people. */}
+          {!present ? (
+            <span aria-hidden className="absolute left-0 top-1/2 h-px w-4 -rotate-45 bg-ink-faint/60" />
+          ) : null}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {problem ?? (present ? value : `No ${label.toLowerCase()} on record`)}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/* ---------- Row menu ---------- */
+
+function RowMenu({
+  row,
+  configured,
+  disabled,
+  onSend,
+  onSendBoth,
+  onCopy,
+  onHistory,
+}: {
+  row: DistributionRow;
+  configured: { whatsapp: boolean; email: boolean };
+  disabled: boolean;
+  onSend: (channel: Channel) => void;
+  onSendBoth: () => void;
+  onCopy: () => void;
+  onHistory: () => void;
+}) {
+  const canWhatsApp = row.sendable && Boolean(row.phoneE164) && configured.whatsapp;
+  const canEmail = row.sendable && Boolean(row.email) && configured.email;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="size-11" aria-label={`Actions for ${row.name}`}>
+          <MoreHorizontal className="size-4" aria-hidden />
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem disabled={disabled || !canWhatsApp} onSelect={() => onSend("WHATSAPP")}>
+          Send WhatsApp
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={disabled || !canEmail} onSelect={() => onSend("EMAIL")}>
+          Send email
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={disabled || !canWhatsApp || !canEmail} onSelect={() => onSendBoth()}>
+          Send both
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem disabled={!row.sendable} onSelect={() => onCopy()}>
+          Copy link
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onHistory()}>View history</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ---------- Dialogs ---------- */
+
+function ConfirmSendDialog({
+  open,
+  count,
+  channels,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  count: number;
+  channels: Channel[];
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const channelText =
+    channels.length === 2 ? "WhatsApp and email" : channels[0] === "WHATSAPP" ? "WhatsApp" : "email";
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Send to {plural(count, "person")}?</DialogTitle>
+          <DialogDescription>
+            Each person gets a fresh link over {channelText}. Any link already sent to them stops
+            working — a person only ever has one live link per channel.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" className="min-h-11" onClick={onCancel}>Cancel</Button>
+          <Button className="min-h-11" onClick={onConfirm}>
+            Send {count} × {channels.length === 2 ? "2" : "1"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CopyLinkDialog({
+  row,
+  copied,
+  onCancel,
+  onConfirm,
+}: {
+  row: DistributionRow | null;
+  copied: { link: string; name: string } | null;
+  onCancel: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [pending, setPending] = React.useState(false);
+
+  return (
+    <Dialog open={row !== null} onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{copied ? `Link for ${copied.name}` : "Create a new link?"}</DialogTitle>
+          <DialogDescription>
+            {copied
+              ? "Copy it now — it is shown once and cannot be shown again."
+              : "This creates a new link and stops the previous one working. Continue?"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {copied ? (
+          <div className="space-y-2">
+            <Input readOnly value={copied.link} className="font-mono text-body-sm" onFocus={(e) => e.currentTarget.select()} />
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              onClick={() => void navigator.clipboard.writeText(copied.link)}
+            >
+              <Copy className="size-4" aria-hidden />
+              Copy to clipboard
+            </Button>
+          </div>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="outline" className="min-h-11" onClick={onCancel}>
+            {copied ? "Done" : "Cancel"}
+          </Button>
+          {!copied ? (
+            <Button
+              className="min-h-11"
+              disabled={pending}
+              onClick={async () => {
+                setPending(true);
+                await onConfirm();
+                setPending(false);
+              }}
+            >
+              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Create link
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FixNumberDialog({
+  row,
+  onCancel,
+  onDone,
+}: {
+  row: DistributionRow | null;
+  onCancel: () => void;
+  onDone: () => void;
+}) {
+  const [value, setValue] = React.useState(row?.phoneRaw ?? "");
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  return (
+    <Dialog open={row !== null} onOpenChange={(next) => !next && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Fix {row?.name}&rsquo;s number</DialogTitle>
+          <DialogDescription>{row?.phoneError?.message}</DialogDescription>
+        </DialogHeader>
+
+        <div>
+          <Label htmlFor="fix-phone">Phone number</Label>
+          <Input
+            id="fix-phone"
+            className="mt-1.5"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="9876543210"
+          />
+          <p className="mt-1.5 text-body-sm text-ink-muted">
+            Ten digits is enough — +91 is added automatically.
+          </p>
+        </div>
+
+        {error ? <p role="alert" className="text-body-sm text-critical">{error}</p> : null}
+
+        <DialogFooter>
+          <Button variant="outline" className="min-h-11" onClick={onCancel} disabled={pending}>Cancel</Button>
+          <Button
+            className="min-h-11"
+            disabled={pending}
+            onClick={async () => {
+              if (!row) return;
+              setPending(true);
+              setError(null);
+              const result = await updatePhone(row.profileId, value);
+              setPending(false);
+              if (result.ok) onDone();
+              else setError(result.error.message);
+            }}
+          >
+            {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

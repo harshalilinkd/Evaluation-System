@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/reminders",
+      "//": "04:30 UTC = 10:00 Asia/Kolkata (UTC+5:30). Vercel crons run in UTC.",
+      "schedule": "30 4 * * *"
+    }
+  ]
+}

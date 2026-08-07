@@ -1,0 +1,49 @@
+-- =============================================================================
+-- seed.sql — Reference data. CLAUDE.md §0.6: seed data lives ONLY here.
+--
+-- Run by `supabase db reset` AFTER every migration has applied. That ordering
+-- is the whole reason this file is now short.
+-- =============================================================================
+--
+-- WHY THE QUESTION BANK IS NO LONGER HERE
+--
+-- It used to be, and it broke a real `db reset` in two ways once 0008 and 0017
+-- existed. Both were masked by the test harness, which loaded the seed between
+-- 0007 and 0008 rather than at the end where the CLI actually puts it:
+--
+--   1. The seeded WORKER-track questions violate `questions_core_track_staff`,
+--      the CHECK 0008 added to make §5's module boundary structural. The seed
+--      runs after 0008, so the insert is refused and the reset fails outright.
+--
+--   2. Worse and quieter: 0017 retires the old company-secretarial bank, and a
+--      seed running afterwards would re-insert every one of those questions as
+--      ACTIVE — silently undoing the reseed and putting FEMA and SEBI questions
+--      back in front of a fabric printer.
+--
+-- The bank is product content, not demo data, and it now lives in
+-- 0017_reseed_questions.sql where the ordering guarantees hold. What remains
+-- here is reference data: rows the product needs to exist before anybody signs
+-- in, which no migration owns.
+--
+-- The ten working departments come with 0017, alongside the Job Specific Skills
+-- questions that make each of them launchable. This file no longer creates any.
+
+
+/* ---------- Departments ---------- */
+--
+-- The five original departments — MIS, SALES, OPS, DESIGNS, ACCOUNTS — used to be
+-- created here. They are not any more, and they are not renamed either (§0.2):
+-- they are simply no longer *made*.
+--
+-- Re-creating them on a fresh reset produced fifteen departments, five of which
+-- had zero Job Specific Skills questions after 0017 moved the bank. Per P9-7 a
+-- department in that state cannot be launched — every employee in it would get
+-- an empty section — so the picker offered HR five choices that quietly did not
+-- work, two of them near-homographs of the real ones ("Sales" beside "Sales &
+-- Customer Service"). That is a data-entry trap, not reference data.
+--
+-- On a database where they already exist, 0018 retires them by setting
+-- is_active = false, so nothing that history points at disappears.
+--
+-- `code` remains the stable handle: seeds, imports and later phases join on it,
+-- so no file ever hard-codes a uuid.

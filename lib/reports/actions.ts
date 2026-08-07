@@ -1,0 +1,252 @@
+"use server";
+
+/** HR's and the MD's actions on a report (P20). Every status move goes through §8. */
+
+import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+import { checkRole } from "@/lib/auth/guards";
+import { cycleError, type CycleResult } from "@/lib/cycles/schema";
+import { MIN_REASON_LENGTH } from "@/lib/evaluations/transitions";
+import { transition } from "@/lib/evaluations/state-machine";
+import { createClient } from "@/lib/supabase/server";
+
+/* ---------- Guards ---------- */
+//
+// AMEND-2 un-merged the roles, and this screen is where that matters most: HR
+// prepares and reviews, the MD approves. `ADMIN_ROLES` is deliberately NOT used
+// on any action here — a single predicate would let one person do both halves,
+// which is the second pair of eyes removed.
+
+async function requireHr() {
+  const auth = await checkRole(["HR_ADMIN"]);
+  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
+  return { ok: true as const, session: auth.session };
+}
+
+async function requireMd() {
+  const auth = await checkRole(["MD"]);
+  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
+  return { ok: true as const, session: auth.session };
+}
+
+/** The actor shape §8's state machine expects. */
+function actorOf(session: { profile: { id: string }; roles: readonly string[] }) {
+  return { profileId: session.profile.id, roles: [...session.roles] as never };
+}
+
+/* ---------- HR's review ---------- */
+
+const hrReviewSchema = z.object({
+  evaluationId: z.string().uuid(),
+  summary: z.string().trim().min(1, "Write a short summary before sending this on."),
+  recommendation: z.enum(["PROCEED", "HOLD", "NEEDS_DISCUSSION"]),
+});
+
+/** Save HR's summary and recommendation without moving the record. */
+export async function saveHrReview(input: {
+  evaluationId: string;
+  summary: string;
+  recommendation: string;
+}): Promise<CycleResult<{ saved: true }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const parsed = hrReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the form.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("evaluation_reviews").upsert(
+    {
+      evaluation_id: parsed.data.evaluationId,
+      hr_summary: parsed.data.summary,
+      hr_recommendation: parsed.data.recommendation,
+      hr_reviewed_by: auth.session.profile.id,
+      hr_reviewed_at: new Date().toISOString(),
+    },
+    { onConflict: "evaluation_id" },
+  );
+
+  if (error) return cycleError("SAVE_FAILED", `Could not save your review: ${error.message}`);
+
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { saved: true } };
+}
+
+/**
+ * Send to the MD. PENDING_HR_REVIEW → HR_APPROVED.
+ *
+ * The summary is saved FIRST and the transition second. If the order were
+ * reversed, a failure to save would leave the record with the MD carrying no
+ * review — which is precisely the thing the MD is meant to be reading.
+ */
+export async function sendToMd(input: {
+  evaluationId: string;
+  summary: string;
+  recommendation: string;
+}): Promise<CycleResult<{ status: string; notified: unknown }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const parsed = hrReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("NO_SUMMARY", parsed.error.issues[0]?.message ?? "Write a summary first.");
+  }
+
+  const saved = await saveHrReview(input);
+  if (!saved.ok) return saved;
+
+  // The salary guard is §8's `requireSalaryComplete`, enforced inside
+  // `transition()` — not re-implemented here. A second copy would be a second
+  // definition of "complete", and they would disagree the first time P21
+  // changes what the block contains.
+  const moved = await transition(parsed.data.evaluationId, "HR_APPROVED", actorOf(auth.session));
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { status: "HR_APPROVED", notified: moved.data.notified ?? null } };
+}
+
+const returnSchema = z.object({
+  evaluationId: z.string().uuid(),
+  returnedTo: z.enum(["SELF", "LEAD", "BOTH"]),
+  reason: z
+    .string()
+    .trim()
+    .min(MIN_REASON_LENGTH, `Give a reason of at least ${MIN_REASON_LENGTH} characters.`),
+});
+
+/**
+ * Return for changes. PENDING_HR_REVIEW → OPEN, unlocking only the named layers.
+ *
+ * §8: HR owns both returns now. The lead's was deleted in AMEND-3 — a lead
+ * cannot return a form they are not allowed to read.
+ */
+export async function returnForChanges(input: {
+  evaluationId: string;
+  returnedTo: string;
+  reason: string;
+}): Promise<CycleResult<{ status: string }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const parsed = returnSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the form.");
+  }
+
+  const moved = await transition(parsed.data.evaluationId, "OPEN", actorOf(auth.session), {
+    reason: parsed.data.reason,
+    returnedTo: parsed.data.returnedTo,
+  });
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { status: "OPEN" } };
+}
+
+/* ---------- The MD's review ---------- */
+
+const mdReviewSchema = z.object({
+  evaluationId: z.string().uuid(),
+  remarks: z.string().trim().min(1, "Record your remarks before approving."),
+});
+
+/**
+ * Approve. HR_APPROVED → MD_REVIEWED.
+ *
+ * The MD cannot reach this before HR has reviewed, and that is enforced twice —
+ * §8's table has no path from PENDING_HR_REVIEW to MD_REVIEWED, and
+ * `apply_evaluation_transition` re-checks the same table in SQL (P5-1).
+ */
+export async function mdApprove(input: {
+  evaluationId: string;
+  remarks: string;
+}): Promise<CycleResult<{ status: string }>> {
+  const auth = await requireMd();
+  if (!auth.ok) return auth;
+
+  const parsed = mdReviewSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("NO_REMARKS", parsed.error.issues[0]?.message ?? "Record your remarks.");
+  }
+
+  const supabase = await createClient();
+  // The MD's columns only — 0029's trigger refuses anything else, so a bug that
+  // widened this object would fail loudly rather than overwrite HR's summary.
+  const { error } = await supabase
+    .from("evaluation_reviews")
+    .update({
+      md_remarks: parsed.data.remarks,
+      md_outcome: "APPROVED",
+      md_reviewed_by: auth.session.profile.id,
+      md_reviewed_at: new Date().toISOString(),
+    })
+    .eq("evaluation_id", parsed.data.evaluationId);
+
+  if (error) return cycleError("SAVE_FAILED", `Could not save your remarks: ${error.message}`);
+
+  const moved = await transition(parsed.data.evaluationId, "MD_REVIEWED", actorOf(auth.session));
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { status: "MD_REVIEWED" } };
+}
+
+/** Send back to HR. HR_APPROVED → PENDING_HR_REVIEW, reason required (§8). */
+export async function mdSendBack(input: {
+  evaluationId: string;
+  reason: string;
+}): Promise<CycleResult<{ status: string }>> {
+  const auth = await requireMd();
+  if (!auth.ok) return auth;
+
+  const parsed = z
+    .object({
+      evaluationId: z.string().uuid(),
+      reason: z.string().trim().min(MIN_REASON_LENGTH, `Give a reason of at least ${MIN_REASON_LENGTH} characters.`),
+    })
+    .safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Give a reason.");
+  }
+
+  const supabase = await createClient();
+  await supabase
+    .from("evaluation_reviews")
+    .update({
+      md_outcome: "RETURNED",
+      md_reviewed_by: auth.session.profile.id,
+      md_reviewed_at: new Date().toISOString(),
+    })
+    .eq("evaluation_id", parsed.data.evaluationId);
+
+  const moved = await transition(parsed.data.evaluationId, "PENDING_HR_REVIEW", actorOf(auth.session), {
+    reason: parsed.data.reason,
+  });
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${parsed.data.evaluationId}`);
+  return { ok: true, data: { status: "PENDING_HR_REVIEW" } };
+}
+
+/** Close. MD_REVIEWED → CLOSED. EVALUATION cycles only (§8). */
+export async function closeEvaluation(input: {
+  evaluationId: string;
+}): Promise<CycleResult<{ status: string }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const moved = await transition(input.evaluationId, "CLOSED", actorOf(auth.session));
+  if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
+
+  revalidatePath("/reports");
+  revalidatePath(`/reports/${input.evaluationId}`);
+  return { ok: true, data: { status: "CLOSED" } };
+}

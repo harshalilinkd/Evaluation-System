@@ -1,0 +1,444 @@
+/* Global tokens and base styling for the "Dossier" dashboard system. DESIGN.md §2–§4. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ---------- Colour tokens (DESIGN.md §2) ---------- */
+  /* Values are RGB channel triplets, with the hex from DESIGN.md beside each.
+     tailwind.config.ts consumes them as `rgb(var(--token) / <alpha-value>)`,
+     which is the only form Tailwind v3 can apply an opacity modifier to. With a
+     bare `var(--token)` holding a hex, Tailwind silently emits NOTHING for
+     `bg-primary/90` or `bg-black/50` — every hover state and overlay would be
+     dead with no error to show for it.
+
+     This block is the only place a colour is defined in the repo. */
+  :root {
+    /* -- Ground & surfaces -- */
+    --background: 244 247 254; /* #F4F7FE  page background (cool gray/blue) */
+    --surface: 255 255 255; /* #FFFFFF  cards, sidebar, topnav */
+    --surface-mute: 248 249 250; /* #F8F9FA  secondary panels, table headers */
+    --rule: 226 232 240; /* #E2E8F0  standard borders (subtle) */
+
+    /* -- Ink -- */
+    --ink: 17 24 39; /* #111827  primary text, headings */
+    --ink-muted: 107 114 128; /* #6B7280  secondary text, labels, chart axes */
+    --ink-faint: 156 163 175; /* #9CA3AF  placeholders, disabled */
+    --ink-invert: 255 255 255; /* #FFFFFF  text on solid/accent backgrounds */
+
+    /* -- Brand & accents -- */
+    --accent-primary: 79 70 229; /* #4F46E5  primary buttons, active nav, focus */
+    --accent-cyan: 6 182 212; /* #06B6D4  secondary charts, soft UI */
+    --accent-pink: 236 72 153; /* #EC4899  alert highlights, chart accents */
+    --accent-green: 16 185 129; /* #10B981  positive trends, success */
+    /* §6: "Active states use a soft --accent-primary background tint with bold,
+       colored text." Also serves as the hover surface the shadcn primitives
+       reach for via `bg-accent`. */
+    --accent-tint: 238 242 255; /* #EEF2FF */
+
+    /* -- Status & feedback -- */
+    --success: 16 185 129; /* #10B981 */
+    --success-tint: 209 250 229; /* #D1FAE5 */
+    --warning: 245 158 11; /* #F59E0B */
+    --warning-tint: 254 243 199; /* #FEF3C7 */
+    --critical: 239 68 68; /* #EF4444 */
+    --critical-tint: 254 226 226; /* #FEE2E2 */
+
+    /* -- Tier colours: RESERVED. Never decorative. -- */
+    /* Drawn from the accent palette so they belong to the dashboard, but held
+       apart from it: these three answer "who said this", and nothing else may
+       use them. Green is deliberately absent — it means "positive trend", and a
+       green that also meant "the MD said this" would make every good delta read
+       as a final score. */
+    --self: 6 182 212; /* #06B6D4  cyan   · the employee */
+    --self-tint: 207 250 254; /* #CFFAFE */
+    --lead: 236 72 153; /* #EC4899  pink   · the HOD / supervisor */
+    --lead-tint: 252 231 243; /* #FCE7F3 */
+    --final: 79 70 229; /* #4F46E5  indigo · the MD, the authoritative answer */
+    --final-tint: 224 231 255; /* #E0E7FF */
+
+    /* -- Chart ramps -- */
+    /*
+       Charts need two things the brand tokens cannot supply, so they get their
+       own family rather than borrowing one.
+
+       SERIES (categorical) answers "which series" — identity. Two slots, in a
+       fixed order that is never cycled: a third series folds into "Other" or
+       becomes a second chart. Same hues as the brand, re-stepped per theme so
+       both stay inside the lightness band a chart mark needs.
+
+       STEP (ordinal) answers "how far along" — the §8 pipeline is a funnel, and
+       a funnel's colour has to carry its order. One hue, light to dark, so the
+       reader sees the sequence in the ramp instead of memorising four unrelated
+       hues. This replaces the four categorical colours the stage donut used to
+       cycle through, which said "these are four different things" about five
+       positions in one sequence.
+
+       Every value below was produced by snapping the brand indigo/cyan to the
+       nearest passing step and running the checks — lightness band, chroma
+       floor, CVD separation, normal-vision floor, contrast, ΔL monotonicity.
+       Do not hand-edit one: re-run the validator.
+
+       The tier hues are still absent, and still deliberately (§13.1). Cyan
+       appears as a *series* colour, which is a different token with a different
+       job from --self even though the light-mode hex coincides.
+    */
+    --chart-series-1: 79 70 229; /* #4F46E5  primary quantity */
+    --chart-series-2: 6 182 212; /* #06B6D4  secondary quantity */
+
+    --chart-step-1: 129 140 248; /* #818CF8  earliest stage */
+    --chart-step-2: 91 84 232; /* #5B54E8 */
+    --chart-step-3: 67 56 202; /* #4338CA */
+    --chart-step-4: 49 46 129; /* #312E81 */
+    --chart-step-5: 30 27 75; /* #1E1B4B  latest stage */
+
+    /* Recessive grid. A hairline one shade off the surface — never dashed, which
+       reads as "projection" or "threshold" when it is only a grid. */
+    --chart-grid: 226 232 240; /* #E2E8F0 */
+
+    /* -- Sidebar: its own surface, not the card surface -- */
+    /* The rail is Slate Navy against the cool-white canvas. It is the only
+       large dark field in the light theme, and that is deliberate: it anchors
+       the page, separates navigation from content without a border, and gives
+       the indigo active state something to glow against. Tokenised separately
+       from --surface because the sidebar must NOT follow cards into white. */
+    --sidebar: 30 41 59; /* #1E293B  slate navy */
+    --sidebar-ink: 241 245 249; /* #F1F5F9  nav labels */
+    --sidebar-ink-muted: 148 163 184; /* #94A3B8  group headings, meta */
+    --sidebar-rule: 51 65 85; /* #334155  hairlines inside the rail */
+    --sidebar-active: 99 102 241; /* #6366F1  indigo, lifted for dark ground */
+
+    /* -- Shape (DESIGN.md §4) -- */
+    --radius-control: 8px; /* inputs, buttons */
+    --radius-card: 16px; /* dashboard cards, widgets */
+    --radius-card-lg: 20px; /* hero widgets */
+
+    /* -- The rail -- */
+    --rail-w: 264px;
+  }
+
+  :root[data-rail="collapsed"] {
+    --rail-w: 76px;
+  }
+
+  /* ---------- Dark theme ---------- */
+  /*
+     Applied by `data-theme="dark"` on <html>, set before first paint by the
+     script in app/layout.tsx. `.dark` is carried too because
+     tailwind.config.ts sets darkMode: "class" and the shadcn primitives key
+     off it.
+
+     This is a re-mapping, not a second palette. Every token below is the same
+     ROLE as its light twin — surface is still "the thing a card is made of" —
+     so no component needs to know which theme it is in. Nothing here is a new
+     colour name, and the tier hues are deliberately unchanged in meaning:
+     only their tints move, because a light tint on a dark ground is a glare.
+  */
+  :root[data-theme="dark"],
+  .dark {
+    /*
+       RE-BALANCED, and every value below was measured rather than picked.
+       Two defects the old set carried:
+
+       1. `--rule` and `--surface-mute` were BOTH #334155 — the identical
+          colour. Every hairline drawn on a muted ground was therefore
+          invisible, which is why the dark tables had no column separators and
+          the toolbars had no edges. That is the single biggest reason dark
+          looked wrong: the structure was there and simply not being painted.
+
+       2. `--ink-faint` on `--surface-mute` came to 2.18:1 and `--ink-muted` to
+          4.04:1, both under §13.8's 4.5:1 floor. Six text/ground combinations
+          failed in total.
+
+       The set below clears 4.5:1 on all four grounds and leaves the rule
+       visibly lighter than everything it is drawn on (1.75:1 on surface,
+       1.49:1 on surface-mute). The grounds also sit closer together than
+       before — the old jump from #1E293B to #334155 is what made the header
+       bands read as stripes.
+    */
+    /*
+       The owner's six-step cool neutral ramp, taken in its own order:
+         #06141B  #11212D  #253745  #4A5C6A  #9BA8AB  #CCD0CF
+       Two levels are interpolated because the system needs eight and the ramp
+       supplies six — `--surface` (cards have to lift off the canvas) and
+       `--ink-muted` (there are three ink weights, not two). Both are marked.
+
+       Measured, not chosen. Every ink/ground pair clears §13.8's 4.5:1 — the
+       worst is ink-faint on surface-mute at 5.02:1. And the rule is a clear
+       step above every ground it is drawn on (2.07:1 on surface, 1.77:1 on
+       surface-mute), which is what the old set got wrong: `--rule` and
+       `--surface-mute` were the SAME colour, so every hairline on a muted
+       ground was invisible and the tables lost their gridlines entirely.
+    */
+    --background: 17 33 45; /* #11212D  ramp 2 — the canvas */
+    --surface: 27 44 56; /* #1B2C38  interpolated — cards lift OFF the canvas */
+    --surface-mute: 37 55 69; /* #253745  ramp 3 — header bands, hover */
+    --rule: 74 92 106; /* #4A5C6A  ramp 4 — hairlines, visible on all grounds */
+
+    --ink: 204 208 207; /* #CCD0CF  ramp 6 */
+    --ink-muted: 180 189 189; /* #B4BDBD  interpolated */
+    --ink-faint: 155 168 171; /* #9BA8AB  ramp 5 — 5.02:1 at its worst */
+    --ink-invert: 6 20 27; /* #06141B  text on a solid accent */
+
+    /* Brand hues hold their identity. Indigo is lifted one step so it keeps
+       its 4.5:1 against the darker ground (§13.8). */
+    --accent-primary: 129 140 248; /* #818CF8 */
+    --accent-cyan: 34 211 238; /* #22D3EE */
+    --accent-pink: 244 114 182; /* #F472B6 */
+    --accent-green: 52 211 153; /* #34D399 */
+    --accent-tint: 36 49 71; /* #243147  the "soft fill" behind active nav */
+
+    --success: 52 211 153;
+    --success-tint: 6 78 59; /* #064E3B */
+    --warning: 251 191 36;
+    --warning-tint: 120 53 15; /* #78350F */
+    --critical: 248 113 113;
+    --critical-tint: 127 29 29; /* #7F1D1D */
+
+    /* Tier identity is unchanged — cyan is still the employee, pink still the
+       lead, indigo still the MD (§13.1). Only the tints invert. */
+    --self: 34 211 238;
+    --self-tint: 22 78 99; /* #164E63 */
+    --lead: 244 114 182;
+    --lead-tint: 131 24 67; /* #831843 */
+    --final: 129 140 248;
+    --final-tint: 49 46 129; /* #312E81 */
+
+    /* Chart ramps, re-stepped for the dark surface — SELECTED, not flipped.
+       #22D3EE sits at L 0.80 and #818CF8 at 0.68, both outside the 0.48–0.67
+       band a dark-surface mark needs, so the series slots take their own steps
+       rather than inheriting the brand tokens above.
+
+       The ordinal ramp reverses its anchor: on a dark ground the LIGHTEST step
+       is the most prominent, so step 1 is palest and step 5 deepest reads
+       backwards — the ramp runs the other way and the earliest stage is the
+       faintest against the surface, exactly as it is in light. */
+    --chart-series-1: 99 102 241; /* #6366F1 */
+    --chart-series-2: 14 165 196; /* #0EA5C4 */
+
+    --chart-step-1: 224 231 255; /* #E0E7FF  earliest stage */
+    --chart-step-2: 199 210 254; /* #C7D2FE */
+    --chart-step-3: 165 180 252; /* #A5B4FC */
+    --chart-step-4: 129 140 248; /* #818CF8 */
+    --chart-step-5: 99 102 241; /* #6366F1  latest stage */
+
+    --chart-grid: 45 62 78; /* #2D3E4E  one shade off the surface, like light */
+
+    /* The rail takes the ramp's deepest step, so it is still the anchor it is in
+       the light theme — one step below the canvas rather than the near-black
+       hole #020617 punched in it. */
+    --sidebar: 6 20 27; /* #06141B  ramp 1 */
+    --sidebar-ink: 204 208 207; /* #CCD0CF  12.01:1 on the rail */
+    --sidebar-ink-muted: 155 168 171; /* #9BA8AB  7.64:1 */
+    --sidebar-rule: 37 55 69; /* #253745  ramp 3, visible on ramp 1 */
+    --sidebar-active: 129 140 248;
+  }
+
+  /* ---------- Base ---------- */
+  body {
+    @apply bg-background text-ink font-sans text-body antialiased;
+  }
+
+  /* Focus ring in the primary accent (§7). focus-visible only, so a mouse click
+     never leaves a ring behind but every keyboard path shows one. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-primary ring-offset-2 ring-offset-background;
+  }
+
+  /* §3: all numeric data uses tabular figures so table columns and chart axes
+     line up. Applied by default — a number that jitters between renders is a
+     number people stop trusting. */
+  table,
+  [data-numeric],
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* §7: honour prefers-reduced-motion. Transforms are dropped; opacity is left
+     alone so state changes stay perceivable. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* The `label` type token (§3). A Tailwind fontSize entry cannot carry
+     text-transform, so the uppercase half lives here. Named `type-label` rather
+     than `text-label` so it does not recursively @apply the generated utility. */
+  .type-label {
+    @apply text-label uppercase;
+  }
+
+  /* §5.1: the dashboard card — white surface, 16px radius, soft diffused
+     shadow, NO border. Depth carries the hierarchy now, not rules. Every card
+     in the product is this class; a bordered card is a bug.
+
+     In dark, a shadow against a dark ground is nearly invisible, so the card
+     gains a hairline instead. Same job — separating the card from the canvas —
+     done by the tool that works on that ground. */
+  .card-surface {
+    @apply rounded-card bg-surface shadow-dashboard;
+  }
+
+  :root[data-theme="dark"] .card-surface,
+  .dark .card-surface {
+    @apply border border-rule shadow-none;
+  }
+
+  /* Glass panel — used for the sticky bulk bars and the topbar. Backdrop blur
+     over a translucent surface, so content scrolling underneath reads as
+     depth rather than disappearing. Falls back to the solid surface where
+     backdrop-filter is unsupported. */
+  .glass {
+    @apply bg-surface/80 backdrop-blur-xl;
+  }
+
+  /* A hairline that follows the theme, for dividers that must not become a
+     hard line in dark. */
+  .rule-soft {
+    @apply border-rule/70;
+  }
+
+  /* ---------- Content width ---------- */
+  /*
+     §4's 1180px cap and gutters, and the opt-out.
+     A page goes edge to edge by putting `data-full-bleed` on its root element.
+     :has() does the work so the shared layout never has to know which route it
+     is rendering — and the dashboard, where the grid IS the layout, stops being
+     a 1180px column with 700px of empty desk either side on a wide monitor.
+  */
+  .app-main {
+    @apply flex-1 px-4 py-8 lg:px-8;
+  }
+
+  .app-container {
+    @apply mx-auto w-full max-w-content;
+  }
+
+  .app-main:has([data-full-bleed]) {
+    @apply p-0;
+  }
+
+  .app-main:has([data-full-bleed]) .app-container {
+    max-width: none;
+  }
+
+  /* ---------- Data grid ---------- */
+  /*
+     Frozen panes for the spreadsheet-style tables (the question bank, the
+     people list). The offset has to be a per-cell value AND has to apply only
+     from `lg` up, and those two requirements pull apart: an inline style can
+     carry the pixel offset but cannot be media-queried, and a Tailwind class
+     can be media-queried but cannot carry a computed pixel value. So the cell
+     sets `--frozen-left` inline and this rule decides whether to honour it.
+
+     Below lg nothing freezes: on a 375px screen the frozen columns would eat
+     the viewport and leave a sliver to scroll the rest through.
+  */
+  @media (min-width: 1024px) {
+    .grid-frozen {
+      position: sticky;
+      left: var(--frozen-left, 0px);
+    }
+  }
+
+  /* ---------- The collapsible rail ---------- */
+  /*
+     Width is a variable on :root, flipped by the `data-rail` attribute the
+     pre-paint script sets. Doing it in CSS rather than React is what makes a
+     collapsed rail arrive already narrow — a width applied on hydration makes
+     the entire layout jump one frame after the page appears.
+
+     It also means no component holds this state. The toggle writes one
+     attribute; everything else reads it.
+  */
+  .rail {
+    width: var(--rail-w);
+  }
+
+  /* Labels fade and stop taking part in layout, so the icons centre themselves
+     rather than sitting left-aligned in a narrow strip. `visibility` rather
+     than `display` keeps them focusable-order stable and the transition real. */
+  :root[data-rail="collapsed"] .rail-label {
+    opacity: 0;
+    visibility: hidden;
+    width: 0;
+  }
+
+  .rail-label {
+    transition:
+      opacity 160ms ease,
+      width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  :root[data-rail="collapsed"] .rail-item {
+    justify-content: center;
+  }
+
+  /* Group headings are pure labelling; in a 76px rail they have nowhere to go
+     and a truncated "ADMIN" reads as a bug. */
+  :root[data-rail="collapsed"] .rail-heading {
+    display: none;
+  }
+
+  /* §7 / task 16: cards arrive rather than appearing. 300ms, 10px of travel,
+     staggered 40ms by --enter-index so a grid resolves left to right instead of
+     flashing all at once.
+
+     `backwards` matters: without it a delayed card renders at full opacity for
+     its delay and then jumps to the start of the animation. */
+  .card-enter {
+    animation: card-enter 300ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    animation-delay: calc(var(--enter-index, 0) * 40ms);
+  }
+
+  @keyframes card-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+}
+
+/* §7 / task 16: honour prefers-reduced-motion by dropping the entrance entirely.
+   Kept OUTSIDE @layer components on purpose — a media query nested inside a
+   layer gets reordered by the layer cascade and this override silently vanished
+   from the compiled output the first time round. */
+@media (prefers-reduced-motion: reduce) {
+  .card-enter {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Print (DESIGN.md §7a) ---------- */
+/* The dashboard aesthetic stops at the print boundary: a page that gets signed
+   and filed is not a dashboard. Shadows and tints do not survive a printer, and
+   a card that splits across two sheets stops the pack being signature-ready. */
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+
+  .card-surface,
+  [data-print-block] {
+    box-shadow: none !important;
+    border: 1px solid #000;
+    break-inside: avoid;
+  }
+}

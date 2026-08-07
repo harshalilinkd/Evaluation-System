@@ -1,0 +1,117 @@
+﻿department,question_text,helper_text,answer_type,who_answers,required
+Design,Fabric & Printing Knowledge,"Understands how a design behaves on different fabrics, GSMs and widths",Rating 0 to 5,The employee and their manager,Yes
+Design,Colour Matching & Design Accuracy,Colours come out on fabric matching the approved shade or Pantone,Rating 0 to 5,The employee and their manager,Yes
+Design,Software Skills (Photoshop / Illustrator / CAD),Works confidently in the tools without needing help for routine tasks,Rating 0 to 5,The employee and their manager,Yes
+Design,Understanding Buyer Requirements,Reads the brief correctly the first time and asks when it is unclear,Rating 0 to 5,The employee and their manager,Yes
+Design,System / Process Knowledge,"Knows the design repository, file naming and approval steps",Rating 0 to 5,The employee and their manager,Yes
+Design,Design Creativity & Innovation,Brings fresh ideas rather than repeating what was done last season,Rating 0 to 5,The employee and their manager,Yes
+Design,Timely Completion of Assigned Work,Designs are ready by the date promised to the coordinator,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Planning & Allocation,Work is distributed sensibly across designers against deadlines,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Review & Approval,Catches problems at review rather than after printing,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Buyer Requirement Understanding,Translates what the buyer asked for into a clear brief for the designer,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Colour & Print Coordination,Coordinates shade and print expectations between design and production,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Photoshop / Illustrator / APC Knowledge,"Can open, check and correct a file personally when needed",Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Print File Verification,"Checks repeat, width and file version before the file goes to print",Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Documentation,"Records what was approved, by whom, and when",Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Print Process Knowledge,Understands what the printing floor can and cannot do,Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Artwork Quality Check,"Spots resolution, repeat and colour problems before release",Rating 0 to 5,The employee and their manager,Yes
+Design Coordinator,Design Standard Compliance,"Follows the agreed file, naming and approval standards every time",Rating 0 to 5,The employee and their manager,Yes
+Printing,Digital Printing Machine Operation,Runs the machine confidently and handles routine settings alone,Rating 0 to 5,The employee and their manager,Yes
+Printing,RIP Software Knowledge,Sets up and troubleshoots jobs in the RIP without help,Rating 0 to 5,The employee and their manager,Yes
+Printing,Colour Matching,Output matches the approved shade across the run,Rating 0 to 5,The employee and their manager,Yes
+Printing,Print Quality Inspection,"Checks the print while running, not only at the end",Rating 0 to 5,The employee and their manager,Yes
+Printing,Print Alignment,Registration and placement are correct against the jobcard,Rating 0 to 5,The employee and their manager,Yes
+Printing,Fabric Handling,"Handles fabric without creases, marks or edge damage",Rating 0 to 5,The employee and their manager,Yes
+Printing,Ink Management,Uses ink efficiently and keeps the system clean and topped up,Rating 0 to 5,The employee and their manager,Yes
+Printing,Machine Maintenance,Does daily cleaning and preventive care without being told,Rating 0 to 5,The employee and their manager,Yes
+Printing,Defect Identification,Notices a defect early and stops rather than running through it,Rating 0 to 5,The employee and their manager,Yes
+Printing,Printing Process Knowledge,Understands the full process from file to fused fabric,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fusing Machine Operation,Runs the machine confidently and handles routine settings alone,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Temperature Setting,Sets and holds the right temperature for the substrate,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Pressure Setting,Sets and holds the right pressure for the material being run,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Interlining Knowledge,Knows which interlining suits which fabric and job,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fabric Handling,"Handles fabric without creases, marks or edge damage",Rating 0 to 5,The employee and their manager,Yes
+Fusing,Quality Inspection,Checks transfer quality from the start of a roll to the end,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Defect Identification,Notices a defect early and stops rather than running through it,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Machine Maintenance,Does daily cleaning and preventive care without being told,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Fusing Process Knowledge,Understands what affects transfer quality and why,Rating 0 to 5,The employee and their manager,Yes
+Fusing,Wastage Control,"Minimises paper, fabric and time lost during setup and running",Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Planning,Plans the day and week so machines and people are not idle,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Process Knowledge,Knows every stage from print to fusing to packing in detail,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Machine Utilisation,Keeps machines running productively and minimises idle time,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Quality Control,"Quality issues are caught inside the factory, not by the customer",Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Wastage Control,"Actively works to reduce fabric, paper, ink and power loss",Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Reporting,"Reports are accurate, on time and reflect what actually happened",Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Resource Planning,Right people and material available when the job needs them,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Production Scheduling,Sequences jobs so deliveries are met without last-minute rush,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Safety Compliance,Enforces safety rules on the floor consistently,Rating 0 to 5,The employee and their manager,Yes
+Supervisor,Process Improvement,Suggests and implements changes that make the floor work better,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Buyer Communication,"Replies clearly and quickly, and the buyer is never left guessing",Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Client Query Resolution,Resolves queries fully rather than passing them on,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Processing Accuracy,"Design, quantity, width, GSM and rate are captured correctly",Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Follow-up,Chases orders through the stages without being reminded,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,"Production, Sample and Dispatch Coordination",Keeps the three sides aligned so nothing stalls,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Fabric Knowledge,Can answer a buyer's fabric question without escalating it,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Delivery Timeline Management,Commits realistic dates and keeps them,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,Order Status Updates to Clients,"Clients hear about a delay from us, not the other way round",Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,"Documentation Accuracy (PO, PI, Invoice)",Paperwork is correct the first time,Rating 0 to 5,The employee and their manager,Yes
+Sales Coordinator,ERP / Excel Data Management,Keeps order data in the system accurate and current,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Market Visit & Coverage,Covers the assigned market regularly rather than the easy accounts,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,New Client Acquisition,"Brings in new accounts, not only servicing existing ones",Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Client Follow-up,"Follows up consistently until an outcome, either way",Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Sales Target Achievement,Achieves the target set for the period,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Order Generation,Converts visits and enquiries into confirmed orders,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Customer Relationship Management,Clients trust them and come back,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Product Presentation & Demonstration,Presents our range and capability convincingly,Rating 0 to 5,The employee and their manager,Yes
+Sales Executive,Daily Visit Report Submission,Reports are submitted daily and honestly reflect the visits made,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Flow Knowledge,Knows every stage an order passes through and who owns it,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Order Tracking,Always knows where an order stands without having to ask around,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,ERP / Google Sheet Knowledge,Works confidently in the systems used to run the process,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Documentation Accuracy,Entries and records match what actually happened,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Production Process Knowledge,Understands what the factory can do and how long it takes,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Vendor Follow-up,Chases vendors and jobworkers so they do not become the delay,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Order Status Monitoring,Notices a stuck order before someone complains about it,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Compliance,Follows the process even when a shortcut would be faster,Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Report Preparation,"Reports are accurate, on time and useful to read",Rating 0 to 5,The employee and their manager,Yes
+Process Coordinator,Process Issue Identification,"Spots where the process itself is failing, not just the job",Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,SAB ERP Knowledge,Works confidently in SAB without needing help for routine work,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Sales Order Entry,Orders entered correctly and completely the first time,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Invoice Preparation,"Invoices are accurate, complete and raised on time",Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,GST Documentation,GST details are correct and compliant,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,E-Way Bill Generation,Generated correctly and in time so dispatch is never held up,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Data Accuracy,Entries match the source documents exactly,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Report Generation,"Produces the reports asked for, correctly and on time",Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Excel Knowledge,Handles the spreadsheet work the role needs without help,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,Documentation Management,Records are filed so anyone can find them later,Rating 0 to 5,The employee and their manager,Yes
+SAB Operator,ERP Troubleshooting,Resolves routine system problems instead of escalating everything,Rating 0 to 5,The employee and their manager,Yes
+Operations,Data Entry Speed & Productivity,Gets through the expected volume of entry work,Rating 0 to 5,The employee and their manager,Yes
+Operations,Google Sheets / MS Excel Knowledge,Handles the spreadsheet work the role needs without help,Rating 0 to 5,The employee and their manager,Yes
+Operations,Attention to Detail,Errors are rare and caught before they travel downstream,Rating 0 to 5,The employee and their manager,Yes
+Operations,Record Maintenance & Organisation,"Records are complete, current and findable",Rating 0 to 5,The employee and their manager,Yes
+Operations,Work Process Compliance (SOP Following),Follows the SOP even when the day is rushed,Rating 0 to 5,The employee and their manager,Yes
+Operations,Timely Completion of Assigned Work,Work is finished by the date it was needed,Rating 0 to 5,The employee and their manager,Yes
+Operations,Documentation Accuracy,Entries match the source documents exactly,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Accuracy of Data,Numbers are right and can be relied on for a decision,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Report Preparation,Reports answer the question that was actually asked,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Data Analysis & Interpretation,"Explains what the numbers mean, not only what they are",Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Excel / Google Sheets Skills,"Works confidently with formulas, pivots and large sheets",Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Data Validation & Error Checking,Checks the data before publishing rather than after a complaint,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Timeliness of Report Submission,Reports arrive when they are needed to be useful,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Dashboard Creation & Maintenance,Dashboards stay current and are actually used,Rating 0 to 5,The employee and their manager,Yes
+Data Analyst,Documentation & Record Management,Documents how a number is built so someone else can maintain it,Rating 0 to 5,The employee and their manager,Yes
+HR,Recruitment & Hiring Efficiency,Positions are filled in reasonable time with suitable people,Rating 0 to 5,The employee and their manager,Yes
+HR,Employee Documentation Accuracy,"Records, contracts and files are complete and correct",Rating 0 to 5,The employee and their manager,Yes
+HR,"HRMS, Attendance & Leave Management Knowledge",Handles attendance and leave systems confidently,Rating 0 to 5,The employee and their manager,Yes
+HR,Policy & Process Compliance,Applies policy consistently and fairly to everyone,Rating 0 to 5,The employee and their manager,Yes
+HR,Timely Completion of Assigned Work,Work is finished by the date it was needed,Rating 0 to 5,The employee and their manager,Yes
+HR,Google Sheets / MS Excel Knowledge,Handles the spreadsheet work the role needs without help,Rating 0 to 5,The employee and their manager,Yes
+HR,Work Process Compliance (SOP Following),Follows the SOP even when the day is rushed,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Calendar Management,Diary is accurate and conflicts are caught before they happen,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Meeting Coordination,"Meetings happen with the right people, prepared, on time",Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Documentation & Drafting,Drafts are clear and need little correction,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,ERP / Google Sheet Knowledge,Works confidently in the systems the role needs,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Report Preparation,"Reports are accurate, on time and useful to read",Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Email Management,Nothing important sits unanswered or gets lost,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,MOM (Minutes of Meeting) Preparation,Minutes capture the decisions and who owns what,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Data Confidentiality,Sensitive information stays with the people entitled to it,Rating 0 to 5,The employee and their manager,Yes
+Executive Assistant,Follow-up Tracking,"Action points are tracked to closure, not just noted",Rating 0 to 5,The employee and their manager,Yes

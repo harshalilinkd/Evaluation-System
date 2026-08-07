@@ -1,0 +1,523 @@
+/* Print pack styling. DESIGN.md §7a — the one place the design system inverts. */
+
+/*
+  THIS FILE DELIBERATELY IGNORES §2's TOKENS.
+
+  Everywhere else, a raw hex in a component is a bug. Here it is the only honest
+  option: a printer has no CSS custom properties worth relying on, no dark theme,
+  and no tints that survive a monochrome laser. A page that gets signed and filed
+  is not a dashboard, so §7a inverts the system — pure white, black text, ruled
+  tables, no shadows, no rounded cards.
+
+  Black and #000 appear below as literals for that reason, and only in this file.
+*/
+
+@page {
+  size: A4 portrait;
+  margin: 18mm;
+}
+
+/*
+  PAGE NUMBERS: an honest note.
+
+  "Page {n} of {m}" needs counter(page) and counter(pages), and those only
+  resolve inside an @page margin box. Firefox and Safari support them; Chrome
+  does not, and silently prints nothing there.
+
+  So the rule is written correctly for the browsers that can honour it, and
+  Chrome users get the numbering from the browser's own print dialog, which is
+  on by default. The alternative — computing page breaks in JavaScript to place
+  a number manually — guesses at the printer's line breaking and is wrong the
+  first time somebody changes a font size.
+*/
+@page {
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 9pt;
+    color: #000;
+  }
+}
+
+.print-root {
+  color: #000;
+  background: #fff;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+}
+
+/* ---------- Screen preview ---------- */
+/*
+  On screen the same markup sits inside a paper-sheet frame on the canvas, so it
+  can be checked before anybody spends a tree on it. None of this reaches the
+  printed page.
+*/
+@media screen {
+  .print-canvas {
+    background: #eef1f7;
+    padding: 24px 12px 64px;
+    min-height: 100vh;
+  }
+
+  .print-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 18mm;
+    margin: 0 auto 24px;
+    background: #fff;
+    box-shadow: 0 4px 24px rgb(0 0 0 / 0.12);
+  }
+
+  .print-toolbar {
+    max-width: 210mm;
+    margin: 0 auto 16px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+}
+
+@media print {
+  .print-canvas {
+    background: #fff;
+    padding: 0;
+  }
+
+  .print-sheet {
+    width: auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    box-shadow: none;
+  }
+
+  /* The controls are for the person at the screen, never for the page. */
+  .print-toolbar,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Colour degrades to black. Anything that meant something in colour must also
+     be carrying a glyph, a label or a position — the components do that. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ---------- Structure ---------- */
+
+/* ---------- Letterhead ---------- */
+/*
+  A signed appraisal is a formal record, and it should look like one when it
+  comes off the printer. What makes a document read as considered on PAPER is
+  not colour — colour is the first thing a monochrome laser throws away, and
+  P15-10 keeps the tier hues off this sheet entirely. It is hierarchy: a real
+  masthead, generous air around the title, and hairlines rather than boxes.
+
+  Three columns, and the title is centred on the PAGE rather than on whatever
+  is left between the mark and the period. `flex: 1` on both flanks with equal
+  basis is what keeps it optically centred whatever width the artwork turns out
+  to be.
+*/
+.print-header {
+  display: flex;
+  align-items: center;
+  gap: 8mm;
+  padding-bottom: 4mm;
+  border-bottom: 1.5pt solid #000;
+}
+
+.print-header > .print-brand,
+.print-header > .print-period {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* The mark, with its caption beneath. Stacked, and left-aligned to the margin. */
+.print-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.6mm;
+}
+
+/*
+  Capped on BOTH axes, in millimetres.
+
+  A logo sized in pixels lands at whatever the printer's DPI decides. The width
+  cap matters as much as the height here: the LinkD mark is a wide wordmark, and
+  without it a tall-ish source file would push the title off centre.
+*/
+.print-logo {
+  height: auto;
+  width: auto;
+  max-height: 13mm;
+  max-width: 46mm;
+  object-fit: contain;
+  display: block;
+}
+
+/*
+  The caption under the mark.
+
+  `.print-wordmark` is GONE, along with the "LinkD Prints" text beside the logo
+  on all four sheets. The artwork is the company name; setting it twice competed
+  with the document title for the top of the page, and the title is what tells
+  somebody which sheet they are holding.
+*/
+.print-brand-sub {
+  display: block;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 7pt;
+  font-weight: 400;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #444;
+  white-space: nowrap;
+}
+
+/*
+  Georgia for the document title alone.
+
+  §3 gives the APP one family and no exceptions; this file is §7a's deliberate
+  inversion of the design system for paper (P15-2), and a restrained serif is
+  what makes a certificate or a signed record look official rather than like a
+  screen that was printed. It is used HERE and on section headings, and nowhere
+  else — the data stays in Helvetica, where tabular figures line up.
+*/
+.print-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17pt;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  margin: 0;
+  flex: 0 1 auto;
+}
+
+.print-title-sub {
+  display: block;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 7.5pt;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #444;
+  margin-top: 1.2mm;
+}
+
+.print-period {
+  font-size: 9pt;
+  text-align: right;
+  letter-spacing: 0.04em;
+}
+
+.print-period strong {
+  display: block;
+  font-size: 6.5pt;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #444;
+}
+
+/*
+  Every block that could straddle a page break says so. The signature block in
+  particular: a signature line orphaned onto a page of its own is the commonest
+  way a printed pack stops being signature-ready.
+*/
+.print-block,
+.print-signatures,
+.print-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-section {
+  margin-top: 6mm;
+}
+
+/*
+  Section headings carry the serif too, so the document has one voice. Small
+  caps at a wide track reads as a heading without needing to be large — which
+  matters on a sheet that has to fit a whole appraisal.
+*/
+.print-section > h2 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 0.75pt solid #000;
+  padding-bottom: 1.2mm;
+  margin: 0 0 2.5mm;
+}
+
+/* ---------- Tables ---------- */
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+/*
+  Hairlines, not a grid.
+
+  The old sheet drew a 0.5pt black box round every cell, which is what makes a
+  printed table read as a spreadsheet somebody exported. Vertical rules are kept
+  — the Remarks column has to be a visible box to write in, and the score
+  columns need separating — but they are a pale grey that a laser renders as a
+  faint line rather than a cage. The horizontal rules do the real work.
+*/
+.print-table th,
+.print-table td {
+  border: 0.4pt solid #c9c9c9;
+  border-left: none;
+  border-right: none;
+  padding: 2mm 2.4mm;
+  text-align: left;
+  vertical-align: top;
+  font-size: 9.5pt;
+}
+
+/* The columns that need a boundary get one, and only between cells. */
+.print-table th + th,
+.print-table td + td {
+  border-left: 0.4pt solid #d8d8d8;
+}
+
+.print-table th {
+  font-weight: 700;
+  font-size: 8pt;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  background: transparent;
+  border-top: none;
+  border-bottom: 1pt solid #000;
+  padding-bottom: 1.4mm;
+  white-space: nowrap;
+}
+
+/* A whisper of tone, so the eye can track a long row across seven columns.
+   Light enough to survive greyscale without muddying the text on top of it. */
+.print-table tbody tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+/*
+  A section band inside the ratings table — "Core Performance", "Job Specific
+  Skills". Solid rather than ruled, so it reads as a divider rather than as
+  another row of data.
+*/
+.print-table .print-group td {
+  background: #ececec;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 700;
+  font-size: 9pt;
+  letter-spacing: 0.05em;
+  border-top: 0.75pt solid #000;
+  border-bottom: 0.4pt solid #b0b0b0;
+  padding-top: 1.6mm;
+  padding-bottom: 1.6mm;
+}
+
+/* A long table SHOULD break across pages — but its header repeats, so page two
+   is still readable on its own. */
+.print-table thead {
+  display: table-header-group;
+}
+
+.print-table tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* §3 has one family and no mono; tabular figures are what make a column of
+   scores line up, and they survive the print boundary. */
+.print-num {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.print-total td {
+  font-weight: 700;
+  border-top: 1pt solid #000;
+}
+
+/* ---------- Metadata ---------- */
+
+.print-meta {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4mm;
+}
+
+/*
+  The identity block. Four rows of label/value pairs, and it was the heaviest
+  thing on the page — eight boxed cells competing with the title above them.
+  Now: no outer box, a hairline between rows, and the labels set as small
+  letterspaced caps so they read as captions rather than as data.
+*/
+.print-meta td {
+  border: none;
+  border-bottom: 0.4pt solid #dcdcdc;
+  padding: 1.8mm 2mm;
+  font-size: 9.5pt;
+  vertical-align: baseline;
+}
+
+.print-meta tr:last-child td {
+  border-bottom: none;
+}
+
+.print-meta td:nth-child(odd) {
+  font-size: 6.8pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+  width: 17%;
+  background: transparent;
+  padding-right: 0;
+  white-space: nowrap;
+}
+
+.print-meta td:nth-child(even) {
+  font-weight: 600;
+  width: 33%;
+  padding-left: 2.5mm;
+}
+
+/* ---------- Narrative ---------- */
+
+.print-narrative {
+  margin-top: 3mm;
+}
+
+.print-narrative h3 {
+  font-size: 10pt;
+  font-weight: 700;
+  margin: 0 0 1mm;
+}
+
+/* Never truncated, never ellipsised: a printed answer that stops mid-sentence
+   is worse than no printed answer. */
+.print-narrative p {
+  margin: 0 0 3mm;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---------- Signatures ---------- */
+
+/*
+  The signature block is what the whole sheet exists for, so it is given room
+  and its own rule above it rather than being tacked onto the last section.
+  The line spans its column instead of a fixed 40mm — three cramped stubs in a
+  row is what made this look like a form to fill in rather than a record to
+  sign.
+*/
+.print-signatures {
+  display: flex;
+  gap: 10mm;
+  margin-top: 12mm;
+  padding-top: 5mm;
+  border-top: 0.75pt solid #000;
+}
+
+.print-signature {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.print-signature .rule {
+  border-bottom: 0.5pt solid #000;
+  width: 100%;
+  height: 14mm;
+}
+
+.print-signature .who {
+  font-size: 7pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+  margin-top: 1.6mm;
+}
+
+.print-signature .name {
+  font-size: 9pt;
+  font-weight: 600;
+  margin-top: 0.4mm;
+}
+
+.print-signature .date {
+  font-size: 8pt;
+  color: #555;
+}
+
+/* ---------- Grading scale ---------- */
+/*
+  §6's wording, verbatim, on the document (P15-9). It was a run-on paragraph of
+  eight-point text under the identity block; boxed and spaced, it reads as a key
+  — which is what somebody who has never used the app needs it to be.
+*/
+.print-scale {
+  margin-top: 4mm;
+  padding: 2.2mm 3mm;
+  border: 0.4pt solid #d0d0d0;
+  border-left: 1.5pt solid #000;
+  background: #fafafa;
+  font-size: 8pt;
+  line-height: 1.5;
+}
+
+.print-scale .label {
+  font-size: 6.8pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+  margin-right: 1.5mm;
+}
+
+/* ---------- Batch ---------- */
+
+/* Each evaluation in a pack starts on a fresh sheet. */
+.print-page-break {
+  break-before: page;
+  page-break-before: always;
+}
+
+@media screen {
+  .print-page-break {
+    break-before: auto;
+    page-break-before: auto;
+  }
+}
+
+/* ---------- Landscape (the summary sheet) ---------- */
+
+.print-landscape {
+  /* Scoped to the route that asks for it; @page cannot be conditional in CSS
+     alone, so the route imports this class and the rule below applies. */
+}
+
+@page landscape {
+  size: A4 landscape;
+  margin: 14mm;
+}
+
+.print-landscape .print-sheet {
+  page: landscape;
+}
+
+@media screen {
+  .print-landscape .print-sheet {
+    width: 297mm;
+    min-height: 210mm;
+  }
+}
