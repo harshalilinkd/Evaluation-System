@@ -260,6 +260,8 @@ export function ExtendDatesDialog({
   const [dates, setDates] = React.useState({
     self_due_on: cycle.selfDueOn ?? "",
     lead_due_on: cycle.leadDueOn ?? "",
+    // Derived, not edited. Kept in the payload because the launch guard and
+    // 0003's ordering constraint both still want a value.
     md_due_on: cycle.mdDueOn ?? "",
   });
   const [pending, setPending] = React.useState(false);
@@ -277,10 +279,12 @@ export function ExtendDatesDialog({
     onDone();
   };
 
+  /* No MD row: the field was removed from the wizard too, and a deadline you
+     can extend but never set is worse than none. `md_due_on` follows the
+     lead's date on save — see the submit below. */
   const fields = [
     ["self_due_on", "Self-evaluation due", cycle.selfDueOn],
     ["lead_due_on", "Lead review due", cycle.leadDueOn],
-    ["md_due_on", "MD decision due", cycle.mdDueOn],
   ] as const;
 
   return (

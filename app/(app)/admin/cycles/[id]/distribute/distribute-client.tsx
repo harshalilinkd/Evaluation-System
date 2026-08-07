@@ -131,7 +131,8 @@ export function DistributeClient({
   }, [board.rows, search, department, statusFilter]);
 
   const selectable = visible.filter((r) => r.sendable);
-  const allSelected = selectable.length > 0 && selectable.every((r) => selected.has(r.evaluationId));
+  const someSelected = selectable.filter((r) => selected.has(r.evaluationId)).length;
+  const allSelected = selectable.length > 0 && someSelected === selectable.length;
 
   const failedRows = board.rows.filter((r) => r.lastResult?.status === "FAILED");
 
@@ -434,11 +435,26 @@ export function DistributeClient({
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10">
+                    {/* Tri-state. A binary tick reads as "nobody selected"
+                        while two of three are — on the control that decides
+                        who a message goes to, which is not a place to be
+                        vague about how many are in. */}
                     <Checkbox
-                      checked={allSelected}
-                      aria-label="Select everyone shown"
-                      onCheckedChange={(checked) =>
-                        setSelected(checked === true ? new Set(selectable.map((r) => r.evaluationId)) : new Set())
+                      checked={
+                        someSelected === 0
+                          ? false
+                          : someSelected === selectable.length
+                            ? true
+                            : "indeterminate"
+                      }
+                      disabled={selectable.length === 0}
+                      aria-label={
+                        allSelected
+                          ? `Clear all ${selectable.length} selected`
+                          : `Select all ${selectable.length} people shown`
+                      }
+                      onCheckedChange={() =>
+                        setSelected(allSelected ? new Set() : new Set(selectable.map((r) => r.evaluationId)))
                       }
                     />
                   </TableHead>

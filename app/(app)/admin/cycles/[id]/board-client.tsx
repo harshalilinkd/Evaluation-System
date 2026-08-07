@@ -373,7 +373,8 @@ export function BoardClient({
               [
                 ["Self", board.cycle.selfDueOn],
                 ["Lead", board.cycle.leadDueOn],
-                ["MD", board.cycle.mdDueOn],
+                // "MD" is gone: it now always equals the lead's date, so it was
+                // the same figure printed twice.
               ] as const
             ).map(([label, value]) => (
               <div key={label} className="flex gap-1.5">

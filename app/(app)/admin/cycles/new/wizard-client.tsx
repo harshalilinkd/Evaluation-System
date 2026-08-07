@@ -199,7 +199,9 @@ export function WizardClient({
         starts_on: d.starts_on || undefined,
         self_due_on: d.self_due_on || undefined,
         lead_due_on: d.lead_due_on || undefined,
-        md_due_on: d.md_due_on || undefined,
+        /* Derived, never typed. The cycle's last deadline is the lead's
+           review; the MD's step follows whenever HR sends it on. */
+        md_due_on: d.md_due_on || d.lead_due_on || undefined,
       };
 
       let workingId = id;
@@ -587,7 +589,18 @@ export function WizardClient({
               ["starts_on", "Cycle opens"],
               ["self_due_on", "Self-evaluation due"],
               ["lead_due_on", "Lead review due"],
-              ["md_due_on", "MD decision due"],
+              /* "MD decision due" is gone. Since 0039 the MD is optional on an
+                 evaluation cycle, so a deadline for a step that may never
+                 happen is a date HR has to invent — and the summary read "The
+                 MD gets 0 days to finalise", which is not a sentence anybody
+                 can act on.
+
+                 The COLUMN stays and is derived from the lead's date on save.
+                 It is not decoration: `mdReviewPending` puts a date in the
+                 message that tells the MD a report is waiting, the launch guard
+                 requires all four dates, and 0003 constrains
+                 md_due_on >= lead_due_on. Dropping the value would break all
+                 three; dropping the FIELD breaks none. */
             ] as const
           ).map(([field, label]) => (
             <div key={field}>

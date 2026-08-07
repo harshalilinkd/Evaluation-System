@@ -230,7 +230,7 @@ export function daysBetween(from: string, to: string): number {
  * expressed in days is the thing they actually care about.
  */
 export function describeWindows(dates: Partial<CycleDatesInput>): string[] {
-  const { starts_on, self_due_on, lead_due_on, md_due_on } = dates;
+  const { starts_on, self_due_on, lead_due_on } = dates;
   const out: string[] = [];
 
   if (starts_on && self_due_on) {
@@ -239,9 +239,10 @@ export function describeWindows(dates: Partial<CycleDatesInput>): string[] {
   if (self_due_on && lead_due_on) {
     out.push(`Leads get ${plural(daysBetween(self_due_on, lead_due_on), "day")} after that.`);
   }
-  if (lead_due_on && md_due_on) {
-    out.push(`The MD gets ${plural(daysBetween(lead_due_on, md_due_on), "day")} to finalise.`);
-  }
+  /* The MD line is gone with the field that fed it. It said "The MD gets 0
+     days to finalise" whenever the two dates matched, which is what they now
+     always do — and since 0039 the MD is an optional step on an evaluation
+     cycle, so there is no window to describe. */
   return out;
 }
 

@@ -223,12 +223,8 @@ export function CyclesClient({
         size: 116,
         cell: ({ row }) => <GridCell value={dash(row.original.leadDueOn)} className="tabular" />,
       },
-      {
-        accessorKey: "mdDueOn",
-        header: "MD due",
-        size: 116,
-        cell: ({ row }) => <GridCell value={dash(row.original.mdDueOn)} className="tabular" />,
-      },
+      /* The "MD due" column is gone — `md_due_on` is derived from the lead's
+         date now, so it was a column repeating the one beside it. */
       {
         id: "actions",
         header: "",

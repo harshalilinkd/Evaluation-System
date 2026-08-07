@@ -138,6 +138,14 @@ export function StepPeople({
     onChange({ ...state, [id]: { ...current, ...next } });
   };
 
+  /* -- How many of the rows ON SCREEN are ticked.
+        Drives the header checkbox's three states, so it reports the filtered
+        list rather than the whole roster — otherwise a search matching two
+        included people would show an empty box while both were in. -- */
+  const visibleIncluded = visible.filter(
+    (p) => (state[p.id]?.included ?? true) === true,
+  ).length;
+
   const setAllVisible = (included: boolean) => {
     const next = { ...state };
     for (const p of visible) {
@@ -245,7 +253,42 @@ export function StepPeople({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">Include</TableHead>
+              {/* -- The header checkbox.
+                    Everybody starts included, which is right for an annual
+                    cycle and exactly wrong for sending to two people — that
+                    meant unticking the whole roster by hand, one row at a time.
+                    The buttons above could already do it, but a control that
+                    clears a table belongs ON the table, at the top of the
+                    column it clears.
+
+                    Tri-state, so it also REPORTS. A bare tick cannot say "some
+                    of these are in", and on a filtered list that is the usual
+                    case — it would read as "none included" while three were.
+
+                    It acts on what is SHOWN, matching the buttons: a filter is
+                    how HR narrows to the people they mean, and a control that
+                    reached past it would clear rows they cannot see. -- */}
+              <TableHead className="w-24">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={
+                      visibleIncluded === 0
+                        ? false
+                        : visibleIncluded === visible.length
+                          ? true
+                          : "indeterminate"
+                    }
+                    disabled={visible.length === 0}
+                    onCheckedChange={() => setAllVisible(visibleIncluded !== visible.length)}
+                    aria-label={
+                      visibleIncluded === visible.length
+                        ? `Exclude all ${visible.length} people shown`
+                        : `Include all ${visible.length} people shown`
+                    }
+                  />
+                  <span>Include</span>
+                </div>
+              </TableHead>
               <TableHead className="min-w-[9rem]">Name</TableHead>
               <TableHead className="whitespace-nowrap">Department</TableHead>
               <TableHead className="whitespace-nowrap">Designation</TableHead>
