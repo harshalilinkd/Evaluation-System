@@ -48,12 +48,33 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
   const [asTable, setAsTable] = React.useState(false);
   const [sectionsAsTable, setSectionsAsTable] = React.useState(false);
 
+  /* -- NULL, never 0.
+        `?? 0` here was drawing a straight decline from 4 to 0 across a person's
+        history — a collapse in their performance that never happened. Every
+        cycle they have not been rated in became a floor value, and the chart
+        said so in a smooth confident curve while the header beside it said
+        "not rated".
+
+        §11 and P7-9 are both explicit that missing is not zero, and this is the
+        screen where getting that wrong is most expensive: it is somebody's
+        appraisal history, and 0 is the worst score there is. Recharts leaves a
+        gap for a null point, which is the honest drawing — nothing is claimed
+        about a period nobody scored. -- */
   const trend = card.history.map((h) => ({
     period: h.period_label,
-    self: h.self_overall ?? 0,
-    lead: h.lead_overall ?? 0,
-    final: h.final_overall ?? 0,
+    self: h.self_overall ?? null,
+    lead: h.lead_overall ?? null,
+    final: h.final_overall ?? null,
   }));
+
+  /* -- Which cycle the detail below is about.
+        "" is every cycle. The picker is the thing that turns this from a page
+        about a person into a page about one appraisal, which is what somebody
+        preparing for a conversation actually needs. -- */
+  const [cycleFilter, setCycleFilter] = React.useState<string>("");
+  const visibleHistory = cycleFilter
+    ? card.history.filter((h) => String(h.evaluation_id) === cycleFilter)
+    : card.history;
 
   const latest = card.history[card.history.length - 1] ?? null;
   const previous = card.history[card.history.length - 2] ?? null;
@@ -446,7 +467,35 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
           ) : null}
 
           {/* ---------- Every cycle ---------- */}
-          <DashboardCard title="Every cycle">
+          <DashboardCard
+            title="Every cycle"
+            action={
+              /* -- One cycle, or all of them.
+                    A scorecard is read for two different reasons: "how has this
+                    person done over time", which wants every row, and "what
+                    happened in THIS appraisal", which is the question somebody
+                    has five minutes before the conversation. The picker is what
+                    lets one screen answer both. Hidden with one cycle, where it
+                    would be a control with a single option. -- */
+              card.history.length > 1 ? (
+                <label className="flex items-center gap-2 text-body-sm text-ink">
+                  <span className="text-ink-muted">Show</span>
+                  <select
+                    value={cycleFilter}
+                    onChange={(e) => setCycleFilter(e.target.value)}
+                    className="min-h-9 rounded-input border border-rule bg-surface px-2 text-body-sm text-ink"
+                  >
+                    <option value="">All cycles</option>
+                    {card.history.map((h) => (
+                      <option key={h.evaluation_id} value={String(h.evaluation_id)}>
+                        {h.period_label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null
+            }
+          >
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -459,18 +508,18 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   </tr>
                 </thead>
                 <tbody>
-                  {card.history.map((h) => (
+                  {visibleHistory.map((h) => (
                     <tr key={h.evaluation_id} className="border-t border-rule">
                       <td className="py-2 text-body text-ink">{h.period_label}</td>
-                      <td className="tabular py-2 text-body">{formatScore(h.self_overall)}</td>
-                      <td className="tabular py-2 text-body">{formatScore(h.lead_overall)}</td>
-                      <td className="tabular py-2 text-body font-medium">
+                      <td className="tabular py-2 text-body text-ink">{formatScore(h.self_overall)}</td>
+                      <td className="tabular py-2 text-body text-ink">{formatScore(h.lead_overall)}</td>
+                      <td className="tabular py-2 text-body font-medium text-ink">
                         {formatScore(h.final_overall)}
                       </td>
-                      <td className="py-2 text-body text-ink-muted">
+                      <td className="py-2 text-body text-ink">
                         {card.redacted ? "Not disclosed" : (h.promotion_recommendation ?? "—")}
                       </td>
-                      <td className="tabular py-2 text-body text-ink-muted">
+                      <td className="tabular py-2 text-body text-ink">
                         {card.redacted ? "—" : (h.increment_pct ?? "—")}
                       </td>
                     </tr>

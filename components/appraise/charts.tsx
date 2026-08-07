@@ -173,7 +173,13 @@ export function TrendAreaChart({
   height = 240,
   className,
 }: {
-  data: Array<Record<string, string | number>>;
+  /* -- `null` is permitted, and is the point.
+        A period nobody was rated in must be a GAP in the line, not a zero.
+        Zero is the worst score on a 0-5 scale, so plotting it as one invents a
+        collapse (§11, P7-9). Recharts skips a null point; the type has to allow
+        it or callers reach for `?? 0` to satisfy the compiler, which is exactly
+        the bug. -- */
+  data: Array<Record<string, string | number | null>>;
   xKey: string;
   series: Array<{ key: string; label: string; color: ChartColor }>;
   height?: number;
@@ -212,6 +218,9 @@ export function TrendAreaChart({
               type="monotone"
               dataKey={s.key}
               name={s.label}
+              // Never bridge a gap. Joining across an unrated period draws a
+              // trend through data that does not exist.
+              connectNulls={false}
               stroke={CHART_COLORS[s.color]}
               strokeWidth={2}
               fill={`url(#fill-${s.key})`}
