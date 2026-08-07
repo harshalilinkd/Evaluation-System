@@ -13,7 +13,8 @@
 import Link from "next/link";
 import { ArrowRight, ClipboardList, FileText, Flag, Users } from "lucide-react";
 
-import { LabelledBarChart, RankedBarChart, StatusDonutChart } from "@/components/appraise/charts";
+import { LabelledBarChart, RankedBarChart, StatusDonutChart, ratingBandColor, ratingBandIndex } from "@/components/appraise/charts";
+import { ChartFigure } from "@/components/appraise/chart-figure";
 import { EmptyState } from "@/components/appraise/states";
 import { HeroCard, StatTile } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
@@ -212,15 +213,49 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           {distribution.length === 0 ? (
             <EmptyState title="Nothing rated yet" body="Bands appear once ratings come in." />
           ) : (
+            <ChartFigure
+              caption="Scored answers by band"
+              rows={[...distribution].sort(
+                (a, b) =>
+                  ratingBandIndex(String(a.bucket ?? "")) - ratingBandIndex(String(b.bucket ?? "")),
+              )}
+              columns={[
+                { header: "Band", cell: (b) => String(b.bucket ?? "—") },
+                { header: "People", cell: (b) => String(b.people ?? 0), align: "right" },
+              ]}
+            >
             <StatusDonutChart
-              data={distribution.map((b, i) => ({
-                name: String(b.bucket ?? ""),
-                value: Number(b.people ?? 0),
-                fill: ["rgb(var(--critical))", "rgb(var(--warning))", "rgb(var(--primary))", "rgb(var(--final))"][
-                  i % 4
-                ]!,
-              }))}
+              /*
+                The bands are ORDINAL — 0-1 through 4-5 is one scale, not five
+                kinds of thing — so they take the single-hue ramp, light to
+                dark, exactly as `ordinalStep` was built for.
+
+                What was here before did three wrong things at once. It cycled
+                `i % 4` over FIVE bands, so two shared a colour. It coloured by
+                the row's position in a `group by` result, which has no
+                guaranteed order — a band emptying would have repainted every
+                other one. And it reached for `--critical`, `--warning` and
+                `--final`: two reserved status colours and, worse, a TIER
+                colour. §13.1 keeps indigo meaning "the MD said this" and
+                nothing else, and UI2-12 keeps the tiers out of chart series
+                altogether.
+
+                Sorted and mapped BY BAND, so a colour always means the same
+                score whatever the query returns.
+              */
+              data={[...distribution]
+                .sort(
+                  (a, b) =>
+                    ratingBandIndex(String(a.bucket ?? "")) -
+                    ratingBandIndex(String(b.bucket ?? "")),
+                )
+                .map((b) => ({
+                  name: String(b.bucket ?? ""),
+                  value: Number(b.people ?? 0),
+                  fill: ratingBandColor(String(b.bucket ?? "")),
+                }))}
             />
+            </ChartFigure>
           )}
         </Panel>
 
@@ -231,6 +266,14 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           {departments.length === 0 ? (
             <EmptyState title="No department has a score yet" body="Averages appear as leads submit." />
           ) : (
+            <ChartFigure
+              caption="Lead averages by department"
+              rows={departments}
+              columns={[
+                { header: "Department", cell: (d) => String(d.department_name ?? "—") },
+                { header: "Lead average", cell: (d) => score(d.avg_lead), align: "right" },
+              ]}
+            >
             <LabelledBarChart
               data={departments.map((d) => ({
                 label: String(d.department_name ?? "—"),
@@ -240,6 +283,7 @@ function AdminView({ analytics }: { analytics: Analytics }) {
               valueKey="value"
               color="pink"
             />
+            </ChartFigure>
           )}
         </Panel>
       </section>
@@ -252,15 +296,41 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           {variance.length === 0 ? (
             <EmptyState title="No leads have submitted yet" body="This fills in as reviews arrive." />
           ) : (
+            <ChartFigure
+              caption="How each lead rates, against their team's own scores"
+              rows={[...variance].sort(
+                (a, b) => Number(b.mean_delta ?? 0) - Number(a.mean_delta ?? 0),
+              )}
+              columns={[
+                { header: "Lead", cell: (v) => String(v.lead_name ?? "—") },
+                {
+                  header: "Mean difference",
+                  cell: (v) => {
+                    const d = Number(v.mean_delta ?? 0);
+                    // Signed in the table too: "0.40" and "-0.40" are opposite
+                    // findings and must not read the same at a glance.
+                    return `${d > 0 ? "+" : ""}${d.toFixed(2)}`;
+                  },
+                  align: "right",
+                },
+              ]}
+            >
             <RankedBarChart
-              data={variance.map((v) => ({
-                label: String(v.lead_name ?? "—"),
-                value: Number(v.mean_delta ?? 0),
-              }))}
+              /* Signed data: above the line the lead rated higher than the
+                 employee did, below it lower. Sorted so the two poles sit at
+                 the ends and the leads who agree with their team collapse
+                 toward the middle — which is the shape HR is looking for. */
+              data={[...variance]
+                .sort((a, b) => Number(b.mean_delta ?? 0) - Number(a.mean_delta ?? 0))
+                .map((v) => ({
+                  label: String(v.lead_name ?? "—"),
+                  value: Number(v.mean_delta ?? 0),
+                }))}
               labelKey="label"
               valueKey="value"
-              color="primary"
+              diverging
             />
+            </ChartFigure>
           )}
         </Panel>
 

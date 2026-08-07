@@ -16,6 +16,7 @@ import {
   PolarAngleAxis,
   RadialBar,
   RadialBarChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -65,6 +66,26 @@ export const ORDINAL_STEPS = [
   "rgb(var(--chart-step-4))",
   "rgb(var(--chart-step-5))",
 ] as const;
+
+/**
+ * The five score bands `v_rating_distribution` groups by, in score order.
+ *
+ * Here rather than in the dashboard because the ORDER is the thing that makes
+ * the ordinal ramp meaningful: a band's colour must come from its position on
+ * this list, never from where it happened to land in a query result.
+ */
+export const RATING_BANDS: readonly string[] = ["0-1", "1-2", "2-3", "3-4", "4-5"];
+
+/** Where a band sits on the scale. Unknown sorts last rather than colliding with 0-1. */
+export function ratingBandIndex(bucket: string): number {
+  const i = RATING_BANDS.indexOf(bucket);
+  return i === -1 ? RATING_BANDS.length : i;
+}
+
+/** A band's colour, from its position on the scale — never from a row number. */
+export function ratingBandColor(bucket: string): string {
+  return ordinalStep(ratingBandIndex(bucket));
+}
 
 export function ordinalStep(index: number): string {
   return ORDINAL_STEPS[Math.min(Math.max(index, 0), ORDINAL_STEPS.length - 1)] ?? ORDINAL_STEPS[0];
@@ -479,6 +500,7 @@ export function RankedBarChart({
   labelKey,
   valueKey,
   color = "primary",
+  diverging = false,
   height = 260,
   className,
 }: {
@@ -486,6 +508,18 @@ export function RankedBarChart({
   labelKey: string;
   valueKey: string;
   color?: ChartColor;
+  /**
+   * The values are signed and the SIGN is the point.
+   *
+   * A single hue across a set that runs from -2 to +2 throws away the one
+   * thing the reader is looking for. Diverging is two poles and a neutral
+   * middle: indigo above the line, amber below, and a zero rule they are
+   * measured against. The pair is deliberately non-moral — a lead who rates
+   * above their team is not "good" and one below is not "bad" (§11 makes the
+   * gap a reporting figure, not a verdict), so green/red is exactly the wrong
+   * choice here however natural it looks.
+   */
+  diverging?: boolean;
   height?: number;
   className?: string;
 }) {
@@ -508,6 +542,11 @@ export function RankedBarChart({
             {...AXIS}
           />
           <ChartTooltip />
+          {/* The neutral midpoint. Without it a diverging bar chart is just
+              bars of two colours; the rule is what they are diverging FROM. */}
+          {diverging ? (
+            <ReferenceLine x={0} stroke="rgb(var(--ink-faint))" strokeWidth={1} />
+          ) : null}
           <Bar
             dataKey={valueKey}
             fill={CHART_COLORS[color]}
@@ -516,6 +555,18 @@ export function RankedBarChart({
             activeBar={{ fillOpacity: 0.82 }}
             isAnimationActive={!reduced}
           >
+            {/* Colour follows the VALUE's sign, never the row's position — a
+                hue that tracked rank would repaint itself the moment the sort
+                or the filter changed, and a reader who learned "amber means
+                rates lower" would be misled. */}
+            {diverging
+              ? data.map((row, i) => (
+                  <Cell
+                    key={i}
+                    fill={Number(row[valueKey] ?? 0) < 0 ? CHART_COLORS.amber : CHART_COLORS.primary}
+                  />
+                ))
+              : null}
             {/* The validator flags the series hues below 3:1 on a white surface,
                 which obligates a relief channel rather than a different colour.
                 A direct value at each bar end is that relief — and it is also

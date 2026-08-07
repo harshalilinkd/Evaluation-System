@@ -3873,3 +3873,48 @@ leaks a key shape.
 
 **Nothing in the sending code needed to change.** The two settings do — see the
 banners now shown on `/admin/cycles/[id]/distribute`.
+
+---
+
+### P29 — The dashboard's encodings, corrected
+
+Asked for a more advanced and informative dashboard. The layout was already
+sound; what was wrong was underneath it — **two of the three charts encoded
+their data incorrectly**, and one of them broke §13.1.
+
+The palette was validated with a script rather than judged by eye. Findings,
+both pre-existing:
+
+| Check | Result |
+|---|---|
+| light, 4 series on white | **FAIL** — green ↔ cyan ΔE 12.5, below the 15 floor: hard to tell apart even with full colour vision. **`CHART_COLORS.green` turns out to be used by nothing**, so the pair never actually co-occurs. |
+| light, contrast vs surface | **WARN** — three series below 3:1. Not dismissable: it obligates visible labels or a table view. |
+| dark, 4 series on #1B2C38 | **FAIL** — dark-mode green (L 0.773) and amber (L 0.837) sit above the 0.77 band. Separation and contrast both pass. |
+| indigo ↔ amber as a diverging pair | **PASS** in light, ΔE 46 normal / 40 protan. |
+
+| # | Decision | Why |
+|---|---|---|
+| P29-1 | **The rating-band donut was cycling tier and status colours** | It ran `i % 4` over FIVE bands — so two shared a hue — using `--critical`, `--warning`, `--primary` and `--final`. Two of those are reserved status colours, and `--final` is a TIER: §13.1 keeps indigo meaning "the MD said this" and UI2-12 keeps tiers out of chart series entirely. It also coloured by position in a `group by` result, which has no guaranteed order, so a band emptying would have repainted every other one. |
+| P29-2 | Bands take the **single-hue ordinal ramp** | 0-1 → 4-5 is one scale, not five kinds of thing. `ORDINAL_STEPS` already existed for exactly this and had never been used here. Five bands, five steps. |
+| P29-3 | The mapping is **by band, never by index** | `ratingBandColor()` resolves the colour from the band's own value, so a colour always means the same score whatever the query returns, and an unrecognised band sorts last rather than colliding with 0-1. |
+| P29-4 | Lead variance is **diverging**, with a zero rule | It is signed data — above the line the lead rated higher than the employee, below it lower — drawn in one flat hue, which threw away the only thing the reader wants. Two poles, a neutral midpoint, and sorted so the extremes sit at the ends and the leads who agree collapse toward the middle. |
+| P29-5 | The poles are indigo and amber, deliberately **not green and red** | §11 makes the gap a reporting figure, not a verdict, and P16-5 says a lead at +2 is not "good". Green/red is the natural reach and the wrong one — it would tell HR somebody had done well by rating their team highly. |
+| P29-6 | Every chart gained a **table view** | The contrast WARN is an obligation, not advice: marks below 3:1 must carry relief. Direct labels cover the bars; a donut cannot label every slice, so it needs the numbers as text. It is also P16's outstanding "view as table on every chart", which only the scorecard trend ever got. A real toggle with `aria-pressed`, not a hover affordance — §13.8, and there is no hover on a phone. |
+| P29-7 | The variance table keeps the **sign** | "0.40" and "-0.40" are opposite findings and must not read alike. |
+
+**Verification — 22 checks, 0 failed.** No tier or status token is used as a
+series fill; nothing is modulo-cycled; the band's colour comes from the band;
+the ramp is one hue in five steps; the diverging chart has its zero line and
+picks its pole from the value's sign; all three charts have a table view with an
+announced caption and tabular right-aligned numbers; tooltips and reduced-motion
+survive.
+
+**One of my own checks hit the comment trap again** — it matched `i % 4` inside
+the comment explaining that `i % 4` had been removed. Eighth occurrence in this
+log. The suite strips comments before every absence check.
+
+**Not changed, and worth stating.** The light-mode green↔cyan failure is real
+but currently theoretical, because no chart uses green. The dark-mode lightness
+failures are in the tokens themselves (§2), and re-stepping those is a design
+system change rather than a dashboard one — recorded here so the next person
+does not have to re-derive it.
