@@ -203,7 +203,21 @@ const KPI_TONE: Record<KpiTone, string> = {
 /** Three (or four) tinted counts, directly under the header. */
 export function KpiRow({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid shrink-0 gap-3 border-b border-rule px-4 py-3 sm:grid-cols-2 lg:grid-cols-3 lg:px-6">
+    /* -- Side by side on a phone, not stacked. --
+          One column below `sm` meant three or four full-width cards, each with
+          a label, a big numeral and a caption, filled the entire screen before
+          a single row of the list underneath — on the queue somebody opened in
+          order to work through it. A count is a small thing and does not need
+          a full-width card to be read.
+
+          `auto-fit` rather than a fixed column count, so three tiles become
+          three columns and four become two-by-two, without each caller
+          choosing. 9rem is the narrowest a two-digit number and its label stay
+          comfortable at 375px. -- */
+    <div
+      className="grid shrink-0 gap-2 border-b border-rule px-4 py-3 sm:gap-3 lg:px-6"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))" }}
+    >
       {children}
     </div>
   );
@@ -221,11 +235,17 @@ export function KpiCard({
   tone?: KpiTone;
 }) {
   return (
-    <div className={cn("rounded-card px-4 py-2.5", KPI_TONE[tone])}>
+    <div className={cn("rounded-card px-3 py-2 sm:px-4 sm:py-2.5", KPI_TONE[tone])}>
       <p className="type-label font-semibold text-ink-muted">{label}</p>
       <p className="tabular text-display-md leading-tight text-ink">{value}</p>
+      {/* -- The caption is the first thing to go on a narrow screen.
+            It explains a number that is already labelled, so it is the least
+            load-bearing line in the tile and the one that costs three tiles
+            their extra height. Still read by anybody on a laptop. -- */}
       {caption ? (
-        <p className="font-sans text-body-sm leading-tight text-ink-muted">{caption}</p>
+        <p className="hidden font-sans text-body-sm leading-tight text-ink-muted sm:block">
+          {caption}
+        </p>
       ) : null}
     </div>
   );

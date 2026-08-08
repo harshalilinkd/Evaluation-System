@@ -104,7 +104,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
       </KpiRow>
 
       <ScreenToolbar>
-        <div className="relative w-full sm:w-[300px]">
+        <div className="relative min-w-0 flex-1 sm:w-[300px] sm:flex-none">
           <Search
             aria-hidden
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
@@ -119,7 +119,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
         </div>
 
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger aria-label="Filter by status" className="min-h-11 w-[200px] border-rule bg-surface">
+          <SelectTrigger aria-label="Filter by status" className="min-h-11 w-auto min-w-[8rem] shrink-0 border-rule bg-surface sm:w-[200px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

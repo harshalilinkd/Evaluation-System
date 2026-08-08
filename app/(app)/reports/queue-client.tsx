@@ -322,7 +322,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
 
       {/* ---------- Filters ---------- */}
       <ScreenToolbar>
-        <div className="relative w-full sm:w-[260px]">
+        <div className="relative min-w-0 flex-1 sm:w-[260px] sm:flex-none">
           <Search
             aria-hidden
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"

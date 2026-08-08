@@ -230,7 +230,7 @@ export function IncrementsClient({
 
       {/* ---------- Toolbar ---------- */}
       <ScreenToolbar>
-        <div className="relative w-full sm:w-[300px]">
+        <div className="relative min-w-0 flex-1 sm:w-[300px] sm:flex-none">
           <Search
             aria-hidden
             className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
