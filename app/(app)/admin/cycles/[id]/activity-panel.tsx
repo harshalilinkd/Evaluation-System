@@ -113,7 +113,29 @@ export function ActivityPanel({ entries }: { entries: ActivityEntry[] }) {
                           piece was true and the line was not readable: the name
                           appeared twice, and the statuses were enum values,
                           which §13.5 keeps off every user-facing surface. */}
-                      <p className="font-sans text-body text-ink">{entry.sentence}</p>
+                      <p className="font-sans text-body text-ink">
+                        {entry.sentence}
+                        {/* -- A run of identical events, folded. --
+                              Setting a cycle up autosaves, and each save that
+                              genuinely changed something is a real audit row
+                              that can never be deleted (§12: no DELETE policy
+                              exists for anyone). Twelve lines saying the same
+                              thing is not a history — it buries the launches
+                              and submissions somebody opened this panel to
+                              find. One line, with how many times and over what
+                              span, says everything the twelve said.
+
+                              The rows are all still in `audit_log`. This is
+                              what is SHOWN. -- */}
+                        {entry.repeated > 1 ? (
+                          <span className="ml-2 whitespace-nowrap rounded-pill bg-surface-mute px-2 py-0.5 text-body-sm text-ink-muted">
+                            ×{entry.repeated}
+                            {entry.firstAt !== entry.at
+                              ? ` · ${formatTime(entry.firstAt)}–${formatTime(entry.at)}`
+                              : null}
+                          </span>
+                        ) : null}
+                      </p>
 
                       {/* §8 requires a reason on every return, and it is shown
                           WORD FOR WORD — the whole point of recording one is

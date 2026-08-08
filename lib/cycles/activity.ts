@@ -7,6 +7,18 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ActivityEntry = {
   id: string;
+  /**
+   * How many consecutive identical events this row stands for. 1 normally.
+   *
+   * A cycle is autosaved while it is being set up, and each save that genuinely
+   * changed something is a real audit row (§12) that can never be deleted —
+   * `audit_log` has no DELETE policy for anyone, deliberately. So the repetition
+   * is collapsed HERE, where it is a display concern, rather than by not
+   * recording history.
+   */
+  repeated: number;
+  /** When the run of identical events STARTED. Equal to `at` when repeated is 1. */
+  firstAt: string;
   /** ISO. §0.10 formatting happens on the screen, not here. */
   at: string;
   /** The raw `audit_log.action`, kept so a screen can group or test on it. */
@@ -265,7 +277,7 @@ export async function getCycleActivity(
 
   return {
     ok: true,
-    data: rows.map((row) => {
+    data: collapseRuns(rows.map((row) => {
       /* -- A null actor is the SYSTEM, not a gap.
             §8 raises OPEN → PENDING_HR_REVIEW with no actor on purpose (F11-4):
             naming the employee who happened to submit second would attribute a
@@ -283,6 +295,8 @@ export async function getCycleActivity(
       return {
         id: row.id,
         at: row.created_at,
+        firstAt: row.created_at,
+        repeated: 1,
         action: row.action,
         sentence: sentenceFor(
           row.action,
@@ -291,6 +305,44 @@ export async function getCycleActivity(
         ),
         reason: row.reason,
       };
-    }),
+    })),
   };
+}
+
+/**
+ * Fold a run of identical events into one row.
+ *
+ * Twelve lines of "changed the period and the gap threshold" is not a history —
+ * it is the same fact twelve times, and it buries the four events somebody
+ * actually opened this panel to find. One line saying it happened twelve times,
+ * between 10:18 and 10:22, says everything the twelve said and leaves the
+ * launches and submissions visible.
+ *
+ * CONSECUTIVE only. Two runs of the same edit either side of a launch stay two
+ * rows, because what happened in between is the thing that makes them different
+ * events rather than one.
+ *
+ * Nothing is discarded: every row is still in `audit_log`, which no policy
+ * permits anybody to delete (§12). This changes what is SHOWN.
+ */
+function collapseRuns(entries: ActivityEntry[]): ActivityEntry[] {
+  const out: ActivityEntry[] = [];
+
+  for (const entry of entries) {
+    const previous = out[out.length - 1];
+
+    // Keyed on the rendered sentence, not the action: two edits that changed
+    // different fields now read differently (P32 named the fields), and folding
+    // them together would claim they were the same change.
+    if (previous && previous.sentence === entry.sentence && previous.reason === entry.reason) {
+      // Rows arrive newest first, so the one arriving is the EARLIER of the two.
+      previous.repeated += 1;
+      previous.firstAt = entry.at;
+      continue;
+    }
+
+    out.push({ ...entry });
+  }
+
+  return out;
 }

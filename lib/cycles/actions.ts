@@ -165,10 +165,20 @@ export async function updateCycle(
 
   const { data: cycle, error: readError } = await supabase
     .from("evaluation_cycles")
-    // The four below are read so an autosave that omits them keeps what is
-    // stored rather than resetting it to the schema default.
+    /* -- EVERY column the patch can carry has to be read back, or the
+          no-op check below cannot see it.
+          `period_label`, `variance_threshold` and `disclosure` were missing,
+          so `current[key]` was undefined for all three, every comparison
+          against them was "changed", and every autosave wrote an audit row
+          naming exactly those three — which is precisely the repetition this
+          check was added to stop. A diff is only as truthful as the row it
+          diffs against.
+
+          The four at the end are read for a second reason: an autosave that
+          omits them keeps what is stored rather than resetting it to the
+          schema default. -- */
     .select(
-      "id, name, status, starts_on, self_due_on, lead_due_on, md_due_on, cycle_type, cycle_kind, default_self_days, default_lead_days",
+      "id, name, status, period_label, variance_threshold, disclosure, starts_on, self_due_on, lead_due_on, md_due_on, cycle_type, cycle_kind, default_self_days, default_lead_days",
     )
     .eq("id", cycleId)
     .maybeSingle();
