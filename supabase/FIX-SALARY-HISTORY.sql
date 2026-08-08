@@ -49,7 +49,7 @@ with ordered as (
     -- A JOINING salary has nothing before it, whatever the dates say.
     -- Otherwise: the most recent row that took effect STRICTLY earlier.
     case when h.reason = 'JOINING' then null else lag(h.new_ctc) over (
-      partition by h.profile_id order by h.effective_from, h.created_at
+      partition by h.profile_id order by h.effective_from, h.recorded_at
     ) end as correct_previous
   from public.salary_history h
   join public.profiles p on p.id = h.profile_id
@@ -92,7 +92,7 @@ begin;
     select
       h.id,
       case when h.reason = 'JOINING' then null else lag(h.new_ctc) over (
-        partition by h.profile_id order by h.effective_from, h.created_at
+        partition by h.profile_id order by h.effective_from, h.recorded_at
       ) end as correct_previous,
       h.new_ctc
     from public.salary_history h
