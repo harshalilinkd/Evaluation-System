@@ -39,7 +39,7 @@ export function SectionCard({
           {/* The "document section" device: label token above a hairline (§3). */}
           <h2 className="type-label text-ink-muted">{title}</h2>
           {description ? (
-            <p className="font-sans text-body-sm text-ink-faint">{description}</p>
+            <p className="font-sans text-body-sm text-ink-muted">{description}</p>
           ) : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}

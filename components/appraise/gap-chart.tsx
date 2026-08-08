@@ -134,7 +134,7 @@ export function GapChart({
                   has nowhere to go on a phone. */}
               <p
                 className={cn(
-                  "font-sans text-body-sm text-ink-faint transition-opacity motion-reduce:transition-none",
+                  "font-sans text-body-sm text-ink-muted transition-opacity motion-reduce:transition-none",
                   active ? "opacity-100" : "opacity-0",
                 )}
               >
@@ -147,7 +147,7 @@ export function GapChart({
       </ul>
 
       {/* The scale, once, at the foot — rather than a tick under every row. */}
-      <div className="flex justify-between border-t border-rule pt-2 font-sans text-body-sm text-ink-faint">
+      <div className="flex justify-between border-t border-rule pt-2 font-sans text-body-sm text-ink-muted">
         <span>0</span>
         <span>Out of {MAX}</span>
         <span>{MAX}</span>

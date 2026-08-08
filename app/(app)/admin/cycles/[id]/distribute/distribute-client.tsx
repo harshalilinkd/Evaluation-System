@@ -65,7 +65,7 @@ import { formatDateTime } from "@/lib/utils/date";
 
 /** DESIGN.md §5.3 pills. Tier tints carry tier meaning — cyan is the employee. */
 const LINK_STATUS: Record<LinkStatus, { label: string; classes: string }> = {
-  NOT_SENT: { label: "Not sent", classes: "bg-surface-mute text-ink-faint" },
+  NOT_SENT: { label: "Not sent", classes: "bg-surface-mute text-ink-muted" },
   // Lead tint for "we have acted"; the employee has not yet.
   SENT: { label: "Sent", classes: "bg-lead-tint text-lead" },
   // Self tint: the employee has done something — they opened it.
@@ -258,7 +258,7 @@ export function DistributeClient({
           <div className="relative min-w-0 flex-1 sm:w-[260px] sm:flex-none">
             <Search
               aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
             />
             <Input
               id="dist-search"
@@ -571,7 +571,7 @@ export function DistributeClient({
                       ) : row.lastResult?.status === "SENT" ? (
                         <span className="text-body-sm text-ink-muted">Accepted by provider</span>
                       ) : (
-                        <span className="text-body-sm text-ink-faint">—</span>
+                        <span className="text-body-sm text-ink-muted">—</span>
                       )}
                     </TableCell>
 
@@ -598,7 +598,7 @@ export function DistributeClient({
           </div>
 
           {visible.length === 0 ? (
-            <p className="py-10 text-center text-body-sm text-ink-faint">
+            <p className="py-10 text-center text-body-sm text-ink-muted">
               {statusFilter === "NO_CONTACT"
                 ? "Everybody has a phone number or an email address."
                 : "Nobody matches that filter."}

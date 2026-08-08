@@ -45,7 +45,7 @@ const STATUS: Record<
   DRAFT: {
     internal: "Draft",
     employee: "In progress",
-    classes: "bg-surface-mute border-rule text-ink-faint",
+    classes: "bg-surface-mute border-rule text-ink-muted",
   },
   // accent
   CYCLE_ACTIVE: {

@@ -133,7 +133,7 @@ export function SectionsDialog({
               )}
             >
               <div className="flex items-start gap-3">
-                <span className="tabular mt-1.5 w-5 shrink-0 text-body-sm text-ink-faint">
+                <span className="tabular mt-1.5 w-5 shrink-0 text-body-sm text-ink-muted">
                   {index + 1}
                 </span>
 
@@ -176,7 +176,7 @@ export function SectionsDialog({
                       >
                         {row.label}
                       </p>
-                      <p className="type-label mt-0.5 text-ink-faint">
+                      <p className="type-label mt-0.5 text-ink-muted">
                         {row.questionCount}{" "}
                         {row.questionCount === 1 ? "question" : "questions"}
                         {row.isActive ? "" : " · parked"}
@@ -226,7 +226,7 @@ export function SectionsDialog({
                         type="submit"
                         variant="ghost"
                         size="icon"
-                        className="size-8 text-ink-faint"
+                        className="size-8 text-ink-muted"
                         aria-label={row.isActive ? `Park ${row.label}` : `Restore ${row.label}`}
                         title={row.isActive ? "Take off the form" : "Put back on the form"}
                       >

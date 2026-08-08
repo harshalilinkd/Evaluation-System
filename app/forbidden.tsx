@@ -21,7 +21,7 @@ export default function Forbidden() {
       <p className="font-sans text-body text-ink-muted">
         This document is available to HR and the Managing Director only.
       </p>
-      <p className="font-sans text-body-sm text-ink-faint">
+      <p className="font-sans text-body-sm text-ink-muted">
         If you believe you should be able to open it, ask HR.
       </p>
       <Link

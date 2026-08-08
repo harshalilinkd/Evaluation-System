@@ -122,8 +122,8 @@ export function RatingScale({
     <div className="space-y-2">
       {/* §6.1: anchors sit OUTSIDE the group, in ink-faint, label token. */}
       <div className="flex items-end justify-between gap-4">
-        <span className="type-label text-ink-faint">{SCALE_ANCHORS.low}</span>
-        <span className="type-label text-ink-faint">{SCALE_ANCHORS.high}</span>
+        <span className="type-label text-ink-muted">{SCALE_ANCHORS.low}</span>
+        <span className="type-label text-ink-muted">{SCALE_ANCHORS.high}</span>
       </div>
 
       <div
@@ -202,7 +202,7 @@ export function RatingScale({
                   // cell narrower than the word, it wraps inside the border
                   // rather than spilling over it.
                   "w-full break-words text-center font-sans text-[11px] leading-tight",
-                  isSelected ? tierClasses.numeral : "text-ink-faint",
+                  isSelected ? tierClasses.numeral : "text-ink-muted",
                 )}
               >
                 {option.word}
@@ -229,14 +229,27 @@ export function RatingScale({
         {shown ? shown.full : "Not yet rated"}
       </p>
 
-      {/* Mobile: no hover exists, so the whole legend stays visible (§6.1). */}
-      <dl className={cn("space-y-0.5", compact ? "block" : "sm:hidden")}>
+      {/* -- The legend is now shown ONCE per form, not once per question.
+            P7-5 made it permanent on mobile because there is no hover there and
+            the wording would otherwise be unreachable. That was right about the
+            wording and wrong about the placement: six lines under each of 33
+            questions is 198 lines of the same six sentences, and it pushed the
+            actual questions most of a screen apart.
+
+            §6's wording is not lost — `ScaleLegend` prints it verbatim at the
+            top of the form, and every cell still carries its own number and
+            short label. What is gone is the repetition.
+
+            `compact` still shows it inline: the builder preview renders one
+            question in a narrow pane with no form around it to carry a
+            legend. -- */}
+      <dl className={cn("space-y-0.5", compact ? "block" : "hidden")}>
         {SCALE_0_5_LABELS.map((option) => (
           <div key={option.value} className="flex gap-2">
             <dt
               className={cn(
                 "tabular text-body-sm",
-                value === option.value ? tierClasses.numeral : "text-ink-faint",
+                value === option.value ? tierClasses.numeral : "text-ink-muted",
               )}
             >
               {option.value}
@@ -244,7 +257,7 @@ export function RatingScale({
             <dd
               className={cn(
                 "font-sans text-body-sm",
-                value === option.value ? "text-ink" : "text-ink-faint",
+                value === option.value ? "text-ink" : "text-ink-muted",
               )}
             >
               {option.full}
@@ -260,10 +273,45 @@ export function RatingScale({
       ) : null}
 
       {showGhost && ghostValue !== null && value === null ? (
-        <p className="font-sans text-body-sm text-ink-faint">
+        <p className="font-sans text-body-sm text-ink-muted">
           Showing the lead&rsquo;s rating of {ghostValue}. Choose a value to override it.
         </p>
       ) : null}
     </div>
+  );
+}
+
+
+/* ---------- The scale, explained once ---------- */
+
+/**
+ * §6's six labels, printed once at the top of a form rather than under every
+ * question.
+ *
+ * The wording is taken from `SCALE_0_5_LABELS`, never retyped — §6 says "fixed
+ * wording, do not paraphrase", and P7-4 asserts that constant against the
+ * constitution itself so the two cannot drift.
+ *
+ * A `<details>` so it collapses on a phone and can still be opened by anybody
+ * who wants it. Native, so it is keyboard reachable and needs no state — and
+ * `open` on `sm` and up would need JavaScript, which is not worth it for a
+ * block a laptop has room for anyway.
+ */
+export function ScaleLegend({ className }: { className?: string }) {
+  return (
+    <details className={cn("card-surface px-4 py-3", className)}>
+      <summary className="cursor-pointer list-none text-body-sm font-medium text-ink marker:hidden">
+        What the numbers mean
+        <span className="ml-2 text-body-sm font-normal text-ink-muted">0 to 5</span>
+      </summary>
+      <dl className="mt-3 grid gap-x-4 gap-y-1 sm:grid-cols-2">
+        {SCALE_0_5_LABELS.map((option) => (
+          <div key={option.value} className="flex gap-2">
+            <dt className="tabular w-3 shrink-0 text-body-sm text-ink-muted">{option.value}</dt>
+            <dd className="text-body-sm text-ink-muted">{option.full}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }

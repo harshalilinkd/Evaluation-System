@@ -126,7 +126,7 @@ export function LaunchDialog({
                   <span aria-hidden className="size-4 rounded-pill border border-rule" />
                 )}
                 <span
-                  className={index <= stage ? "text-body text-ink" : "text-body text-ink-faint"}
+                  className={index <= stage ? "text-body text-ink" : "text-body text-ink-muted"}
                 >
                   {label}
                 </span>

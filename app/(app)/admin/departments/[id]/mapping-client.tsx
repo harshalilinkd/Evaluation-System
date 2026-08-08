@@ -160,7 +160,7 @@ export function MappingClient({
             />
 
             {filtered.length === 0 ? (
-              <p className="py-6 text-center text-body-sm text-ink-faint">
+              <p className="py-6 text-center text-body-sm text-ink-muted">
                 {available.length === 0
                   ? "Every question in the bank is already asked of this team."
                   : "Nothing matches that search."}
@@ -178,11 +178,11 @@ export function MappingClient({
                           question already trusted by three teams is a safer
                           choice than a brand new one. */}
                       {q.usedBy.length > 0 ? (
-                        <p className="text-body-sm text-ink-faint">
+                        <p className="text-body-sm text-ink-muted">
                           Also asked of {q.usedBy.join(", ")}
                         </p>
                       ) : (
-                        <p className="text-body-sm text-ink-faint">Not used anywhere yet</p>
+                        <p className="text-body-sm text-ink-muted">Not used anywhere yet</p>
                       )}
                     </div>
                     <form action={mapAction}>
@@ -221,12 +221,12 @@ export function MappingClient({
                   key={q.id}
                   className="flex items-start gap-2 rounded-control border border-rule p-3"
                 >
-                  <span className="tabular pt-1 text-body-sm text-ink-faint">{index + 1}</span>
+                  <span className="tabular pt-1 text-body-sm text-ink-muted">{index + 1}</span>
 
                   <div className="min-w-0 flex-1 space-y-1">
                     <p className="text-body text-ink">{q.text}</p>
                     {q.usedBy.length > 0 ? (
-                      <p className="text-body-sm text-ink-faint">
+                      <p className="text-body-sm text-ink-muted">
                         Also asked of {q.usedBy.join(", ")}
                       </p>
                     ) : null}
@@ -292,7 +292,7 @@ export function MappingClient({
             </ol>
           )}
 
-          <p className="pt-4 text-body-sm text-ink-faint">
+          <p className="pt-4 text-body-sm text-ink-muted">
             Changes apply to future cycles. Evaluations already launched keep the questions they
             were launched with.
           </p>
@@ -307,7 +307,7 @@ export function MappingClient({
         >
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[220px] space-y-1">
-              <span className="type-label block text-ink-faint">Copy from</span>
+              <span className="type-label block text-ink-muted">Copy from</span>
               <Select value={copyFrom} onValueChange={setCopyFrom}>
                 <SelectTrigger className="min-h-11 border-rule bg-surface">
                   <SelectValue placeholder="Choose a department" />

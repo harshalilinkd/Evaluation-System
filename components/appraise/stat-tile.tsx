@@ -33,7 +33,7 @@ const TONE: Record<StatTone, { card: string; label: string; value: string; capti
     card: "card-surface",
     label: "text-ink-muted",
     value: "text-ink",
-    caption: "text-ink-faint",
+    caption: "text-ink-muted",
   },
   self: {
     card: "rounded-card bg-self-tint shadow-dashboard",

@@ -15,7 +15,7 @@ export function AuthShell({
     <main className="flex min-h-dvh items-center justify-center px-4 py-12">
       <div className="w-full max-w-[420px]">
         <div className="mb-6 space-y-1">
-          <p className="type-label text-ink-faint">{eyebrow ?? "LinkD Prints"}</p>
+          <p className="type-label text-ink-muted">{eyebrow ?? "LinkD Prints"}</p>
           {/* Display face, not the UI face — this is the one editorial moment
               on an otherwise purely functional screen. */}
           <h1 className="font-sans text-display-lg text-ink">{title}</h1>

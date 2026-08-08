@@ -64,7 +64,7 @@ export function SidebarNav({
             <p
               className={cn(
                 "rail-heading type-label px-3 pb-1",
-                onNavy ? "text-sidebar-ink-muted" : "text-ink-faint",
+                onNavy ? "text-sidebar-ink-muted" : "text-ink-muted",
               )}
             >
               {group.heading}
@@ -110,7 +110,7 @@ export function SidebarNav({
                         : "text-primary"
                       : onNavy
                         ? "text-sidebar-ink-muted"
-                        : "text-ink-faint",
+                        : "text-ink-muted",
                   )}
                   aria-hidden
                 />

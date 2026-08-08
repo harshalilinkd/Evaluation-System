@@ -66,7 +66,7 @@ export function HistoryDrawer({
               Loading…
             </p>
           ) : rows.length === 0 ? (
-            <p className="text-body-sm text-ink-faint">Nothing has been sent to this person yet.</p>
+            <p className="text-body-sm text-ink-muted">Nothing has been sent to this person yet.</p>
           ) : (
             <ul className="divide-y divide-rule">
               {rows.map((entry) => (
@@ -90,7 +90,7 @@ export function HistoryDrawer({
                     </span>
                   </div>
 
-                  <p className="tabular mt-1 text-body-sm text-ink-faint">
+                  <p className="tabular mt-1 text-body-sm text-ink-muted">
                     {formatDateTime(entry.sentAt ?? entry.createdAt)}
                   </p>
 

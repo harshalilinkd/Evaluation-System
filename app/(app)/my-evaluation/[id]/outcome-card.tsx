@@ -43,7 +43,7 @@ export function OutcomeCard({ outcome }: { outcome: EmployeeOutcome }) {
         </dl>
       ) : null}
 
-      <p className="mt-4 font-sans text-body-sm text-ink-faint">
+      <p className="mt-4 font-sans text-body-sm text-ink-muted">
         Speak to HR if you have any questions about your evaluation.
       </p>
     </section>

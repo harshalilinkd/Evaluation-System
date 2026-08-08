@@ -237,7 +237,7 @@ export function CyclesClient({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 text-ink-faint hover:text-ink"
+                className="size-8 text-ink-muted hover:text-ink"
                 aria-label={`Actions for ${row.original.name}`}
               >
                 <MoreHorizontal className="size-4" aria-hidden />
@@ -564,7 +564,7 @@ function BinDialog({
               onChange={(e) => setReason(e.target.value)}
               placeholder="Created by mistake — wrong period."
             />
-            <p className="text-body-sm text-ink-faint">
+            <p className="text-body-sm text-ink-muted">
               Shown in the recycle bin, so whoever finds it later knows why it is there.
             </p>
           </div>

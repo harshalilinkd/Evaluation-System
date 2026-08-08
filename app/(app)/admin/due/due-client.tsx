@@ -152,7 +152,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         enableResizing: false,
         cell: ({ row }) =>
           !canAct ? (
-            <span className="text-body-sm text-ink-faint">HR acts on this</span>
+            <span className="text-body-sm text-ink-muted">HR acts on this</span>
           ) : row.original.blockedBecause ? (
             // §13.4: the reason sits beside the disabled control, not in a
             // tooltip — each of these has a different fix.

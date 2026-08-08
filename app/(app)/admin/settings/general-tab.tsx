@@ -105,7 +105,7 @@ export function GeneralTab({ hikeBands }: { hikeBands: number[] }) {
                 </Button>
               ) : null}
             </div>
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               Between one and six. Stored as data, so adding a fourth band is a change here rather
               than a change to the code.
             </p>

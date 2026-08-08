@@ -53,7 +53,7 @@ export function AutosaveIndicator({
       aria-live="polite"
       className={cn(
         "inline-flex items-center gap-1.5 font-sans text-body-sm",
-        state === "error" ? "text-critical" : "text-ink-faint",
+        state === "error" ? "text-critical" : "text-ink-muted",
         className,
       )}
     >

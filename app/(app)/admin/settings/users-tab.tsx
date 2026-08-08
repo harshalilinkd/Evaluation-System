@@ -121,7 +121,7 @@ function RowMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-ink-faint hover:text-ink"
+          className="size-8 text-ink-muted hover:text-ink"
           aria-label={`Actions for ${person.full_name}`}
         >
           <MoreHorizontal className="size-4" aria-hidden />
@@ -213,7 +213,7 @@ function FormSection({
     <section className="grid gap-x-10 gap-y-4 border-t border-rule pt-6 md:grid-cols-[13rem_1fr] md:pt-7">
       <div className="space-y-1">
         <h3 className="font-sans text-body font-medium text-ink">{title}</h3>
-        <p className="font-sans text-body-sm text-ink-faint">{hint}</p>
+        <p className="font-sans text-body-sm text-ink-muted">{hint}</p>
       </div>
       <div className="space-y-5">{children}</div>
     </section>
@@ -241,13 +241,13 @@ function Field({
       <Label htmlFor={id} className="type-label flex items-baseline gap-2 text-ink-muted">
         {label}
         {optional ? (
-          <span className="font-sans text-body-sm normal-case tracking-normal text-ink-faint">
+          <span className="font-sans text-body-sm normal-case tracking-normal text-ink-muted">
             optional
           </span>
         ) : null}
       </Label>
       {children}
-      {hint ? <p className="font-sans text-body-sm text-ink-faint">{hint}</p> : null}
+      {hint ? <p className="font-sans text-body-sm text-ink-muted">{hint}</p> : null}
       {error ? <p className="font-sans text-body-sm text-critical">{error}</p> : null}
     </div>
   );
@@ -360,11 +360,11 @@ function ImportDialog({
                 {column.required ? (
                   <span className="ml-2 type-label text-critical">required</span>
                 ) : null}
-                <span className="ml-2 text-ink-faint">{column.hint}</span>
+                <span className="ml-2 text-ink-muted">{column.hint}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-3 font-sans text-body-sm text-ink-faint">
+          <p className="mt-3 font-sans text-body-sm text-ink-muted">
             Dates are DD-MM-YYYY. Department is matched by name or code. Reports-to is the HOD&rsquo;s
             email address, so import heads of department before their teams — or leave it blank and
             set it afterwards.
@@ -456,7 +456,7 @@ function RolePicker({ initial }: { initial?: readonly string[] }) {
           </label>
         );
       })}
-      <p className="font-sans text-body-sm text-ink-faint">
+      <p className="font-sans text-body-sm text-ink-muted">
         A head of department is also an employee — they fill in their own appraisal first, then
         review their team.
       </p>
@@ -790,7 +790,7 @@ function AddPersonDialog({
                 />
               </Field>
             </div>
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               Figures may be typed with ₹ and commas. The joining salary is filed against their
               joining date and the current salary against their last increment, so the increment
               amount is only used when that date is set.
@@ -807,7 +807,7 @@ function AddPersonDialog({
 
           {/* §13.3: one primary action, and it stays reachable on a long form. */}
           <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-3 border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur">
-            <p className="mr-auto font-sans text-body-sm text-ink-faint">
+            <p className="mr-auto font-sans text-body-sm text-ink-muted">
               They can sign in as soon as you save.
             </p>
             <Submit pendingLabel="Creating…">Create account</Submit>
@@ -1112,7 +1112,7 @@ function EditPersonDialog({
 
             {/* Derived, not typed — shown so the consequence of the two dates
                 above is visible while they are being changed. */}
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               Next increment:{" "}
               <span className="tabular text-ink-muted">
                 {person.next_increment_date ? formatDate(person.next_increment_date) : "—"}
@@ -1451,7 +1451,7 @@ export function UsersTab({
               "type-label inline-block whitespace-nowrap rounded-pill border px-2 py-0.5",
               row.original.is_active
                 ? "border-final/40 bg-final-tint text-final"
-                : "border-rule bg-surface-mute text-ink-faint",
+                : "border-rule bg-surface-mute text-ink-muted",
             )}
           >
             {row.original.is_active ? "Active" : "Inactive"}

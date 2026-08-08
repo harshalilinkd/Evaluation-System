@@ -208,7 +208,7 @@ export function BoardClient({
               {plural(row.original.daysLate, "day")}
             </span>
           ) : (
-            <span className="tabular text-body-sm text-ink-faint">—</span>
+            <span className="tabular text-body-sm text-ink-muted">—</span>
           ),
       },
       {
@@ -407,7 +407,7 @@ export function BoardClient({
           <div className="relative min-w-0 flex-1 sm:w-[220px] sm:flex-none">
             <Search
               aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
             />
             <Input
               id="board-search"

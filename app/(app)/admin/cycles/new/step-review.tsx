@@ -76,7 +76,7 @@ export function StepReview({
 
           <ul className="mt-4 space-y-3">
             {departmentRows.length === 0 ? (
-              <li className="text-body-sm text-ink-faint">Nobody included yet.</li>
+              <li className="text-body-sm text-ink-muted">Nobody included yet.</li>
             ) : (
               departmentRows.map(([id, row]) => (
                 <li key={id}>
@@ -108,7 +108,7 @@ export function StepReview({
 
           <ul className="mt-4 space-y-2">
             {departmentRows.filter(([id]) => id !== "none").length === 0 ? (
-              <li className="text-body-sm text-ink-faint">No departments represented yet.</li>
+              <li className="text-body-sm text-ink-muted">No departments represented yet.</li>
             ) : (
               departmentRows
                 .filter(([id]) => id !== "none")
@@ -157,19 +157,19 @@ export function StepReview({
 
           <ul className="mt-4 space-y-2">
             {excluded.length === 0 ? (
-              <li className="text-body-sm text-ink-faint">Everyone is in.</li>
+              <li className="text-body-sm text-ink-muted">Everyone is in.</li>
             ) : (
               excluded.slice(0, 12).map((p) => (
                 <li key={p.id} className="flex items-baseline justify-between gap-3">
                   <span className="truncate text-body-sm text-ink">{p.name}</span>
                   {/* The only reason available before launch is HR's own choice.
                       Post-launch withdrawals carry a typed reason instead. */}
-                  <span className="shrink-0 text-body-sm text-ink-faint">Unticked by you</span>
+                  <span className="shrink-0 text-body-sm text-ink-muted">Unticked by you</span>
                 </li>
               ))
             )}
             {excluded.length > 12 ? (
-              <li className="text-body-sm text-ink-faint">
+              <li className="text-body-sm text-ink-muted">
                 and {plural(excluded.length - 12, "more")}.
               </li>
             ) : null}

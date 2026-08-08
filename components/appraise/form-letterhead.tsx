@@ -30,15 +30,18 @@ export function FormLetterhead({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <span
-        className={cn(
-          "flex h-9 w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-input",
-          // On a light card the artwork sits directly on the surface; on ink it
-          // needs the plate.
-          tone === "dark" ? "bg-white p-1" : "bg-transparent",
-        )}
-      >
+    /* -- Centred, and the plate is gone.
+          The white tile existed because the original artwork was multi-coloured
+          on an opaque ground and a dark header swallowed its strokes (P27-8).
+          The mark is transparent now, so it sits directly on whatever is behind
+          it — and a white rectangle floating on a dark card was the thing that
+          made the header look pasted on rather than printed.
+
+          Centred because a letterhead is centred. Left-aligned it read as an
+          icon beside a heading; on its own axis it reads as the top of a
+          document, which is what the form is. -- */
+    <div className={cn("flex flex-col items-center gap-1.5 text-center", className)}>
+      <span className="flex h-11 w-[112px] shrink-0 items-center justify-center overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size mark at the top of the page; next/image would defer the one element that should paint first, and the optimiser has nothing to add to it. */}
         <img src="/logo.png" alt="" className="h-full w-full object-contain" />
       </span>

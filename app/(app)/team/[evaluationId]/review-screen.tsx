@@ -117,7 +117,25 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
     // Answers and comments ride the SAME call: split across two, one can land
     // and the other not, and a comment would outlive the score it explains
     // (P13-9).
-    const result = await saveLeadDraft(meta.evaluationId, answersPatch, commentsPatch);
+    /* -- Guarded, for the same reason the self form is.
+          A REJECTED promise — a dropped connection on a phone, a 500, anything
+          thrown server-side — skips every line below it, including the restore
+          that puts the patch back on the queue. The queue was already cleared
+          above, so the answers would be gone with the indicator still claiming
+          it was saving. A throw has to land in the same place a failure does. -- */
+    let result: Awaited<ReturnType<typeof saveLeadDraft>>;
+    try {
+      result = await saveLeadDraft(meta.evaluationId, answersPatch, commentsPatch);
+    } catch {
+      pending.current = {
+        answers: { ...answersPatch, ...pending.current.answers },
+        comments: { ...commentsPatch, ...pending.current.comments },
+      };
+      inSync.current = false;
+      setSaveState("error");
+      return false;
+    }
+
     if (result.ok) {
       inSync.current = true;
       setSaveState("saved");
@@ -368,7 +386,7 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
             </p>
           </div>
           <div className="text-right">
-            <p className="type-label text-ink-faint">Your average</p>
+            <p className="type-label text-ink-muted">Your average</p>
             <p className="tabular text-display-sm font-semibold text-lead">
               {liveAverage === null ? "—" : liveAverage.toFixed(2)}
             </p>

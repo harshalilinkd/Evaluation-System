@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, Loader2, RotateCcw, Send } from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
+import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
@@ -125,8 +126,34 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
     inFlight.current = true;
     setSaveState("saving");
 
-    const result = await saveSelfDraft(form.evaluationId, patch);
-    inFlight.current = false;
+    /* -- The await MUST be guarded. --
+          A rejected promise here — a dropped mobile connection, a 500, a
+          server action that threw — skipped `inFlight.current = false` and
+          every line after it. The flag stayed true for the life of the page,
+          so every later autosave returned early at the guard above and NOTHING
+          was ever sent again. The indicator sat on "saving…" for ever, which
+          is why a full form came back empty with no error anywhere: the one
+          state that reports a problem was unreachable.
+
+          `finally` is what makes the flag honest. It is the difference between
+          a failed save and a form that has quietly stopped saving. -- */
+    let result: Awaited<ReturnType<typeof saveSelfDraft>>;
+    try {
+      result = await saveSelfDraft(form.evaluationId, patch);
+    } catch (cause) {
+      pending.current = { ...patch, ...pending.current };
+      inSync.current = false;
+      setSaveState("error");
+      setFailures((n) => n + 1);
+      setSaveError(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : "The connection dropped before your answers reached us.",
+      );
+      return false;
+    } finally {
+      inFlight.current = false;
+    }
 
     if (result.ok) {
       inSync.current = true;
@@ -414,8 +441,14 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           </div>
         </section>
       ) : (
-        /* ---------- Sticky header ---------- */
-        <header className="sticky top-topbar z-10 mb-4 rounded-card-lg bg-ink p-4 sm:p-5">
+        /* ---------- Header ----------
+           NOT sticky any more. A 160px card pinned under the topbar took a
+           third of a phone screen away from the form for its whole length, and
+           what it holds — a title, a due date and a progress count — is
+           orientation, not something anybody needs while answering question 22.
+           The action bar at the bottom is what has to stay reachable, and it
+           still does. */
+        <header className="mb-4 rounded-card-lg bg-ink p-4 sm:p-5">
           {/* The mark, above the fold on the phone most people open this on. */}
           <FormLetterhead tone="dark" className="mb-3" />
 
@@ -517,7 +550,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
             ["Date of evaluation", formatDate(new Date())],
           ].map(([label, value]) => (
             <div key={label}>
-              <dt className="type-label text-ink-faint">{label}</dt>
+              <dt className="type-label text-ink-muted">{label}</dt>
               <dd className="text-body text-ink">{value}</dd>
             </div>
           ))}
@@ -547,7 +580,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               anybody else's, and not on an ordinary evaluation. */}
         {meta.isIncrement ? (
           <div className="mt-4 border-t border-rule pt-4">
-            <dt className="type-label text-ink-faint">Current salary</dt>
+            <dt className="type-label text-ink-muted">Current salary</dt>
             <dd className="tabular mt-0.5 text-h3 text-ink">
               {formatInr(meta.currentCtc)}
             </dd>
@@ -559,6 +592,9 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           </div>
         ) : null}
       </section>
+
+      {/* §6's wording, once — not under all 33 questions. See ScaleLegend. */}
+      <ScaleLegend className="mb-4" />
 
       {/* ---------- The form ---------- */}
       <FormRenderer

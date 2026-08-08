@@ -83,7 +83,7 @@ export function QuestionPreview({
 
   return (
     <div className="space-y-3">
-      {hideHeading ? null : <p className="type-label text-ink-faint">Preview</p>}
+      {hideHeading ? null : <p className="type-label text-ink-muted">Preview</p>}
 
       {parentText && dependsValue ? (
         <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">

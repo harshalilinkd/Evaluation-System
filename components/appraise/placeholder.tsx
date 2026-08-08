@@ -31,7 +31,7 @@ export function Placeholder({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="type-label text-ink-faint">Reachable by</p>
+          <p className="type-label text-ink-muted">Reachable by</p>
           <p className="font-sans text-body text-ink">{guardedBy}</p>
         </CardContent>
       </Card>

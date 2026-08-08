@@ -90,7 +90,7 @@ export function Topbar({
       <div className="mx-auto hidden w-full max-w-sm md:block">
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
             aria-hidden
           />
           <Input
@@ -172,9 +172,9 @@ export function Topbar({
           <DropdownMenuContent align="end" className="w-60 border-rule">
             <DropdownMenuLabel className="space-y-0.5 font-normal">
               <p className="font-sans text-body text-ink">{userName}</p>
-              <p className="truncate tabular text-body-sm text-ink-faint">{userEmail}</p>
+              <p className="truncate tabular text-body-sm text-ink-muted">{userEmail}</p>
               {roleBadges.length > 0 ? (
-                <p className="type-label pt-1 text-ink-faint">
+                <p className="type-label pt-1 text-ink-muted">
                   {roleBadges.map((r) => ROLE_LABELS[r]).join(" · ")}
                 </p>
               ) : null}

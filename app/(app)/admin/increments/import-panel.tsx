@@ -194,11 +194,11 @@ function ImportForm() {
               {column.required ? (
                 <span className="type-label ml-2 text-critical">required</span>
               ) : null}
-              <span className="ml-2 text-ink-faint">{column.hint}</span>
+              <span className="ml-2 text-ink-muted">{column.hint}</span>
             </li>
           ))}
         </ul>
-        <p className="mt-3 font-sans text-body-sm text-ink-faint">
+        <p className="mt-3 font-sans text-body-sm text-ink-muted">
           A blank salary column means &ldquo;not in this file&rdquo;, never &ldquo;set it to
           nothing&rdquo; — an existing figure is left alone. The next increment date is worked out
           for you and is not a column.

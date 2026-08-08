@@ -69,7 +69,7 @@ export function SignInForm({ next, initialError }: { next?: string; initialError
 
       <SubmitButton />
 
-      <p className="font-sans text-body-sm text-ink-faint">
+      <p className="font-sans text-body-sm text-ink-muted">
         Accounts are created by HR. If you cannot get in, ask them to reset your password.
       </p>
     </form>

@@ -229,7 +229,7 @@ export function PeopleClient({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 text-ink-faint hover:text-ink"
+                className="size-8 text-ink-muted hover:text-ink"
                 aria-label={`Actions for ${row.original.fullName}`}
               >
                 <MoreHorizontal className="size-4" aria-hidden />

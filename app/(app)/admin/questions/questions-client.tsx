@@ -327,7 +327,7 @@ export function QuestionsClient({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 text-ink-faint hover:text-critical"
+                  className="size-8 text-ink-muted hover:text-critical"
                   aria-label={`Delete "${row.original.text}"`}
                   onClick={() => setConfirming([row.original])}
                 >
@@ -422,7 +422,7 @@ export function QuestionsClient({
               "type-label inline-block whitespace-nowrap rounded-pill border px-2 py-0.5",
               row.original.is_active
                 ? "border-final/40 bg-final-tint text-final"
-                : "border-rule bg-surface-mute text-ink-faint",
+                : "border-rule bg-surface-mute text-ink-muted",
             )}
           >
             {row.original.is_active ? "Active" : "Inactive"}
@@ -914,7 +914,7 @@ export function QuestionsClient({
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto px-2 text-ink-faint"
+            className="ml-auto px-2 text-ink-muted"
             onClick={() => {
               setColumnSizing({});
               writeStoredWidths({});
@@ -962,7 +962,7 @@ export function QuestionsClient({
                   </p>
                 </div>
               ) : (
-                <p className="font-sans text-body-sm text-ink-faint">
+                <p className="font-sans text-body-sm text-ink-muted">
                   It is not mapped to any department.
                 </p>
               )}

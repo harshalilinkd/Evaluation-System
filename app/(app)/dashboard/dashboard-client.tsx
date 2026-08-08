@@ -11,16 +11,19 @@
  */
 
 import Link from "next/link";
-import { ArrowRight, ClipboardList, FileText, Flag, Users } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { LabelledBarChart, RankedBarChart, StatusDonutChart, ratingBandColor, ratingBandIndex } from "@/components/appraise/charts";
+import { CycleShapeChart } from "@/components/appraise/cycle-shape-chart";
+import { HistoryTrendChart } from "@/components/appraise/history-trend-chart";
 import { ChartFigure } from "@/components/appraise/chart-figure";
 import { GapChart } from "@/components/appraise/gap-chart";
-import { HeroCard, StatTile } from "@/components/appraise/stat-tile";
+import { HeroCard } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { Analytics } from "@/lib/analytics/queries";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils";
 
 export type DueSummary = {
   total: number;
@@ -53,7 +56,7 @@ function Panel({
         <div className="min-w-0 space-y-1">
           <h2 className="font-sans text-body font-medium text-ink">{title}</h2>
           {subtitle ? (
-            <p className="max-w-prose font-sans text-body-sm leading-relaxed text-ink-faint">
+            <p className="max-w-prose font-sans text-body-sm leading-relaxed text-ink-muted">
               {subtitle}
             </p>
           ) : null}
@@ -79,7 +82,7 @@ function Panel({
  */
 function PanelEmpty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex h-full items-center font-sans text-body-sm text-ink-faint">{children}</p>
+    <p className="flex h-full items-center font-sans text-body-sm text-ink-muted">{children}</p>
   );
 }
 
@@ -203,74 +206,61 @@ export function DashboardClient({
         <EmployeeView analytics={analytics} />
       ) : (
         <>
-          {/*
-            The four counts, and then the one line that makes them mean
-            something. A row of bare numbers with no denominator is four facts
-            nobody can act on; the bar says how far through the cycle is, which
-            is the question the numbers were being read to answer.
-          */}
-          <section className="space-y-4">
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-              label="In progress"
-              value={String(progress?.not_started ?? 0)}
-              icon={<ClipboardList className="size-4" aria-hidden />}
-              caption={
-                progress ? `of ${progress.total} in this cycle` : "Nobody has submitted yet"
-              }
-            />
-            <StatTile
-              label="Self submitted"
-              value={String(progress?.self_submitted ?? 0)}
-              tone="self"
-              icon={<Users className="size-4" aria-hidden />}
-            />
-            <StatTile
-              label="Rated by their lead"
-              value={String(progress?.lead_reviewed ?? 0)}
-              tone="lead"
-              icon={<Flag className="size-4" aria-hidden />}
-            />
-            <StatTile
-              label="Reviewed"
-              value={String(progress?.md_finalized ?? 0)}
-              tone="final"
-              icon={<FileText className="size-4" aria-hidden />}
-            />
-          </section>
-
-          {progress ? (
-            <div className="card-surface space-y-2 p-5">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="font-sans text-body-sm text-ink-muted">
-                  {activeCycle ? `${activeCycle.name} · ${activeCycle.periodLabel}` : "This cycle"}
-                </p>
-                <p className="tabular text-body-sm text-ink">
+          {/* ---------- Where the cycle stands ----------
+              The four bare counts that were here — In progress / Self submitted
+              / Rated by their lead / Reviewed — had no denominator and no
+              relationship to each other, which is four facts rather than an
+              answer. `CycleShapeChart` shows the two sides in PARALLEL (§1:
+              neither waits for the other) and the records' position as one
+              ordered bar. */}
+          <Panel
+            title="Where this cycle stands"
+            subtitle={
+              activeCycle
+                ? `${activeCycle.name} · ${activeCycle.periodLabel}`
+                : "No cycle is running at the moment."
+            }
+            action={
+              progress ? (
+                <span className="tabular text-body-sm text-ink-muted">
                   {Number(progress.percent_complete ?? 0).toFixed(0)}% complete
-                </p>
-              </div>
-              {/*
-                Three steps per person — self, lead, review — so the bar moves as
-                work happens rather than only when somebody finishes entirely.
-                `--primary` and not a tier colour: the bar is the cycle's
-                progress, not any one layer's (§13.1, UI2-12).
-              */}
-              <div
-                className="h-2 w-full overflow-hidden rounded-pill bg-surface-mute"
-                role="progressbar"
-                aria-valuenow={Math.round(Number(progress.percent_complete ?? 0))}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Cycle completion"
+                </span>
+              ) : undefined
+            }
+          >
+            {!progress || Number(progress.total ?? 0) === 0 ? (
+              <PanelEmpty>
+                This fills in the moment a cycle is launched — both sides&rsquo; progress, and
+                where every record has got to.
+              </PanelEmpty>
+            ) : (
+              <ChartFigure
+                caption="Cycle progress: each side's submissions, and where the records are"
+                rows={[
+                  { k: "Employees submitted", v: `${Number(progress.self_submitted ?? 0)} of ${Number(progress.total)}` },
+                  { k: "HODs submitted", v: `${Number(progress.lead_reviewed ?? 0)} of ${Number(progress.total)}` },
+                  { k: "With HR", v: String(Number(progress.md_finalized ?? 0)) },
+                  { k: "Closed", v: String(Number(progress.closed ?? 0)) },
+                  { k: "Complete", v: `${Number(progress.percent_complete ?? 0).toFixed(0)}%` },
+                ]}
+                columns={[
+                  { header: "Measure", cell: (r) => r.k },
+                  { header: "Value", cell: (r) => r.v, align: "right" },
+                ]}
               >
-                <div
-                  className="h-full rounded-pill bg-primary transition-[width] duration-500 motion-reduce:transition-none"
-                  style={{ width: `${Math.min(100, Number(progress.percent_complete ?? 0))}%` }}
+                <CycleShapeChart
+                  shape={{
+                    total: Number(progress.total ?? 0),
+                    selfIn: Number(progress.self_submitted ?? 0),
+                    leadIn: Number(progress.lead_reviewed ?? 0),
+                    withHr: Number(progress.md_finalized ?? 0),
+                    reviewed: 0,
+                    closed: Number(progress.closed ?? 0),
+                  }}
                 />
-              </div>
-            </div>
-          ) : null}
-          </section>
+              </ChartFigure>
+            )}
+          </Panel>
 
           {isAdmin ? <AdminView analytics={analytics} /> : <LeadView analytics={analytics} />}
         </>
@@ -297,7 +287,7 @@ function LateList({
           <span className="min-w-0">
             <span className="block truncate font-sans text-body-sm text-ink">{person.name}</span>
             {person.department ? (
-              <span className="block truncate font-sans text-body-sm text-ink-faint">
+              <span className="block truncate font-sans text-body-sm text-ink-muted">
                 {person.department}
               </span>
             ) : null}
@@ -720,25 +710,68 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
 
   return (
     <section className="grid items-stretch gap-6 lg:grid-cols-2">
-      <Panel title="Your appraisals" subtitle="How they have gone">
+      <Panel
+        title="Your appraisals"
+        subtitle="Every cycle you have been through, and what each side scored"
+      >
         {ownHistory.length === 0 ? (
           <PanelEmpty>
             Your first result appears here once your evaluation closes.
           </PanelEmpty>
+        ) : ownHistory.length === 1 ? (
+          /* One point is not a trend, it is a dot on an axis (N3-8). A reading
+             is the honest form for a single cycle; the chart arrives with the
+             second one. */
+          <div className="space-y-2">
+            <p className="font-sans text-body-sm text-ink-muted">
+              {String(ownHistory[0]?.period_label ?? ownHistory[0]?.cycle_name ?? "Your first cycle")}
+            </p>
+            <dl className="grid grid-cols-3 gap-3">
+              {(
+                [
+                  ["You said", ownHistory[0]?.self_overall, "text-ink"],
+                  ["Your lead", ownHistory[0]?.lead_overall, "text-ink"],
+                  ["Agreed", ownHistory[0]?.final_overall, "text-ink"],
+                ] as const
+              ).map(([label, value, tone]) => (
+                <div key={label} className="rounded-control bg-surface-mute px-3 py-2">
+                  <dt className="type-label text-ink-muted">{label}</dt>
+                  <dd className={cn("tabular text-display-sm", tone)}>{score(value)}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="font-sans text-body-sm text-ink-muted">
+              A trend appears here once you have been through a second cycle.
+            </p>
+          </div>
         ) : (
-          <ul className="space-y-2">
-            {ownHistory.slice(0, 5).map((row, i) => (
-              <li
-                key={`${row.cycle_id}-${i}`}
-                className="flex items-center justify-between gap-3 rounded-control bg-surface-mute px-3 py-2"
-              >
-                <span className="font-sans text-body-sm text-ink">
-                  {String(row.period_label ?? row.cycle_name ?? "—")}
-                </span>
-                <span className="tabular text-body-sm text-lead">{score(row.lead_overall)}</span>
-              </li>
-            ))}
-          </ul>
+          /* Change over time, so a line. A list of five numbers can be read but
+             not SEEN, and the shape they make is what somebody wants from their
+             own history. `ChartFigure` keeps the numbers one click away, which
+             is also what discharges cyan's contrast WARN. */
+          <ChartFigure
+            caption="Your scores across cycles"
+            rows={[...ownHistory].reverse()}
+            columns={[
+              { header: "Cycle", cell: (r) => String(r.period_label ?? r.cycle_name ?? "—") },
+              { header: "You said", cell: (r) => score(r.self_overall), align: "right" },
+              { header: "Your lead", cell: (r) => score(r.lead_overall), align: "right" },
+              { header: "Agreed", cell: (r) => score(r.final_overall), align: "right" },
+            ]}
+          >
+            <HistoryTrendChart
+              /* Oldest first: time runs left to right, and the view hands them
+                 back newest first. */
+              points={[...ownHistory]
+                .reverse()
+                .map((row) => ({
+                  label: String(row.period_label ?? row.cycle_name ?? "—"),
+                  self: row.self_overall === null ? null : Number(row.self_overall),
+                  lead: row.lead_overall === null ? null : Number(row.lead_overall),
+                  final: row.final_overall === null ? null : Number(row.final_overall),
+                }))}
+            />
+          </ChartFigure>
         )}
       </Panel>
 

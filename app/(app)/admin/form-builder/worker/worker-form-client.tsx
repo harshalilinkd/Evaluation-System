@@ -135,7 +135,7 @@ export function WorkerFormClient({
                 )}
               >
                 <div className="flex items-start gap-3">
-                  <span className="tabular mt-0.5 w-5 shrink-0 text-body-sm text-ink-faint">
+                  <span className="tabular mt-0.5 w-5 shrink-0 text-body-sm text-ink-muted">
                     {index + 1}
                   </span>
 
@@ -151,7 +151,7 @@ export function WorkerFormClient({
                     {q.helpText ? (
                       <p className="text-body-sm text-ink-muted">{q.helpText}</p>
                     ) : null}
-                    <p className="type-label mt-1 text-ink-faint">
+                    <p className="type-label mt-1 text-ink-muted">
                       {q.responseType === "TICK_3" ? "Three ticks" : "Yes / No"}
                       {q.isRequired ? " · must be answered" : " · optional"}
                     </p>
@@ -199,7 +199,7 @@ export function WorkerFormClient({
                         bug, one that says why reads as deliberate (§13.4). */}
                     {q.isOverall ? (
                       <span
-                        className="flex items-center gap-1 px-2 text-body-sm text-ink-faint"
+                        className="flex items-center gap-1 px-2 text-body-sm text-ink-muted"
                         title="Overall Performance is the worker's score for the period"
                       >
                         <Lock className="size-3.5" aria-hidden />
@@ -222,7 +222,7 @@ export function WorkerFormClient({
 
           {retired.length > 0 ? (
             <div className="mt-4 border-t border-rule pt-3">
-              <p className="type-label text-ink-faint">Removed from the form</p>
+              <p className="type-label text-ink-muted">Removed from the form</p>
               <ul className="mt-2 space-y-1">
                 {retired.map((q) => (
                   <li key={q.id} className="flex items-center justify-between gap-3">
@@ -324,7 +324,7 @@ export function WorkerFormClient({
         {/* ---------- Preview ---------- */}
         <section className="card-surface p-5">
           <div className="flex items-center gap-2">
-            <Users aria-hidden className="size-4 text-ink-faint" />
+            <Users aria-hidden className="size-4 text-ink-muted" />
             <h2 className="text-display-sm text-ink">The supervisor&apos;s sheet</h2>
           </div>
           <p className="mt-1 text-body-sm text-ink-muted">
@@ -339,7 +339,7 @@ export function WorkerFormClient({
           </div>
 
           <div className="mt-5 border-t border-rule pt-4">
-            <p className="type-label text-ink-faint">Also on the form, and not questions</p>
+            <p className="type-label text-ink-muted">Also on the form, and not questions</p>
             <ul className="mt-2 space-y-2">
               {FIXED_BLOCKS.map((block) => (
                 <li key={block.title} className="text-body-sm">

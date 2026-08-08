@@ -79,7 +79,7 @@ export function ErrorState({
     >
       <p className="font-sans text-body-lg text-ink">{title}</p>
       <p className="font-sans text-body text-ink-muted">{body}</p>
-      {detail ? <p className="tabular text-body-sm text-ink-faint">{detail}</p> : null}
+      {detail ? <p className="tabular text-body-sm text-ink-muted">{detail}</p> : null}
       {action ? <div className="pt-1">{action}</div> : null}
     </div>
   );

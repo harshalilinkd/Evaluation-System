@@ -73,7 +73,7 @@ export function KpiCard({
 
         {/* §3: display-lg, tabular, so six cards in a row line up. */}
         <p className="tabular text-display-lg leading-none text-ink">{value}</p>
-        {caption ? <p className="text-body-sm text-ink-faint">{caption}</p> : null}
+        {caption ? <p className="text-body-sm text-ink-muted">{caption}</p> : null}
       </div>
 
       {/* Flush to the card's edge — the trace is a foot, not a chart in a box. */}

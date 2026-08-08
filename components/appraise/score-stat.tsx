@@ -45,7 +45,7 @@ export function ScoreStat({ label, value, tier, caption, raw = false, className 
       >
         {display}
       </p>
-      {caption ? <p className="font-sans text-body-sm text-ink-faint">{caption}</p> : null}
+      {caption ? <p className="font-sans text-body-sm text-ink-muted">{caption}</p> : null}
     </div>
   );
 }
@@ -64,7 +64,7 @@ export function DeltaChip({
   className?: string;
 }) {
   if (delta === null) {
-    return <span className={cn("tabular text-body-sm text-ink-faint", className)}>—</span>;
+    return <span className={cn("tabular text-body-sm text-ink-muted", className)}>—</span>;
   }
 
   const magnitude = Math.abs(delta);

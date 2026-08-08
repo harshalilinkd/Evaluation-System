@@ -128,7 +128,7 @@ export function StepRail({
               <span
                 className={cn(
                   "hidden whitespace-nowrap font-sans text-body-sm leading-tight sm:block",
-                  isCurrent ? "font-medium text-ink" : reachable ? "text-ink-muted" : "text-ink-faint",
+                  isCurrent ? "font-medium text-ink" : reachable ? "text-ink-muted" : "text-ink-muted",
                 )}
               >
                 <span className="tabular">{index + 1}</span> · {label}
@@ -196,7 +196,7 @@ export function ProgressRail({
                 <span
                   className={cn(
                     "hidden whitespace-nowrap text-center font-sans text-[11px] leading-tight sm:block",
-                    isCurrent ? "text-ink" : "text-ink-faint",
+                    isCurrent ? "text-ink" : "text-ink-muted",
                   )}
                 >
                   {label}

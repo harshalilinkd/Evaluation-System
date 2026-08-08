@@ -253,7 +253,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 "No department set"}
             </p>
             {card.profile.dateOfJoining ? (
-              <p className="tabular text-body-sm text-ink-faint">
+              <p className="tabular text-body-sm text-ink-muted">
                 Joined {formatDate(card.profile.dateOfJoining)}
               </p>
             ) : null}

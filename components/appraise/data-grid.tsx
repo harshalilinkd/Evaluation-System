@@ -512,7 +512,7 @@ export function DataGrid<TData>({
         {Object.keys(columnSizing).length > 0 ? (
           <button
             type="button"
-            className="ml-auto rounded-control px-2 py-1 text-body-sm text-ink-faint hover:text-ink"
+            className="ml-auto rounded-control px-2 py-1 text-body-sm text-ink-muted hover:text-ink"
             onClick={() => {
               setColumnSizing({});
               writeStoredWidths(storageKey, {});

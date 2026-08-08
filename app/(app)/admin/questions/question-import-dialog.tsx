@@ -164,7 +164,7 @@ export function QuestionImportDialog({
               </div>
 
               <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-card border border-dashed border-rule bg-surface-mute px-6 py-10 text-center">
-                <Upload className="size-6 text-ink-faint" aria-hidden />
+                <Upload className="size-6 text-ink-muted" aria-hidden />
                 <span className="text-body text-ink">Choose a CSV file</span>
                 <span className="text-body-sm text-ink-muted">
                   Needs a column for the department and one for the question. Everything else is
@@ -209,7 +209,7 @@ export function QuestionImportDialog({
                     {counts?.errors} {counts?.errors === 1 ? "error" : "errors"}
                   </span>
                 ) : null}
-                <span className="ml-auto text-ink-faint">{fileName}</span>
+                <span className="ml-auto text-ink-muted">{fileName}</span>
               </div>
 
               {(counts?.errors ?? 0) > 0 ? (
@@ -253,7 +253,7 @@ export function QuestionImportDialog({
                         <td className="tabular border-b border-rule px-3 py-2 text-ink-muted">{row.line}</td>
                         <td className="border-b border-rule px-3 py-2 text-ink">{row.department}</td>
                         <td className="border-b border-rule px-3 py-2 text-ink">
-                          {row.text || <span className="text-ink-faint">—</span>}
+                          {row.text || <span className="text-ink-muted">—</span>}
                           {row.note ? (
                             <span className="block text-ink-muted">{row.note}</span>
                           ) : null}

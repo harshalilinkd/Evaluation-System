@@ -136,7 +136,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
         </div>
       ) : null}
 
-      <p className="tabular text-body-sm text-ink-faint">
+      <p className="tabular text-body-sm text-ink-muted">
         {active} active{departments.length > active ? ` · ${departments.length - active} inactive` : ""}
       </p>
 
@@ -173,12 +173,12 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
 
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-body-lg font-medium text-ink">{d.name}</p>
-                  <p className="tabular truncate text-body-sm text-ink-faint">{d.code}</p>
+                  <p className="tabular truncate text-body-sm text-ink-muted">{d.code}</p>
                 </div>
 
                 {d.questionCount === 0 && d.is_active ? <NeedsQuestionsFlag /> : null}
                 {!d.is_active ? (
-                  <span className="shrink-0 whitespace-nowrap text-body-sm text-ink-faint">
+                  <span className="shrink-0 whitespace-nowrap text-body-sm text-ink-muted">
                     Inactive
                   </span>
                 ) : null}
@@ -190,11 +190,11 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
                   two loose stacks at an arbitrary gap. */}
               <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-control bg-rule">
                 <div className="bg-surface px-3 py-2.5">
-                  <dt className="type-label text-ink-faint">People</dt>
+                  <dt className="type-label text-ink-muted">People</dt>
                   <dd className="tabular mt-0.5 text-display-sm text-ink">{d.headcount}</dd>
                 </div>
                 <div className="bg-surface px-3 py-2.5">
-                  <dt className="type-label text-ink-faint">Questions</dt>
+                  <dt className="type-label text-ink-muted">Questions</dt>
                   <dd
                     className={cn(
                       "tabular mt-0.5 text-display-sm",
@@ -233,7 +233,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="ml-auto size-9 text-ink-faint hover:text-ink"
+                  className="ml-auto size-9 text-ink-muted hover:text-ink"
                   aria-label={`Edit ${d.name}`}
                   onClick={() => {
                     setEditing(d);
@@ -246,7 +246,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 text-ink-faint hover:text-critical"
+                  className="size-9 text-ink-muted hover:text-critical"
                   aria-label={`Delete ${d.name}`}
                   onClick={() => setDeleting(d)}
                 >
@@ -340,7 +340,7 @@ function DeleteDialog({
               </p>
             ) : null}
 
-            <p className="text-body-sm text-ink-faint">
+            <p className="text-body-sm text-ink-muted">
               Evaluations already launched keep the department name they were launched with.
             </p>
           </div>
@@ -468,7 +468,7 @@ function DepartmentForm({
           className="tabular min-h-11 uppercase"
           placeholder="SALES"
         />
-        <p className="text-body-sm text-ink-faint">
+        <p className="text-body-sm text-ink-muted">
           Used in exports and imports. Letters and numbers only.
         </p>
         {state.fieldErrors?.code ? (

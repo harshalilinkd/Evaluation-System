@@ -287,7 +287,7 @@ function QuestionField({
               "tabular text-right text-body-sm",
               (typeof current === "string" ? current.length : 0) >= 1000
                 ? "font-medium text-critical"
-                : "text-ink-faint",
+                : "text-ink-muted",
             )}
           >
             {typeof current === "string" ? current.length : 0} / 1000

@@ -422,7 +422,7 @@ function PaneSwitcher({
             <span
               className={cn(
                 "relative truncate text-[11px]",
-                active ? "text-ink-muted" : "text-ink-faint",
+                active ? "text-ink-muted" : "text-ink-muted",
               )}
             >
               {tab.hint}

@@ -23,7 +23,7 @@ export function SetupRequired() {
           <li className="tabular text-body-sm text-ink">NEXT_PUBLIC_SUPABASE_ANON_KEY</li>
         </ul>
 
-        <p className="font-sans text-body-sm text-ink-faint">
+        <p className="font-sans text-body-sm text-ink-muted">
           The design system at <code className="tabular text-body-sm">/styleguide</code> works
           without a database, if you only want to look at the components.
         </p>

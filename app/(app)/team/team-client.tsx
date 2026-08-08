@@ -107,7 +107,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
         <div className="relative min-w-0 flex-1 sm:w-[300px] sm:flex-none">
           <Search
             aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
           />
           <Input
             value={search}
@@ -208,7 +208,7 @@ function TeamCard({ row }: { row: TeamRow }) {
         <p className="flex flex-wrap items-center gap-2 text-body-lg text-ink">
           {row.name}
           {row.employeeCode ? (
-            <span className="tabular text-body-sm text-ink-faint">{row.employeeCode}</span>
+            <span className="tabular text-body-sm text-ink-muted">{row.employeeCode}</span>
           ) : null}
         </p>
         <p className="text-body-sm text-ink-muted">
@@ -217,7 +217,7 @@ function TeamCard({ row }: { row: TeamRow }) {
         {row.isSelfLed ? (
           // P13 edge case. Neutral, not a warning: a department head with nobody
           // above them is a fact about the org chart, not a mistake they made.
-          <p className="mt-1 text-body-sm text-ink-faint">
+          <p className="mt-1 text-body-sm text-ink-muted">
             You are recorded as your own lead for this cycle.
           </p>
         ) : null}
@@ -226,7 +226,7 @@ function TeamCard({ row }: { row: TeamRow }) {
       <div className="flex flex-col items-start gap-1 sm:items-end">
         {/* YOUR state, never theirs. */}
         <StatusChip status={row.chipStatus} />
-        <p className="tabular text-body-sm text-ink-faint">
+        <p className="tabular text-body-sm text-ink-muted">
           {row.leadState === "submitted"
             ? `You submitted ${row.leadSubmittedAt ? formatDate(row.leadSubmittedAt) : ""}`.trim()
             : row.leadState === "in_progress"
@@ -234,7 +234,7 @@ function TeamCard({ row }: { row: TeamRow }) {
               : "You have not started this"}
         </p>
         {row.daysToLeadDue !== null && !row.isOverdue && row.leadState !== "submitted" ? (
-          <p className="tabular text-body-sm text-ink-faint">
+          <p className="tabular text-body-sm text-ink-muted">
             {row.daysToLeadDue === 0
               ? "Due today"
               : row.daysToLeadDue > 0

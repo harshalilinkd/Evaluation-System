@@ -54,7 +54,7 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
         </span>
         <span
           className={`type-label block truncate ${
-            onNavy ? "text-sidebar-ink-muted" : "text-ink-faint"
+            onNavy ? "text-sidebar-ink-muted" : "text-ink-muted"
           }`}
         >
           LinkD Prints

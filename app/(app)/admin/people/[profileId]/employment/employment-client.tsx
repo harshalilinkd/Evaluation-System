@@ -331,7 +331,7 @@ function Field({
 function Readout({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
   return (
     <div>
-      <p className="type-label text-ink-faint">{label}</p>
+      <p className="type-label text-ink-muted">{label}</p>
       <p className={cn("tabular mt-1 text-body", emphasis ? "text-display-sm font-semibold text-ink" : "text-ink")}>
         {value}
       </p>

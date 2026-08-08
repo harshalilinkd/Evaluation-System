@@ -144,7 +144,7 @@ export function NotificationsTab({
             </p>
 
             {state.paused && state.reason ? (
-              <p className="font-sans text-body-sm text-ink-faint">
+              <p className="font-sans text-body-sm text-ink-muted">
                 &ldquo;{state.reason}&rdquo;
                 {state.pausedByName ? ` — ${state.pausedByName}` : ""}
                 {state.pausedAt ? `, ${formatDateTime(state.pausedAt)}` : ""}
@@ -176,7 +176,7 @@ export function NotificationsTab({
           <div className="flex flex-wrap items-center gap-3">
             <span className="relative">
               <Search
-                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
                 aria-hidden
               />
               <Input
@@ -254,7 +254,7 @@ export function NotificationsTab({
                         <span className="block font-sans text-body-sm text-ink">
                           {row.personName ?? "—"}
                         </span>
-                        <span className="block tabular text-body-sm text-ink-faint">
+                        <span className="block tabular text-body-sm text-ink-muted">
                           {row.recipient}
                         </span>
                       </td>
@@ -318,7 +318,7 @@ export function NotificationsTab({
                 <p className="type-label text-ink-muted">Message</p>
                 <p className="whitespace-pre-wrap font-sans text-body text-ink">{shown.body}</p>
               </div>
-              <p className="font-sans text-body-sm text-ink-faint">
+              <p className="font-sans text-body-sm text-ink-muted">
                 Names, dates and links are filled in when it is sent. The example above uses
                 placeholders.
               </p>
@@ -350,7 +350,7 @@ export function NotificationsTab({
               rows={3}
               placeholder={state.paused ? "Why is it safe to resume?" : "Why are you pausing?"}
             />
-            <p className="font-sans text-body-sm text-ink-faint">
+            <p className="font-sans text-body-sm text-ink-muted">
               Recorded against your name. &ldquo;Why is everything silent?&rdquo; is a question
               somebody asks days later.
             </p>

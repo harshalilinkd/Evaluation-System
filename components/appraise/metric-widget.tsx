@@ -102,7 +102,7 @@ export function MetricWidget({
           </span>
         ) : null}
         {(trend?.caption ?? caption) ? (
-          <span className="text-body-sm text-ink-faint">{trend?.caption ?? caption}</span>
+          <span className="text-body-sm text-ink-muted">{trend?.caption ?? caption}</span>
         ) : null}
       </div>
     </div>

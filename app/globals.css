@@ -21,10 +21,54 @@
     --surface-mute: 248 249 250; /* #F8F9FA  secondary panels, table headers */
     --rule: 226 232 240; /* #E2E8F0  standard borders (subtle) */
 
-    /* -- Ink -- */
-    --ink: 17 24 39; /* #111827  primary text, headings */
-    --ink-muted: 107 114 128; /* #6B7280  secondary text, labels, chart axes */
-    --ink-faint: 156 163 175; /* #9CA3AF  placeholders, disabled */
+    /* -- Ink --
+
+       DARKENED AT THE OWNER'S EXPLICIT INSTRUCTION: "make all screens, all
+       menus and modules font colour black so it will be readable."
+
+       Changed HERE rather than across the app because these three tokens are
+       what every screen, menu, dialog, table and chart axis already resolves
+       to. One edit reaches all of them; five hundred edits would reach most of
+       them and leave a residue nobody could find.
+
+       What the old values were, and why this was a real fault rather than a
+       preference — measured on white, against §13.8's 4.5:1 floor:
+
+           --ink        #111827   17.74:1   fine
+           --ink-muted  #6B7280    4.83:1   only just over
+           --ink-faint  #9CA3AF    2.54:1   FAIL
+
+       Secondary text sat a whisker above the line and the third step was well
+       under it, so anything wearing it — hints, captions, table sub-lines,
+       empty states, half the menus — was below the minimum on every screen in
+       the product.
+
+       The new steps, on white and on --surface-mute (the darker of the two
+       grounds either can land on):
+
+           --ink        #111827   17.74 · 16.83
+           --ink-muted  #374151   10.31 ·  9.78
+           --ink-faint  #4B5563    7.56 ·  7.17
+
+       Taken a SECOND step darker after the first was still reported as grey:
+
+           --ink        #111827   17.74:1
+           --ink-muted  #1F2937   14.68:1
+           --ink-faint  #374151   10.31:1
+
+       Every level is now black to read. The three are barely distinguishable
+       from one another, and that is the deliberate cost of the instruction —
+       hierarchy is carried by SIZE and WEIGHT from here on (DESIGN.md §3's type
+       scale already does that work), not by fading text out until it cannot be
+       read. If a caption ever needs to recede again, make it smaller or lighter
+       in weight rather than paler.
+
+       DARK MODE IS NOT TOUCHED. Its ink is light-on-dark by construction and
+       already clears the floor (its faintest step is 5.02:1) — making anything
+       there "black" would invert the failure rather than fix it. */
+    --ink: 17 24 39; /* #111827  primary text, headings — 17.74:1 */
+    --ink-muted: 31 41 55; /* #1F2937  secondary text, labels, chart axes — 14.68:1 */
+    --ink-faint: 55 65 81; /* #374151  placeholders, disabled — 10.31:1 */
     --ink-invert: 255 255 255; /* #FFFFFF  text on solid/accent backgrounds */
 
     /* -- Brand & accents -- */
@@ -105,7 +149,11 @@
        from --surface because the sidebar must NOT follow cards into white. */
     --sidebar: 30 41 59; /* #1E293B  slate navy */
     --sidebar-ink: 241 245 249; /* #F1F5F9  nav labels */
-    --sidebar-ink-muted: 148 163 184; /* #94A3B8  group headings, meta */
+    /* Lifted from #94A3B8 (5.71:1) in the same pass that darkened the ink
+       tokens. Same goal, opposite direction: the rail is light-on-dark, so
+       "readable" here means BRIGHTER, and darkening it toward black would
+       invert the fault rather than fix it. 9.85:1 on the navy. */
+    --sidebar-ink-muted: 203 213 225; /* #CBD5E1  group headings, meta */
     --sidebar-rule: 51 65 85; /* #334155  hairlines inside the rail */
     --sidebar-active: 99 102 241; /* #6366F1  indigo, lifted for dark ground */
 

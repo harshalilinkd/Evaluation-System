@@ -163,7 +163,7 @@ export function StepPeople({
           <div className="relative mt-1.5">
             <Search
               aria-hidden
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint"
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
             />
             <Input
               id="people-search"
@@ -374,7 +374,7 @@ export function StepPeople({
                         {isIncrementDue(person.nextIncrementOn) ? " · due" : ""}
                       </span>
                     ) : (
-                      <span className="text-ink-faint">—</span>
+                      <span className="text-ink-muted">—</span>
                     )}
                   </TableCell>
 
@@ -438,7 +438,7 @@ export function StepPeople({
                               hasPhone={lead.hasPhone}
                             />
                           ) : (
-                            <span className="text-body-sm text-ink-faint">—</span>
+                            <span className="text-body-sm text-ink-muted">—</span>
                           )}
                           {leadUnreachable ? (
                             <span className="text-[11px] font-medium text-critical">
@@ -457,7 +457,7 @@ export function StepPeople({
       </div>
 
       {visible.length === 0 ? (
-        <p className="py-8 text-center text-body-sm text-ink-faint">Nobody matches that search.</p>
+        <p className="py-8 text-center text-body-sm text-ink-muted">Nobody matches that search.</p>
       ) : null}
 
       {/* -- Sticky footer: the count of rows that block launch. -- */}

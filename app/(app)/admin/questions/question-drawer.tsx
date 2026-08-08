@@ -98,7 +98,7 @@ function Field({
         {label}
       </Label>
       {children}
-      {hint ? <p className="text-body-sm text-ink-faint">{hint}</p> : null}
+      {hint ? <p className="text-body-sm text-ink-muted">{hint}</p> : null}
       {error ? <p className="text-body-sm font-medium text-critical">{error}</p> : null}
     </div>
   );
@@ -374,7 +374,7 @@ function QuestionForm({
                 error={state.fieldErrors?.department_ids}
               >
                 {departments.length === 0 ? (
-                  <p className="text-body-sm text-ink-faint">No departments yet. Add one first.</p>
+                  <p className="text-body-sm text-ink-muted">No departments yet. Add one first.</p>
                 ) : (
                   // A wrapped grid rather than a tall column: ten departments as
                   // ten full-width rows pushed every field below them off screen.
@@ -435,7 +435,7 @@ function QuestionForm({
                       key={index}
                       className="flex items-center gap-1 rounded-control border border-rule bg-surface p-1.5"
                     >
-                      <span className="px-1 text-ink-faint" aria-hidden>
+                      <span className="px-1 text-ink-muted" aria-hidden>
                         <GripVertical className="size-4" />
                       </span>
                       <Input
