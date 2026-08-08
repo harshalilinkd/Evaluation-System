@@ -295,7 +295,17 @@ export function ExecutiveSummary({
                     : `HR proposed ${formatInr(salary.review?.hr_proposed_ctc ?? null)}.`
                 }
               >
-                <HikeCalculator evaluationId={evaluationId} band={salary} role={role} />
+                {/* -- Locked once the increment is settled. Past INTERVIEW_DONE
+                      the figure is on a pay record and in `salary_history`,
+                      which has no UPDATE path for anybody (P19-3) — so an
+                      editable form there offers to change something the
+                      database will not let anybody change. -- */}
+                <HikeCalculator
+                  evaluationId={evaluationId}
+                  band={salary}
+                  role={role}
+                  settled={header.status === "INTERVIEW_DONE" || header.status === "CLOSED"}
+                />
                 <NextStep
                   status={header.status}
                   hasProposal={salary.review?.hr_proposed_ctc !== null && salary.review?.hr_proposed_ctc !== undefined}

@@ -37,10 +37,13 @@ export function HikeCalculator({
   evaluationId,
   band,
   role,
+  settled = false,
 }: {
   evaluationId: string;
   band: SalaryBand;
   role: "HR_ADMIN" | "MD";
+  /** The increment is confirmed and on the pay record. Read-only from here. */
+  settled?: boolean;
 }) {
   const current = band.currentCtc;
   const isHr = role === "HR_ADMIN";
@@ -78,6 +81,26 @@ export function HikeCalculator({
 
   /** A figure has been chosen. Drives the output panel's live treatment. */
   const live = target !== null && target > 0;
+
+  /* ---------- Is there anything left to save? ----------
+
+     GREYED WHEN CLEAN, NOT GREYED FOREVER AFTER THE FIRST SAVE.
+
+     "Disable it once saved" is the obvious reading and it is the wrong rule: HR
+     revises a proposal during a negotiation, and a button that dies on the
+     first press would strand them with a figure they had already moved past.
+     What should be dead is a press that would write exactly what is already
+     stored — so the test is whether anything has CHANGED since the last save,
+     which also covers the reload case, because `existing` is read from the
+     stored row.
+
+     `savedNote` compares against the stored note, so editing only the wording
+     re-arms the button too — the justification is part of the record. */
+  const savedCtc = existing === null ? null : Number(existing);
+  const savedNote = ((isHr ? band.review?.hr_justification : band.review?.md_remarks) ?? "").trim();
+
+  const dirty = target !== savedCtc || note.trim() !== savedNote;
+  const canSave = live && dirty && !settled && !saving;
 
   function applyPct(next: string) {
     setPctText(next);
@@ -145,6 +168,7 @@ export function HikeCalculator({
                 key={p}
                 type="button"
                 onClick={() => applyPct(String(p))}
+                disabled={settled}
                 aria-pressed={active}
                 className={cn(
                   "tabular min-h-9 rounded-control px-3 font-sans text-body transition-colors",
@@ -169,6 +193,7 @@ export function HikeCalculator({
             inputMode="decimal"
             value={pctText}
             onChange={(e) => applyPct(e.target.value)}
+            disabled={settled}
             placeholder="e.g. 12.5"
             className="tabular mt-1"
           />
@@ -180,6 +205,7 @@ export function HikeCalculator({
             inputMode="numeric"
             value={target === null ? "" : String(target)}
             onChange={(e) => applyCtc(e.target.value)}
+            disabled={settled}
             placeholder="e.g. 210000"
             className="tabular mt-1"
           />
@@ -243,6 +269,7 @@ export function HikeCalculator({
             setNote(e.target.value);
             setSaved(false);
           }}
+          disabled={settled}
           rows={3}
           className="mt-1.5"
           placeholder={
@@ -264,9 +291,31 @@ export function HikeCalculator({
         </p>
       ) : null}
 
-      <Button onClick={submit} disabled={saving} className="w-full sm:w-auto">
-        {saving ? "Saving…" : isHr ? "Save proposal" : "Approve this figure"}
-      </Button>
+      {/* -- The label says WHY it is disabled, rather than leaving a dead
+            control with no explanation (§13.4). Three states: nothing to save,
+            already settled, or ready. -- */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button onClick={submit} disabled={!canSave} className="w-full sm:w-auto">
+          {saving
+            ? "Saving…"
+            : settled
+              ? "Closed"
+              : !dirty && live
+                ? isHr
+                  ? "Proposal saved"
+                  : "Figure approved"
+                : isHr
+                  ? "Save proposal"
+                  : "Approve this figure"}
+        </Button>
+
+        {!settled && !dirty && live ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            Nothing has changed since it was last saved. Adjust the figure or the note to save
+            again.
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
