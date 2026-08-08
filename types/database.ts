@@ -27,6 +27,10 @@ export type Database = {
           increment_frequency_months: number;
           current_ctc: number | null;
           joining_ctc: number | null;
+          // 0044: provenance for the baseline, which a column cannot carry
+          // the way a history row does.
+          joining_ctc_recorded_by: string | null;
+          joining_ctc_recorded_at: string | null;
           salary_effective_from: string | null;
           employment_type: string;
           created_at: string;
@@ -39,6 +43,8 @@ export type Database = {
           increment_frequency_months?: number;
           current_ctc?: number | null;
           joining_ctc?: number | null;
+          joining_ctc_recorded_by?: string | null;
+          joining_ctc_recorded_at?: string | null;
           salary_effective_from?: string | null;
           employment_type?: string;
         };
@@ -48,6 +54,8 @@ export type Database = {
           increment_frequency_months?: number;
           current_ctc?: number | null;
           joining_ctc?: number | null;
+          joining_ctc_recorded_by?: string | null;
+          joining_ctc_recorded_at?: string | null;
           salary_effective_from?: string | null;
           employment_type?: string;
         };

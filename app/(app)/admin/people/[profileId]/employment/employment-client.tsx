@@ -337,7 +337,15 @@ export function EmploymentClient({
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">Joining salary</td>
-                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    {/* -- Provenance, same as every other row (0044).
+                          A column carries no author the way a history row does,
+                          so it is stored alongside the figure. Blank where the
+                          baseline predates that column or came from an import
+                          with nobody to attribute it to — an honest "unknown"
+                          rather than a name that would be a guess. -- */}
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">
+                      {detail.joiningRecordedByName ?? "—"}
+                    </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">Baseline</td>
                   </tr>
                 ) : null}

@@ -88,7 +88,11 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0041_read_my_lead',          'function',   'is_my_lead',
      'Without it EVALUATED BY is blank on every self-evaluation: the employee cannot read their own HOD''s name.'),
   ('0042_pre_increment_evaluation','function',  'milestone_notice_days',
-     'Without it the six-months-before-increment evaluation is never raised for tenured staff.')
+     'Without it the six-months-before-increment evaluation is never raised for tenured staff.'),
+  ('0043_joining_salary_baseline','column',     'employment_records.joining_ctc',
+     'Without it a joining salary recorded after a raise is filed as a rise over today''s pay.'),
+  ('0044_joining_ctc_provenance','column',      'employment_records.joining_ctc_recorded_by',
+     'Without it the joining salary row in the pay ledger has nobody''s name against it.')
 )
 select
   e.migration,

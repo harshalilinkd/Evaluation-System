@@ -252,7 +252,20 @@ export async function addJoiningSalary(input: {
     .eq("profile_id", v.profileId)
     .neq("reason", "JOINING");
 
-  const patch: { joining_ctc: number; current_ctc?: number } = { joining_ctc: v.amount };
+  /* -- Provenance travels with the figure (0044).
+        A history row carries who wrote it; a column has to be told. Without
+        this the baseline renders as the one line in a pay ledger with nobody's
+        name against it. -- */
+  const patch: {
+    joining_ctc: number;
+    joining_ctc_recorded_by: string;
+    joining_ctc_recorded_at: string;
+    current_ctc?: number;
+  } = {
+    joining_ctc: v.amount,
+    joining_ctc_recorded_by: auth.session.profile.id,
+    joining_ctc_recorded_at: new Date().toISOString(),
+  };
   if ((revisions ?? 0) === 0 && record.current_ctc === null) {
     patch.current_ctc = v.amount;
   }

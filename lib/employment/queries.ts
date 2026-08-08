@@ -14,6 +14,8 @@ export type EmploymentDetail = {
   /** From `profiles` — the ONE joining date (0024). */
   dateOfJoining: string | null;
   history: Array<SalaryRow & { recordedByName: string | null }>;
+  /** Who recorded the joining salary (0044). Null where it predates the column. */
+  joiningRecordedByName: string | null;
   /** Plain-words reminder line: "HR will be reminded on 14-07-2026." */
   remindOn: string | null;
 };
@@ -51,7 +53,16 @@ export async function getEmployment(profileId: string): Promise<CycleResult<Empl
   ]);
 
   const rows = history ?? [];
-  const recorderIds = [...new Set(rows.map((r) => r.recorded_by).filter((v): v is string => Boolean(v)))];
+  /* -- The joining recorder rides the SAME lookup.
+        It is one more id against the same table; a second query for one name
+        would be a round trip bought for nothing. -- */
+  const recorderIds = [
+    ...new Set(
+      [...rows.map((r) => r.recorded_by), record?.joining_ctc_recorded_by].filter(
+        (v): v is string => Boolean(v),
+      ),
+    ),
+  ];
 
   const { data: recorders } = recorderIds.length
     ? await supabase.from("profiles").select("id, full_name").in("id", recorderIds)
@@ -63,6 +74,9 @@ export async function getEmployment(profileId: string): Promise<CycleResult<Empl
     data: {
       record: record ?? null,
       dateOfJoining: profile?.date_of_joining ?? null,
+      joiningRecordedByName: record?.joining_ctc_recorded_by
+        ? (nameOf.get(record.joining_ctc_recorded_by) ?? null)
+        : null,
       history: rows.map((r) => ({
         ...r,
         recordedByName: r.recorded_by ? (nameOf.get(r.recorded_by) ?? null) : null,
