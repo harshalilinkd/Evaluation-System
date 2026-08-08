@@ -53,7 +53,13 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
         that hard-coded its own index would be wrong the moment the one above it
         was conditional — which is exactly the case this report has. -- */
   return (
-    <>
+    /* -- `data-wide` raises the shell's 1180px cap to 1440 for this route only
+          (see globals.css). The document shares its width with a fixed 320px
+          decision rail, so at the default cap the report itself had ~830px for
+          a four-column table whose two answer columns each hold a phrase — and
+          every one of them wrapped. Not full bleed: this page also carries
+          prose, and prose does not want 2000px (UI2-9). -- */
+    <div data-wide className="space-y-0">
       {/* The way out. It was missing entirely: the only exit from a report was
           the browser's back button or the sidebar. */}
       <ReportTopBar report={data} />
@@ -102,6 +108,6 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
           <MetaPanel report={data} />
         </div>
       </div>
-    </>
+    </div>
   );
 }

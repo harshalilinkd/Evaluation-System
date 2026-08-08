@@ -124,7 +124,14 @@ const salarySchema = z.object({
   profileId: z.string().uuid(),
   effectiveFrom: z.string().min(1, "An effective-from date is required"),
   newCtc: z.coerce.number().positive("The new CTC must be greater than zero"),
-  reason: z.enum(["JOINING", "ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
+  /* -- JOINING IS NOT A REVISION, so it is not on this list.
+        A joining salary is the baseline of the ledger, not a change to it, and
+        it lives in `employment_records.joining_ctc` where it cannot be
+        duplicated and cannot be compared against anything. Leaving it here let
+        somebody file "the first salary this person was ever paid" as a rise
+        over the salary they are on today — which is how a 620% hike got
+        written. `setJoiningSalary` below is its own path. -- */
+  reason: z.enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
   /* -- OPTIONAL, at the owner's explicit instruction. This reverses P19-8,
         which made it required on the reasoning that "optional would mean
         usually blank, and a pay change with no explanation is the thing
@@ -156,6 +163,123 @@ const salarySchema = z.object({
  * `previous_ctc` could write a history that disagrees with the record it came
  * from, and the whole point of this table is that it is evidence.
  */
+/* ---------- The joining salary ---------- */
+
+const joiningSalarySchema = z.object({
+  profileId: z.string().uuid(),
+  /* -- The amount, and nothing else.
+        No effective date: 0024 made `profiles.date_of_joining` the ONE joining
+        date, and a salary form that could move it would silently reschedule
+        somebody's increments (P19B-2's trigger fires on that column). The form
+        shows the date; it does not own it.
+
+        No reason: there is only one reason a joining salary exists. A dropdown
+        with one option is a control that cannot be got wrong and still asks to
+        be read.
+
+        No hike: this is the baseline everything else is measured FROM. -- */
+  amount: z.coerce
+    .number()
+    .positive("A joining salary has to be more than zero.")
+    .max(100_000_000, "That looks too large — check the figure."),
+});
+
+/**
+ * Record what somebody was paid when they joined.
+ *
+ * SEPARATE FROM `addSalaryChange`, AND THAT IS THE POINT. A joining salary is
+ * not a revision: it is the line every revision is measured against. Routing it
+ * through the revision path is what produced a 620% rise on the first salary a
+ * person was ever paid — the figure was compared against the salary they are on
+ * TODAY, because that is the only thing a revision knows how to do.
+ *
+ * WRITES ONE COLUMN, and appends NOTHING to `salary_history`. So filling this
+ * in months later, after several revisions are already recorded, cannot alter a
+ * single stored row or percentage. That is the whole reason the baseline is a
+ * column rather than a row.
+ *
+ * `current_ctc` is initialised only when there is no revision history AND no
+ * figure already there. Somebody who joined on ₹1,80,000 and has had no rise
+ * IS on ₹1,80,000, so leaving their current salary blank would be false — but
+ * where a revision exists, `current_ctc` is that revision and this must not
+ * touch it.
+ */
+export async function addJoiningSalary(input: {
+  profileId: string;
+  amount: number | string;
+}): Promise<CycleResult<{ ok: true }>> {
+  const auth = await checkRole(["HR_ADMIN", "MD"]);
+  if (!auth.ok) return auth;
+
+  const parsed = joiningSalarySchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID_INPUT", parsed.error.issues[0]?.message ?? "Check the amount.");
+  }
+  const v = parsed.data;
+  const supabase = await createClient();
+
+  const { data: record } = await supabase
+    .from("employment_records")
+    .select("current_ctc, joining_ctc")
+    .eq("profile_id", v.profileId)
+    .maybeSingle();
+
+  if (!record) {
+    return cycleError(
+      "NO_RECORD",
+      "This person has no employment record yet. Add their joining details first.",
+    );
+  }
+
+  /* -- Immutable once set.
+        "Once recorded, joining_salary remains static for audit purposes." A
+        baseline that can be edited is a baseline that can be moved after every
+        percentage in the ledger has been computed from it — which would leave
+        the stored hikes describing a figure that no longer exists. Correcting
+        one is a deliberate act, not a re-save. -- */
+  if (record.joining_ctc !== null && record.joining_ctc !== undefined) {
+    return cycleError(
+      "ALREADY_SET",
+      "A joining salary is already recorded. It is the baseline every later rise is measured against, so it does not change once set.",
+    );
+  }
+
+  /* -- Does any REVISION exist? Legacy JOINING rows do not count — they are the
+        baseline recorded the old way, not a rise. -- */
+  const { count: revisions } = await supabase
+    .from("salary_history")
+    .select("id", { count: "exact", head: true })
+    .eq("profile_id", v.profileId)
+    .neq("reason", "JOINING");
+
+  const patch: { joining_ctc: number; current_ctc?: number } = { joining_ctc: v.amount };
+  if ((revisions ?? 0) === 0 && record.current_ctc === null) {
+    patch.current_ctc = v.amount;
+  }
+
+  const { error } = await supabase
+    .from("employment_records")
+    .update(patch)
+    .eq("profile_id", v.profileId);
+
+  if (error) {
+    return cycleError("SAVE_FAILED", `Could not record the joining salary: ${error.message}`);
+  }
+
+  // §12, and NO FIGURE in the diff (P19-10). A lead can read audit_log for
+  // their own reports (0013), so a salary there would walk past §5.
+  await supabase.rpc("log_admin_action", {
+    p_entity: "employment",
+    p_entity_id: v.profileId,
+    p_action: "salary.joining_recorded",
+    p_diff: { seeded_current: patch.current_ctc !== undefined } as Json,
+  });
+
+  revalidatePath(`/admin/people/${v.profileId}/employment`);
+  revalidatePath("/admin/increments");
+  return { ok: true, data: { ok: true } };
+}
+
 export async function addSalaryChange(
   input: Omit<z.input<typeof salarySchema>, "newCtc"> & { newCtc: string | number },
 ): Promise<CycleResult<{ id: string }>> {
@@ -171,7 +295,7 @@ export async function addSalaryChange(
 
   const { data: record } = await supabase
     .from("employment_records")
-    .select("current_ctc")
+    .select("current_ctc, joining_ctc")
     .eq("profile_id", v.profileId)
     .maybeSingle();
 
@@ -203,6 +327,10 @@ export async function addSalaryChange(
     .from("salary_history")
     .select("new_ctc")
     .eq("profile_id", v.profileId)
+    // Legacy JOINING rows are excluded: the baseline is the column now, and
+    // counting an old row as well would measure a revision against the same
+    // figure twice depending on which was written first.
+    .neq("reason", "JOINING")
     .lt("effective_from", v.effectiveFrom)
     .order("effective_from", { ascending: false })
     .limit(1)
@@ -214,12 +342,22 @@ export async function addSalaryChange(
         joining salary after an existing row, the lookup would find a
         predecessor and compute a hike for the first salary somebody was ever
         paid, which is nonsense whatever the dates say. -- */
+  /* -- THE BASELINE IS THE FALLBACK.
+        First revision after joining → measured against `joining_ctc`, which is
+        what somebody actually started on. Every later one → against the
+        revision immediately before it. That is the spec and it is also just
+        how a pay ledger reads: each line explains itself against the line
+        above, and the top line is what they joined on.
+
+        Null only when there is neither — a person with no baseline recorded and
+        no history. The row still stands as "this is the salary from this date",
+        with the hike left null rather than invented (P19D-6). -- */
   const previous =
-    v.reason === "JOINING"
-      ? null
-      : preceding?.new_ctc === null || preceding?.new_ctc === undefined
-        ? null
-        : Number(preceding.new_ctc);
+    preceding?.new_ctc !== null && preceding?.new_ctc !== undefined
+      ? Number(preceding.new_ctc)
+      : record.joining_ctc !== null && record.joining_ctc !== undefined
+        ? Number(record.joining_ctc)
+        : null;
   const hikeAmount = previous === null ? null : Math.round((v.newCtc - previous) * 100) / 100;
   const hikePct =
     previous === null || previous === 0

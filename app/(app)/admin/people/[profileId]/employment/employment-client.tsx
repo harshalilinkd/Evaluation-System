@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { addSalaryChange, saveEmployment } from "@/lib/employment/actions";
+import { addJoiningSalary, addSalaryChange, saveEmployment } from "@/lib/employment/actions";
 import type { EmploymentDetail } from "@/lib/employment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -43,7 +43,6 @@ const REASONS = [
   { value: "ANNUAL_INCREMENT", label: "Annual increment" },
   { value: "PROMOTION", label: "Promotion" },
   { value: "MARKET_ADJUSTMENT", label: "Market adjustment" },
-  { value: "JOINING", label: "Joining salary" },
   { value: "CORRECTION", label: "Correction of an earlier entry" },
 ] as const;
 
@@ -81,8 +80,22 @@ export function EmploymentClient({
   /* -- One dialog, three ways in. `null` is closed.
         Held as the MODE rather than a boolean plus a second state, so the two
         cannot disagree about which dialog is open. -- */
-  const [salaryMode, setSalaryMode] = React.useState<"change" | "correct" | "joining" | null>(null);
-  const openSalary = (mode: "change" | "correct" | "joining") => setSalaryMode(mode);
+  /* -- Two dialogs, not one with a mode.
+        A joining salary and a revision are different transactions: one is the
+        baseline of the ledger, the other is a change to it, and they share no
+        field but the amount. One component with a `mode` meant the revision
+        form opened for both — with an effective date and a reason dropdown on
+        a screen that has neither — and it filed the first salary a person was
+        ever paid as a rise over the salary they are on today. -- */
+  const [salaryMode, setSalaryMode] = React.useState<"change" | "correct" | null>(null);
+  const openSalary = (mode: "change" | "correct") => setSalaryMode(mode);
+  const [joiningOpen, setJoiningOpen] = React.useState(false);
+
+  /* -- REVISIONS ONLY.
+        A legacy `reason = 'JOINING'` row is the baseline recorded the old way,
+        and 0043 has copied its amount into `joining_ctc`. Rendering both would
+        show the same figure twice — once as the baseline and once as a rise. -- */
+  const revisions = detail.history.filter((h) => h.reason !== "JOINING");
   const salaryOpen = salaryMode !== null;
 
   async function onSave() {
@@ -272,7 +285,7 @@ export function EmploymentClient({
               <Button
                 variant="ghost"
                 className="mt-1 h-auto px-0 py-1 text-body-sm text-primary"
-                onClick={() => openSalary("joining")}
+                onClick={() => setJoiningOpen(true)}
               >
                 Add joining salary
               </Button>
@@ -283,7 +296,7 @@ export function EmploymentClient({
 
       {/* ---------- History ---------- */}
       <DashboardCard title="Salary history">
-        {detail.history.length === 0 ? (
+        {revisions.length === 0 && r?.joining_ctc == null ? (
           <p className="text-body-sm text-ink-muted">
             Nothing recorded yet. Every change is appended here and can never be edited or removed —
             a mistake is fixed by adding a correction.
@@ -303,7 +316,33 @@ export function EmploymentClient({
                 </tr>
               </thead>
               <tbody>
-                {detail.history.map((row) => (
+                {/* -- ROW 1 IS THE BASELINE, rendered rather than stored.
+                        It comes from `employment_records.joining_ctc`, so
+                        filling it in months later cannot alter a single row
+                        below it or any percentage already computed. That is the
+                        whole reason it is a column and not a history row.
+
+                        No previous, no hike, no percentage — it is what the
+                        ledger starts from, and a baseline with a rise against
+                        it would be describing a raise that never happened. -- */}
+                {r?.joining_ctc != null ? (
+                  <tr className="border-b border-rule bg-surface-mute/60 last:border-b-0">
+                    <td className="tabular px-3 py-2.5 text-body-sm text-ink">
+                      {formatDate(detail.dateOfJoining)}
+                    </td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    <td className="tabular px-3 py-2.5 text-body-sm font-medium text-ink">
+                      {formatInr(r.joining_ctc)}
+                    </td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">Joining salary</td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    <td className="px-3 py-2.5 text-body-sm text-ink-muted">Baseline</td>
+                  </tr>
+                ) : null}
+
+                {revisions.map((row) => (
                   <tr key={row.id} className="border-b border-rule last:border-b-0">
                     <td className="tabular px-3 py-2.5 text-body-sm text-ink">
                       {formatDate(row.effective_from)}
@@ -351,11 +390,7 @@ export function EmploymentClient({
            not retyping both fields. Joining opens on their joining date, which
            is the only date it can honestly carry. */
         initialEffectiveFrom={
-          salaryMode === "correct"
-            ? (r?.salary_effective_from ?? "")
-            : salaryMode === "joining"
-              ? (detail.dateOfJoining ?? "")
-              : ""
+          salaryMode === "correct" ? (r?.salary_effective_from ?? "") : ""
         }
         initialCtc={
           salaryMode === "correct" && r?.current_ctc != null ? String(r.current_ctc) : ""
@@ -365,6 +400,14 @@ export function EmploymentClient({
           setSalaryMode(null);
           router.refresh();
         }}
+      />
+
+      <JoiningSalaryDialog
+        open={joiningOpen}
+        onOpenChange={setJoiningOpen}
+        profileId={person.id}
+        dateOfJoining={detail.dateOfJoining ?? null}
+        hasRecord={Boolean(r)}
       />
     </div>
   );
@@ -443,14 +486,14 @@ function SalaryDialog({
    * stays editable, because somebody who opened the wrong one should be able to
    * carry on rather than cancel and start again.
    */
-  mode?: "change" | "correct" | "joining";
+  mode?: "change" | "correct";
   initialEffectiveFrom?: string;
   initialCtc?: string;
 }) {
   const [effectiveFrom, setEffectiveFrom] = React.useState(initialEffectiveFrom);
   const [newCtc, setNewCtc] = React.useState(initialCtc);
   const [reason, setReason] = React.useState<string>(
-    mode === "correct" ? "CORRECTION" : mode === "joining" ? "JOINING" : "ANNUAL_INCREMENT",
+    mode === "correct" ? "CORRECTION" : "ANNUAL_INCREMENT",
   );
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -499,18 +542,12 @@ function SalaryDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {mode === "correct"
-              ? "Correct the current pay"
-              : mode === "joining"
-                ? "Record the joining salary"
-                : "Record a salary change"}
+            {mode === "correct" ? "Correct the current pay" : "Record a salary change"}
           </DialogTitle>
           <DialogDescription>
             {mode === "correct"
               ? "The figure on record is replaced by the one you enter. The entry it replaces stays in the history — a pay record that can be quietly rewritten is not a record, so a mistake is superseded rather than erased."
-              : mode === "joining"
-                ? "What they were paid when they joined. Date it their joining date; it becomes the first line of their history."
-                : "This is appended to the history and can never be edited or removed. If you need to fix an earlier entry, add a correction rather than trying to change it."}
+              : "This is appended to the history and can never be edited or removed. If you need to fix an earlier entry, add a correction rather than trying to change it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -566,6 +603,128 @@ function SalaryDialog({
           </Button>
           <Button className="min-h-11" onClick={() => void submit()} disabled={busy || !hasRecord}>
             {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+            Record it
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+/* ---------- The joining salary ---------- */
+
+/**
+ * ONE FIELD. Deliberately.
+ *
+ * This used to be the revision dialog opened with a different title, so it
+ * carried an effective date and a reason dropdown — and the server treated what
+ * it submitted as a rise over the salary the person is on today. Recording
+ * ₹1,80,000 as somebody's starting pay came back as a 620% increase.
+ *
+ * A joining salary has no date to choose (it is their joining date, which
+ * `profiles.date_of_joining` already owns — and a salary form that could move
+ * it would silently reschedule their increments), no reason to pick, and
+ * nothing to compare against. What is left is the amount, so that is what the
+ * form is.
+ *
+ * The date is SHOWN and not editable. A field somebody cannot change is still
+ * worth displaying: it is the thing that makes the figure mean something, and
+ * a form that silently omits it invites the question of which date it used.
+ */
+function JoiningSalaryDialog({
+  open,
+  onOpenChange,
+  profileId,
+  dateOfJoining,
+  hasRecord,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  profileId: string;
+  dateOfJoining: string | null;
+  hasRecord: boolean;
+}) {
+  const router = useRouter();
+  const [amount, setAmount] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const result = await addJoiningSalary({ profileId, amount });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onOpenChange(false);
+    setAmount("");
+    router.refresh();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Record the joining salary</DialogTitle>
+          <DialogDescription>
+            What they were paid when they joined. This is the baseline their first
+            rise is measured against — it is not a salary change and does not
+            count as one.
+          </DialogDescription>
+        </DialogHeader>
+
+        {!hasRecord ? (
+          <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
+            This person has no employment record yet. Save their joining details first.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-control bg-surface-mute px-4 py-3">
+              <p className="type-label text-ink-muted">Joined</p>
+              <p className="tabular text-body text-ink">
+                {dateOfJoining ? formatDate(dateOfJoining) : "Not recorded"}
+              </p>
+              <p className="mt-1 text-body-sm text-ink-muted">
+                From their profile. Change it there if it is wrong — their increment
+                dates are worked out from it.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="joining_amount">
+                Joining salary (annual) <span className="text-critical">*</span>
+              </Label>
+              <Input
+                id="joining_amount"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="numeric"
+                placeholder="180000"
+                className="min-h-11 tabular"
+              />
+              <p className="text-body-sm text-ink-muted">
+                ₹ and commas are fine. Recorded once and left alone afterwards, because
+                every later percentage is worked out from it.
+              </p>
+            </div>
+
+            {error ? (
+              <p role="alert" className="rounded-control bg-critical-tint px-4 py-3 text-body-sm text-critical">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="min-h-11">
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={busy || !hasRecord} className="min-h-11">
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
             Record it
           </Button>
         </DialogFooter>

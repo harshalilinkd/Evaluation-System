@@ -371,20 +371,37 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
               {/* `table-fixed` with explicit widths: the two answer columns hold
                   wording like "4 · Effective (Exceeds objective)", and with auto
                   layout one long question text squeezed them to nothing. */}
-              <table className="w-full min-w-[760px] table-fixed border-collapse">
+              <table className="w-full min-w-[900px] table-fixed border-collapse">
                 <colgroup>
+                  {/* -- 300, not 190, and the number is measured rather than
+                        chosen. §6's six labels run from "3 · Adequate (Meets
+                        objective)" at ~213px to "5 · Outstanding (Well exceeds
+                        objective)" at ~284px, so a 190px column — 150px of text
+                        after padding — guaranteed that EVERY answer in the
+                        product wrapped to two lines. The ragged rows were an
+                        arithmetic result, not a styling one.
+
+                        300 with `px-4` leaves 268px, which holds four of the
+                        six on one line. Sizing for all six would need 324 each,
+                        and two of those plus the gap column would leave the
+                        question under 280px on a 1440 page — trading a common
+                        problem for a worse one. The two extremes still wrap;
+                        the table no longer looks uniformly broken.
+
+                        §6's wording is untouched. It is fixed and §17 forbids
+                        paraphrasing it, so the column moves, not the label. -- */}
                   <col />
-                  <col className="w-[190px]" />
-                  <col className="w-[190px]" />
-                  <col className="w-[80px]" />
+                  <col className="w-[300px]" />
+                  <col className="w-[300px]" />
+                  <col className="w-[104px]" />
                 </colgroup>
                 <thead>
                   <tr className="border-b border-rule">
                     <th className="type-label px-5 py-3 text-left font-bold text-ink">Question</th>
-                    <th className={cn("px-5 py-3 text-left", TIER_CELL)}>
+                    <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
                       <TierTag tier="self">Self</TierTag>
                     </th>
-                    <th className={cn("px-5 py-3 text-left", TIER_CELL)}>
+                    <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
                       <TierTag tier="lead">Lead</TierTag>
                     </th>
                     <th className="type-label px-5 py-3 text-right font-bold text-ink">Gap</th>
@@ -430,10 +447,10 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
                       </td>
                       {/* Ink, always. The heading's dot says who spoke; the
                           wording stays readable (§13.8's 4.5:1). */}
-                      <td className={cn("px-5 py-4 font-sans text-body text-ink", TIER_CELL)}>
+                      <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
                         {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
-                      <td className={cn("px-5 py-4 font-sans text-body text-ink", TIER_CELL)}>
+                      <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
                         {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
                       <td className="px-5 py-4 text-right">

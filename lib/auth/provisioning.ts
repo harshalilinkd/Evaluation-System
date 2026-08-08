@@ -203,6 +203,10 @@ async function provisionPerson(
       employment_type: input.employment_type,
       // The figure on the record is what they are paid TODAY. If HR gave only a
       // joining salary, that is still today's salary.
+      /* -- Somebody joining on ₹1,80,000 with no rise yet IS on ₹1,80,000, so
+            leaving `current_ctc` blank would be false. The two columns start
+            equal and diverge at the first revision, which is the only thing
+            that moves `current_ctc` afterwards. -- */
       current_ctc: input.current_ctc ?? input.joining_ctc ?? null,
       joining_ctc: input.joining_ctc ?? null,
     });
@@ -245,26 +249,29 @@ async function provisionPerson(
     note: string;
   }> = [];
 
-  if (input.joining_ctc !== undefined && input.date_of_joining) {
-    salaryRows.push({
-      profile_id: profileId,
-      effective_from: input.date_of_joining,
-      previous_ctc: null,
-      new_ctc: input.joining_ctc,
-      hike_amount: null,
-      hike_pct: null,
-      reason: "JOINING",
-      recorded_by: actorProfileId,
-      note: "Recorded when the account was created.",
-    });
-  }
+  /* -- NO JOINING ROW. The baseline is `joining_ctc` on the employment record,
+        written above, and the ledger renders it as row 1 (0043).
+
+        It used to be appended here as a `salary_history` row with reason
+        JOINING. That reads well and breaks the moment somebody records a
+        joining salary AFTER a revision already exists — the revision path
+        measured it against today's salary and filed the first pay a person ever
+        received as a rise. A baseline that cannot be compared against anything
+        cannot be got wrong that way. -- */
 
   if (input.current_ctc !== undefined && input.last_increment_date) {
     // The increment amount is what makes the previous figure knowable. Without
     // it the row still stands as "this is the salary from this date", with the
     // hike left null rather than invented.
+    /* -- The increment amount makes the previous figure knowable; failing
+          that, the baseline does. Falling back to `joining_ctc` is what makes
+          the FIRST revision measure against what somebody joined on, which is
+          the rule the ledger follows everywhere else. -- */
     const hike = input.last_increment_amount;
-    const previous = hike !== undefined ? input.current_ctc - hike : null;
+    const previous =
+      hike !== undefined
+        ? input.current_ctc - hike
+        : (input.joining_ctc ?? null);
 
     salaryRows.push({
       profile_id: profileId,

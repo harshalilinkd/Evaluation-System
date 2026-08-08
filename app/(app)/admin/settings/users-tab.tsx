@@ -1199,7 +1199,7 @@ function EditPersonDialog({
                   <option value="PROMOTION">Promotion</option>
                   <option value="MARKET_ADJUSTMENT">Market adjustment</option>
                   <option value="CORRECTION">Correction</option>
-                  <option value="JOINING">Joining salary</option>
+                  
                 </select>
               </Field>
 

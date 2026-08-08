@@ -413,6 +413,27 @@
     max-width: none;
   }
 
+  /* -- A WIDER CAP, for a document that carries a rail beside it.
+        Between the 1180px column and edge-to-edge there was nothing, and the
+        combined report needs the middle: it is a two-column layout whose right
+        side is a fixed 320px decision panel, so the document itself only ever
+        got ~830px of the 1180 — and its ratings table has four columns, two of
+        which hold a phrase like "4 · Effective (Exceeds objective)". Every
+        answer wrapped to two lines, which is what made the rows look ragged.
+
+        NOT full bleed, and that is UI2-9's rule rather than timidity: this page
+        holds prose — the employee's own words, the lead's assessment — and a
+        paragraph measured across 2000px is unreadable. 1440 gives the table its
+        line back and still keeps a sane measure for the narrative bands.
+
+        Driven by `:has()` like `data-full-bleed`, for UI2-8's reason: the
+        layout is shared by every authenticated route and cannot read the
+        pathname, and threading a prop would make every page pass something it
+        does not care about. -- */
+  .app-main:has([data-wide]) .app-container {
+    max-width: 1440px;
+  }
+
   /* ---------- Data grid ---------- */
   /*
      Frozen panes for the spreadsheet-style tables (the question bank, the
