@@ -75,11 +75,14 @@ export function SalaryBand({
   evaluationId,
   status,
   isHr,
+  index,
 }: {
   data: SalaryBandData;
   evaluationId: string;
   status: string;
   isHr: boolean;
+  /** Counted by the page, so the sequence closes up when a band is absent. */
+  index: number;
 }) {
   const router = useRouter();
   const review = data.review;
@@ -112,7 +115,7 @@ export function SalaryBand({
       {/* Numbered like the other five, so the document reads as one thing. It
           is band 6 on an increment cycle and does not exist otherwise. */}
       <BandHeading
-        index={5}
+        index={index}
         title="Salary"
         hint="Every figure here is for HR and the MD only."
       />
@@ -545,10 +548,22 @@ function InterviewCard({
   approvedPct: number | null;
   onDone: () => void;
 }) {
+  /* -- NO SEPARATE INTERVIEW STEP, at the owner's instruction.
+        "When HR reviews and sends to the MD it means the interview is
+        scheduled" — so the call is not a thing the system asks about
+        afterwards, and asking for its date, its attendees and its notes was
+        three fields nobody was going to fill in truthfully.
+
+        §8's INTERVIEW_DONE has NOT been removed and no migration was written.
+        `confirm_increment` (0030) already runs MD_REVIEWED -> INTERVIEW_DONE ->
+        CLOSED inside ONE transaction, so that status has never been somewhere a
+        record rests — it is a step inside an atomic call. Editing an applied
+        migration to delete it would be forbidden (§0.8) and would buy nothing;
+        what was worth removing was the data entry, and that is what has gone.
+
+        The three interview columns stay and are left null, which reads honestly
+        as "not separately recorded" rather than as a date somebody invented. -- */
   const today = new Date();
-  const [interviewDate, setInterviewDate] = React.useState(today.toISOString().slice(0, 10));
-  const [attendees, setAttendees] = React.useState("HR and the Managing Director");
-  const [notes, setNotes] = React.useState("");
   const [finalText, setFinalText] = React.useState(String(approvedCtc));
   const [effectiveFrom, setEffectiveFrom] = React.useState(firstOfNextMonth(today));
   const [open, setOpen] = React.useState(false);
@@ -562,14 +577,7 @@ function InterviewCard({
     if (finalCtc === null) return;
     setBusy(true);
     setError(null);
-    const result = await confirmIncrement({
-      evaluationId,
-      finalCtc,
-      effectiveFrom,
-      interviewDate,
-      attendees,
-      notes,
-    });
+    const result = await confirmIncrement({ evaluationId, finalCtc, effectiveFrom });
     setBusy(false);
     if (!result.ok) setError(result.error.message);
     else {
@@ -581,26 +589,17 @@ function InterviewCard({
   return (
     <article className="card-surface space-y-4 p-6">
       <div>
-        <h3 className="font-sans text-body font-medium text-ink">The increment interview</h3>
+        <h3 className="font-sans text-body font-medium text-ink">Confirm and close</h3>
         <p className="font-sans text-body-sm text-ink-muted">
-          The MD approved {money(approvedCtc)} ({pctText(approvedPct)}). Record what was agreed in
-          the call.
+          The MD approved {money(approvedCtc)} ({pctText(approvedPct)}). Confirming writes it to
+          {" "}
+          {employeeName}&rsquo;s pay record and closes the evaluation.
         </p>
       </div>
 
       {error ? <Notice tone="error">{error}</Notice> : null}
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="interview_date" className="type-label text-ink-muted">Interview date</Label>
-          <Input id="interview_date" type="date" value={interviewDate}
-            onChange={(e) => setInterviewDate(e.target.value)} className="min-h-11 tabular" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="attendees" className="type-label text-ink-muted">Attendees</Label>
-          <Input id="attendees" value={attendees} onChange={(e) => setAttendees(e.target.value)}
-            className="min-h-11" />
-        </div>
         <div className="space-y-2">
           <Label htmlFor="final_ctc" className="type-label text-ink-muted">Final CTC</Label>
           <Input id="final_ctc" value={finalText} onChange={(e) => setFinalText(e.target.value)}
@@ -614,18 +613,13 @@ function InterviewCard({
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="interview_notes" className="type-label text-ink-muted">Notes</Label>
-        <Textarea id="interview_notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
-      </div>
-
       <Button
         type="button"
         className="min-h-11"
         disabled={finalCtc === null || finalCtc <= 0 || effectiveFrom === ""}
         onClick={() => setOpen(true)}
       >
-        Confirm final increment
+        Confirm and close
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

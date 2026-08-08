@@ -249,7 +249,13 @@ export const TRANSITIONS: readonly TransitionDefinition[] = [
   {
     from: "INTERVIEW_DONE",
     to: "CLOSED",
-    actors: ["HR_ADMIN", "SYSTEM"],
+    /* -- MD added (0045). `confirm_increment` is granted to HR or the MD and
+          runs MD_REVIEWED -> INTERVIEW_DONE -> CLOSED atomically, so the MD was
+          admitted to the first half and refused the second — the call could
+          never complete for them. A role allowed to begin an indivisible
+          operation has to be allowed to finish it. The SQL half moves in the
+          same change (P5-1). -- */
+    actors: ["HR_ADMIN", "MD", "SYSTEM"],
     guards: ["requireDisclosureReady"],
     isReturn: false,
     action: "evaluation.close_after_interview",

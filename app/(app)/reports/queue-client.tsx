@@ -292,13 +292,27 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       {
         id: "actions",
         header: "",
-        size: 84,
+        size: 150,
         enableResizing: false,
         meta: { align: "center" },
+        /* -- Both views, on the row itself.
+              They were only in the row-details dialog, which opens on a click
+              somebody has to know to make — so the interview view existed and
+              was effectively undiscoverable. A feature reachable only from a
+              modal nobody opens is a feature that is not there. -- */
         cell: ({ row }) => (
-          <Button asChild variant="outline" size="sm" className="h-8">
-            <Link href={`/reports/${row.original.evaluationId}`}>{isHr ? "Open" : "Read"}</Link>
-          </Button>
+          <div className="flex justify-center gap-1.5">
+            <Button asChild size="sm" className="h-8">
+              <Link href={`/reports/${row.original.evaluationId}/summary`} title="Executive summary — scores and salary on one screen">
+                Summary
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="sm" className="h-8">
+              <Link href={`/reports/${row.original.evaluationId}`} title="The full report and audit trail">
+                {isHr ? "Open" : "Read"}
+              </Link>
+            </Button>
+          </div>
         ),
       },
     ],
@@ -317,9 +331,15 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
     <TableScreen>
       <ScreenHeader
         title="Reports"
+        /* -- "Nothing is waiting for review" was true of HR's own inbox and
+              false of the screen: a record the MD had reviewed still needs
+              closing, and saying nothing is waiting sends somebody away from
+              work that is theirs. It now names the next thing to do. -- */
         subtitle={
           queue.pendingHr === 0
-            ? "Nothing is waiting for review."
+            ? queue.readyToClose > 0
+              ? `${queue.readyToClose} ${queue.readyToClose === 1 ? "report has" : "reports have"} been reviewed by the MD and can be closed.`
+              : "Nothing is waiting for review."
             : queue.oldestWaiting !== null
               ? `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review · the oldest has waited ${queue.oldestWaiting} ${queue.oldestWaiting === 1 ? "day" : "days"}`
               : `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review`
@@ -329,9 +349,15 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       {/* The three coloured counts, restored at the owner's instruction — half
           the height they were, and the numeral is ink rather than the tint's
           own hue, which is what makes them readable (§13.8). */}
+      {/* -- Four, not three. §8 has four live states before CLOSED and the row
+            showed three, so a record the MD had just reviewed was counted
+            nowhere — every tile read 0 with a report sitting in the table
+            below. "Ready to close" is where MD_REVIEWED and INTERVIEW_DONE
+            land, which is also the tile that says whose turn it now is. -- */}
       <KpiRow>
         <KpiCard label="Pending your review" value={queue.pendingHr} tone="self" />
         <KpiCard label="With the MD" value={queue.withMd} tone="lead" />
+        <KpiCard label="Ready to close" value={queue.readyToClose} tone="final" />
         <KpiCard label="Closed" value={queue.closedThisCycle} tone="final" />
       </KpiRow>
 
@@ -449,10 +475,24 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         storageKey="appraise.reports-queue.column-widths"
         rowNoun="report"
         rowTitle={(r) => r.employeeName}
+        /* -- Two ways in, because they are two different moments.
+              "Executive summary" is the live-interview view: the two scores and
+              the whole salary model on one screen, no scrolling. The full report
+              is the record — every question, every comment, the audit trail —
+              and is unchanged.
+              The summary is offered FIRST because it is the one somebody opens
+              with a person sitting opposite them. -- */
         rowActions={(r) => (
-          <Button asChild className="min-h-11">
-            <Link href={`/reports/${r.evaluationId}`}>{isHr ? "Open report" : "Read report"}</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild className="min-h-11">
+              <Link href={`/reports/${r.evaluationId}/summary`}>Executive summary</Link>
+            </Button>
+            <Button asChild variant="secondary" className="min-h-11">
+              <Link href={`/reports/${r.evaluationId}`}>
+                {isHr ? "Full report" : "Read full report"}
+              </Link>
+            </Button>
+          </div>
         )}
         minWidth={1320}
         empty={

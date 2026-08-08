@@ -7,7 +7,7 @@ import { computeScores, computeVariance, DEFAULT_VARIANCE_THRESHOLD } from "@/li
 import { getEvaluationForm } from "@/lib/forms/get-form";
 import { SECTION_LABELS, SECTION_ORDER } from "@/lib/forms/labels";
 import { isNarrative, readableAnswer } from "@/lib/reports/answer";
-import { NARRATIVE_TOPICS, PAIRED_QUESTION_IDS } from "@/lib/reports/topics";
+import { NARRATIVE_TOPICS } from "@/lib/reports/topics";
 import type {
   EvaluationReport,
   NarrativeBlock,
@@ -208,18 +208,32 @@ export async function buildEvaluationReport(
     });
   }
 
-  // Bands 4 and 5 take every narrative answer the topics did not claim, so
-  // nothing anybody wrote can fall out of the report.
+  /* -- EACH SIDE'S BAND IS A COMPLETE RECORD OF WHAT THAT SIDE WAS ASKED.
+        No question is withheld from it because another band also shows it.
+
+        It used to skip anything the curated topic pairing claimed, on the
+        reasoning that showing it twice was redundant. That was wrong, and the
+        owner found it: a HOD answered nine questions and the lead's assessment
+        listed four. Three of them — strengths, areas for improvement, training
+        — had been claimed by the comparison band, so the section that reads as
+        "everything the manager said" was silently missing most of it.
+
+        The comparison band is a VIEW: two sides of one topic, for reading
+        together. These two are the RECORD, in the order the questions were
+        asked. A record with holes in it is not a record, and this document is
+        signed and filed (§12). The repetition is the cheaper of the two costs.
+
+        The one deliberate omission is a rating: `SCALE_0_5` answers live in the
+        Ratings band with their scores and their gap, which is where a number
+        belongs. Nothing is lost — every question appears somewhere. -- */
   const employeeVoice: NarrativeBlock[] = allQuestions
     .filter((q) => isNarrative(q) && q.answeredBy !== "LEAD_ONLY")
-    .filter((q) => !PAIRED_QUESTION_IDS.has(q.questionId))
     .filter((q) => !hidden.has(q.questionId) || answeredHidden(q.questionId))
     .map((q) => ({ question: q.text, answer: readableAnswer(q, selfAnswers[q.questionId]) }));
 
   const leadAssessment: NarrativeBlock[] = allQuestions
     .filter((q) => q.answeredBy !== "EMPLOYEE_ONLY")
     .filter((q) => q.section === "MANAGER_REVIEW")
-    .filter((q) => !PAIRED_QUESTION_IDS.has(q.questionId))
     .filter((q) => !hidden.has(q.questionId) || answeredHidden(q.questionId))
     // The lead's assessment is prose AND the two selects and the concern flag —
     // "can they handle more responsibility" belongs with the written verdict,

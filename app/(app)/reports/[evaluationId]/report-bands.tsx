@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Flag, Lock } from "lucide-react";
+import { ArrowLeft, Flag, LayoutDashboard, Lock } from "lucide-react";
 
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { StatusChip } from "@/components/appraise/status-chip";
@@ -103,7 +103,24 @@ export function ReportTopBar({ report }: { report: EvaluationReport }) {
       <span className="truncate text-body-sm font-medium text-ink">{header.employeeName}</span>
 
       <span className="ml-auto flex items-center gap-2">
-        <span className="hidden text-body-sm text-ink-muted sm:inline">
+        {/* -- The other half of the dual-report toggle.
+              PURELY ADDITIVE: one link in the chrome. Nothing about the report
+              below is moved, removed or reworded — the record is unchanged, and
+              this is only the way across to the interview view.
+
+              It is here because a toggle that exists on one side only is a
+              toggle nobody finds: the executive view links here, and without
+              this there was no way back to it except the queue. -- */}
+        <Link
+          href={`/reports/${report.evaluationId}/summary`}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-rule px-2.5 text-body-sm font-medium text-ink transition-colors duration-hover hover:bg-surface-mute"
+        >
+          <LayoutDashboard className="size-4" aria-hidden />
+          <span className="hidden sm:inline">Executive summary</span>
+          <span className="sm:hidden">Summary</span>
+        </Link>
+
+        <span className="hidden text-body-sm text-ink-muted lg:inline">
           {header.cycleName} · {header.period}
         </span>
         <StatusChip status={header.status} />
@@ -328,7 +345,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
 
 /* ---------- Band 2 ---------- */
 
-export function RatingsBand({ report }: { report: EvaluationReport }) {
+export function RatingsBand({ report, index }: { report: EvaluationReport; index: number }) {
   const [flaggedOnly, setFlaggedOnly] = React.useState(false);
 
   const sections = report.sections
@@ -338,7 +355,7 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
   return (
     <section className="space-y-4">
       <BandHeading
-        index={1}
+        index={index}
         title="Ratings"
         hint="Every question both sides answered, in the order they were asked."
         action={
@@ -479,7 +496,7 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
 
 /* ---------- Band 3 ---------- */
 
-export function LearningBand({ report }: { report: EvaluationReport }) {
+export function LearningBand({ report, index }: { report: EvaluationReport; index: number }) {
   const { paired } = report.narratives;
   if (paired.length === 0) return null;
 
@@ -489,9 +506,9 @@ export function LearningBand({ report }: { report: EvaluationReport }) {
   return (
     <section className="space-y-4">
       <BandHeading
-        index={3}
+        index={index}
         title="Learning and improvement"
-        hint="The two sides side by side. Nothing here is scored or matched — read them together."
+        hint="The two sides on one topic, for reading together. Nothing here is scored or matched, and every answer below also appears in full in its own side's section."
       />
 
       {paired.map((pair) => (

@@ -10,7 +10,15 @@ export const ROUTES = {
   dashboard: "/dashboard",
   myEvaluation: "/my-evaluation",
   team: "/team",
-  review: "/review",
+  /* -- `/review` IS GONE. P23 deleted the MD's legacy collision screen when P20
+        replaced it, and the directory it left behind holds a `.gitkeep` and no
+        page — so the path 404s. This map still pointed at it, and so did the
+        MD's landing, which is why signing in as the MD opened a black 404 and
+        the only way into the product was the browser's back button.
+
+        The MD's work lives at `/reports` now: the queue of records awaiting
+        their review, and the approval itself. -- */
+  reports: "/reports",
   scorecard: "/scorecard",
   adminCycles: "/admin/cycles",
   adminQuestions: "/admin/questions",
@@ -30,7 +38,7 @@ export const ROUTES = {
  */
 export function landingPathFor(roles: readonly AppRole[]): string {
   if (roles.includes("HR_ADMIN")) return ROUTES.adminCycles;
-  if (roles.includes("MD")) return ROUTES.review;
+  if (roles.includes("MD")) return ROUTES.reports;
   return ROUTES.myEvaluation;
 }
 
@@ -50,7 +58,14 @@ export function showsTeamLink(roles: readonly AppRole[]): boolean {
  */
 const ROUTE_RULES: ReadonlyArray<{ prefix: string; roles: readonly AppRole[] | null }> = [
   { prefix: "/admin", roles: ["HR_ADMIN"] },
-  { prefix: "/review", roles: ["MD", "HR_ADMIN"] },
+  /* -- Three routes that shipped without a rule here. Each guards itself in its
+        own page, so nothing was ever exposed — but the middleware did not know
+        they were part of the authenticated area, so an unauthenticated visitor
+        reached the page before being bounced instead of being sent to the login
+        screen at the edge. `/reports` replaces the deleted `/review`. -- */
+  { prefix: "/reports", roles: ["MD", "HR_ADMIN"] },
+  { prefix: "/people", roles: null },
+  { prefix: "/scorecard", roles: null },
   { prefix: "/team", roles: ["HOD", "SUPERVISOR", "HR_ADMIN", "MD"] },
   { prefix: "/my-evaluation", roles: null },
   { prefix: "/dashboard", roles: null },
@@ -69,7 +84,9 @@ export const PROTECTED_PREFIXES = [
   "/dashboard",
   "/my-evaluation",
   "/team",
-  "/review",
+  "/reports",
+  "/people",
+  "/scorecard",
   "/admin",
 ] as const;
 

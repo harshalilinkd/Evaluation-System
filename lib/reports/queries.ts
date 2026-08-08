@@ -35,6 +35,8 @@ export type ReportQueue = {
   rows: QueueRow[];
   pendingHr: number;
   withMd: number;
+  /** Reviewed by the MD, still to be closed. INTERVIEW_DONE counts too. */
+  readyToClose: number;
   closedThisCycle: number;
   /** The longest anything has been waiting, in days. */
   oldestWaiting: number | null;
@@ -78,7 +80,7 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
   if (list.length === 0) {
     return {
       ok: true,
-      data: { rows: [], pendingHr: 0, withMd: 0, closedThisCycle: 0, oldestWaiting: null, cycles: [], departments: [] },
+      data: { rows: [], pendingHr: 0, withMd: 0, readyToClose: 0, closedThisCycle: 0, oldestWaiting: null, cycles: [], departments: [] },
     };
   }
 
@@ -197,12 +199,30 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
 
   const pending = rows.filter((r) => r.status === "PENDING_HR_REVIEW");
 
+  /* -- THE TILES HAD A HOLE IN THE MIDDLE OF §8.
+        The query fetches five statuses and the three counters covered three of
+        them: PENDING_HR_REVIEW, HR_APPROVED and CLOSED. A record the MD had
+        reviewed — MD_REVIEWED, or INTERVIEW_DONE on an increment — was counted
+        by NONE of them, so the moment the MD did their job the record vanished
+        from every tile and the row above read 0 · 0 · 0 with a report plainly
+        sitting in the table.
+
+        A counter that silently drops a state is worse than no counter: it does
+        not look broken, it looks like there is no work. Both remaining statuses
+        now have a home, and the four together cover every status the query
+        admits — so this cannot happen again without somebody widening the `in`
+        filter and not the tiles. -- */
+  const readyToClose = rows.filter(
+    (r) => r.status === "MD_REVIEWED" || r.status === "INTERVIEW_DONE",
+  ).length;
+
   return {
     ok: true,
     data: {
       rows,
       pendingHr: pending.length,
       withMd: rows.filter((r) => r.status === "HR_APPROVED").length,
+      readyToClose,
       closedThisCycle: rows.filter((r) => r.status === "CLOSED").length,
       oldestWaiting: pending.reduce<number | null>(
         (max, r) => (r.daysWaiting !== null && (max === null || r.daysWaiting > max) ? r.daysWaiting : max),

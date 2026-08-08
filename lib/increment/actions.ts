@@ -30,10 +30,24 @@ async function requireHrOrMd() {
 
 /* ---------- HR's proposal ---------- */
 
+/**
+ * OPTIONAL AT THE OWNER'S EXPLICIT INSTRUCTION.
+ *
+ * P19-8 made it mandatory, on the reasoning that "optional would mean usually
+ * blank" and that a pay change with no explanation is the thing somebody has to
+ * reconstruct from memory two years later. That reasoning still holds and the
+ * decision has been overruled deliberately — recorded here rather than quietly
+ * relaxed. The field is still offered first and still travels with the figure;
+ * it simply no longer blocks.
+ *
+ * Everything else about the record is unchanged: the figure, its percent, the
+ * actor and the timestamp are all still written, so the WHO and the WHAT remain
+ * answerable even when the WHY is left blank.
+ */
 const proposalSchema = z.object({
   evaluationId: z.string().uuid(),
   proposedCtc: z.number().positive("A proposed salary must be more than zero."),
-  justification: z.string().trim().min(1, "Say why this figure is right before sending it on."),
+  justification: z.string().trim().default(""),
 });
 
 /**
@@ -49,7 +63,7 @@ const proposalSchema = z.object({
 export async function saveProposal(input: {
   evaluationId: string;
   proposedCtc: number;
-  justification: string;
+  justification?: string;
 }): Promise<CycleResult<{ hikePct: number | null }>> {
   const auth = await requireHr();
   if (!auth.ok) return auth;
@@ -94,7 +108,7 @@ export async function saveProposal(input: {
       months_since_last_increment: monthsSince(employment?.last_increment_date ?? null, new Date()),
       hr_proposed_ctc: parsed.data.proposedCtc,
       hr_proposed_hike_pct: pct,
-      hr_justification: parsed.data.justification,
+      hr_justification: parsed.data.justification || null,
       status: "HR_PROPOSED",
     },
     { onConflict: "evaluation_id" },
@@ -117,14 +131,16 @@ export async function saveProposal(input: {
 const approvalSchema = z.object({
   evaluationId: z.string().uuid(),
   approvedCtc: z.number().positive("An approved salary must be more than zero."),
-  remarks: z.string().trim().min(1, "Record your remarks before approving."),
+  // Optional, for the same instruction and the same reason as the
+  // justification above. The approval is still dated and attributed.
+  remarks: z.string().trim().default(""),
 });
 
 /** Set the approved figure. The percent is derived, never accepted. */
 export async function saveApproval(input: {
   evaluationId: string;
   approvedCtc: number;
-  remarks: string;
+  remarks?: string;
 }): Promise<CycleResult<{ hikePct: number | null }>> {
   const auth = await requireMd();
   if (!auth.ok) return auth;
@@ -152,7 +168,7 @@ export async function saveApproval(input: {
     .update({
       md_approved_ctc: parsed.data.approvedCtc,
       md_approved_hike_pct: pct,
-      md_remarks: parsed.data.remarks,
+      md_remarks: parsed.data.remarks || null,
       status: "MD_APPROVED",
     })
     .eq("evaluation_id", parsed.data.evaluationId);

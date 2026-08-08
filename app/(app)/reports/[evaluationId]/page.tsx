@@ -72,21 +72,33 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               top of a document. The numbered headings start at Ratings. */}
           <HeaderBand report={data} />
 
-          <RatingsBand report={data} />
-          <LearningBand report={data} />
+          {/* -- THE NUMBERS ARE COUNTED, NOT WRITTEN DOWN.
+                They were hard-coded, and had drifted: Ratings was 1, the
+                comparison band and the employee's words were BOTH 3, there was
+                no 2, and salary was 5. A reader who says "look at three" then
+                has to ask which three, and a missing number reads as a missing
+                section on a document that gets signed.
+
+                Counting also survives a band being absent — the comparison band
+                renders nothing when no topic is in the snapshot, and everything
+                after it now closes up instead of leaving a hole. -- */}
+          <RatingsBand report={data} index={1} />
+          {data.narratives.paired.length > 0 ? (
+            <LearningBand report={data} index={2} />
+          ) : null}
 
           <NarrativeBand
-            index={3}
+            index={data.narratives.paired.length > 0 ? 3 : 2}
             title={`${employeeFirst}'s own words`}
-            hint="Achievements, difficulties, ideas and the support they asked for. Shown in full."
+            hint="Every free-text answer they gave, in the order the questions were asked."
             blocks={data.narratives.employeeVoice}
             tone="self"
           />
 
           <NarrativeBand
-            index={4}
+            index={data.narratives.paired.length > 0 ? 4 : 3}
             title="The lead's assessment"
-            hint="Strengths, improvement, training, responsibility, promotion, concerns and final remarks."
+            hint="Every question the manager answered, in the order they were asked. Ratings are in section 1 with their scores."
             blocks={data.narratives.leadAssessment}
             tone="lead"
           />
@@ -97,6 +109,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               evaluationId={evaluationId}
               status={data.header.status}
               isHr={isHr}
+              index={data.narratives.paired.length > 0 ? 5 : 4}
             />
           ) : null}
         </div>
