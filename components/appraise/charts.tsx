@@ -190,9 +190,14 @@ export function TrendAreaChart({
   className?: string;
 }) {
   const reduced = usePrefersReducedMotion();
+  // Sized to the bars — see `barChartHeight`. A little taller per row than the
+  // labelled chart, because these carry a name AND a signed value.
+  const box = height ?? barChartHeight(data.length, 300, 42);
+
+  if (data.length === 0) return null;
 
   return (
-    <div className={cn("w-full", className)} style={{ height }}>
+    <div className={cn("w-full", className)} style={{ height: box }}>
       <ResponsiveContainer width="100%" height="100%">
         {/* left: 0, not -16. A negative left margin pulls the y-axis off the
             canvas and clips its own tick labels — "2.25" arrives as "25". */}
@@ -442,7 +447,7 @@ export function StackedBarChart({
   data,
   xKey,
   series,
-  height = 260,
+  height,
   className,
 }: {
   data: Array<Record<string, string | number>>;
@@ -514,7 +519,7 @@ export function RankedBarChart({
   valueKey,
   color = "primary",
   diverging = false,
-  height = 260,
+  height,
   className,
 }: {
   data: Array<Record<string, string | number>>;
@@ -693,12 +698,32 @@ export function Sparkline({
  * `emphasis` tints the largest bar. One accent, not a rainbow — the ranking is
  * already carried by length, so colour only has to say "this is the top one".
  */
+/**
+ * How tall a horizontal bar chart should be, given how many bars it has.
+ *
+ * A FIXED height is what produced the voids. Both of these defaulted to 220–260
+ * px whatever the data, so a cycle with one department rendered one bar in a
+ * 220px canvas and the rest of the card was empty — and because the dashboard
+ * grid stretches siblings to match, the panel BESIDE it inherited the same
+ * height to say a single sentence. Two large blank cards from one small dataset.
+ *
+ * Sizing to the rows fixes both at once: the chart is as tall as it needs to be,
+ * and nothing next to it is stretched to match a hole.
+ *
+ * `cap` keeps a long list from running away — beyond it the chart scrolls with
+ * the page rather than growing without limit.
+ */
+function barChartHeight(rows: number, cap: number, rowHeight = 38, chrome = 24): number {
+  if (rows <= 0) return 0;
+  return Math.min(cap, Math.max(rowHeight + chrome, rows * rowHeight + chrome));
+}
+
 export function LabelledBarChart({
   data,
   labelKey,
   valueKey,
   color = "primary",
-  height = 220,
+  height,
   className,
 }: {
   data: Array<Record<string, string | number>>;
@@ -709,9 +734,13 @@ export function LabelledBarChart({
   className?: string;
 }) {
   const max = Math.max(0, ...data.map((d) => Number(d[valueKey]) || 0));
+  // Sized to the bars unless the caller insists otherwise.
+  const box = height ?? barChartHeight(data.length, 260);
+
+  if (data.length === 0) return null;
 
   return (
-    <div className={cn("w-full", className)} style={{ height }}>
+    <div className={cn("w-full", className)} style={{ height: box }}>
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 8 }}>
           <XAxis type="number" hide domain={[0, max || 1]} />

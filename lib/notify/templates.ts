@@ -51,6 +51,7 @@ export type TemplateKey =
   | "leadReviewOverdue"
   | "hrDueDigest"
   | "incrementsOverdue"
+  | "evaluationsOverdue"
   | "mdReviewDigest"
   | "mdReviewPending"
   | "reportReady"
@@ -68,6 +69,7 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   leadReviewOverdue: "HOD rating overdue",
   hrDueDigest: "What is due (to HR)",
   incrementsOverdue: "Increments overdue (to HR)",
+  evaluationsOverdue: "Forms overdue (to HR)",
   mdReviewDigest: "Reports waiting (to the MD)",
   mdReviewPending: "Management review pending",
   reportReady: "Report ready for HR",
@@ -617,6 +619,51 @@ export function incrementsOverdue(v: {
       heading: "Overdue increments",
       bodyHtml: p(`${v.items.length} past their due date: ${nameList(v.items)}.`),
       cta: { label: "Open the list", href: v.link },
+    }),
+  };
+}
+
+/**
+ * Who has not filled their form in, to HR.
+ *
+ * P22 chases each side against their OWN deadline, which is right — but nobody
+ * was telling HR the total. So a cycle could sit with nine people late and the
+ * only way to know was to open the board and count, which is exactly the thing
+ * that gets missed.
+ *
+ * NO SCORES, and no indication of who rated whom. §5: the message says somebody
+ * has not submitted, never anything they wrote — a WhatsApp has no access
+ * control around it, so nothing that is confined inside the product may travel
+ * in one (P13-13).
+ *
+ * COUNTS BY SIDE, not by name, once past a handful. Nine names is a wall of
+ * text on a phone; "6 employees and 3 HODs" is the same fact in a glance, and
+ * the link opens the list where the names belong.
+ */
+export function evaluationsOverdue(v: {
+  employees: number;
+  leads: number;
+  cycleName: string;
+  link: string;
+}): RenderedMessage {
+  const total = v.employees + v.leads;
+  const parts = [
+    v.employees > 0 ? `${v.employees} employee${v.employees === 1 ? "" : "s"}` : null,
+    v.leads > 0 ? `${v.leads} HOD${v.leads === 1 ? "" : "s"}` : null,
+  ].filter(Boolean);
+
+  return {
+    subject: `${total} form${total === 1 ? " is" : "s are"} overdue in ${v.cycleName}`,
+    body:
+      `*${total} form${total === 1 ? " is" : "s are"} overdue* in ${v.cycleName}: ` +
+      `${parts.join(" and ")} have not submitted. ` +
+      `See who: ${v.link} — Appraise, LinkD Prints`,
+    html: shell({
+      heading: "Forms are overdue",
+      bodyHtml: p(
+        `${parts.join(" and ")} have not submitted in ${v.cycleName}.`,
+      ),
+      cta: { label: "See who", href: v.link },
     }),
   };
 }

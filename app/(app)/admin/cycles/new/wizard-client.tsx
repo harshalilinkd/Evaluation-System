@@ -65,10 +65,13 @@ export function WizardClient({
   people,
   jobSkillCounts,
   initial,
+  presetCycleType,
 }: {
   people: SelectablePerson[];
   jobSkillCounts: Record<string, number>;
   initial: WizardInitial | null;
+  /** A NEW cycle that already knows its type, from a link. Never used in edit mode. */
+  presetCycleType?: "EVALUATION" | "INCREMENT";
 }) {
   const router = useRouter();
 
@@ -97,7 +100,14 @@ export function WizardClient({
     period_label: initial?.periodLabel ?? "",
     variance_threshold: String(initial?.varianceThreshold ?? 2),
     disclosure: initial?.disclosure ?? "SCORE_ONLY",
-    cycle_type: initial?.cycleType ?? "EVALUATION",
+    /* -- `presetCycleType` is for a NEW cycle arriving from a link that already
+          knows what it is — "Start increment" on the increment calendar. It is
+          only a starting value: the picker is right there and unchanged, so
+          nothing is decided that HR cannot see and change.
+
+          `initial` still wins, because that is edit mode reading a stored
+          cycle, and a query string must never override what is saved. -- */
+    cycle_type: initial?.cycleType ?? presetCycleType ?? "EVALUATION",
     cycle_kind: initial?.cycleKind ?? "BATCH",
     default_self_days: String(initial?.defaultSelfDays ?? 14),
     default_lead_days: String(initial?.defaultLeadDays ?? 21),

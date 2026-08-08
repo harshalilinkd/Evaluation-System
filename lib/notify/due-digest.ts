@@ -15,7 +15,12 @@ import "server-only";
 import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { sendNotification } from "@/lib/notify/dispatch";
-import { hrDueDigest, incrementsOverdue, mdReviewDigest } from "@/lib/notify/templates";
+import {
+  evaluationsOverdue,
+  hrDueDigest,
+  incrementsOverdue,
+  mdReviewDigest,
+} from "@/lib/notify/templates";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { formatDate } from "@/lib/utils/date";
@@ -28,6 +33,11 @@ export type DigestOutcome = { sent: number; failed: number; skipped: string[] };
 const CADENCE_HOURS = {
   hrDueDigest: 20, // daily
   incrementsOverdue: 24 * 6.5, // weekly
+  /* -- Every two days, not daily. --
+        A form is overdue because a person has not done it, and a daily nag
+        about the same nine people is how a channel stops being read (P22-15).
+        Two days is often enough that nothing sits unnoticed for a week. -- */
+  evaluationsOverdue: 44,
   mdReviewDigest: 44, // every two days
 } as const;
 
@@ -256,6 +266,71 @@ export async function sendDueDigests(supabase: Client, now: Date): Promise<Diges
       outcome.sent += result.sent;
       outcome.failed += result.failed;
       if (result.note) outcome.skipped.push(result.note);
+    }
+  }
+
+  /* ---------- 2b. Overdue FORMS, to HR ----------
+        P22 chases each side against their own deadline, which is right — but
+        nobody told HR the total. A cycle could sit with nine people late and
+        the only way to find out was to open the board and count, which is
+        precisely the thing that gets missed.
+
+        NO NAMES in the message and no scores: §5 keeps what people wrote
+        inside the product, and a WhatsApp has no access control around it. The
+        counts and the link are enough to act on, and the names belong on the
+        board where they can be chased.
+
+        Counted per SIDE from the timestamps, never from the status — under
+        blind rating both layers fill during OPEN, so no status can say which
+        side is missing (0027 made the same correction). */
+  {
+    const { data: openCycle } = await supabase
+      .from("evaluation_cycles")
+      .select("id, name")
+      .eq("status", "ACTIVE")
+      .is("deleted_at", null)
+      .order("starts_on", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openCycle) {
+      const { data: lateRows } = await supabase
+        .from("evaluations")
+        .select("self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, due_self_on, due_lead_on")
+        .eq("cycle_id", openCycle.id)
+        .eq("status", "OPEN")
+        .is("excluded_at", null);
+
+      // A skipped layer is closed deliberately by HR and is not outstanding.
+      const employeesLate = (lateRows ?? []).filter(
+        (r) => !r.self_submitted_at && !r.self_skipped && r.due_self_on && r.due_self_on < today,
+      ).length;
+      const leadsLate = (lateRows ?? []).filter(
+        (r) => !r.lead_submitted_at && !r.lead_skipped && r.due_lead_on && r.due_lead_on < today,
+      ).length;
+
+      if (employeesLate + leadsLate > 0) {
+        const alreadySent = await sentRecently(supabase, "evaluationsOverdue", now);
+
+        for (const person of await holdersOf(supabase, "HR_ADMIN")) {
+          if (alreadySent.has(person.id)) continue;
+          const result = await deliver(
+            supabase,
+            person,
+            "evaluationsOverdue",
+            evaluationsOverdue({
+              employees: employeesLate,
+              leads: leadsLate,
+              cycleName: openCycle.name,
+              link: appUrl(`/admin/cycles/${openCycle.id}`),
+            }),
+            { employees: employeesLate, leads: leadsLate },
+          );
+          outcome.sent += result.sent;
+          outcome.failed += result.failed;
+          if (result.note) outcome.skipped.push(result.note);
+        }
+      }
     }
   }
 

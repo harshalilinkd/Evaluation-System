@@ -4125,3 +4125,61 @@ in self-form.tsx" is §5's salary-confinement guard catching it. That may well b
 the right call (it is their own salary, and P21-7 already lets them write their
 own expectation against it) but it is a §5 decision and belongs in this log,
 made by whoever is adding 0040 rather than absorbed silently here.
+
+---
+
+### FIX-12 — A launch invited on WhatsApp only, and three blank-env bugs
+
+Reported as "when HR clicks launch cycle the form link is sent only on WhatsApp,
+not email". Correct, and it was hardcoded that way.
+
+**`dispatch-launch.ts` passed `channel: "WHATSAPP"` for both the employee and
+the HOD**, under a comment reading *"WhatsApp is the primary channel; email
+follows from the distribution screen."* That was true when P11 wrote it and
+stopped being true at P17, which reversed PW-3 and made **launching the moment
+the whole company hears about it** — the distribution screen became a resend
+tool. The comment was never revisited. The tell was in the query three lines
+above: it already selected `email` and then never used it.
+
+`events.ts` has sent on **every channel a person can be reached on** since
+P11-WIRE. So there were two answers in the codebase to "which channels does an
+invite go out on", and the launch had the wrong one.
+
+| # | Decision | Why |
+|---|---|---|
+| F12-1 | The launch now delivers on every reachable channel, through one helper | Not by adding a second `sendNotification` call beside the first: `deliverInvite` takes the phone, the email and a `render(link)` and does both, mirroring `events.ts`'s `deliver`. Two hand-rolled channel blocks per recipient is four places for the next channel rule to be applied in three of them. |
+| F12-2 | **The email link is its OWN token, minted with the LAYER** | The security-relevant part. §10 scopes a token to (evaluation, layer, channel), and `launch_cycle` mints its pair as `channel: 'WHATSAPP'` — so emailing that token would put a whatsapp-scoped secret in an email. `issueInviteToken(id, "email", layer)` mints the right one, and **the layer must be passed**: at the `'SELF'` default a HOD's email would carry a link that opens the EMPLOYEE's form, which is a blindness breach (§5), not a wrong page. Pinned by a test. |
+| F12-3 | WhatsApp is sent BEFORE the email token is minted, and that is safe | Checked rather than assumed: 0022's revoke is scoped by `channel = p_channel` **and** `layer = p_layer`, so issuing the email token leaves the WhatsApp one live. A test asserts that clause, because narrowing it to layer alone would kill each WhatsApp link moments after sending it. |
+| F12-4 | A missing phone or email is **not** a failure | P11-11. Nothing is attempted, so nothing is logged, and the failure count stays a count of things that can actually be retried. |
+| F12-5 | The per-HOD cap still counts REPORTS, not messages | It exists so a HOD with thirty reports is not buried at launch. Counting messages would halve the reach the moment a second channel appeared. |
+
+#### Three `??` bugs, found by a question about blank keys
+
+Asked where `SMTP_HOST` and `SMTP_PORT` come from. They come from nowhere —
+they are optional. But the code read them with `??`, and **a key written blank
+in `.env` is present and empty, not absent**, so `??` kept `""`:
+
+| | computed | should be |
+|---|---|---|
+| `SMTP_HOST ?? "smtp.gmail.com"` | `""` | `smtp.gmail.com` |
+| `Number(SMTP_PORT ?? 465)` | `0` | `465` |
+
+A connection to host `""` on port `0`, surfacing as a timeout with the settings
+looking perfectly correct on screen. `.env.example` ships both keys blank, so
+this was the default state. The same mistake was in `DEFAULT_COUNTRY_CODE ??
+"+91"` twice — `dispatch.ts` and `queries.ts` — where a blank key would strip
+`+91` from every Indian mobile and stop WhatsApp entirely. All three now use
+`||`.
+
+`credentials()` also **trims the user and strips whitespace from the password**,
+because Google prints an App Password in four groups and it is invariably pasted
+with the spaces still in, which SMTP AUTH sends literally.
+
+**A verification lesson worth recording.** My throwaway probe wrote `||` while
+the module under test used `??`, so the probe connected and the product would
+not have. **A script that reimplements the logic it is checking is not a check
+of that logic** — which is precisely why the connection test now lives in the
+app (P32) and calls the real module.
+
+**Verification — p11b 52 checks, 0 failed** (up from 45). p6 66/0, p10 55/0,
+p11 69/0, p23 42/0. Typecheck 0, lint 0, build clean.

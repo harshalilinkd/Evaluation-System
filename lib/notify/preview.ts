@@ -15,6 +15,7 @@ import {
   evaluationFinalised,
   formReturned,
   hrDueDigest,
+  evaluationsOverdue,
   incrementsOverdue,
   leadReviewInvite,
   leadReviewOverdue,
@@ -67,6 +68,12 @@ const PREVIEWS: Record<TemplateKey, RenderedMessage> = {
     link: SAMPLE.link,
   }),
   incrementsOverdue: incrementsOverdue({ items: LISTED, link: SAMPLE.link }),
+  evaluationsOverdue: evaluationsOverdue({
+    employees: 6,
+    leads: 3,
+    cycleName: "Q3 FY26",
+    link: SAMPLE.link,
+  }),
   mdReviewDigest: mdReviewDigest({ waiting: 2, link: SAMPLE.link }),
 };
 

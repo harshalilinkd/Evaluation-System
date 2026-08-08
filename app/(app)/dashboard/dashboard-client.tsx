@@ -81,9 +81,16 @@ function Panel({
  * chart-shaped hole open.
  */
 function PanelEmpty({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="flex h-full items-center font-sans text-body-sm text-ink-muted">{children}</p>
-  );
+  /* -- TOP-ALIGNED, and not `h-full`.
+        It was `flex h-full items-center`, which is what put a single sentence
+        in the MIDDLE of a 400px card — the panel stretches to match its taller
+        sibling (that is what keeps the card edges level), and centring inside
+        that stretch left the text adrift with dead space above and below it.
+
+        Sitting under the header is where a reader expects it, and the card is
+        no taller for it. Paired with the charts now sizing to their data, an
+        early cycle produces short cards rather than large blank ones. -- */
+  return <p className="font-sans text-body-sm text-ink-muted">{children}</p>;
 }
 
 const score = (v: number | null | undefined) =>

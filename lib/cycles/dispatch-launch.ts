@@ -3,8 +3,10 @@
 import "server-only";
 import { absoluteUrl } from "@/lib/notify/preflight";
 
+import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import type { LaunchPlan } from "@/lib/cycles/launch";
 import { sendNotification } from "@/lib/notify/dispatch";
+import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils/date";
@@ -134,27 +136,28 @@ async function sendLaunchInvites(
       ? person.get(evaluation.evaluatee_id)
       : undefined;
     if (employee) {
-      const message = selfEvaluationInvite({
-          name: employee.full_name,
-          period,
-          // The EVALUATION's date, not the cycle's — a rolling cycle gives each
-          // person their own (item 3).
-          dueDate: formatDate(evaluation.due_self_on),
-          link: inviteLink(link.selfToken),
-      });
-      // WhatsApp is the primary channel (§10); email follows from the
-      // distribution screen. One call per channel, each logged separately.
-      const result = await sendNotification({
-        channel: "WHATSAPP",
-        recipient: employee.phone_e164,
-        template: "selfEvaluationInvite",
-        message,
+      const result = await deliverInvite({
         evaluationId: link.evaluationId,
+        layer: "SELF",
         profileId: employee.id,
+        phone: employee.phone_e164,
+        email: employee.email,
+        whatsappToken: link.selfToken,
+        template: "selfEvaluationInvite",
+        // Rendered per channel, because each channel carries its own token.
+        render: (url) =>
+          selfEvaluationInvite({
+            name: employee.full_name,
+            period,
+            // The EVALUATION's date, not the cycle's — a rolling cycle gives
+            // each person their own (item 3).
+            dueDate: formatDate(evaluation.due_self_on),
+            link: url,
+          }),
         context: { cycle: cycle?.name ?? "" },
       });
-      if (result.ok) out.sent += 1;
-      else out.failed += 1;
+      out.sent += result.sent;
+      out.failed += result.failed;
     }
 
     /* -- The HOD -- */
@@ -170,29 +173,31 @@ async function sendLaunchInvites(
       }
       perLead.set(lead.id, already + 1);
 
-      const message = leadReviewInvite({
-          leadName: lead.full_name,
-          employeeName: person.get(evaluation.evaluatee_id)?.full_name ?? "your report",
-          department: evaluation.department_id
-            ? (departmentName.get(evaluation.department_id) ?? "their team")
-            : "their team",
-          period,
-          dueDate: formatDate(evaluation.due_lead_on),
-          link: inviteLink(link.leadToken),
-      });
-      const result = await sendNotification({
-        channel: "WHATSAPP",
-        recipient: lead.phone_e164,
-        template: "leadReviewInvite",
-        message,
+      const result = await deliverInvite({
         evaluationId: link.evaluationId,
+        layer: "LEAD",
         profileId: lead.id,
+        phone: lead.phone_e164,
+        email: lead.email,
+        whatsappToken: link.leadToken,
+        template: "leadReviewInvite",
+        render: (url) =>
+          leadReviewInvite({
+            leadName: lead.full_name,
+            employeeName: person.get(evaluation.evaluatee_id)?.full_name ?? "your report",
+            department: evaluation.department_id
+              ? (departmentName.get(evaluation.department_id) ?? "their team")
+              : "their team",
+            period,
+            dueDate: formatDate(evaluation.due_lead_on),
+            link: url,
+          }),
         // No `employee_submitted` or anything like it: §5's blindness applies
         // to the notification log as much as to a screen.
         context: { cycle: cycle?.name ?? "" },
       });
-      if (result.ok) out.sent += 1;
-      else out.failed += 1;
+      out.sent += result.sent;
+      out.failed += result.failed;
     }
   }
 
@@ -202,4 +207,82 @@ async function sendLaunchInvites(
 /** §10: the token appears in exactly one URL and is never re-shown. */
 function inviteLink(token: string): string {
   return absoluteUrl(`/invite/${token}`);
+}
+
+/**
+ * Send one invite on EVERY channel the person can actually be reached on.
+ *
+ * This is what the launch was missing. It messaged WhatsApp and nothing else,
+ * with a comment saying "email follows from the distribution screen" — which
+ * was true when P11 wrote it and stopped being true the moment launching became
+ * the moment the whole company hears about it (P17). So a launch quietly told
+ * half the story: the email address was even SELECTED in the query above and
+ * then never used, which is the tell.
+ *
+ * `events.ts` has sent on every reachable channel since P11-WIRE. This brings
+ * the launch onto the same rule rather than leaving two answers to "which
+ * channels does an invite go out on".
+ *
+ * A MISSING CONTACT DETAIL IS NOT A FAILURE. Nothing is attempted, so nothing
+ * is logged — P11-11's rule, so the failure count stays a count of things that
+ * actually went wrong and can be retried.
+ */
+async function deliverInvite(opts: {
+  evaluationId: string;
+  /** Whose link. Decides which token is minted for the email channel. */
+  layer: "SELF" | "LEAD";
+  profileId: string;
+  phone: string | null;
+  email: string | null;
+  /**
+   * The plaintext token `launch_cycle` minted, which is scoped to WHATSAPP.
+   *
+   * §10 gives one active token per (evaluation, layer, channel), so the email
+   * link needs its OWN — reusing this one would put a whatsapp-scoped secret in
+   * an email, and minting a second whatsapp token here would revoke the one the
+   * launch just wrote.
+   */
+  whatsappToken: string;
+  template: TemplateKey;
+  render: (link: string) => RenderedMessage;
+  context: Record<string, string | number | null>;
+}): Promise<{ sent: number; failed: number }> {
+  const out = { sent: 0, failed: 0 };
+
+  // WhatsApp first: §13.2 — most people open the link on a phone, and a
+  // WhatsApp message is read in minutes where an email may not be read at all.
+  if (opts.phone) {
+    const result = await sendNotification({
+      channel: "WHATSAPP",
+      recipient: opts.phone,
+      template: opts.template,
+      message: opts.render(inviteLink(opts.whatsappToken)),
+      evaluationId: opts.evaluationId,
+      profileId: opts.profileId,
+      context: opts.context,
+    });
+    if (result.ok) out.sent += 1;
+    else out.failed += 1;
+  }
+
+  if (opts.email) {
+    const issued = await issueInviteToken(opts.evaluationId, "email", opts.layer);
+    if (!issued.ok) {
+      out.failed += 1;
+    } else {
+      const result = await sendNotification({
+        channel: "EMAIL",
+        recipient: opts.email,
+        template: opts.template,
+        message: opts.render(inviteUrl(issued.data.token)),
+        evaluationId: opts.evaluationId,
+        profileId: opts.profileId,
+        context: opts.context,
+      });
+      if (result.ok) out.sent += 1;
+      else out.failed += 1;
+    }
+  }
+
+  return out;
 }
