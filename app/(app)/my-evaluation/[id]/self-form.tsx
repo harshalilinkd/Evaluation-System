@@ -108,6 +108,12 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
   const inSync = React.useRef(true);
 
   /** Returns whether the server now holds everything typed so far. */
+  /* -- The server's own words, kept.
+        This was thrown away, so a refused save showed a four-word indicator in
+        a header that is scrolled off-screen on a phone — and the person went on
+        filling a form nothing was recording. §0.7: fail loudly. -- */
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
   const flush = React.useCallback(async (): Promise<boolean> => {
     if (readOnly) return true;
     const patch = pending.current;
@@ -127,6 +133,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       setSaveState("saved");
       setSavedAt(new Date(result.data.savedAt));
       setFailures(0);
+      setSaveError(null);
       return true;
     }
 
@@ -137,6 +144,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
     inSync.current = false;
     setSaveState("error");
     setFailures((n) => n + 1);
+    setSaveError(result.error.message);
     return false;
   }, [form.evaluationId, readOnly]);
 
@@ -492,7 +500,14 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
         {/* A definition list, not inputs. These come from the profile and the
             evaluation record; letting somebody type a name here would let it
             disagree with the record it is drawn from. */}
-        <dl className="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {/* -- Two columns from the smallest screen up, not from `sm`. --
+              Six single-column rows plus their labels ran to most of a phone
+              screen before the first question — on the one form §13.2 says
+              must be flawless at 375px. These are six short values; a name and
+              a designation sit side by side comfortably at that width, and
+              halving the rows takes a screenful of scrolling out of the way of
+              the thing somebody actually came to do. -- */}
+        <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
           {[
             ["Employee", meta.evaluateeName],
             ["Evaluated by", meta.leadName ?? "—"],
@@ -558,6 +573,28 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
 
       {/* ---------- Mobile sticky bar ---------- */}
       {!submitted ? (
+        <>
+        {/* -- A refused save, said where it cannot be missed. --
+              The header indicator sits at the top of a long form, so on a
+              phone it is scrolled away for the entire time somebody is
+              filling one in. This sits directly above the button they just
+              pressed, carries the server's own words rather than a paraphrase
+              (a paraphrase sends people to fix the wrong thing), and says
+              plainly that nothing typed is lost — because the answers are
+              still in the page and in the tab's own mirror (§13.6). */}
+        {saveError ? (
+          <div
+            role="alert"
+            className="fixed inset-x-0 bottom-16 z-20 border-t border-critical/40 bg-critical-tint px-4 py-3 lg:hidden"
+          >
+            <p className="text-body-sm font-medium text-critical">Not saved</p>
+            <p className="mt-0.5 text-body-sm text-ink">{saveError}</p>
+            <p className="mt-1 text-body-sm text-ink-muted">
+              Nothing you have typed is lost. Leave this page open and try Save draft again.
+            </p>
+          </div>
+        ) : null}
+
         <div className="glass fixed inset-x-0 bottom-0 z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
           <Button
             variant="ghost"
@@ -573,6 +610,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
             Submit
           </Button>
         </div>
+        </>
       ) : null}
 
       {/* ---------- Confirmation ---------- */}

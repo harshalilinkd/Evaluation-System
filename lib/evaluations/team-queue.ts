@@ -91,6 +91,10 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     .from("evaluation_cycles")
     .select("id, name, period_label, self_due_on, lead_due_on")
     .eq("status", "ACTIVE")
+    // A binned cycle is still ACTIVE — 0032's recycle bin is a `deleted_at`,
+    // not a status. Without this the queue could open on a cycle HR had
+    // already thrown away, and every count on the screen would describe it.
+    .is("deleted_at", null)
     .order("starts_on", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -155,12 +159,26 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
   /* -- "In progress" needs to know a LEAD draft exists. Read from the LEAD
         layer only, which is the sole layer 0021 leaves the lead able to see —
         so this query cannot become a leak even by accident. -- */
+  /* -- `answers`, not just the row's existence.
+        `launch_cycle` creates BOTH response rows at launch (PR-7) so each side
+        has something to write into — which meant this Set contained every
+        evaluation in the cycle from the moment it opened, and every row
+        reported "You have started this" to a HOD who had not opened anything.
+        A queue that says you have started all of it is a queue nobody can
+        work, and it made the counts above it wrong in the same stroke.
+
+        A draft is answers somebody actually gave. -- */
   const { data: drafts } = await supabase
     .from("evaluation_responses")
-    .select("evaluation_id")
+    .select("evaluation_id, answers")
     .eq("layer", "LEAD")
     .in("evaluation_id", rowsRaw.map((r) => r.id));
-  const draftedIds = new Set((drafts ?? []).map((d) => d.evaluation_id));
+
+  const draftedIds = new Set(
+    (drafts ?? [])
+      .filter((d) => Object.keys((d.answers ?? {}) as Record<string, unknown>).length > 0)
+      .map((d) => d.evaluation_id),
+  );
 
   const byPerson = new Map((people ?? []).map((p) => [p.id, p]));
   const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));

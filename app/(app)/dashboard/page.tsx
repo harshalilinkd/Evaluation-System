@@ -47,11 +47,17 @@ export default async function Page() {
     // fill in, HR and the MD included (§9's simultaneous-roles case).
     supabase
       .from("evaluations")
-      .select("id, status, due_self_on, self_submitted_at")
+      /* -- `!inner` on the cycle so a BINNED one is excluded.
+            0032 gave cycles a `deleted_at` and nothing that reads evaluations
+            ever filtered on it — so binning a cycle removed it from the cycles
+            list and left its evaluations in every queue, count and dashboard.
+            A recycle bin that only hides the folder is not a recycle bin. -- */
+      .select("id, status, due_self_on, self_submitted_at, evaluation_cycles!inner(deleted_at)")
       .eq("evaluatee_id", profile.id)
       .eq("status", "OPEN")
       .is("excluded_at", null)
       .is("self_submitted_at", null)
+      .is("evaluation_cycles.deleted_at", null)
       .limit(1)
       .maybeSingle(),
 
@@ -62,11 +68,14 @@ export default async function Page() {
     isLead
       ? supabase
           .from("evaluations")
-          .select("id", { count: "exact", head: true })
+          // Same binned-cycle exclusion as above — this is the count that was
+          // reported as "2 to rate" against a single live cycle.
+          .select("id, evaluation_cycles!inner(deleted_at)", { count: "exact", head: true })
           .eq("lead_id", profile.id)
           .eq("status", "OPEN")
           .is("lead_submitted_at", null)
           .is("excluded_at", null)
+          .is("evaluation_cycles.deleted_at", null)
       : Promise.resolve({ count: 0 }),
   ]);
 

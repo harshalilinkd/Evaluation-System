@@ -372,7 +372,21 @@ function QuestionField({
         ) : null}
         {question.isRequired ? <span className="sr-only"> (required)</span> : null}
       </p>
-      {question.helpText ? <p className="text-body-sm text-ink-muted">{question.helpText}</p> : null}
+      {/* -- Guidance is desktop-only. --
+            33 questions each carrying a line of explanation is 33 extra lines
+            between somebody and the next thing they have to answer, on the
+            screen §13.2 says must be flawless at 375px. The question text is
+            the question; this elaborates it, and elaboration is what gives way
+            when space is the scarce thing.
+
+            It is HIDDEN, not deleted — the same words still print on the pack
+            and still show on a laptop. If a question genuinely cannot be
+            answered on a phone without its guidance, the fix is to fold that
+            into the question text in the form builder, where HR can see it
+            being asked rather than relying on a second line nobody reads. -- */}
+      {question.helpText ? (
+        <p className="hidden text-body-sm text-ink-muted sm:block">{question.helpText}</p>
+      ) : null}
     </div>
   );
 
