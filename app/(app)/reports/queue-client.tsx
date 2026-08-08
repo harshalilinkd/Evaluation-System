@@ -25,6 +25,21 @@ import { cn } from "@/lib/utils";
 
 const ANY = "__any__";
 
+/**
+ * The toolbar selects, at a third of a phone.
+ *
+ * `min-w-0` is what lets a grid cell be narrower than its content instead of
+ * blowing the row out — a select's intrinsic minimum is its longest option, and
+ * "Every department" is wider than 375÷3.
+ *
+ * The padding comes back at `lg`, where there is room for it. Trimming it on a
+ * phone buys ~8px of visible text per control, which is the difference between
+ * "Every departm…" and "Every department" on most handsets. Some clipping at
+ * this width is unavoidable and acceptable: the selected value is short
+ * ("Printing", "Design") — it is only the placeholder that is long.
+ */
+const SELECT_TIGHT = "min-w-0 px-2 lg:px-3";
+
 /** An absent score is an em dash, never 0.00 — §11, missing is not zero (P7-9). */
 function score(value: number | null): string {
   return value === null ? "—" : value.toFixed(2);
@@ -320,73 +335,112 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         <KpiCard label="Closed" value={queue.closedThisCycle} tone="final" />
       </KpiRow>
 
-      {/* ---------- Filters ---------- */}
-      <ScreenToolbar>
-        <div className="relative min-w-0 flex-1 sm:w-[260px] sm:flex-none">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, code or department"
-            aria-label="Search reports"
-            className="min-h-11 border-rule bg-surface pl-9"
-          />
-        </div>
-        <select value={cycle} onChange={(e) => setCycle(e.target.value)} aria-label="Filter by cycle" className={SELECT_CLASS}>
-          <option value={ANY}>Every cycle</option>
-          {queue.cycles.map((c) => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
-        <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by cycle type" className={SELECT_CLASS}>
-          <option value={ANY}>Both types</option>
-          <option value="Evaluation">Evaluation</option>
-          <option value="Increment">Increment</option>
-        </select>
-        <select value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Filter by department" className={SELECT_CLASS}>
-          <option value={ANY}>Every department</option>
-          {queue.departments.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status" className={SELECT_CLASS}>
-          <option value={ANY}>Every status</option>
-          <option value="PENDING_HR_REVIEW">Pending HR review</option>
-          <option value="HR_APPROVED">With the MD</option>
-          <option value="MD_REVIEWED">Reviewed</option>
-          <option value="INTERVIEW_DONE">Interview done</option>
-          <option value="CLOSED">Closed</option>
-        </select>
-        {/* The gap threshold sits with the flag filter it qualifies, rather
-            than on a second line of its own. */}
-        <label className="flex min-h-11 items-center gap-2 font-sans text-body-sm text-ink-muted">
-          Gap ≥
-          <Input
-            value={minGap}
-            onChange={(e) => setMinGap(e.target.value)}
-            inputMode="decimal"
-            placeholder="2"
-            aria-label="Minimum absolute gap"
-            className="tabular min-h-11 w-16 border-rule bg-surface"
-          />
-        </label>
-        <Button
-          type="button"
-          variant={flaggedOnly ? "default" : "secondary"}
-          className="min-h-11"
-          aria-pressed={flaggedOnly}
-          onClick={() => setFlaggedOnly((v) => !v)}
-        >
-          <Flag className="mr-2 size-4" aria-hidden />
-          Flagged only
-        </Button>
+      {/* ---------- Filters ----------
+          TWO FIXED ROWS OF THREE ON A PHONE, one flowing line on a laptop.
 
-        <p className="tabular ml-auto hidden text-body-sm text-ink-muted lg:block">
-          {rows.length} of {queue.rows.length} {queue.rows.length === 1 ? "report" : "reports"}
-        </p>
+          `ScreenToolbar` is `flex-wrap`, which decides the breaks from whatever
+          each control happens to measure — so the seven filters fell into
+          3 / 2 / 2 at 400px, with "Gap ≥" and "Flagged only" stranded on a line
+          of their own and the whole strip four rows deep. Wrapping is the right
+          behaviour for a wide screen and no behaviour at all for a narrow one.
+
+          So the phone gets a stated layout — search · cycle · type, then
+          department · status · gap — and `lg:contents` dissolves both wrappers
+          above 1024px so the seven controls rejoin the flex line exactly as
+          before. Nothing about the desktop strip changes. */}
+      <ScreenToolbar>
+        <div className="grid w-full grid-cols-3 gap-2 lg:contents">
+          <div className="relative min-w-0 lg:w-[260px]">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+            />
+            {/* -- A SHORT placeholder, and the long form in the tooltip.
+                  At a third of 375px the field is ~105px, of which the icon
+                  and its padding take 34 — "Search by name, code or
+                  department" arrives as "Search by ", which reads as a label
+                  that has been cut off rather than as a hint. The `aria-label`
+                  is unchanged, so nothing is lost to a screen reader. -- */}
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search"
+              title="Search by name, code or department"
+              aria-label="Search reports by name, code or department"
+              className="min-h-11 w-full min-w-0 border-rule bg-surface pl-8 lg:pl-9"
+            />
+          </div>
+          <select value={cycle} onChange={(e) => setCycle(e.target.value)} aria-label="Filter by cycle" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
+            <option value={ANY}>Every cycle</option>
+            {queue.cycles.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by cycle type" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
+            <option value={ANY}>Both types</option>
+            <option value="Evaluation">Evaluation</option>
+            <option value="Increment">Increment</option>
+          </select>
+        </div>
+
+        <div className="grid w-full grid-cols-3 gap-2 lg:contents">
+          <select value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Filter by department" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
+            <option value={ANY}>Every department</option>
+            {queue.departments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
+            <option value={ANY}>Every status</option>
+            <option value="PENDING_HR_REVIEW">Pending HR review</option>
+            <option value="HR_APPROVED">With the MD</option>
+            <option value="MD_REVIEWED">Reviewed</option>
+            <option value="INTERVIEW_DONE">Interview done</option>
+            <option value="CLOSED">Closed</option>
+          </select>
+          {/* -- ONE control, not a floating label beside a boxed input.
+                The old shape was the text "Gap ≥" sitting outside a bordered
+                field, which measured ~120px and could not share a third of a
+                phone with anything. Folding the prefix inside the same box
+                makes it the same size and shape as the two selects next to it,
+                which is also why the row now reads as a row. -- */}
+          {/* -- The ring moves to the WRAPPER, because the box is what a
+                sighted keyboard user sees. A borderless input inside a bordered
+                label has nowhere of its own to draw focus, and dropping the
+                ring rather than relocating it is how a control becomes
+                unreachable-looking for exactly the people §13.8 is about. -- */}
+          <label className="flex min-h-11 min-w-0 items-center gap-1.5 rounded-control border border-rule bg-surface px-2.5 text-body-sm text-ink-muted focus-within:ring-1 focus-within:ring-ring lg:w-[108px]">
+            <span className="shrink-0">Gap ≥</span>
+            <input
+              value={minGap}
+              onChange={(e) => setMinGap(e.target.value)}
+              inputMode="decimal"
+              placeholder="2"
+              aria-label="Minimum absolute gap"
+              className="tabular w-full min-w-0 bg-transparent text-body-sm text-ink outline-none placeholder:text-ink-faint"
+            />
+          </label>
+        </div>
+
+        <div className="flex w-full items-center gap-3 lg:contents">
+          <Button
+            type="button"
+            variant={flaggedOnly ? "default" : "secondary"}
+            className="min-h-11 flex-1 lg:flex-none"
+            aria-pressed={flaggedOnly}
+            onClick={() => setFlaggedOnly((v) => !v)}
+          >
+            <Flag className="mr-2 size-4" aria-hidden />
+            Flagged only
+          </Button>
+
+          {/* -- Shown on a phone too, where the grid's own status bar is at the
+                bottom of a scrolling table and therefore off screen. Somebody
+                who has just narrowed the list needs to know it narrowed. -- */}
+          <p className="tabular shrink-0 text-body-sm text-ink-muted lg:ml-auto">
+            {rows.length} of {queue.rows.length} {queue.rows.length === 1 ? "report" : "reports"}
+          </p>
+        </div>
       </ScreenToolbar>
 
       <DataGrid

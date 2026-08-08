@@ -581,7 +581,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
         {meta.isIncrement ? (
           <div className="mt-4 border-t border-rule pt-4">
             <dt className="type-label text-ink-muted">Current salary</dt>
-            <dd className="tabular mt-0.5 text-h3 text-ink">
+            <dd className="tabular mt-0.5 text-display-sm text-ink">
               {formatInr(meta.currentCtc)}
             </dd>
             <p className="mt-1 text-body-sm text-ink-muted">

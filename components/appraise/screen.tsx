@@ -202,21 +202,37 @@ const KPI_TONE: Record<KpiTone, string> = {
 
 /** Three (or four) tinted counts, directly under the header. */
 export function KpiRow({ children }: { children: React.ReactNode }) {
-  return (
-    /* -- Side by side on a phone, not stacked. --
-          One column below `sm` meant three or four full-width cards, each with
-          a label, a big numeral and a caption, filled the entire screen before
-          a single row of the list underneath — on the queue somebody opened in
-          order to work through it. A count is a small thing and does not need
-          a full-width card to be read.
+  /* -- THE COLUMN COUNT COMES FROM THE CHILDREN, not from `auto-fit`.
+        `repeat(auto-fit, minmax(9rem, 1fr))` was the tidy answer and it was
+        wrong on a phone: 9rem is 144px, and three of them plus gaps need 448px.
+        A 375–400px screen therefore got TWO columns and an orphan on a line of
+        its own — three counts occupying two rows and ~150px, which is the
+        stacking this row was written to avoid, arrived at by arithmetic instead
+        of by a breakpoint.
 
-          `auto-fit` rather than a fixed column count, so three tiles become
-          three columns and four become two-by-two, without each caller
-          choosing. 9rem is the narrowest a two-digit number and its label stay
-          comfortable at 375px. -- */
+        Counting is what makes "three counts, one row" true at every width
+        rather than only above 448px. Four still fall to two-by-two on a phone,
+        because four across 375px leaves ~80px a tile and the labels stop being
+        readable — the honest place to wrap. -- */
+  const count = React.Children.toArray(children).filter(Boolean).length;
+
+  const columns =
+    count <= 1
+      ? "grid-cols-1"
+      : count === 2
+        ? "grid-cols-2"
+        : count === 3
+          ? "grid-cols-3"
+          : count === 4
+            ? "grid-cols-2 sm:grid-cols-4"
+            : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
+
+  return (
     <div
-      className="grid shrink-0 gap-2 border-b border-rule px-4 py-3 sm:gap-3 lg:px-6"
-      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(9rem, 1fr))" }}
+      className={cn(
+        "grid shrink-0 gap-1.5 border-b border-rule px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3 lg:px-6",
+        columns,
+      )}
     >
       {children}
     </div>
@@ -235,9 +251,21 @@ export function KpiCard({
   tone?: KpiTone;
 }) {
   return (
-    <div className={cn("rounded-card px-3 py-2 sm:px-4 sm:py-2.5", KPI_TONE[tone])}>
-      <p className="type-label font-semibold text-ink-muted">{label}</p>
-      <p className="tabular text-display-md leading-tight text-ink">{value}</p>
+    <div className={cn("min-w-0 rounded-card px-2.5 py-2 sm:px-4 sm:py-2.5", KPI_TONE[tone])}>
+      {/* -- Written as utilities rather than `.type-label`, because the label
+            has to give ground on a phone and a component class cannot be
+            varied by breakpoint. At three-across on a 375px screen a tile is
+            ~105px wide, and 12px uppercase at 0.05em tracking pushes "Pending
+            your review" to three lines. 11px at tighter tracking holds it to
+            two, and 11px is the floor this codebase set for itself (P31-6).
+
+            `break-words` because a single long word — a department name, a
+            future label — must wrap rather than widen the tile and push its
+            neighbours off the row. -- */}
+      <p className="break-words text-[11px] font-semibold uppercase leading-tight tracking-[0.02em] text-ink-muted sm:text-[12px] sm:tracking-[0.05em]">
+        {label}
+      </p>
+      <p className="tabular text-display-sm leading-tight text-ink sm:text-display-md">{value}</p>
       {/* -- The caption is the first thing to go on a narrow screen.
             It explains a number that is already labelled, so it is the least
             load-bearing line in the tile and the one that costs three tiles

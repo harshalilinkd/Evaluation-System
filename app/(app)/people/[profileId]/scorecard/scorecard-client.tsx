@@ -3,18 +3,35 @@
 /** The scorecard. Where it stands, how it scored, and what moved between cycles. */
 
 import * as React from "react";
-import { EyeOff, Minus, Sparkles, Target, TrendingDown, TrendingUp } from "lucide-react";
-
 import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarDays,
+  EyeOff,
+  Handshake,
+  Layers,
+  Minus,
+  Sparkles,
+  Split,
+  Target,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
+
+import { ChartFigure } from "@/components/appraise/chart-figure";
+import {
+  GroupedBarChart,
   RATING_BANDS,
+  ScoreComboChart,
   SectionRadarChart,
-  TrendAreaChart,
+  StatusDonutChart,
+  TIER_CHART_COLORS,
+  ratingBandColor,
 } from "@/components/appraise/charts";
 import { DashboardCard } from "@/components/appraise/metric-widget";
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { EmptyState } from "@/components/appraise/states";
-import { TIER_CLASSES, TIER_LABELS } from "@/components/appraise/tier";
-import { Button } from "@/components/ui/button";
+import { SCALE_0_5_LABELS, TIER_CLASSES, TIER_LABELS } from "@/components/appraise/tier";
 import { SECTION_LABELS, sectionRank } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { Scorecard, ScorecardQuestion } from "@/lib/analytics/queries";
@@ -47,33 +64,12 @@ const WAITING: Record<string, { who: string; what: string }> = {
 };
 
 export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boolean }) {
-  // Every chart has a table fallback (P16). Not a nicety: a trend line is
-  // unreadable to a screen reader, and these are somebody's appraisal numbers.
-  const [asTable, setAsTable] = React.useState(false);
-  const [sectionsAsTable, setSectionsAsTable] = React.useState(false);
-
-  /* -- NULL, never 0.
-        `?? 0` here was drawing a straight decline from 4 to 0 across a person's
-        history — a collapse in their performance that never happened. Every
-        cycle they have not been rated in became a floor value, and the chart
-        said so in a smooth confident curve while the header beside it said
-        "not rated".
-
-        §11 and P7-9 are both explicit that missing is not zero, and this is the
-        screen where getting that wrong is most expensive: it is somebody's
-        appraisal history, and 0 is the worst score there is. Recharts leaves a
-        gap for a null point, which is the honest drawing — nothing is claimed
-        about a period nobody scored. -- */
-  const trend = card.history
-    .filter(
-      (h) => h.self_overall !== null || h.lead_overall !== null || h.final_overall !== null,
-    )
-    .map((h) => ({
-      period: h.period_label,
-      self: h.self_overall ?? null,
-      lead: h.lead_overall ?? null,
-      final: h.final_overall ?? null,
-    }));
+  /* -- Every chart carries a table fallback, and it is not a nicety.
+        The palette validator reports cyan below 3:1 on a white surface, which
+        obligates relief rather than a different hue — and a polygon is
+        unreadable to a screen reader whatever its contrast. These are somebody's
+        appraisal numbers, so the exact figures are always one press away.
+        `ChartFigure` owns that toggle now; nothing here holds it. -- */
 
   /* -- Which cycle the detail below is about.
         "" is every cycle. The picker is the thing that turns this from a page
@@ -147,8 +143,6 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
     [sections],
   );
 
-  const [gapsAsTable, setGapsAsTable] = React.useState(false);
-
   /* -- The radar's rows. Only sections at least one layer rated: an axis with
         nothing on it draws a zero-length spoke, which reads as "scored nothing
         here" rather than "not asked here" (P14-10 made the same call about
@@ -169,22 +163,73 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
 
   const radarHasFinal = radar.some((r) => r.final !== null && r.final !== r.lead);
 
-  /* -- How their answers spread across the scale.
-        Two averages that match can still be built from completely different
-        answers — a steady 3.5 everywhere and a mix of 5s and 2s are the same
-        mean and very different reviews. This is the panel that tells them
-        apart, and it is the only place the SHAPE of somebody's rating shows. -- */
-  const distribution = React.useMemo(() => {
-    const bandOf = (v: number) => Math.min(Math.floor(v), 4);
-    const counts = RATING_BANDS.map((band) => ({ band, self: 0, lead: 0 }));
-    for (const q of card.questions) {
-      if (q.self !== null) counts[bandOf(q.self)]!.self += 1;
-      if (q.lead !== null) counts[bandOf(q.lead)]!.lead += 1;
-    }
-    return counts;
-  }, [card.questions]);
+  /* -- What the scores actually say.
+        The settled value per question is the final where one exists, else the
+        lead's, else their own — the same precedence §11 uses to resolve a
+        score, so this cannot disagree with the stored overall. -- */
+  const settled = React.useCallback((q: ScorecardQuestion) => q.final ?? q.lead ?? q.self, []);
 
-  const distributionTotal = distribution.reduce((n, b) => n + b.self + b.lead, 0);
+  /* -- The same spread, as ONE series, for the donut.
+        A ring can only carry one series honestly — two concentric rings read as
+        a part-to-whole relationship they do not have. So the donut shows the
+        SETTLED answer per question, which is the one figure that is a whole:
+        every rated question lands in exactly one band, and the bands sum to the
+        form.
+
+        Colour comes from the band's own position on the scale, never from its
+        row number (P29-3): the bands are ORDERED, so they take the single-hue
+        ordinal ramp. A reader learns "darker is higher" once. -- */
+  const settledBands = React.useMemo(() => {
+    const counts = RATING_BANDS.map((band) => ({
+      name: band,
+      value: 0,
+      fill: ratingBandColor(band),
+    }));
+    for (const q of card.questions) {
+      const v = settled(q);
+      if (v === null) continue;
+      counts[Math.min(Math.floor(v), RATING_BANDS.length - 1)]!.value += 1;
+    }
+    // A band nobody landed in is not a zero-width slice — it is absent. A donut
+    // rendering five arcs of which three are invisible reads as a broken ring.
+    return counts.filter((c) => c.value > 0);
+  }, [card.questions, settled]);
+
+  const settledTotal = settledBands.reduce((n, b) => n + b.value, 0);
+
+  /* -- A ring needs something to divide.
+        With every answer in one band there is no part-to-whole relationship to
+        draw, and a single 360° arc is a circle pretending to be a chart. The
+        card says the fact in words instead. -- */
+  const showRatingMix = settledBands.length > 1;
+
+  /* -- Appraisal history as columns and a line.
+        Self and lead are the two OPINIONS, drawn as columns; final is the
+        settled answer, drawn over them as a line. All three are the same
+        measure on the same 0–5 scale, which is the only condition under which
+        combining the two forms says anything true. -- */
+  const comboRows = React.useMemo(
+    () =>
+      ratedHistory.map((h) => ({
+        period: h.period_label,
+        self: h.self_overall,
+        lead: h.lead_overall,
+        final: h.final_overall,
+      })),
+    [ratedHistory],
+  );
+
+  /* -- Sections as grouped bars, self against lead.
+        Grouped and not stacked: self 4 and lead 3 is not a section worth 7. -- */
+  const sectionBars = React.useMemo(
+    () =>
+      sections
+        .filter((s) => s.self !== null || s.lead !== null || s.final !== null)
+        .map((s) => ({ label: s.label, self: s.self, lead: s.lead, final: s.final })),
+    [sections],
+  );
+
+  const sectionBarsHaveFinal = sectionBars.some((s) => s.final !== null && s.final !== s.lead);
 
   /* -- The four numbers worth reading before any chart.
         "Agreed" is where both sides landed on the same score — the single
@@ -198,15 +243,6 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
   const strongestSection = [...sections]
     .filter((s) => (s.final ?? s.lead ?? s.self) !== null)
     .sort((a, b) => (b.final ?? b.lead ?? b.self ?? 0) - (a.final ?? a.lead ?? a.self ?? 0))[0];
-
-  /* -- What the scores actually say.
-        The settled value per question is the final where one exists, else the
-        lead's, else their own — the same precedence §11 uses to resolve a
-        score, so this cannot disagree with the stored overall. -- */
-  const settled = React.useCallback(
-    (q: ScorecardQuestion) => q.final ?? q.lead ?? q.self,
-    [],
-  );
 
   const ranked = React.useMemo(
     () =>
@@ -235,46 +271,121 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
   const scoredCount = card.questions.filter((q) => settled(q) !== null).length;
   const waiting = card.current ? WAITING[card.current.status] : null;
 
+  /* -- The one number the page is about.
+        Final where the MD has recorded one, else the lead's — §11's precedence
+        again, and §11's own instruction that where a single headline figure is
+        needed it is the lead average, LABELLED as such. The caption under it
+        says which layer it came from, so the hero never implies an authority
+        the number does not have. -- */
+  const headline = latest?.final_overall ?? latest?.lead_overall ?? latest?.self_overall ?? null;
+  const headlineLayer: "final" | "lead" | "self" | null =
+    latest?.final_overall != null
+      ? "final"
+      : latest?.lead_overall != null
+        ? "lead"
+        : latest?.self_overall != null
+          ? "self"
+          : null;
+
+  const headlinePrev =
+    previous?.final_overall ?? previous?.lead_overall ?? previous?.self_overall ?? null;
+  const headlineDelta =
+    headline !== null && headlinePrev !== null ? headline - headlinePrev : null;
+
   return (
     <div className="mx-auto w-full max-w-content space-y-5">
-      {/* ---------- Identity and the three-layer verdict ---------- */}
-      <header className="card-surface flex flex-wrap items-center justify-between gap-5 p-6">
-        <div className="flex min-w-0 items-center gap-4">
+      {/* ---------- Identity, and the headline ----------
+          ON THE CARD SURFACE IN BOTH THEMES, and that is a correctness call
+          rather than a preference.
+
+          The obvious premium treatment here is the dashboard's `night` card —
+          `bg-ink` with inverted text. It cannot be used: in dark mode `--ink` IS
+          the light text colour (#CCD0CF), so a night card flips to a pale slab,
+          and the tier dots that carry identity on it are #22D3EE cyan on light
+          grey — about 1.1:1, invisible. A hero whose whole job is to say which
+          layer produced the number cannot have its layer marks disappear in one
+          of the two themes.
+
+          So the weight comes from type and space, and the colour from a single
+          soft wash keyed to the tier the headline came from — which every other
+          tier surface on the page already handles correctly in both themes. */}
+      <header className="card-surface relative overflow-hidden p-6 sm:p-7">
+        {headline !== null ? (
           <span
             aria-hidden
-            className="flex size-[62px] shrink-0 items-center justify-center rounded-pill bg-gradient-to-br from-self to-final text-display-sm font-semibold text-white"
-          >
-            {card.profile.initials}
-          </span>
-          <div className="min-w-0">
-            <h1 className="text-display-md text-ink">{card.profile.name}</h1>
-            <p className="text-body text-ink-muted">
-              {[card.profile.designation, card.profile.department].filter(Boolean).join(" · ") ||
-                "No department set"}
-            </p>
-            {card.profile.dateOfJoining ? (
-              <p className="tabular text-body-sm text-ink-muted">
-                Joined {formatDate(card.profile.dateOfJoining)}
-              </p>
-            ) : null}
-          </div>
-        </div>
-
-        {latest ? (
-          <div className="grid grid-cols-3 gap-2.5">
-            <TierScore tier="self" value={latest.self_overall} />
-            <TierScore tier="lead" value={latest.lead_overall} />
-            <TierScore
-              tier="final"
-              value={latest.final_overall}
-              delta={
-                previous && latest.final_overall !== null && previous.final_overall !== null
-                  ? latest.final_overall - previous.final_overall
-                  : null
-              }
-            />
-          </div>
+            className={cn(
+              "pointer-events-none absolute -right-20 -top-24 size-64 rounded-pill opacity-40 blur-3xl",
+              headlineLayer === "final"
+                ? "bg-final-tint"
+                : headlineLayer === "lead"
+                  ? "bg-lead-tint"
+                  : "bg-self-tint",
+            )}
+          />
         ) : null}
+
+        <div className="relative flex flex-wrap items-start justify-between gap-x-8 gap-y-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <span
+              aria-hidden
+              className="flex size-[64px] shrink-0 items-center justify-center rounded-pill bg-gradient-to-br from-self to-final text-display-sm font-semibold text-white"
+            >
+              {card.profile.initials}
+            </span>
+            <div className="min-w-0">
+              <h1 className="truncate text-display-md text-ink">{card.profile.name}</h1>
+              <p className="text-body text-ink-muted">
+                {[card.profile.designation, card.profile.department].filter(Boolean).join(" · ") ||
+                  "No department set"}
+              </p>
+              {card.profile.dateOfJoining ? (
+                <p className="tabular mt-1 inline-flex items-center gap-1.5 text-body-sm text-ink-muted">
+                  <CalendarDays aria-hidden className="size-3.5" />
+                  Joined {formatDate(card.profile.dateOfJoining)}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          {headline !== null ? (
+            <div className="flex flex-wrap items-end gap-x-8 gap-y-5">
+              <div>
+                {/* §11: where a single headline figure is needed, it is the
+                    lead average and it is LABELLED as such. The caption names
+                    the layer, so the number never claims an authority it does
+                    not have. */}
+                <p className="text-body-sm text-ink-muted">
+                  {TIER_LABELS[headlineLayer ?? "final"]} score
+                  {latest ? ` · ${latest.period_label}` : ""}
+                </p>
+                <p className="flex items-baseline gap-1.5">
+                  <span className="text-display-lg leading-none text-ink">
+                    {headline.toFixed(2)}
+                  </span>
+                  <span className="text-body text-ink-muted">/ 5.00</span>
+                </p>
+                {/* §6's wording, from the constant — never retyped, and never
+                    paraphrased (§17). "Nearest" is doing real work: an average
+                    of 4.20 is close to the 4 anchor, not equal to it. */}
+                <p className="mt-2 inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="rounded-pill bg-surface-mute px-2.5 py-0.5 text-body-sm font-medium text-ink">
+                    Nearest: {nearestBand(headline)}
+                  </span>
+                  <Delta value={headlineDelta} />
+                </p>
+              </div>
+
+              {/* The three layers, small, beside the headline rather than
+                  instead of it. Which side said what is the second question on
+                  this page; what the score IS, is the first. */}
+              <div className="flex gap-2.5">
+                <HeroTier tier="self" value={latest?.self_overall ?? null} />
+                <HeroTier tier="lead" value={latest?.lead_overall ?? null} />
+                <HeroTier tier="final" value={latest?.final_overall ?? null} />
+              </div>
+            </div>
+          ) : null}
+        </div>
       </header>
 
       {card.history.length === 0 ? (
@@ -320,68 +431,44 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
             </DashboardCard>
           ) : null}
 
-          {/* ---------- Trend ----------
-              Gated on RATED cycles, not on cycles. Four periods of which one
-              carries a score draws a single dot adrift in three-quarters of
-              empty axis — which reads as a broken chart rather than as a person
-              with one appraisal behind them. N3-8's rule, applied to the row
-              set the line is actually made of. */}
-          {ratedHistory.length > 1 ? (
-            <DashboardCard
-              title="Overall score across cycles"
-              action={
-                <Button
-                  variant="ghost"
-                  className="min-h-11"
-                  aria-pressed={asTable}
-                  onClick={() => setAsTable((v) => !v)}
-                >
-                  {asTable ? "Chart" : "View as table"}
-                </Button>
-              }
-            >
-              {asTable ? null : (
-                <TrendAreaChart
-                  data={trend}
-                  xKey="period"
-                  series={[
-                    { key: "self", label: "Self", color: "cyan" },
-                    { key: "lead", label: "Lead", color: "pink" },
-                    { key: "final", label: "Final", color: "primary" },
-                  ]}
-                />
-              )}
-              {asTable ? <HistoryTable history={card.history} /> : null}
-            </DashboardCard>
-          ) : null}
-
           {/* ---------- The four numbers, before any chart ----------
               A reader should be able to take the review in without parsing a
-              single figure. These are the ones a conversation actually opens
+              single mark. These are the figures a conversation actually opens
               with, and every one of them was previously only derivable by
               reading the whole table at the bottom. */}
           {bothRated.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <MiniStat
+                icon={<Layers className="size-4" />}
+                accent="primary"
                 label="Questions rated"
                 value={String(card.questions.length)}
-                hint="by at least one side"
+                hint="answered by at least one side"
               />
               <MiniStat
+                icon={<Handshake className="size-4" />}
+                accent="green"
                 label="Agreed exactly"
-                value={`${agreed} of ${bothRated.length}`}
-                hint={
-                  bothRated.length > 0
-                    ? `${Math.round((agreed / bothRated.length) * 100)}% of the form`
-                    : undefined
-                }
+                value={`${Math.round((agreed / bothRated.length) * 100)}%`}
+                hint={`${agreed} of ${bothRated.length} both sides rated`}
+                meter={agreed / bothRated.length}
               />
+              {/* NOT amber. Amber reads as "needs attention", and §11 makes the
+                  gap a reporting figure rather than a verdict — the same call
+                  P29-5 made about lead variance. A lead who rated two points
+                  above is not a problem to be fixed, they are a conversation to
+                  be had, and a warning colour on this tile would tell the
+                  employee their own review is defective. */}
               <MiniStat
+                icon={<Split className="size-4" />}
+                accent="primary"
                 label="Widest difference"
                 value={widest ? signed((widest.lead ?? 0) - (widest.self ?? 0)) : "—"}
                 hint={widest?.text}
               />
               <MiniStat
+                icon={<Sparkles className="size-4" />}
+                accent="cyan"
                 label="Strongest section"
                 value={
                   strongestSection
@@ -395,89 +482,172 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
             </div>
           ) : null}
 
+          {/* ---------- Appraisals over time ----------
+              Built from RATED cycles, never from cycles. A draft nobody has
+              opened is not a period with a score of nothing, and including one
+              would put an empty slot in the middle of somebody's history (N3-8,
+              §11).
+
+              Columns are the two opinions, the line is the settled answer. One
+              axis, fixed to the instrument's own 0–5 — see the note on
+              ScoreComboChart for why that matters more here than anywhere.
+
+              IT RENDERS FROM THE FIRST CYCLE, and the title changes rather than
+              the card disappearing. A trend LINE through one point would be
+              dishonest, but a column pair with the recorded answer marked on it
+              is a real reading of one appraisal — and hiding the panel until
+              somebody's second year is how a new joiner's scorecard ends up
+              looking half-built. */}
+          {comboRows.length >= 1 ? (
+            <DashboardCard
+              title={comboRows.length > 1 ? "Appraisals over time" : "This appraisal, by layer"}
+            >
+              <p className="-mt-2 mb-1 max-w-prose text-body-sm text-ink-muted">
+                {comboRows.length > 1
+                  ? "What each side scored in every cycle, and the answer that was recorded."
+                  : "What each side scored, and the answer that was recorded. A second cycle turns this into a trend."}
+              </p>
+              <ChartFigure
+                caption="Overall score by cycle and layer"
+                rows={comboRows}
+                columns={[
+                  { header: "Cycle", cell: (r) => r.period },
+                  { header: "Self", cell: (r) => formatScore(r.self), align: "right" },
+                  { header: "Lead", cell: (r) => formatScore(r.lead), align: "right" },
+                  { header: "Final", cell: (r) => formatScore(r.final), align: "right" },
+                ]}
+              >
+                <ScoreComboChart
+                  data={comboRows}
+                  xKey="period"
+                  bars={[
+                    { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
+                    { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                  ]}
+                  line={{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }}
+                />
+                <TierLegend showFinal lineFinal />
+              </ChartFigure>
+            </DashboardCard>
+          ) : null}
+
           {/* ---------- Shape, and spread ----------
               The radar answers "where is this person strong" in one glance;
               the distribution answers "what kind of rating is this" — a steady
               3.5 everywhere and a mix of 5s and 2s share a mean and are
               completely different reviews. Neither question was on the page. */}
-          {radar.length >= 3 || distributionTotal > 0 ? (
-            <div className="grid gap-5 lg:grid-cols-2">
+          {radar.length >= 3 || showRatingMix ? (
+            <div className="grid gap-5 lg:grid-cols-5">
               {radar.length >= 3 ? (
-                <DashboardCard title="Section profile">
-                  <SectionRadarChart
-                    data={radar}
-                    series={[
-                      { key: "self", label: "Self", color: "cyan" },
-                      { key: "lead", label: "Lead", color: "pink" },
-                      ...(radarHasFinal
-                        ? [{ key: "final", label: "Final", color: "primary" as const }]
-                        : []),
+                <DashboardCard
+                  title="Section profile"
+                  className={showRatingMix ? "lg:col-span-3" : "lg:col-span-5"}
+                >
+                  <p className="-mt-2 mb-1 max-w-prose text-body-sm text-ink-muted">
+                    Two polygons sitting on top of each other mean the review is settled. One
+                    pulled in on a spoke is where the conversation is.
+                  </p>
+                  <ChartFigure
+                    caption="Average score per section, by layer"
+                    rows={sections}
+                    columns={[
+                      { header: "Section", cell: (s) => s.label },
+                      { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
+                      { header: "Lead", cell: (s) => formatScore(s.lead), align: "right" },
+                      { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                     ]}
-                  />
-                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px] text-ink-muted">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span aria-hidden className="size-2.5 rounded-[2px] bg-self" />
-                      Self
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span aria-hidden className="size-2.5 rounded-[2px] bg-lead" />
-                      Lead
-                    </span>
-                    {radarHasFinal ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span aria-hidden className="size-2.5 rounded-[2px] bg-final" />
-                        Final
-                      </span>
-                    ) : null}
-                  </div>
+                  >
+                    <SectionRadarChart
+                      data={radar}
+                      height={320}
+                      series={[
+                        { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
+                        { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                        ...(radarHasFinal
+                          ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
+                          : []),
+                      ]}
+                    />
+                    <TierLegend showFinal={radarHasFinal} />
+                  </ChartFigure>
                 </DashboardCard>
               ) : null}
 
-              {distributionTotal > 0 ? (
-                <DashboardCard title="How the ratings were spread">
-                  <table className="w-full text-left">
-                    <caption className="sr-only">
-                      Number of questions at each score band, self against lead.
-                    </caption>
-                    <thead>
-                      <tr className="border-b border-rule text-body-sm text-ink-muted">
-                        <th className="py-2 font-medium">Band</th>
-                        <th className="py-2 font-medium">Self</th>
-                        <th className="py-2 font-medium">Lead</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {distribution.map((b) => {
-                        const max = Math.max(
-                          1,
-                          ...distribution.map((d) => Math.max(d.self, d.lead)),
-                        );
-                        return (
-                          <tr key={b.band} className="border-b border-rule/60 last:border-0">
-                            <td className="py-2 text-body text-ink">{b.band}</td>
-                            <td className="py-2">
-                              <CountBar tier="self" n={b.self} max={max} />
-                            </td>
-                            <td className="py-2">
-                              <CountBar tier="lead" n={b.lead} max={max} />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  <p className="mt-3 text-[11px] text-ink-muted">
-                    A band counts questions, not people. 4-5 means the answer scored
-                    between 4 and 5.
+              {/* Not a second view of the radar: the radar says WHERE the
+                  scores are, this says what KIND of review it is. A steady 3.5
+                  everywhere and a mix of 5s and 2s share a mean and are
+                  completely different appraisals — the ring is the only thing
+                  on the page that tells them apart. */}
+              {showRatingMix ? (
+                /* Takes the whole row when there is no radar beside it. A
+                   two-fifths card floating against an empty three-fifths reads
+                   as something that failed to load. */
+                <DashboardCard
+                  title="Rating mix"
+                  className={radar.length >= 3 ? "lg:col-span-2" : "lg:col-span-5"}
+                >
+                  <p className="-mt-2 mb-1 text-body-sm text-ink-muted">
+                    Every rated answer, by the score it settled at.
+                  </p>
+                  {/* Capped so the ring and its key stay a readable block when
+                      this card takes the full row on its own. */}
+                  <div className="mx-auto w-full max-w-[340px]">
+                    <StatusDonutChart
+                      data={settledBands}
+                      height={200}
+                      centerValue={String(settledTotal)}
+                      centerLabel={settledTotal === 1 ? "answer" : "answers"}
+                    />
+                  </div>
+                  <p className="mt-3 text-body-sm text-ink-muted">
+                    A band counts questions, not people. Darker is a higher score.
                   </p>
                 </DashboardCard>
               ) : null}
             </div>
           ) : null}
 
-          {/* ---------- Strengths and focus ---------- */}
+          {/* ---------- Section scores, as bars ----------
+              The radar carries shape; this carries VALUE. A polygon is read by
+              area and area is the one thing people misjudge, so the same
+              numbers appear a second time on a common baseline where two
+              near-equal sections can actually be told apart — and every bar is
+              directly labelled, which is what discharges the validator's
+              contrast warning on cyan. */}
+          {sectionBars.length > 0 ? (
+            <DashboardCard title="Score by section">
+              <ChartFigure
+                caption="Average score per section, by layer"
+                rows={sectionBars}
+                columns={[
+                  { header: "Section", cell: (s) => s.label },
+                  { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
+                  { header: "Lead", cell: (s) => formatScore(s.lead), align: "right" },
+                  { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
+                ]}
+              >
+                <GroupedBarChart
+                  data={sectionBars}
+                  labelKey="label"
+                  series={[
+                    { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
+                    { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                    ...(sectionBarsHaveFinal
+                      ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
+                      : []),
+                  ]}
+                />
+                <TierLegend showFinal={sectionBarsHaveFinal} />
+              </ChartFigure>
+            </DashboardCard>
+          ) : null}
+
+          {/* ---------- Strengths and focus ----------
+              Ranked by the SETTLED value, so the two lists cannot disagree with
+              the stored overall. Three each: a "top ten" out of thirty-eight
+              questions is a list, not a finding. */}
           {ranked.length >= 2 ? (
-            <div className="grid gap-5 lg:grid-cols-2">
+            <div className="grid items-start gap-5 lg:grid-cols-2">
               <DashboardCard title="Strongest">
                 <QuestionList rows={strengths} settled={settled} tone="success" />
               </DashboardCard>
@@ -500,124 +670,36 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
               disagreement. Every bar is directly labelled, which is also what
               discharges the validator's contrast warning on cyan. */}
           {sectionGaps.length > 0 ? (
-            <DashboardCard
-              title="Where you and your lead agreed — and did not"
-              action={
-                <Button
-                  variant="ghost"
-                  className="min-h-11"
-                  aria-pressed={gapsAsTable}
-                  onClick={() => setGapsAsTable((v) => !v)}
-                >
-                  {gapsAsTable ? "Chart" : "View as table"}
-                </Button>
-              }
-            >
-              {gapsAsTable ? (
-                <table className="w-full text-left">
-                  <caption className="sr-only">
-                    Difference between the lead&apos;s average and your own, by section.
-                  </caption>
-                  <thead>
-                    <tr className="border-b border-rule text-body-sm text-ink-muted">
-                      <th className="py-2 font-medium">Section</th>
-                      <th className="py-2 font-medium">Self</th>
-                      <th className="py-2 font-medium">Lead</th>
-                      <th className="py-2 font-medium">Difference</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sectionGaps.map((g) => (
-                      <tr key={g.section} className="border-b border-rule/60 last:border-0">
-                        <td className="py-2 text-body text-ink">{g.label}</td>
-                        <td className="tabular py-2 text-body text-self">{formatScore(g.self)}</td>
-                        <td className="tabular py-2 text-body text-lead">{formatScore(g.lead)}</td>
-                        <td className="tabular py-2 text-body text-ink">{signed(g.delta)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <>
-                  <DivergingGapChart rows={sectionGaps} />
-                  <p className="mt-4 text-body-sm text-ink-muted">
-                    A difference is not a mistake — it is the part of the review worth
-                    talking about.
-                  </p>
-                </>
-              )}
+            <DashboardCard title="Where you and your lead agreed — and did not">
+              {/* One toggle component for every chart on the page. This card
+                  carried its own `useState` and its own hand-built table, which
+                  is how two switches that do the same thing end up looking and
+                  behaving differently. */}
+              <ChartFigure
+                caption="Difference between the lead's section average and your own"
+                rows={sectionGaps}
+                columns={[
+                  { header: "Section", cell: (g) => g.label },
+                  { header: "Self", cell: (g) => formatScore(g.self), align: "right" },
+                  { header: "Lead", cell: (g) => formatScore(g.lead), align: "right" },
+                  { header: "Difference", cell: (g) => signed(g.delta), align: "right" },
+                ]}
+              >
+                <DivergingGapChart rows={sectionGaps} />
+                <p className="mt-4 text-body-sm text-ink-muted">
+                  A difference is not a mistake — it is the part of the review worth talking
+                  about.
+                </p>
+              </ChartFigure>
             </DashboardCard>
           ) : null}
 
-          {/* ---------- Section profile + verdict ---------- */}
-          <div className="grid gap-5 lg:grid-cols-2">
-            <DashboardCard
-              title="By section"
-              action={
-                sections.length > 0 ? (
-                  <Button
-                    variant="ghost"
-                    className="min-h-11"
-                    aria-pressed={sectionsAsTable}
-                    onClick={() => setSectionsAsTable((v) => !v)}
-                  >
-                    {sectionsAsTable ? "Bars" : "View as table"}
-                  </Button>
-                ) : undefined
-              }
-            >
-              {sections.length === 0 ? (
-                <p className="text-body-sm text-ink-muted">
-                  Your section scores appear as soon as the first rated answers are submitted.
-                </p>
-              ) : sectionsAsTable ? (
-                <table className="w-full">
-                  <caption className="sr-only">Average score per section, by layer</caption>
-                  <thead>
-                    <tr>
-                      {["Section", "Self", "Lead", "Final"].map((h) => (
-                        <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sections.map((s) => (
-                      <tr key={s.section} className="border-t border-rule">
-                        <th scope="row" className="py-2 text-left text-body font-normal text-ink">
-                          {s.label}
-                        </th>
-                        <td className="tabular py-2 text-body text-self">{formatScore(s.self)}</td>
-                        <td className="tabular py-2 text-body text-lead">{formatScore(s.lead)}</td>
-                        <td className="tabular py-2 text-body text-final">{formatScore(s.final)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <ul className="space-y-4">
-                  {sections.map((s) => (
-                    <li key={s.section}>
-                      <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                        <span className="truncate text-body-sm text-ink">{s.label}</span>
-                        <span className="tabular shrink-0 text-body-sm text-ink-muted">
-                          {formatScore(s.final ?? s.lead ?? s.self)}
-                        </span>
-                      </div>
-                      {/* Three tracks, not one: the gap between layers is the
-                          point, and a single bar hides exactly that. */}
-                      <div className="space-y-1">
-                        <SectionBar tier="self" value={s.self} />
-                        <SectionBar tier="lead" value={s.lead} />
-                        <SectionBar tier="final" value={s.final} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </DashboardCard>
-
+          {/* ---------- The verdict, beside where the two sides differed ----------
+              Deliberately adjacent: the recorded outcome and the questions it
+              was least settled on are the two halves of the same conversation,
+              and reading one without the other is how a review turns into a
+              number nobody can account for. */}
+          <div className="grid items-start gap-5 lg:grid-cols-2">
             <DashboardCard title="Latest verdict">
               {latest ? (
                 <>
@@ -659,62 +741,92 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 </>
               ) : null}
             </DashboardCard>
+
+            {/* ---------- Where the two sides differed ----------
+                Renders even when nothing differs, and says so. "No answer
+                differs by 2 or more" is a real finding about a review — a card
+                that simply vanishes leaves the reader unsure whether it was
+                checked. */}
+            <DashboardCard title="Where you and your lead saw it differently">
+              {bothRated.length === 0 ? (
+                <p className="text-body-sm text-ink-muted">
+                  This appears once both sides have rated the same questions.
+                </p>
+              ) : gaps.length === 0 ? (
+                <p className="flex items-start gap-2 rounded-card bg-success-tint p-3 text-body-sm text-ink">
+                  <Handshake aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+                  No answer differs by {NOTABLE_GAP} or more. On the {bothRated.length} questions
+                  both sides rated, this review is settled.
+                </p>
+              ) : (
+                <>
+                  <p className="mb-3 text-body-sm text-ink-muted">
+                    {gaps.length} {gaps.length === 1 ? "answer differs" : "answers differ"} by{" "}
+                    {NOTABLE_GAP} or more. A gap is not a mistake — it is the conversation worth
+                    having.
+                  </p>
+                  <ul className="divide-y divide-rule">
+                    {gaps.map((q) => (
+                      <li key={q.questionId} className="flex items-center gap-3 py-2.5">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-body text-ink">{q.text}</span>
+                          <span className="text-body-sm text-ink-muted">
+                            {SECTION_LABELS[q.section]}
+                          </span>
+                        </span>
+                        <ScorePip tier="self" value={q.self} />
+                        <ScorePip tier="lead" value={q.lead} />
+                        {/* The glyph carries the direction, never colour alone
+                            (§13.8) — and green/red here describe movement,
+                            which is the one thing they may mean (UI2-2). */}
+                        <span
+                          className={cn(
+                            "tabular flex w-14 items-center justify-end gap-0.5 text-body-sm font-medium",
+                            q.delta > 0 ? "text-success" : "text-critical",
+                          )}
+                        >
+                          {q.delta > 0 ? (
+                            <ArrowUpRight aria-hidden className="size-3.5" />
+                          ) : (
+                            <ArrowDownRight aria-hidden className="size-3.5" />
+                          )}
+                          {signed(q.delta)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </DashboardCard>
           </div>
 
-          {/* ---------- Where the two sides differed ---------- */}
-          {gaps.length > 0 ? (
-            <DashboardCard title="Where you and your lead saw it differently">
-              <p className="mb-3 text-body-sm text-ink-muted">
-                {gaps.length} {gaps.length === 1 ? "answer differs" : "answers differ"} by{" "}
-                {NOTABLE_GAP} or more. A gap is not a mistake — it is the conversation worth having.
-              </p>
-              <ul className="divide-y divide-rule">
-                {gaps.map((q) => (
-                  <li key={q.questionId} className="flex items-center gap-3 py-2.5">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-body text-ink">{q.text}</span>
-                      <span className="text-[11px] text-ink-muted">
-                        {SECTION_LABELS[q.section]}
-                      </span>
-                    </span>
-                    <span className={cn("tabular w-10 text-center text-body font-semibold", TIER_CLASSES.self.numeral)}>
-                      {q.self}
-                    </span>
-                    <span className={cn("tabular w-10 text-center text-body font-semibold", TIER_CLASSES.lead.numeral)}>
-                      {q.lead}
-                    </span>
-                    {/* The glyph carries the direction, never colour alone
-                        (§13.8) — and green/red here describe movement, which is
-                        the one thing they are allowed to mean (UI2-2). */}
-                    <span
-                      className={cn(
-                        "flex w-16 items-center justify-end gap-0.5 text-body-sm font-medium",
-                        q.delta > 0 ? "text-success" : "text-critical",
-                      )}
-                    >
-                      {q.delta > 0 ? (
-                        <TrendingUp aria-hidden className="size-3.5" />
-                      ) : (
-                        <TrendingDown aria-hidden className="size-3.5" />
-                      )}
-                      {q.delta > 0 ? "+" : ""}
-                      {q.delta}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </DashboardCard>
-          ) : null}
-
-          {/* ---------- Every answer ---------- */}
+          {/* ---------- Every answer ----------
+              The one exhaustive list on the page, and the only place a specific
+              question can be looked up. The three-track sparkbar beside each
+              row is what makes it scannable: a reader picking out the rows
+              where the tracks are ragged has found every disagreement without
+              reading a single number. */}
           {card.questions.length > 0 ? (
             <DashboardCard title="Every rated answer">
               <div className="overflow-x-auto">
                 <table className="w-full">
+                  <caption className="sr-only">
+                    Every question at least one side rated, with each layer&apos;s score.
+                  </caption>
                   <thead>
-                    <tr>
-                      {["Question", "Self", "Lead", "Final"].map((h) => (
-                        <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
+                    <tr className="border-b border-rule">
+                      <th scope="col" className="type-label py-2 text-left font-bold text-ink">
+                        Question
+                      </th>
+                      <th scope="col" className="type-label w-[168px] py-2 text-left font-bold text-ink">
+                        Profile
+                      </th>
+                      {["Self", "Lead", "Final"].map((h) => (
+                        <th
+                          key={h}
+                          scope="col"
+                          className="type-label w-16 py-2 text-right font-bold text-ink"
+                        >
                           {h}
                         </th>
                       ))}
@@ -722,16 +834,33 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   </thead>
                   <tbody>
                     {card.questions.map((q) => (
-                      <tr key={q.questionId} className="border-t border-rule">
-                        <td className="py-2 pr-4 text-body text-ink">
+                      <tr
+                        key={q.questionId}
+                        className="border-t border-rule transition-colors duration-hover hover:bg-surface-mute"
+                      >
+                        <td className="py-2.5 pr-4 text-body text-ink">
                           {q.text}
-                          <span className="block text-[11px] text-ink-muted">
+                          <span className="block text-body-sm text-ink-muted">
                             {SECTION_LABELS[q.section]}
                           </span>
                         </td>
-                        <td className="tabular py-2 text-body text-self">{formatScore(q.self)}</td>
-                        <td className="tabular py-2 text-body text-lead">{formatScore(q.lead)}</td>
-                        <td className="tabular py-2 text-body font-medium text-final">
+                        <td className="py-2.5 pr-4">
+                          {/* Decorative: the three figures are in the same row,
+                              so labelling each track makes a reader hear the
+                              row twice. */}
+                          <div className="space-y-1">
+                            <SectionBar decorative tier="self" value={q.self} />
+                            <SectionBar decorative tier="lead" value={q.lead} />
+                            <SectionBar decorative tier="final" value={q.final} />
+                          </div>
+                        </td>
+                        <td className="tabular py-2.5 text-right text-body text-ink">
+                          {formatScore(q.self)}
+                        </td>
+                        <td className="tabular py-2.5 text-right text-body text-ink">
+                          {formatScore(q.lead)}
+                        </td>
+                        <td className="tabular py-2.5 text-right text-body font-medium text-ink">
                           {formatScore(q.final)}
                         </td>
                       </tr>
@@ -739,6 +868,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   </tbody>
                 </table>
               </div>
+              <TierLegend showFinal className="mt-4" />
             </DashboardCard>
           ) : null}
 
@@ -812,32 +942,160 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
 
 /* ---------- Small parts ---------- */
 
-function HistoryTable({ history }: { history: Scorecard["history"] }) {
+/**
+ * The nearest anchor word on the 0–5 scale.
+ *
+ * §6's wording, read from `SCALE_0_5_LABELS` rather than retyped — §6 calls it
+ * "fixed wording — do not paraphrase" and §17 forbids improving anything that
+ * came from the source forms. P7-4 made the constant the single source and a
+ * test asserts it against the constitution itself.
+ *
+ * "Nearest" is doing real work in the caption that accompanies this: an average
+ * of 4.20 is not literally "Effective (Exceeds objective)", it is close to it,
+ * and a badge that stated the anchor flatly would be claiming a precision the
+ * mean does not have.
+ */
+function nearestBand(value: number): string {
+  const index = Math.min(SCALE_0_5_LABELS.length - 1, Math.max(0, Math.round(value)));
+  return SCALE_0_5_LABELS[index]!.word;
+}
+
+/**
+ * Movement since the previous rated cycle.
+ *
+ * Green up / red down is the TREND colour and never a tier (UI2-2) — it appears
+ * here only because it describes change, not a layer. The arrow carries the
+ * direction too, so the sign is never colour alone (§13.8).
+ *
+ * A first cycle says "first cycle" rather than "0.00": no movement and no
+ * previous figure to move from are different facts, and §11 is explicit that
+ * missing is not zero.
+ */
+function Delta({ value }: { value: number | null }) {
+  if (value === null) {
+    return (
+      <span className="inline-flex items-center gap-1 text-body-sm text-ink-muted">
+        <Minus aria-hidden className="size-3" />
+        no earlier cycle
+      </span>
+    );
+  }
+
+  if (value === 0) {
+    return (
+      <span className="tabular inline-flex items-center gap-1 text-body-sm text-ink-muted">
+        <Minus aria-hidden className="size-3" />
+        unchanged
+      </span>
+    );
+  }
+
+  const up = value > 0;
   return (
-    <table className="w-full">
-      <caption className="sr-only">Overall score for every cycle</caption>
-      <thead>
-        <tr>
-          {["Period", "Self", "Lead", "Final"].map((h) => (
-            <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
-              {h}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {history.map((h) => (
-          <tr key={h.evaluation_id} className="border-t border-rule">
-            <th scope="row" className="py-2 text-left text-body font-normal text-ink">
-              {h.period_label}
-            </th>
-            <td className="tabular py-2 text-body text-self">{formatScore(h.self_overall)}</td>
-            <td className="tabular py-2 text-body text-lead">{formatScore(h.lead_overall)}</td>
-            <td className="tabular py-2 text-body text-final">{formatScore(h.final_overall)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <span
+      className={cn(
+        "tabular inline-flex items-center gap-1 text-body-sm font-medium",
+        up ? "text-success" : "text-critical",
+      )}
+    >
+      {up ? (
+        <TrendingUp aria-hidden className="size-3" />
+      ) : (
+        <TrendingDown aria-hidden className="size-3" />
+      )}
+      {signed(value)} vs last
+    </span>
+  );
+}
+
+/**
+ * One layer's score in the hero.
+ *
+ * The tier tint is the ground and the tier hue is the dot, which is the pairing
+ * §13.1 uses everywhere else — so it inverts correctly with the theme rather
+ * than needing its own set of colours. The numeral stays in ink: text wears
+ * text tokens, and a cyan "4.20" would be both harder to read and redundant
+ * beside a cyan dot that already says whose it is.
+ *
+ * An absent score is an em dash, never 0.00 — missing is not zero (§11, P7-9),
+ * and a card reading 0.00 for an unstarted appraisal is the kind of thing
+ * people escalate about.
+ */
+function HeroTier({ tier, value }: { tier: "self" | "lead" | "final"; value: number | null }) {
+  return (
+    <div className={cn("rounded-card border px-3.5 py-2.5", TIER_CLASSES[tier].chip)}>
+      <span className="flex items-center gap-1.5 text-body-sm text-ink-muted">
+        <span aria-hidden className={cn("size-2 rounded-pill", TIER_CLASSES[tier].dot)} />
+        {TIER_LABELS[tier]}
+      </span>
+      <span className="tabular mt-0.5 block text-display-sm text-ink">
+        {value === null ? "—" : value.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The key every tier chart on this page shares.
+ *
+ * Present whenever two or more layers are drawn — identity is never colour
+ * alone. `lineFinal` distinguishes the combo chart, where final is a LINE over
+ * two columns: a square swatch there would say it is a third bar, and a reader
+ * would go looking for a column that is not drawn.
+ *
+ * The labels wear text tokens, never the series colour: the swatch beside them
+ * carries the identity, and a pink word is both harder to read and redundant.
+ */
+function TierLegend({
+  showFinal = false,
+  lineFinal = false,
+  className,
+}: {
+  showFinal?: boolean;
+  lineFinal?: boolean;
+  className?: string;
+}) {
+  return (
+    <ul
+      className={cn(
+        "flex flex-wrap items-center gap-x-5 gap-y-1.5 text-body-sm text-ink-muted",
+        className,
+      )}
+    >
+      {(["self", "lead"] as const).map((tier) => (
+        <li key={tier} className="flex items-center gap-1.5">
+          <span aria-hidden className={cn("size-2.5 rounded-[2px]", TIER_CLASSES[tier].dot)} />
+          {TIER_LABELS[tier]}
+        </li>
+      ))}
+      {showFinal ? (
+        <li className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className={cn(
+              lineFinal ? "h-0.5 w-4 rounded-pill" : "size-2.5 rounded-[2px]",
+              TIER_CLASSES.final.dot,
+            )}
+          />
+          <span>{lineFinal ? `${TIER_LABELS.final} (line)` : TIER_LABELS.final}</span>
+        </li>
+      ) : null}
+    </ul>
+  );
+}
+
+/** One layer's raw answer, as a tinted pill. Reads at a glance in a dense row. */
+function ScorePip({ tier, value }: { tier: "self" | "lead"; value: number | null }) {
+  return (
+    <span
+      className={cn(
+        "tabular flex size-8 shrink-0 items-center justify-center rounded-input border text-body font-semibold",
+        TIER_CLASSES[tier].chip,
+      )}
+      aria-label={`${TIER_LABELS[tier]} ${value === null ? "not rated" : value}`}
+    >
+      {value ?? "—"}
+    </span>
   );
 }
 
@@ -882,89 +1140,75 @@ function Due({ label, value }: { label: string; value: string | null }) {
 }
 
 /**
- * One layer's headline score. An absent score is an em dash, never 0.00 —
- * missing is not zero (§11, P7-9), and a dashboard reading 0.00 for an
- * unstarted appraisal is the kind of thing people escalate about.
- */
-function TierScore({
-  tier,
-  value,
-  delta,
-}: {
-  tier: "self" | "lead" | "final";
-  value: number | null;
-  delta?: number | null;
-}) {
-  const classes = TIER_CLASSES[tier];
-  return (
-    <div className={cn("rounded-card px-4 py-2.5 text-center", classes.chip)}>
-      <div className="text-[11px] font-medium">{TIER_LABELS[tier]}</div>
-      <div className="tabular text-display-sm font-semibold">
-        {value === null ? "—" : value.toFixed(2)}
-      </div>
-      {/* Green up / red down is the TREND colour and never a tier (UI2-2). It
-          appears here only because it describes movement, not a layer. */}
-      {delta !== null && delta !== undefined && delta !== 0 ? (
-        <div
-          className={cn(
-            "mt-0.5 flex items-center justify-center gap-0.5 text-[10px] font-medium",
-            delta > 0 ? "text-success" : "text-critical",
-          )}
-        >
-          {delta > 0 ? (
-            <TrendingUp aria-hidden className="size-3" />
-          ) : (
-            <TrendingDown aria-hidden className="size-3" />
-          )}
-          {delta > 0 ? "+" : ""}
-          {delta.toFixed(2)} vs last
-        </div>
-      ) : (
-        <div className="mt-0.5 flex items-center justify-center gap-0.5 text-[10px] text-ink-muted">
-          <Minus aria-hidden className="size-3" />
-          {value === null ? "not rated" : "first cycle"}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * One headline number with its label above and its context below.
+ * One headline number: an icon, a label, the figure, and the context under it.
  *
- * Deliberately not `MetricWidget`: that carries a trend pill and a sparkline,
- * neither of which exists here, and a widget rendering half its parts reads as
- * something that failed to load rather than as something smaller.
+ * Deliberately not `MetricWidget`. That carries a signed percentage trend pill,
+ * and three of these four have no meaningful "vs last" — a widget rendering
+ * half its parts reads as something that failed to load rather than as
+ * something smaller.
+ *
+ * ACCENTS ARE NEVER TIER HUES. §13.1 reserves cyan, pink and indigo for "who
+ * said this", and none of these tiles is about a layer, so they take chart and
+ * status tokens. `accent-cyan` is the chart palette's secondary quantity, which
+ * coincides with the self tier in light mode and is a different token doing a
+ * different job (see globals.css).
  */
 function MiniStat({
+  icon,
+  accent,
   label,
   value,
   hint,
+  meter,
 }: {
+  icon: React.ReactNode;
+  accent: "primary" | "cyan" | "green" | "amber";
   label: string;
   value: string;
   hint?: string | null;
+  /** 0–1. Draws a proportion under the figure where the figure IS one. */
+  meter?: number;
 }) {
-  return (
-    <div className="card-surface p-4">
-      <p className="text-[11px] uppercase tracking-wide text-ink-muted">{label}</p>
-      <p className="tabular mt-1 text-h3 text-ink">{value}</p>
-      {hint ? <p className="mt-1 line-clamp-2 text-body-sm text-ink-muted">{hint}</p> : null}
-    </div>
-  );
-}
+  // Written out in full, never interpolated: Tailwind scans statically, so
+  // `bg-accent-${accent}/10` compiles to nothing at all.
+  const tint = {
+    primary: "bg-accent-primary/10 text-accent-primary",
+    cyan: "bg-accent-cyan/10 text-accent-cyan",
+    green: "bg-accent-green/10 text-accent-green",
+    amber: "bg-warning/10 text-warning",
+  }[accent];
 
-/** A count as a bar plus the number. Never the bar alone — a length is not a value. */
-function CountBar({ tier, n, max }: { tier: "self" | "lead"; n: number; max: number }) {
+  const fill = {
+    primary: "bg-accent-primary",
+    cyan: "bg-accent-cyan",
+    green: "bg-accent-green",
+    amber: "bg-warning",
+  }[accent];
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-2 min-w-16 flex-1 overflow-hidden rounded-pill bg-surface-mute">
-        <div
-          className={cn("h-full rounded-pill", tier === "self" ? "bg-self" : "bg-lead")}
-          style={{ width: `${max > 0 ? (n / max) * 100 : 0}%` }}
-        />
+    <div className="card-surface flex flex-col gap-3 p-5">
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className={cn("flex size-8 shrink-0 items-center justify-center rounded-input", tint)}
+        >
+          {icon}
+        </span>
+        <p className="text-body-sm text-ink-muted">{label}</p>
       </div>
-      <span className="tabular w-6 shrink-0 text-right text-body-sm text-ink">{n}</span>
+
+      <p className="tabular text-display-md leading-none text-ink">{value}</p>
+
+      {meter === undefined ? null : (
+        <div className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-mute" aria-hidden>
+          <div
+            className={cn("h-full rounded-pill transition-[width] duration-500", fill)}
+            style={{ width: `${Math.max(0, Math.min(1, meter)) * 100}%` }}
+          />
+        </div>
+      )}
+
+      {hint ? <p className="line-clamp-2 text-body-sm text-ink-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -1074,18 +1318,46 @@ function DivergingGapChart({
   );
 }
 
-function SectionBar({ tier, value }: { tier: "self" | "lead" | "final"; value: number | null }) {
+/**
+ * One layer's score as a track, 0–5.
+ *
+ * A null draws NOTHING rather than an empty track at zero width. Both look
+ * similar at a glance and mean opposite things — "not rated" and "rated 0",
+ * which §6 makes the worst score there is. The tinted rail behind it is what
+ * tells the reader the row exists and is unfilled.
+ *
+ * `decorative` drops the image role where the numbers sit in the same row
+ * anyway: three labelled graphics per line, each restating the figure beside
+ * it, makes a screen reader read the table three times over.
+ */
+function SectionBar({
+  tier,
+  value,
+  decorative = false,
+}: {
+  tier: "self" | "lead" | "final";
+  value: number | null;
+  decorative?: boolean;
+}) {
   const classes = TIER_CLASSES[tier];
   return (
     <div
       className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-mute"
-      role="img"
-      aria-label={`${TIER_LABELS[tier]} ${value === null ? "not rated" : value.toFixed(2)} out of 5`}
+      {...(decorative
+        ? { "aria-hidden": true }
+        : {
+            role: "img",
+            "aria-label": `${TIER_LABELS[tier]} ${
+              value === null ? "not rated" : value.toFixed(2)
+            } out of 5`,
+          })}
     >
-      <div
-        className={cn("h-full rounded-pill transition-[width] duration-500", classes.fill)}
-        style={{ width: `${((value ?? 0) / 5) * 100}%` }}
-      />
+      {value === null ? null : (
+        <div
+          className={cn("h-full rounded-pill transition-[width] duration-500", classes.fill)}
+          style={{ width: `${(value / 5) * 100}%` }}
+        />
+      )}
     </div>
   );
 }

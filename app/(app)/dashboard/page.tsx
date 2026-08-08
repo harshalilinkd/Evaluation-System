@@ -8,6 +8,7 @@ import { requireAuth } from "@/lib/auth/guards";
 import { getAnalytics } from "@/lib/analytics/queries";
 import { getDueList } from "@/lib/due/queries";
 import { createClient } from "@/lib/supabase/server";
+import { greetingFor } from "@/lib/utils/date";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -87,6 +88,7 @@ export default async function Page() {
     <DashboardClient
       analytics={analytics.data}
       firstName={profile.full_name.trim().split(/\s+/)[0] ?? "there"}
+      greeting={greetingFor()}
       myEvaluationId={mine?.id ?? null}
       myDueOn={mine?.due_self_on ?? null}
       toRate={toRate ?? 0}

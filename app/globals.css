@@ -427,6 +427,31 @@
       width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
+  /* The company mark.
+
+     A WIDTH, not a height, because the artwork is a 2.11:1 wordmark — sizing it
+     by height and letting the width follow is what produced a 40px-wide mark
+     with the stripes mushed together. It is given the room a wordmark needs and
+     the height follows.
+
+     Scoped to `.rail` deliberately: the mobile sheet renders the same brand on
+     a white surface and is not collapsible, so it must keep the full mark even
+     while `data-rail` says collapsed. */
+  .rail-mark {
+    /* The rail is 264px less 16px of panel padding and 8px of link padding each
+       side, so 216px is available and the name beside it needs about half. 96px
+       is what is left, and it is 2.4x the 40px the mark had inside its tile. */
+    width: 96px;
+    transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  :root[data-rail="collapsed"] .rail .rail-mark {
+    /* 76px rail, same padding, leaves 28px — but the mark is the only thing in
+       the row once the name has faded, so it may use the panel's full width and
+       let the link's own padding be the margin. */
+    width: 44px;
+  }
+
   :root[data-rail="collapsed"] .rail-item {
     justify-content: center;
   }

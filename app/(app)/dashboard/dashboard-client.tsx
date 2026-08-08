@@ -11,9 +11,28 @@
  */
 
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import {
+  ArrowRight,
+  CircleAlert,
+  CircleCheck,
+  ClipboardCheck,
+  Star,
+  UserCheck,
+  Users,
+} from "lucide-react";
 
-import { LabelledBarChart, RankedBarChart, StatusDonutChart, ratingBandColor, ratingBandIndex } from "@/components/appraise/charts";
+import {
+  LabelledBarChart,
+  RankedBarChart,
+  SectionRadarChart,
+  StatusDonutChart,
+  TIER_CHART_COLORS,
+  TrendAreaChart,
+  ratingBandColor,
+  ratingBandIndex,
+} from "@/components/appraise/charts";
+import { LeadPerformanceTable } from "@/components/appraise/lead-performance-table";
+import { MetricStrip, type Metric } from "@/components/appraise/metric-strip";
 import { CycleShapeChart } from "@/components/appraise/cycle-shape-chart";
 import { HistoryTrendChart } from "@/components/appraise/history-trend-chart";
 import { ChartFigure } from "@/components/appraise/chart-figure";
@@ -35,9 +54,13 @@ export type DueSummary = {
 /**
  * A titled panel. `card-surface` is the borderless 16px card from UI-REFRESH.
  *
- * `h-full` and the column layout are what stop a row going ragged: two panels
- * side by side with different amounts of content used to leave a gap under the
- * shorter one, which reads as a rendering fault rather than as a design.
+ * IT SIZES TO ITS CONTENT. The rows no longer stretch, and that is deliberate:
+ * levelling the card bottoms means the shorter card is padded out to match the
+ * taller one, which is fine when both hold something and produces a large empty
+ * box when one does not. Early in a cycle almost every panel is empty, so the
+ * levelling was buying tidy edges at the cost of a page of voids.
+ *
+ * Ragged bottoms, honest heights.
  */
 function Panel({
   title,
@@ -93,6 +116,16 @@ function PanelEmpty({ children }: { children: React.ReactNode }) {
   return <p className="font-sans text-body-sm text-ink-muted">{children}</p>;
 }
 
+/** A label over a figure. Used in the greeting card's footing row. */
+function Figure({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="type-label text-ink-muted">{label}</dt>
+      <dd className="tabular mt-0.5 font-sans text-body-lg text-ink">{value}</dd>
+    </div>
+  );
+}
+
 const score = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(2);
 
@@ -108,6 +141,7 @@ const signedScore = (v: number | null | undefined) => {
 export function DashboardClient({
   analytics,
   firstName,
+  greeting,
   myEvaluationId,
   myDueOn,
   toRate,
@@ -115,6 +149,15 @@ export function DashboardClient({
 }: {
   analytics: Analytics;
   firstName: string;
+  /**
+   * "Good morning" / "Good afternoon" / "Good evening", already resolved.
+   *
+   * Passed in rather than computed here: it depends on the clock, and anything
+   * derived from `new Date()` inside a client component is computed once on the
+   * server and again at hydration. `greetingFor` reads Asia/Kolkata (§0.10), so
+   * the server's answer is the right one and there is nothing to disagree with.
+   */
+  greeting: string;
   myEvaluationId: string | null;
   myDueOn: string | null;
   toRate: number;
@@ -129,6 +172,12 @@ export function DashboardClient({
           Whatever their role, everybody has their own appraisal. A dashboard
           that opens on company statistics while the reader's own form is
           outstanding has its priorities the wrong way round. */}
+      {/* -- `items-stretch` HERE and nowhere else. Two cards side by side at the
+            very top of a page are read as a pair, so uneven bottoms read as a
+            fault — and unlike the panels further down, both of these always have
+            content, so levelling them cannot produce an empty box. That is the
+            distinction: stretch where both cards are guaranteed to be full,
+            never where one might be a single sentence. -- */}
       <section className="grid items-stretch gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           {/*
@@ -143,7 +192,7 @@ export function DashboardClient({
           */}
           {myEvaluationId || toRate > 0 ? (
             <HeroCard
-              label={`Namaste ${firstName}`}
+              label={`${greeting}, ${firstName}`}
               value={myEvaluationId ? "Your evaluation is open" : `${toRate} to rate`}
               caption={
                 myEvaluationId
@@ -162,9 +211,17 @@ export function DashboardClient({
               }
             />
           ) : (
-            <div className="card-surface flex h-full flex-col justify-center gap-1 p-6">
-              <p className="type-label text-ink-muted">Namaste {firstName}</p>
-              <p className="font-sans text-h3 text-ink">
+            /* -- IT FILLS THE HEIGHT BY CARRYING MORE, not by centring less.
+                  Three lines in a stretched box is the void from the other
+                  direction — so the card states which cycle is running, where it
+                  has got to, and when the two sides are due. That is orientation
+                  the reader would otherwise have to go and find, and it makes
+                  the pair either side of it the same size honestly. -- */
+            <div className="card-surface flex h-full flex-col gap-1 p-6">
+              <p className="type-label text-ink-muted">
+                {greeting}, {firstName}
+              </p>
+              <p className="font-sans text-display-sm text-ink">
                 {activeCycle ? activeCycle.name : "No cycle is running"}
               </p>
               <p className="font-sans text-body-sm text-ink-muted">
@@ -172,6 +229,26 @@ export function DashboardClient({
                   ? `${activeCycle.periodLabel} · nothing is waiting on you`
                   : "Nothing is waiting on you."}
               </p>
+
+              {activeCycle && progress ? (
+                <dl className="mt-auto grid grid-cols-3 gap-4 pt-5">
+                  <Figure
+                    label="People"
+                    value={String(Number(progress.total ?? 0))}
+                  />
+                  <Figure
+                    label="Both sides in"
+                    value={`${Math.min(
+                      Number(progress.self_submitted ?? 0),
+                      Number(progress.lead_reviewed ?? 0),
+                    )} of ${Number(progress.total ?? 0)}`}
+                  />
+                  <Figure
+                    label="Complete"
+                    value={`${Number(progress.percent_complete ?? 0).toFixed(0)}%`}
+                  />
+                </dl>
+              ) : null}
             </div>
           )}
         </div>
@@ -207,6 +284,13 @@ export function DashboardClient({
           </Panel>
         ) : null}
       </section>
+
+      {/* ---------- The figures, immediately under the greeting ----------
+          Above every chart, because they are the only things on the page that
+          are readable at a glance and true from the moment a cycle launches. A
+          reader who looks at nothing else should still leave knowing the
+          headcount, how much of it is in, and what is not started. */}
+      {isAdmin ? <MetricStrip metrics={adminMetrics(analytics)} /> : null}
 
       {/* ---------- Everything below is for people who see more than their own ---------- */}
       {audience === "employee" ? (
@@ -311,62 +395,166 @@ function LateList({
 
 /* ---------- HR and the MD ---------- */
 
+/* ---------- The headline figures ---------- */
+/**
+ * The six numbers that open the page.
+ *
+ * At module scope rather than inside `AdminView` because the strip renders
+ * at the TOP, beside the greeting, and the greeting belongs to the shell.
+ * Passing the built array up is cheaper than hoisting the whole admin
+ * section, and it keeps one definition of what each figure means.
+ */
+function adminMetrics(analytics: Analytics): Metric[] {
+  const { departments, progress } = analytics;
+  /* ---------- The headline figures ----------
+
+     WHAT EACH COLUMN COUNTS IS NOT GUESSED — 0027 rewrote this view for blind
+     rating and kept every column NAME (§0.2, and `queries.ts` selects `*` into a
+     generated type). `self_submitted` and `lead_reviewed` now read the two
+     TIMESTAMPS, because under blind rating neither layer has a status of its
+     own: both fill in during OPEN, so no single status can say "self is in,
+     lead is not". Each also counts a row whose status has moved past the point
+     that requires it, which is what stops a SKIPPED layer reading as unstarted
+     for ever.
+
+     The two share bars are therefore honest: they are counting people, not
+     inferring from a status. */
+  const total = Number(progress?.total ?? 0);
+  const selfIn = Number(progress?.self_submitted ?? 0);
+  const leadIn = Number(progress?.lead_reviewed ?? 0);
+  const notStarted = Number(progress?.not_started ?? 0);
+  const closed = Number(progress?.closed ?? 0);
+
+  /* -- Weighted by headcount, not a mean of means. A five-person team and a
+        fifty-person team do not carry equal weight in a company average, and
+        averaging the department averages would give them exactly that. -- */
+  const rated = departments.filter((d) => d.avg_lead !== null);
+  const ratedPeople = rated.reduce((n, d) => n + Number(d.people ?? 0), 0);
+  const companyLead =
+    ratedPeople > 0
+      ? rated.reduce((n, d) => n + Number(d.avg_lead ?? 0) * Number(d.people ?? 0), 0) / ratedPeople
+      : null;
+
+  const share = (n: number) => (total > 0 ? n / total : 0);
+
+  return [
+    {
+      label: "In this cycle",
+      value: total,
+      caption: total === 1 ? "person being appraised" : "people being appraised",
+      tone: "primary",
+      icon: <Users className="size-4" />,
+    },
+    {
+      label: "Self-evaluations in",
+      value: selfIn,
+      caption: `of ${total}`,
+      share: share(selfIn),
+      tone: "cyan",
+      icon: <UserCheck className="size-4" />,
+    },
+    {
+      label: "HOD ratings in",
+      value: leadIn,
+      caption: `of ${total}`,
+      share: share(leadIn),
+      tone: "pink",
+      icon: <ClipboardCheck className="size-4" />,
+    },
+    {
+      label: "Not started",
+      value: notStarted,
+      caption: "neither side has answered",
+      share: share(notStarted),
+      tone: "amber",
+      icon: <CircleAlert className="size-4" />,
+    },
+    {
+      label: "Completed",
+      value: closed,
+      caption: `of ${total} closed`,
+      share: share(closed),
+      tone: "green",
+      icon: <CircleCheck className="size-4" />,
+    },
+    {
+      label: "Average rating",
+      value: companyLead === null ? "—" : companyLead.toFixed(2),
+      // §11 is explicit that there is no final score and no single headline
+      // figure, so this says WHICH average it is rather than presenting itself
+      // as "the score".
+      caption: companyLead === null ? "no ratings yet" : "lead average, out of 5",
+      tone: "primary",
+      icon: <Star className="size-4" />,
+    },
+  ];
+}
+
 function AdminView({ analytics }: { analytics: Analytics }) {
-  const { departments, sections, variance, distribution, needsAttention } = analytics;
+  const { departments, sections, variance, distribution, needsAttention, timeline } = analytics;
 
   /*
-    A CYCLE THAT HAS PRODUCED NOTHING YET IS NOT FOUR EMPTY CHARTS.
+    A CYCLE THAT HAS PRODUCED NOTHING YET IS NOT A PAGE OF EMPTY CHARTS.
 
-    Early on — which is where every cycle starts and where the product is most
-    often seen — distribution, departments and variance are all empty, and the
-    grid rendered four chart-shaped holes with a caption in each. That reads as
-    broken rather than as early.
+    It used to swap the whole analytics block for a single "these appear later"
+    line, because the alternative was four chart-shaped holes. That solved the
+    voids by removing the screen.
 
-    So the analytics section only appears once there is something to analyse.
-    Until then one line says so, and the counts and the progress bar above it
-    are doing the real work.
+    The metric strip above is what actually answers it: a cycle with nothing
+    submitted still has a headcount, a not-started count and two share bars at
+    zero, all of which are real and none of which needs a chart. So the figures
+    always render, and each panel here decides for itself — collapsing to one
+    line rather than holding a canvas open.
   */
-  const hasAnalytics =
-    distribution.length > 0 || departments.length > 0 || variance.length > 0;
-
-  if (!hasAnalytics) {
-    return (
-      <section className="grid items-stretch gap-6 lg:grid-cols-2">
-        <Panel
-          title="Analysis"
-          subtitle="Rating bands, department averages and how each lead rates."
-        >
-          <PanelEmpty>
-            These appear as ratings come in. Nothing has been submitted on this cycle yet.
-          </PanelEmpty>
-        </Panel>
-
-        <Panel
-          title="Needs chasing"
-          subtitle="Oldest first"
-          action={
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/admin/cycles">Open cycles</Link>
-            </Button>
-          }
-        >
-          {needsAttention.length === 0 ? (
-            <PanelEmpty>Nobody is late. Everything outstanding is still within its date.</PanelEmpty>
-          ) : (
-            <LateList people={needsAttention} limit={6} />
-          )}
-        </Panel>
-      </section>
-    );
-  }
-
   return (
     <>
-      <section className="grid items-stretch gap-6 lg:grid-cols-2">
-        <Panel
-          title="Where the ratings sit"
-          subtitle="Every scored answer this cycle, by band"
-        >
+      {/* ---------- How the cycle is filling up ----------
+          The one thing an HR dashboard is actually asked — "will this land by
+          the due date" — is a level and a slope, and nothing on this screen
+          carried it. */}
+      <section className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <Panel
+            title="How the cycle is filling up"
+            subtitle="Cumulative submissions. The two sides are counted separately — they rate at the same time and neither sees the other."
+          >
+            {timeline.length < 2 ? (
+              <PanelEmpty>
+                The curve appears once submissions start arriving on more than one day.
+              </PanelEmpty>
+            ) : (
+              <ChartFigure
+                caption="Cumulative self-evaluations and HOD ratings, by day"
+                rows={[...timeline].reverse()}
+                columns={[
+                  { header: "Day", cell: (r) => formatDate(r.day) },
+                  { header: "Self", cell: (r) => String(r.self), align: "right" },
+                  { header: "HOD", cell: (r) => String(r.lead), align: "right" },
+                ]}
+              >
+                {/* -- The two tier hues, and legitimately: the series ARE the
+                      rating layers, so the colour IS the meaning (§13.1). This
+                      is the documented exception UI2-12 leaves open, and P30
+                      validated the pair — ΔE 8.9 deuteranopic, 31.2 normal.
+                      Two series, so a legend is always present. -- */}
+                <TrendAreaChart
+                  data={timeline.map((row) => ({
+                    label: formatDate(row.day),
+                    self: row.self,
+                    lead: row.lead,
+                  }))}
+                  xKey="label"
+                  series={[
+                    { key: "self", label: "Self-evaluations", color: TIER_CHART_COLORS.self },
+                    { key: "lead", label: "HOD ratings", color: TIER_CHART_COLORS.lead },
+                  ]}
+                />
+              </ChartFigure>
+            )}
+          </Panel>
+        </div>
+
+        <Panel title="Where the ratings sit" subtitle="Every scored answer this cycle, by band">
           {distribution.length === 0 ? (
             <PanelEmpty>Bands appear here once ratings come in.</PanelEmpty>
           ) : (
@@ -415,7 +603,9 @@ function AdminView({ analytics }: { analytics: Analytics }) {
             </ChartFigure>
           )}
         </Panel>
+      </section>
 
+      <section className="grid items-start gap-6 lg:grid-cols-2">
         <Panel
           title="By department"
           subtitle="Lead averages. Job Specific Skills is excluded — the questions differ per team, so the numbers are not comparable."
@@ -440,6 +630,51 @@ function AdminView({ analytics }: { analytics: Analytics }) {
               valueKey="value"
               color="pink"
             />
+            </ChartFigure>
+          )}
+        </Panel>
+
+        {/* ---------- The shape of the two sides ----------
+            This half of the row was empty, and a radar is the right thing to
+            put in it rather than a fourth bar chart: the question here is the
+            PROFILE — which parts of the job the company rates itself strong and
+            weak on — and a shape is read at a glance where seven pairs of bars
+            are not.
+
+            It is not a duplicate of the dumbbell further down. That one answers
+            "how far apart are the two sides on this section", to two decimals,
+            and is the better tool for it. This one answers "what shape is the
+            company", which no other panel asks. Two questions, two encodings.
+
+            Both polygons wear their TIER colour, which is exactly what §13.1
+            reserves them for — the series ARE the layers. */}
+        <Panel
+          title="The shape of the two sides"
+          subtitle="Company-wide averages across the comparable sections. Where the two outlines pull apart is where the sides disagree."
+        >
+          {sections.length === 0 ? (
+            <PanelEmpty>The profile appears once both sides have been scored.</PanelEmpty>
+          ) : (
+            <ChartFigure
+              caption="Company-wide section averages, self and lead"
+              rows={pivotSections(sections)}
+              columns={[
+                { header: "Section", cell: (r) => r.label },
+                { header: "Self", cell: (r) => score(r.self), align: "right" },
+                { header: "Lead", cell: (r) => score(r.lead), align: "right" },
+              ]}
+            >
+              <SectionRadarChart
+                data={pivotSections(sections).map((r) => ({
+                  section: r.label,
+                  self: r.self,
+                  lead: r.lead,
+                }))}
+                series={[
+                  { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
+                  { key: "lead", label: "HOD", color: TIER_CHART_COLORS.lead },
+                ]}
+              />
             </ChartFigure>
           )}
         </Panel>
@@ -526,10 +761,24 @@ function AdminView({ analytics }: { analytics: Analytics }) {
         </section>
       ) : null}
 
-      <section className="grid items-stretch gap-6 lg:grid-cols-2">
+      {/* ---------- The roster ----------
+          Full width and a real table, because this is the panel somebody reads
+          a name off and then acts. The diverging bar below it answers the shape
+          question — who is furthest out — and the table answers the specific
+          one: who, how many, and which way. */}
+      {variance.length > 0 ? (
         <Panel
-          title="How each lead rates"
-          subtitle="Mean difference from the employee's own score. A lead who is consistently high or low is worth a conversation — for HR and the MD only."
+          title="How each HOD rated their team"
+          subtitle="For HR and the MD only. A HOD who sits consistently above or below their team is worth a conversation, not a mark against them."
+        >
+          <LeadPerformanceTable rows={variance} />
+        </Panel>
+      ) : null}
+
+      <section className="grid items-start gap-6 lg:grid-cols-2">
+        <Panel
+          title="How far each HOD sits from their team"
+          subtitle="Mean difference from the employee's own score, largest first."
         >
           {variance.length === 0 ? (
             <PanelEmpty>This fills in as reviews arrive.</PanelEmpty>
@@ -674,7 +923,7 @@ function LeadView({ analytics }: { analytics: Analytics }) {
   const { needsAttention } = analytics;
 
   return (
-    <section className="grid items-stretch gap-6 lg:grid-cols-2">
+    <section className="grid items-start gap-6 lg:grid-cols-2">
       <Panel
         title="Your team"
         subtitle="Who has not been rated yet"
@@ -716,7 +965,7 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
   const { ownHistory } = analytics;
 
   return (
-    <section className="grid items-stretch gap-6 lg:grid-cols-2">
+    <section className="grid items-start gap-6 lg:grid-cols-2">
       <Panel
         title="Your appraisals"
         subtitle="Every cycle you have been through, and what each side scored"

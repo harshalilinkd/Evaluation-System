@@ -4183,3 +4183,84 @@ app (P32) and calls the real module.
 
 **Verification — p11b 52 checks, 0 failed** (up from 45). p6 66/0, p10 55/0,
 p11 69/0, p23 42/0. Typecheck 0, lint 0, build clean.
+
+---
+
+### P33 — The scorecard rebuilt as an evaluation dashboard
+
+At the owner's instruction: the scorecard should read as an employee
+performance dashboard — radar, bars, a ring, a column-and-line, tables.
+
+`ScoreComboChart`, `GroupedBarChart` and `TIER_CHART_COLORS` added to
+`charts.tsx`; `scorecard-client.tsx` restructured section by section (§0.1 — no
+whole-file rewrite). No route, query, server action or business rule changed.
+
+**The page now reads:** identity and the headline · where this cycle stands ·
+four figures · appraisals over time (columns + line) · section profile (radar)
+beside the rating mix (ring) · score by section (grouped bars) · strongest and
+where to focus · where the two sides agreed (diverging) · the verdict beside
+where they differed · every rated answer · every cycle.
+
+| # | Decision | Why |
+|---|---|---|
+| P33-1 | **The column-and-line chart has ONE axis, and that is the whole reason it is allowed** | A combined column/line chart usually exists to put two measures on two scales, which is the single worst thing a chart can do — the point where the line crosses the columns is then an artefact of two arbitrary ranges and means nothing. Here self, lead and final are the SAME measure on the SAME 0–5 scale (§6), so they share one axis and every comparison on it is real. The line is not a second quantity; it is the settled answer drawn over the two opinions that produced it. |
+| P33-2 | The domain is pinned to 0–5, never fitted to the data | A chart that rescaled to 3.8–4.2 would turn a fifth of a point into a cliff. On somebody's appraisal history that is the difference between "steady" and "collapsing", drawn from identical numbers. |
+| P33-3 | **`TIER_CHART_COLORS` exists, and it fixed a real dark-mode bug** | The radar drew with `cyan`/`pink`/`primary` — the CHART tokens — while the legend beside it drew `bg-self`/`bg-lead`/`bg-final`. Those coincide in light mode and diverge in dark, where `--chart-series-2` is #0EA5C4 and `--self` is #22D3EE: a key disagreeing with the chart it belongs to, on the one page whose subject is who said what. UI-1 keeps the tiers out of `CHART_COLORS` so nobody picks pink for variety; a chart whose series ARE the layers is the documented exception. |
+| P33-4 | **The hero is NOT the dashboard's `night` card, and that is a correctness call** | `bg-ink` + `text-ink-invert` is the obvious premium treatment and it cannot be used here. In dark mode `--ink` IS the light text colour (#CCD0CF), so a night card flips to a pale slab — and the tier dots that carry identity on it become #22D3EE cyan on light grey, about 1.1:1. A hero whose job is to say which layer produced the number cannot have its layer marks vanish in one of the two themes. Weight comes from type and space; colour from a tint wash that inverts correctly. |
+| P33-5 | The headline names its layer | §11: where a single headline figure is needed, use the lead average **and label it as such**. `final ?? lead ?? self`, with the caption naming which — so the number never claims an authority it does not have. |
+| P33-6 | The band badge reads §6's word from `SCALE_0_5_LABELS`, prefixed "Nearest" | §6 calls the wording fixed and §17 forbids improving it, so it is read from the constant P7-4 established rather than retyped. "Nearest" is load-bearing: an average of 4.20 is close to the 4 anchor, not equal to it, and a badge stating it flatly would claim a precision the mean does not have. |
+| P33-7 | **The ring shows the SETTLED score, one series** | Two concentric rings read as a part-to-whole relationship self and lead do not have. Every rated question lands in exactly one settled band and the bands sum to the form, which is the only condition under which a ring says something true. Colour from the band's position on the scale, never its row number (P29-3). |
+| P33-8 | A single occupied band renders **no ring at all** | One 360° arc is a circle pretending to be a chart. The card says the fact in words. |
+| P33-9 | Grouped bars, never stacked | Self 4 and lead 3 is not a section worth 7. Stacking quantities that share a scale but not a total is the commonest way a chart states something untrue. |
+| P33-10 | The grouped chart carries **no per-bar labels**, unlike every other bar chart here | Three series across eight sections is twenty-four numbers, and a value beside every mark is the thing that goes unread. The validator's contrast warning on cyan obligates "visible labels OR a table view" — every caller wraps it in `ChartFigure`, so the figures are one press away and the chart stays quiet. |
+| P33-11 | **"Widest difference" is not amber** | Amber reads as "needs attention", and §11 makes the gap a reporting figure rather than a verdict — the same call P29-5 made about lead variance. A warning colour there tells the employee their own review is defective. |
+| P33-12 | The combo chart renders from the FIRST cycle, with a different title | A trend line through one point is dishonest, but a column pair with the recorded answer marked on it is a real reading of one appraisal. Hiding the panel until somebody's second year is how a new joiner's scorecard ends up looking half-built. |
+| P33-13 | `ChartFigure` owns every toggle; the card's own `useState` and hand-built table are gone | Two switches doing the same job is how they end up looking and behaving differently. |
+| P33-14 | A null score draws **nothing**, not a zero-width track | Both look similar at a glance and mean opposite things — "not rated" and "rated 0", which §6 makes the worst score there is. The tinted rail behind it says the row exists and is unfilled. |
+| P33-15 | The answer table's three tracks are `aria-hidden` | The figures are in the same row. Three labelled graphics per line, each restating the number beside it, makes a screen reader read the table three times over. |
+
+**Palette, computed rather than judged.** `validate_palette.js` on the tier trio:
+light (#06B6D4 / #EC4899 / #4F46E5 on white) **passes** every check — CVD worst
+adjacent ΔE 8.9 deutan, normal-vision worst 31.2 — with the standing WARN that
+cyan is 2.43:1 against white, which is discharged by the table view on every
+chart.
+
+**Dark FAILS the lightness band** and is recorded rather than fixed: #22D3EE,
+#F472B6 and #818CF8 come to L 0.797 / 0.725 / 0.680 against the 0.43–0.77 band.
+Separation and contrast both pass, so the marks are distinguishable and legible;
+the failure is that all three sit light on the dark surface. §13.1 reserves these
+three hues and §0.2 freezes them, so **changing them is a §2 token decision and
+needs an explicit instruction** — it is not something to absorb into a layout
+phase. This joins the two palette failures P29 already recorded.
+
+**Not verified.** The suites live outside the repository (§18 STATUS) and were
+not run. Typecheck 0 errors, lint 0 errors (8 pre-existing warnings, none in the
+changed files), build clean. Nothing was rendered against live data — the route
+returns its auth redirect, which proves it resolves, not that it looks right.
+
+---
+
+### FIX-13 — /reports on a phone: three counts on one row, filters on two
+
+At the owner's instruction, from a 404px screenshot: the KPI cards had broken
+2 + 1, and seven filters had wrapped into four lines, so ~460px of chrome sat
+above a queue somebody had opened in order to work through it.
+
+`KpiRow` and `KpiCard` in `screen.tsx` (shared — `/team`, `/admin/due`,
+`/admin/increments` all pass three counts and all get the same fix), and the
+toolbar in `reports/queue-client.tsx`.
+
+| # | Decision | Why |
+|---|---|---|
+| F13-1 | **The KPI column count comes from `React.Children.count`, not from `auto-fit`** | `repeat(auto-fit, minmax(9rem, 1fr))` was the tidy answer and it was wrong on a phone: three 144px tiles plus gaps need 448px, so a 375–400px screen silently got two columns and an orphan. That is the stacking the row was written to avoid, arrived at by arithmetic instead of by a breakpoint. Counting makes "three counts, one row" true at every width. Four still fall to two-by-two below `sm`, where four across 375px leaves ~80px a tile — the honest place to wrap. |
+| F13-2 | The KPI label is utilities, not `.type-label` | A component class cannot be varied by breakpoint, and this label has to give ground: at ~105px, 12px uppercase at 0.05em runs "Pending your review" to three lines. 11px at tighter tracking holds it to two, and 11px is the floor this codebase set itself (P31-6). |
+| F13-3 | **The filter rows are STATED on a phone and dissolve at `lg`** | `ScreenToolbar` is `flex-wrap`, which picks its breaks from whatever each control happens to measure — fine on a wide screen, no behaviour at all on a narrow one. Two `grid-cols-3` wrappers give the owner's layout exactly (search · cycle · type, then department · status · gap), and `lg:contents` removes both boxes above 1024px so the controls rejoin the original flex line. The desktop strip is unchanged. |
+| F13-4 | `min-w-0` on every select | A select's intrinsic minimum is its longest option, so without it "Every department" blows the grid row out rather than fitting a third of it. |
+| F13-5 | The gap threshold became ONE control | It was the text "Gap ≥" floating beside a bordered input — ~120px, and unable to share a row. Folding the prefix inside the box makes it the same size and shape as the two selects beside it, which is what makes the row read as a row. |
+| F13-6 | **The focus ring moved to the wrapper** | A borderless input inside a bordered label has nowhere of its own to draw focus. Dropping the ring rather than relocating it is how a control becomes unreachable-looking for exactly the people §13.8 is about. |
+| F13-7 | The match count is now visible on a phone | It was `hidden lg:block`, and `DataGrid`'s own status bar is at the bottom of a horizontally scrolling table — off screen. Somebody who has just narrowed the list needs to know it narrowed. |
+| F13-8 | The search placeholder is "Search", with the long form in `title` | At a third of 375px the field is ~105px and "Search by name, code or department" arrives as "Search by ", which reads as a label that has been cut off rather than as a hint. The `aria-label` still carries the full sentence. |
+
+Chrome above the first row: ~460px → ~360px on a 375px screen. Typecheck 0,
+lint 0 errors, build clean. Not rendered against a device — measured from the
+type scale and the token padding, not observed.

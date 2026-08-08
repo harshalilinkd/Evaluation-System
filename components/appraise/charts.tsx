@@ -10,7 +10,9 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   LabelList,
+  Line,
   Pie,
   PieChart,
   PolarAngleAxis,
@@ -50,6 +52,29 @@ export const CHART_COLORS = {
 } as const;
 
 export type ChartColor = keyof typeof CHART_COLORS;
+
+/**
+ * The three tier hues, as colours a chart can resolve.
+ *
+ * Deliberately NOT folded into CHART_COLORS. UI-1 keeps the tiers out of the
+ * generic palette precisely so nobody reaches for pink because a series wants
+ * variety. A chart whose series ARE the rating layers is the documented
+ * exception: there the hue IS the meaning (§13.1), and any other colour is
+ * wrong.
+ *
+ * It also closes a real mismatch. The scorecard's radar drew with
+ * `cyan`/`pink`/`primary` while the legend beside it drew `bg-self`/`bg-lead`/
+ * `bg-final`. Those coincide in light mode and DIVERGE in dark, where
+ * `--chart-series-2` is #0EA5C4 and `--self` is #22D3EE — a key disagreeing
+ * with the chart it belongs to, on a page about who said what.
+ */
+export const TIER_CHART_COLORS = {
+  self: "rgb(var(--self))",
+  lead: "rgb(var(--lead))",
+  final: "rgb(var(--final))",
+} as const;
+
+export type TierChartColor = keyof typeof TIER_CHART_COLORS;
 
 /**
  * The ordinal ramp — one hue, light to dark, for data whose categories have an
@@ -185,19 +210,24 @@ export function TrendAreaChart({
         the bug. -- */
   data: Array<Record<string, string | number | null>>;
   xKey: string;
-  series: Array<{ key: string; label: string; color: ChartColor }>;
+  /* -- `string` as well as a palette key, so a caller whose series ARE the
+        rating layers can pass `TIER_CHART_COLORS.self` directly (§13.1). It
+        matters in DARK MODE specifically: light-mode `--chart-series-2` and
+        `--self` happen to hold the same cyan, so "cyan" would look right and
+        quietly stop being the tier colour the moment the theme flipped. Same
+        mechanism `SectionRadarChart` already uses. -- */
+  series: Array<{ key: string; label: string; color: ChartColor | string }>;
   height?: number;
   className?: string;
 }) {
   const reduced = usePrefersReducedMotion();
-  // Sized to the bars — see `barChartHeight`. A little taller per row than the
-  // labelled chart, because these carry a name AND a signed value.
-  const box = height ?? barChartHeight(data.length, 300, 42);
+  const colorOf = (c: ChartColor | string) =>
+    c in CHART_COLORS ? CHART_COLORS[c as ChartColor] : c;
 
   if (data.length === 0) return null;
 
   return (
-    <div className={cn("w-full", className)} style={{ height: box }}>
+    <div className={cn("w-full", className)} style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
         {/* left: 0, not -16. A negative left margin pulls the y-axis off the
             canvas and clips its own tick labels — "2.25" arrives as "25". */}
@@ -206,8 +236,8 @@ export function TrendAreaChart({
             {series.map((s) => (
               <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
                 {/* Semi-transparent, fading to nothing at the axis. */}
-                <stop offset="0%" stopColor={CHART_COLORS[s.color]} stopOpacity={0.25} />
-                <stop offset="100%" stopColor={CHART_COLORS[s.color]} stopOpacity={0} />
+                <stop offset="0%" stopColor={colorOf(s.color)} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={colorOf(s.color)} stopOpacity={0} />
               </linearGradient>
             ))}
           </defs>
@@ -230,7 +260,7 @@ export function TrendAreaChart({
               // Never bridge a gap. Joining across an unrated period draws a
               // trend through data that does not exist.
               connectNulls={false}
-              stroke={CHART_COLORS[s.color]}
+              stroke={colorOf(s.color)}
               strokeWidth={2}
               fill={`url(#fill-${s.key})`}
               dot={false}
@@ -824,6 +854,204 @@ export function BucketBarChart({
               style={{ fill: "rgb(var(--ink-muted))", fontSize: 12 }}
             />
           </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/* ---------- Column + line ---------- */
+
+/**
+ * Appraisal history: a column per rating layer, with one layer drawn as a line
+ * over the top.
+ *
+ * ONE AXIS. THIS IS THE RULE THE FORM MOST OFTEN BREAKS.
+ *
+ * The usual reason to combine columns and a line is to put two different
+ * measures on two different scales — which is the single worst thing a chart can
+ * do, because the crossing point where the line meets the columns is then an
+ * artefact of two arbitrary ranges and means nothing at all. That is not what
+ * happens here: self, lead and final are the SAME measure on the SAME 0–5 scale
+ * (§6), so they share one axis and every comparison on the chart is real.
+ *
+ * The line therefore is not a second quantity — it is the settled answer drawn
+ * over the two opinions that produced it, which is the whole story of an
+ * appraisal in one mark. Columns are what the two sides said; the line is what
+ * was recorded.
+ *
+ * The domain is fixed at 0–5 rather than fitted to the data. A chart that
+ * rescaled to 3.8–4.2 would turn a fifth of a point into a cliff, and on
+ * somebody's appraisal history that is the difference between "steady" and
+ * "collapsing" drawn from identical numbers.
+ */
+export function ScoreComboChart({
+  data,
+  xKey,
+  bars,
+  line,
+  height = 300,
+  className,
+}: {
+  /* `null` is a gap, never a zero — a cycle nobody rated is not a score of 0
+     (§11, P7-9). Recharts skips a null bar and breaks the line at it. */
+  data: Array<Record<string, string | number | null>>;
+  xKey: string;
+  bars: Array<{ key: string; label: string; color: string }>;
+  line?: { key: string; label: string; color: string };
+  height?: number;
+  className?: string;
+}) {
+  const reduced = usePrefersReducedMotion();
+
+  if (data.length === 0) return null;
+
+  return (
+    <div className={cn("w-full", className)} style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        {/* barGap 2: a surface gap between the paired columns, not a stroke
+            around each — a border drawn to separate marks is what a gap is for. */}
+        <ComposedChart data={data} margin={{ top: 16, right: 8, bottom: 0, left: 0 }} barGap={2}>
+          <CartesianGrid vertical={false} {...GRID} />
+          <XAxis dataKey={xKey} tickLine={false} axisLine={false} {...AXIS} />
+          {/* Fixed to the instrument, not to the data. See the note above. */}
+          <YAxis
+            domain={[0, 5]}
+            ticks={[0, 1, 2, 3, 4, 5]}
+            tickLine={false}
+            axisLine={false}
+            width={32}
+            {...AXIS}
+          />
+          <ChartTooltip />
+
+          {bars.map((b) => (
+            <Bar
+              key={b.key}
+              dataKey={b.key}
+              name={b.label}
+              fill={b.color}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={28}
+              activeBar={{ fillOpacity: 0.82 }}
+              isAnimationActive={!reduced}
+            />
+          ))}
+
+          {/* After the bars, so the settled answer reads on top of the opinions
+              rather than being hidden behind them. */}
+          {line ? (
+            <Line
+              type="monotone"
+              dataKey={line.key}
+              name={line.label}
+              stroke={line.color}
+              strokeWidth={2}
+              // Never bridge a gap: joining across an unrated cycle draws a
+              // trend through a period that produced no score.
+              connectNulls={false}
+              // ≥8px with a 2px surface ring, so a point landing on a column
+              // edge stays legible.
+              dot={{ r: 4, strokeWidth: 2, stroke: "rgb(var(--surface))", fill: line.color }}
+              activeDot={{ r: 6, strokeWidth: 2, stroke: "rgb(var(--surface))" }}
+              isAnimationActive={!reduced}
+            />
+          ) : null}
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/* ---------- Grouped horizontal bar ---------- */
+
+/**
+ * Several series per category, side by side rather than stacked.
+ *
+ * Grouped, not stacked, because these parts do NOT sum to anything: self 4 and
+ * lead 3 is not a section worth 7. Stacking quantities that share a scale but
+ * not a total is the commonest way a chart states something untrue.
+ *
+ * Horizontal because section names are phrases, and a phrase under a vertical
+ * column truncates, tilts or overlaps its neighbour.
+ *
+ * The domain is fixed at 0–5 for the same reason ScoreComboChart's is.
+ *
+ * NO PER-BAR LABELS, unlike the single-series charts above. Three series across
+ * eight sections is twenty-four numbers, and a value beside every mark is the
+ * thing that goes unread. The validator's contrast warning on cyan obligates
+ * "visible labels OR a table view" — every caller wraps this in `ChartFigure`,
+ * so the exact figures are one press away and the chart stays quiet.
+ */
+export function GroupedBarChart({
+  data,
+  labelKey,
+  series,
+  height,
+  className,
+}: {
+  data: Array<Record<string, string | number | null>>;
+  labelKey: string;
+  series: Array<{ key: string; label: string; color: string }>;
+  height?: number;
+  className?: string;
+}) {
+  const reduced = usePrefersReducedMotion();
+  /* -- Sized to the rows AND to how many bars each row holds, so three sections
+        do not sit in a canvas built for eight and leave the card two-thirds
+        empty — and eight do not squeeze into one built for three. 16px of track
+        per series plus 20px of gutter is what keeps a 12px bar from touching
+        its neighbour at either extreme. -- */
+  const box = height ?? barChartHeight(data.length, 520, series.length * 16 + 20, 28);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div className={cn("w-full", className)} style={{ height: box }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart
+          data={data}
+          layout="vertical"
+          // right: 40 leaves the direct label room outside a full-length bar.
+          margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+          barCategoryGap="22%"
+          // A 2px surface gap between adjacent bars, never a stroke around
+          // them: a border drawn to separate marks is what the gap is for.
+          barGap={2}
+        >
+          <CartesianGrid horizontal={false} {...GRID} />
+          <XAxis
+            type="number"
+            domain={[0, 5]}
+            ticks={[0, 1, 2, 3, 4, 5]}
+            tickLine={false}
+            axisLine={false}
+            {...AXIS}
+          />
+          {/* Wide enough for the longest section name the product ships —
+              "Quantitative Performance (KPI)" — because a category axis that
+              clips is an axis that renames the thing it labels. */}
+          <YAxis
+            type="category"
+            dataKey={labelKey}
+            tickLine={false}
+            axisLine={false}
+            width={168}
+            {...AXIS}
+          />
+          <ChartTooltip />
+          {series.map((s) => (
+            <Bar
+              key={s.key}
+              dataKey={s.key}
+              name={s.label}
+              fill={s.color}
+              radius={[0, 4, 4, 0]}
+              maxBarSize={12}
+              activeBar={{ fillOpacity: 0.82 }}
+              isAnimationActive={!reduced}
+            />
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>

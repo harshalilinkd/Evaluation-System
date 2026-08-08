@@ -20,26 +20,35 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
       className="rail-item flex items-center gap-3 rounded-control px-2 py-1.5"
     >
       {/*
-        The company mark, on a white tile.
+        The company mark, with no plate behind it.
 
-        The LinkD artwork is multi-coloured with heavy black strokes, so it
-        needs a light plate to sit on — the navy rail would swallow the outlines
-        that give the wordmark its shape. The tile is the plate.
+        IT USED TO SIT ON A WHITE TILE, and the reason was real: the LinkD
+        artwork is drawn with heavy BLACK strokes, and black on Slate Navy
+        disappears — the "D" is almost entirely outline, so on the bare rail the
+        wordmark lost its last letter. The plate was the fix.
 
-        It is a WIDE mark (2.11:1) in a square chip, which is the shape the
-        collapsed rail needs. `w-full` rather than `h-full` is what lets it use
-        the full 40px across and centre in the leftover height; sized to the
-        height instead it came out 28px wide and the stripes turned to mush.
+        The better fix is a reversed mark. `logo-light.png` is the same artwork
+        with only the black knocked out to slate-100; every coloured letter is
+        untouched. It needs no plate, so the mark is transparent on the rail as
+        it should be, and it can then be given the width a 2.11:1 wordmark
+        actually needs (see `.rail-mark`) instead of being squeezed into a 40px
+        square.
 
-        `alt` is empty because the company name is written beside it: a screen
-        reader announcing "LinkD Prints" twice is noise, not access. If the file
-        is missing the tile simply renders blank rather than a broken icon, and
-        the name beside it still says what this is.
+        `onNavy` picks the ground: the mobile sheet is a white surface, where
+        the original black-stroked mark is the correct one. Neither file is a
+        substitute for the other.
+
+        `alt` is empty because the company name is written beside it — a screen
+        reader announcing "LinkD Prints" twice is noise, not access — and
+        because a decorative image renders as NOTHING when its file is missing,
+        rather than as a broken-image glyph (P27 addendum).
       */}
-      <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-input bg-white p-0.5">
-        {/* eslint-disable-next-line @next/next/no-img-element -- a fixed 40px mark; the optimiser has nothing to add and next/image would defer the one element that should paint first. */}
-        <img src="/logo.png" alt="" className="w-full object-contain" />
-      </span>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a small fixed-width mark; the optimiser has nothing to add and next/image would defer the one element that should paint first. */}
+      <img
+        src={onNavy ? "/logo-light.png" : "/logo.png"}
+        alt=""
+        className="rail-mark shrink-0 object-contain"
+      />
 
       {/* Faded out by CSS on collapse rather than unmounted — the transition
           has to animate a real element, and remounting the brand on every

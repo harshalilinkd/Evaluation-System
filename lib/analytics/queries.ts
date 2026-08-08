@@ -52,6 +52,33 @@ export type Analytics = {
   distribution: RatingBucket[];
   /** The signed-in person's own history, for the employee trend. */
   ownHistory: HistoryRow[];
+  /**
+   * How the cycle filled up, day by day. Administrators only.
+   *
+   * CUMULATIVE, not per-day counts. The question a dashboard is asked here is
+   * "are we going to land this by the due date" — which is a level and a slope,
+   * not a bar chart of Tuesday. A per-day series of a 40-person cycle is also
+   * mostly zeroes with two spikes, which reads as noise.
+   *
+   * Both layers are counted SEPARATELY and never summed into one line. Under
+   * blind parallel rating they are two independent populations filling in at
+   * once (§1); adding them would produce a curve out of two unrelated things
+   * and hide the case that actually matters — one side racing ahead while the
+   * other has not started.
+   *
+   * Empty for an employee and for a lead: it is a company-wide readout, and §9
+   * gives an employee nothing about anyone else. A lead seeing their team's
+   * submission curve would also make the employees' side observable, which is
+   * exactly what §5's blindness forbids.
+   */
+  timeline: Array<{
+    /** ISO date, ascending. */
+    day: string;
+    /** Cumulative self layers submitted on or before this day. */
+    self: number;
+    /** Cumulative lead layers submitted on or before this day. */
+    lead: number;
+  }>;
   /** Overdue people, oldest first. HR and leads only — an employee sees none. */
   needsAttention: Array<{
     evaluationId: string;
@@ -94,6 +121,7 @@ export async function getAnalytics(
         variance: [],
         distribution: [],
         ownHistory: [],
+        timeline: [],
         needsAttention: [],
       },
     };
@@ -110,6 +138,58 @@ export async function getAnalytics(
     supabase.from("v_rating_distribution").select("*").eq("cycle_id", cycle.id),
     supabase.from("v_employee_history").select("*").eq("profile_id", profileId).order("starts_on"),
   ]);
+
+  /* -- How the cycle filled up -- */
+  //
+  // Administrators only, for the reason on the type: a submission curve is a
+  // readout of a whole population's progress, and under blind rating showing a
+  // lead the employees' curve would tell them how their own reports are doing
+  // (§5). The query is SKIPPED rather than fetched and hidden — a filter is
+  // something somebody can forget, an absent request is not.
+  const timeline: Analytics["timeline"] = [];
+
+  if (audience === "hr" || audience === "md") {
+    const { data: submitted } = await supabase
+      .from("evaluations")
+      .select("self_submitted_at, lead_submitted_at")
+      .eq("cycle_id", cycle.id)
+      .is("excluded_at", null);
+
+    const perDay = new Map<string, { self: number; lead: number }>();
+    const bump = (at: string | null, layer: "self" | "lead") => {
+      if (!at) return;
+      const day = at.slice(0, 10);
+      const cell = perDay.get(day) ?? { self: 0, lead: 0 };
+      cell[layer] += 1;
+      perDay.set(day, cell);
+    };
+
+    for (const row of submitted ?? []) {
+      bump(row.self_submitted_at, "self");
+      bump(row.lead_submitted_at, "lead");
+    }
+
+    if (perDay.size > 0) {
+      /* -- Every day between the first submission and today, INCLUDING the ones
+            nobody submitted on. Plotting only the days that have a value draws
+            a straight line across a fortnight of silence and makes a stalled
+            cycle look like steady progress — the flat stretch IS the finding. -- */
+      const days = [...perDay.keys()].sort();
+      const from = Date.parse(`${days[0]}T00:00:00Z`);
+      const today = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+      const to = Math.max(from, today);
+
+      let self = 0;
+      let lead = 0;
+      for (let t = from; t <= to; t += 86_400_000) {
+        const day = new Date(t).toISOString().slice(0, 10);
+        const cell = perDay.get(day);
+        self += cell?.self ?? 0;
+        lead += cell?.lead ?? 0;
+        timeline.push({ day, self, lead });
+      }
+    }
+  }
 
   /* -- Needs attention -- */
   //
@@ -201,6 +281,7 @@ export async function getAnalytics(
       variance: variance.data ?? [],
       distribution: distribution.data ?? [],
       ownHistory: history.data ?? [],
+      timeline,
       needsAttention,
     },
   };
