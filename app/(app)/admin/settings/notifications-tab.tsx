@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BellOff, BellRing, Search } from "lucide-react";
+import { BellOff, BellRing, PlugZap, Search } from "lucide-react";
 
 import { SectionCard } from "@/components/appraise/section-card";
 import { EmptyState } from "@/components/appraise/states";
@@ -20,7 +20,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { setOutboundPaused, type MessageLog, type OutboundState } from "@/lib/notify/settings";
+import {
+  checkEmailTransport,
+  setOutboundPaused,
+  type EmailCheck,
+  type MessageLog,
+  type OutboundState,
+} from "@/lib/notify/settings";
 import { formatDateTime } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 
@@ -102,6 +108,7 @@ export function NotificationsTab({
 
   return (
     <div className="space-y-8">
+      <EmailTransportCard />
       {/* ---------- The switch ---------- */}
       <SectionCard
         title="Outbound messages"
@@ -365,5 +372,78 @@ export function NotificationsTab({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/* ---------- Is email going to work? ---------- */
+//
+// Module scope, not defined inside NotificationsTab: a component created during
+// render is a new type every render, so the subtree remounts and the filter
+// inputs below would lose focus mid-keystroke (P14-12).
+//
+// This sits ABOVE the log because it answers the question somebody has BEFORE
+// they send anything, and the log only answers it afterwards — by which point
+// 47 messages have already been logged as failed attempts.
+function EmailTransportCard() {
+  const [result, setResult] = React.useState<EmailCheck | null>(null);
+  const [busy, setBusy] = React.useState(false);
+
+  async function run() {
+    setBusy(true);
+    const outcome = await checkEmailTransport();
+    setBusy(false);
+    setResult(
+      outcome.ok
+        ? outcome.data
+        : { transport: null, account: null, ok: false, message: outcome.error.message },
+    );
+  }
+
+  return (
+    <SectionCard
+      title="Email delivery"
+      description="Which account mail goes out from, and whether the credentials work."
+    >
+      <div className="space-y-3">
+        <p className="text-body-sm text-ink-muted">
+          WhatsApp sends independently of this. Email needs either a Google account over SMTP or a
+          Resend key — whichever is set in the environment is the one used.
+        </p>
+
+        <Button type="button" variant="outline" onClick={() => void run()} disabled={busy}>
+          <PlugZap aria-hidden className="size-4" />
+          {busy ? "Checking…" : "Check the connection"}
+        </Button>
+
+        {result ? (
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              "space-y-1 rounded-card border p-4",
+              result.ok ? "border-success/40 bg-success-tint" : "border-critical/40 bg-critical-tint",
+            )}
+          >
+            <p className="text-body-sm font-semibold text-ink">
+              {result.transport === "SMTP"
+                ? `SMTP${result.account ? ` · ${result.account}` : ""}`
+                : result.transport === "RESEND"
+                  ? "Resend"
+                  : "Not configured"}
+            </p>
+            {/* The provider's own wording, translated only where it sends people
+                to the wrong fix — a rejected App Password reads as a bad account
+                password, which it is not. */}
+            <p className="text-body-sm text-ink">{result.message}</p>
+            {result.transport === "SMTP" && result.ok ? (
+              <p className="text-body-sm text-ink-muted">
+                This proves the account and password. It does not prove a particular recipient will
+                accept the mail.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </SectionCard>
   );
 }

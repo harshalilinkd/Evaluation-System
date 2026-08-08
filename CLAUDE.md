@@ -4071,3 +4071,57 @@ p22. Typecheck 0 errors, lint 0 errors, build clean.
 rather than a failure: `absoluteUrl` now refuses to build a link with no site
 in front of it, and the suite calls `inviteUrl` directly. With any public
 address set it is 66/0. Worth knowing before somebody reads the crash as a bug.
+
+---
+
+### P32 — Email was already built. What was missing was a way to know it works.
+
+No migration. `verifySmtp` added to `lib/notify/smtp.ts`, `checkEmailTransport`
+to `lib/notify/settings.ts`, and an **Email delivery** card on Settings ›
+Messages. The SMTP keys added to `.env.local` with the two routes written out.
+
+**Asked: "can we implement link sent via email using SMTP or any other free
+method". The answer is that AMEND-4 already did.** `sendEmail` picks SMTP when
+its credentials are present and Resend otherwise, `dispatch.ts` has always
+routed the EMAIL channel through it, and `nodemailer` is installed. Nothing was
+missing from the send path. What was missing was configuration — and any way to
+check the configuration short of launching a cycle and watching every invite
+fail, after the messages had already been logged as attempts.
+
+| # | Decision | Why |
+|---|---|---|
+| P32-1 | **A connection check, deliberately NOT a test send** | §10 makes `dispatch.ts` the single path a message may leave by, and the docstring is explicit that nothing calls a provider directly. A "send a test to yourself" button bolted on beside it would be a second path — unlogged, and needing a 15th `TemplateKey` for something that is not a product message. `transport.verify()` authenticates and sends nothing, so the invariant is untouched. |
+| P32-2 | It says what it does **not** prove | It establishes the host, the port and the credentials. It does not establish that a given recipient will accept the mail, and the card says so rather than letting a green tick imply more than it knows. |
+| P32-3 | Resend gets **no invented check** | It has no handshake — the credentials are only exercised by a real request. The card reports what is configured and says the first invite is the proof, which is true, instead of a check that always passes. |
+| P32-4 | The two real failures are **told apart, and share one explanation** | A rejected App Password answers `535 Username and Password not accepted`, which sends people to reset their account password — the wrong fix, and it locks nothing in. A blocked port answers `ETIMEDOUT`. `explain()` is shared by the send and the check, because two copies of "what does this error mean" is how a check starts giving different advice from the send it is testing. |
+| P32-5 | The card sits **above** the message log | The log answers "did it work" afterwards. This answers it before, which is the only moment the answer is cheap. |
+| P32-6 | `.env.local` now carries the SMTP keys blank, with both routes written out | Blank means unused — `smtpConfigured()` is false on an empty string, so Resend stays the transport and nothing changes until somebody fills them in. The comment names the App Password prerequisite (2-Step Verification) and the `MAIL_FROM`-must-contain-`SMTP_USER` rule, because both are refusals somebody will otherwise hit blind. |
+
+**p11's one-send-path check was asserting a proxy, and it was red over a rule
+nothing had broken.** It asked "who imports `maytapi.ts` or `email.ts`", carving
+out `email.ts` because that file imports a TYPE — then AMEND-4 added `smtp.ts`,
+which imports `redact` for exactly the same reason, and the suite went red. It
+now asserts the claim directly: **no module outside the transport tier CALLS a
+send function**, comments stripped first. That is narrower (a shared helper is
+fine) and stronger (it would catch a send smuggled through a re-export, which
+an import check cannot see), and it has a self-test proving it detects one.
+
+**One of my own assertions was wrong and was fixed, not deleted.** "verifySmtp
+sends nothing" was written as `!/verifySmtp[\s\S]*?sendMail\(/` — an unbounded
+lazy span that runs straight past the closing brace into `sendEmailViaSmtp`
+below, which of course calls `sendMail`. It now cuts the function body at the
+next top-level `export` before testing it, and a companion check asserts the
+send path still exists beside it. Same family as the comment and substring
+traps: **an assertion has to be scoped to the thing it is about.**
+
+**Verification — p11 69 checks, 0 failed**, up from 65/1. Typecheck 0 errors,
+lint 0 errors, build clean.
+
+**Regression: 1509 passed, 9 failed across 29 suites.** p11 went green. The nine
+belong to the concurrent work: p4-pure, p8patch, p12, p13, p20, p22, and **p19,
+which is newly red and is worth reading rather than clearing** — `0040_own_current_salary.sql`
+puts the employee's own CTC on their increment form, and p19's "no salary figure
+in self-form.tsx" is §5's salary-confinement guard catching it. That may well be
+the right call (it is their own salary, and P21-7 already lets them write their
+own expectation against it) but it is a §5 decision and belongs in this log,
+made by whoever is adding 0040 rather than absorbed silently here.

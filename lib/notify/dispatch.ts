@@ -70,7 +70,9 @@ export async function sendNotification(
   let recipient: string;
 
   if (input.channel === "WHATSAPP") {
-    const phone = normaliseToE164(input.recipient, process.env.DEFAULT_COUNTRY_CODE ?? "+91");
+    // `||`, not `??`: a key written blank in .env is present and empty, so `??`
+    // keeps "" and every local number loses its country code.
+    const phone = normaliseToE164(input.recipient, process.env.DEFAULT_COUNTRY_CODE || "+91");
     if (!phone.ok) {
       // Not logged: nothing was attempted, and a notifications_log row implies
       // an attempt. The screen already knows the number is bad — it renders the

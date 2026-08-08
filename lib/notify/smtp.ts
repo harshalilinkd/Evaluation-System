@@ -50,18 +50,88 @@ function credentials():
 
   return {
     ok: true,
-    // Gmail's defaults, overridable for Workspace relays or another provider.
-    host: process.env.SMTP_HOST ?? "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT ?? 465),
-    user: user!,
-    pass: pass!,
-    from: from!,
+    /* -- Gmail's defaults, overridable for Workspace relays or another provider.
+          `||`, NOT `??`. A key written blank in .env — `SMTP_HOST=`, which is
+          exactly how the template ships it — is PRESENT and empty, not absent,
+          so `??` keeps the empty string. That gave host "" and, through
+          Number(""), port 0: a connection to nowhere, reported as a timeout,
+          with the settings looking perfectly correct on screen. -- */
+    host: process.env.SMTP_HOST || "smtp.gmail.com",
+    port: Number(process.env.SMTP_PORT || 465),
+    // Trimmed: Google prints the App Password in four groups and it is usually
+    // pasted with the spaces still in, which SMTP AUTH sends literally.
+    user: user!.trim(),
+    pass: pass!.replace(/\s+/g, ""),
+    from: from!.trim(),
   };
 }
 
 /** Whether SMTP is the configured transport. Read by `email.ts` and the screens. */
 export function smtpConfigured(): boolean {
   return credentials().ok;
+}
+
+/** The two failures that actually happen, told apart. Shared by send and verify. */
+function explain(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+
+  // Gmail's own wording for a rejected App Password sends people to reset their
+  // account password, which is the wrong fix and locks nothing in.
+  if (/invalid login|username and password not accepted|535/i.test(message)) {
+    return (
+      "Gmail rejected the sign-in. Use a 16-character App Password, not your " +
+      "account password — and 2-Step Verification has to be on for App " +
+      "Passwords to exist at all."
+    );
+  }
+  if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|greeting never received/i.test(message)) {
+    return (
+      "Could not reach the mail server. Check SMTP_HOST and SMTP_PORT — " +
+      "Gmail is smtp.gmail.com on 465. Some networks block outbound SMTP."
+    );
+  }
+  return redact(message);
+}
+
+/**
+ * Open the connection and authenticate, WITHOUT sending anything.
+ *
+ * This exists because the only way to find out an App Password was mistyped
+ * used to be launching a cycle and watching 47 invites fail. It is deliberately
+ * not a send: `dispatch.ts` is the single path a message may leave by (§10),
+ * and a "test send" bolted on beside it would be a second one — unlogged, and
+ * needing a template key that is not a product message.
+ *
+ * What it proves: the host, the port and the credentials. What it does not:
+ * that a given recipient will accept the mail. The From address is checked by
+ * `checkMailFrom` in preflight.ts, which is where that rule already lives.
+ */
+export async function verifySmtp(): Promise<SendResult> {
+  const creds = credentials();
+  if (!creds.ok) {
+    return {
+      ok: false,
+      code: "NOT_CONFIGURED",
+      message: `SMTP is not set up. Missing: ${creds.missing.join(", ")}.`,
+    };
+  }
+
+  try {
+    const transport = nodemailer.createTransport({
+      host: creds.host,
+      port: creds.port,
+      secure: creds.port === 465,
+      auth: { user: creds.user, pass: creds.pass },
+      connectionTimeout: TIMEOUT_MS,
+      greetingTimeout: TIMEOUT_MS,
+      socketTimeout: TIMEOUT_MS,
+    });
+
+    await transport.verify();
+    return { ok: true, providerMessageId: null };
+  } catch (error) {
+    return { ok: false, code: "SMTP_VERIFY_FAILED", message: explain(error) };
+  }
 }
 
 /**
@@ -126,18 +196,15 @@ export async function sendEmailViaSmtp(
 
     return { ok: true, providerMessageId: info.messageId ?? null };
   } catch (error) {
-    /* -- `redact` before anything reaches a log or a screen.
+    /* -- `explain` redacts before anything reaches a log or a screen.
           An SMTP failure echoes the envelope back, and on a bad password Gmail
           replies with the username in the error string. §0.3 and §17 keep
           credentials out of logs, and P11-2's CHECK constraint would refuse the
-          row anyway. -- */
-    const message = error instanceof Error ? error.message : String(error);
+          row anyway.
 
-    // Gmail's own wording for a rejected App Password is unhelpful on its own.
-    const friendly = /invalid login|username and password not accepted|535/i.test(message)
-      ? "Gmail rejected the sign-in. Use a 16-character App Password, not your account password — and 2-Step Verification has to be on for App Passwords to exist."
-      : redact(message);
-
-    return { ok: false, code: "SMTP_FAILED", message: friendly };
+          Shared with `verifySmtp` on purpose: two copies of "what does this
+          error mean" is how the check starts giving different advice from the
+          send it is meant to be testing. -- */
+    return { ok: false, code: "SMTP_FAILED", message: explain(error) };
   }
 }

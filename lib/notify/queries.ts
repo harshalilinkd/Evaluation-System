@@ -155,7 +155,8 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
     }
   }
 
-  const defaultCountry = process.env.DEFAULT_COUNTRY_CODE ?? "+91";
+  // `||`, not `??` — see dispatch.ts. A blank key is empty, not absent.
+  const defaultCountry = process.env.DEFAULT_COUNTRY_CODE || "+91";
   const rows: DistributionRow[] = [];
 
   for (const evaluation of live) {

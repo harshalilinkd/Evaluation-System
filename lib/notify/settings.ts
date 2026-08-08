@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { checkRole } from "@/lib/auth/guards";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
+import { smtpConfigured, verifySmtp } from "@/lib/notify/smtp";
 import { createClient } from "@/lib/supabase/server";
 
 /* ---------- The pause switch ---------- */
@@ -175,6 +176,85 @@ export async function getMessageLog(filters?: {
       failed: filtered.filter((r) => r.status === "FAILED").length,
       queued: filtered.filter((r) => r.status === "QUEUED").length,
       templates: [...new Set(mapped.map((r) => r.template))].sort(),
+    },
+  };
+}
+
+/* ---------- Is email actually going to work? ---------- */
+
+export type EmailCheck = {
+  /** Which transport the credentials select. `null` when neither is set up. */
+  transport: "SMTP" | "RESEND" | null;
+  /** Present only for SMTP: the account, so the screen can name it. */
+  account: string | null;
+  ok: boolean;
+  message: string;
+};
+
+/**
+ * Open the mail connection and authenticate, without sending anything.
+ *
+ * The problem this solves: until now the only way to discover that an App
+ * Password was mistyped was to launch a cycle and watch every invite fail —
+ * after the messages had already been logged as attempts. This asks the
+ * question directly, at the moment somebody is entering the credentials.
+ *
+ * It is NOT a send. §10 makes `dispatch.ts` the single path a message may
+ * leave by, and a test send bolted on beside it would be a second one:
+ * unlogged, and needing a template key that is not a product message. So this
+ * verifies the connection and says plainly what that does and does not prove.
+ *
+ * Resend has no equivalent handshake — its credentials are only exercised by a
+ * real request — so for that transport this reports what is configured and
+ * stops there rather than inventing a check it cannot perform.
+ */
+export async function checkEmailTransport(): Promise<CycleResult<EmailCheck>> {
+  const auth = await checkRole(["HR_ADMIN", "MD"]);
+  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
+
+  const account = process.env.SMTP_USER?.trim() || null;
+
+  if (smtpConfigured()) {
+    const result = await verifySmtp();
+    return {
+      ok: true,
+      data: {
+        transport: "SMTP",
+        account,
+        ok: result.ok,
+        message: result.ok
+          ? `Signed in to ${account} successfully. Mail will send from this account.`
+          : result.message,
+      },
+    };
+  }
+
+  if (process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
+    return {
+      ok: true,
+      data: {
+        transport: "RESEND",
+        account: null,
+        ok: true,
+        // Said rather than implied: this is what is configured, not a
+        // successful handshake. Resend does not offer one.
+        message:
+          "Resend is configured. It has no connection test — the credentials " +
+          "are only exercised by a real send, so the first invite is the proof.",
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      transport: null,
+      account: null,
+      ok: false,
+      message:
+        "Email is not set up. Either set SMTP_USER, SMTP_PASSWORD and MAIL_FROM " +
+        "to send from a Google account, or set RESEND_API_KEY and MAIL_FROM to " +
+        "send through Resend. WhatsApp works without either.",
     },
   };
 }
