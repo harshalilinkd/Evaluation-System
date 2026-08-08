@@ -274,11 +274,31 @@ export async function GET(request: Request) {
     if (channels.length === 0) { skipped += 1; continue; }
 
     for (const { channel, recipient } of channels) {
-      // §10: one active token per (evaluation, channel). Issuing revokes the
-      // previous one, which is right — the old link went out days ago and this
-      // message carries its replacement.
+      /* -- THE LAYER MUST BE PASSED. Two bugs came from taking the default.
+            §10 keys a token on (evaluation, LAYER, channel) since 0022, and
+            `issue_invite_token` resolves the recipient FROM the layer: 'SELF'
+            means `evaluatee_id`, 'LEAD' means `lead_id`. This call omitted it
+            and took the `'SELF'` default while the lines below correctly chose
+            the LEAD template from `lead.layer` — so the nightly sweep sent a
+            HOD the lead wording carrying the EMPLOYEE'S token.
+
+            1. The HOD could never open it. `consume_invite_token` re-checks the
+               session against the token's `profile_id` (P6-5), so they were
+               signed out, sent to log in, and returned to "This link belongs to
+               someone else" — every night, permanently, because the token was
+               never going to be theirs.
+
+            2. Quieter and worse: issuing revokes the previous token for that
+               (evaluation, layer, channel). Minting a SELF token to chase a HOD
+               therefore REVOKED THE EMPLOYEE'S OWN LIVE LINK from launch, on an
+               evaluation where the employee had done nothing wrong.
+
+            FIX-12 (F12-2) hit the same trap on the launch path and recorded it;
+            this call site was missed. -- */
       const issued = await issueInviteToken(
-        lead.evaluationId, channel === "WHATSAPP" ? "whatsapp" : "email",
+        lead.evaluationId,
+        channel === "WHATSAPP" ? "whatsapp" : "email",
+        lead.layer,
       );
       if (!issued.ok) { failed += 1; continue; }
 

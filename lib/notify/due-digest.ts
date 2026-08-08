@@ -194,8 +194,27 @@ export async function sendDueDigests(supabase: Client, now: Date): Promise<Diges
   const incrementsLate = items.filter(
     (i) => i.milestone_type === "INCREMENT" && i.due_on < today,
   );
+  /* -- Notice periods differ by WHAT is due, not by "increment or not". --
+
+        A month for anything needing arranging: an increment, and the tenured
+        evaluation six months ahead of one (0042's PRE_INCREMENT). A budget
+        conversation and a diary slot both need more than a week.
+
+        A week for a new joiner's own milestones. A month's notice on an
+        evaluation due 30 days after somebody joins would fire ON THEIR FIRST
+        DAY, before they had done any work to be evaluated on — and a notice
+        that lands before it can possibly matter is one people learn to skip.
+
+        Written as an explicit list rather than `!== "INCREMENT"`. That test
+        silently swept every future milestone type into the 7-day bucket, which
+        is exactly what it did to PRE_INCREMENT the moment 0042 added it. -- */
+  const NEEDS_A_MONTH = new Set(["INCREMENT", "PRE_INCREMENT"]);
+
   const milestonesDue = items.filter(
-    (i) => i.milestone_type !== "INCREMENT" && i.due_on >= today && i.due_on <= inDays(7),
+    (i) =>
+      i.milestone_type !== "INCREMENT" &&
+      i.due_on >= today &&
+      i.due_on <= inDays(NEEDS_A_MONTH.has(i.milestone_type) ? 31 : 7),
   );
 
   const { count: reportsWaiting } = await supabase

@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { signOut } from "@/lib/auth/actions";
+import { BottomNav } from "@/components/appraise/bottom-nav";
 import { Sidebar } from "@/components/appraise/sidebar";
 import { Topbar } from "@/components/appraise/topbar";
 import type { AppRole } from "@/components/appraise/nav-config";
@@ -43,6 +44,13 @@ export function AppShell({
           <div className="app-container">{children}</div>
         </main>
       </div>
+
+      {/* Outside the column, because it is `fixed` to the viewport rather than
+          placed in the flow. The space it occupies is reserved by
+          `--bottom-nav-h` in globals.css, which both `.app-main` and the
+          full-height table screens subtract — a fixed bar with nothing
+          reserving its space hides the last row of every list. */}
+      <BottomNav roles={roles} />
     </div>
   );
 }

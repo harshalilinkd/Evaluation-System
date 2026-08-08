@@ -36,6 +36,12 @@ export const MILESTONE_LABELS: Record<string, string> = {
   MONTH_6: "Six-month review",
   ANNUAL: "Annual evaluation",
   INCREMENT: "Increment due",
+  /* -- Named for WHAT IT IS FOR, not for when it falls.
+        "Six months before increment" describes the date; "Pre-increment
+        review" describes the conversation, which is what HR is deciding
+        whether to start. The two are the same appraisal form — only the
+        reason for running it differs. -- */
+  PRE_INCREMENT: "Pre-increment review",
 };
 
 function daysUntil(iso: string): number {

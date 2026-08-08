@@ -44,13 +44,36 @@ export const INVITE_STATES = {
   "wrong-recipient": {
     title: "This link belongs to someone else",
     heading: "This evaluation is not yours",
-    body: "You are signed in as a different person. Sign out, then open the link again from your own message.",
+    /* -- "Sign out and open it again" is the fix, and it is the ONLY one — so
+          the page has to be able to do it. It could not: the single control was
+          "Sign in with your work email", which on a page you only reach WHILE
+          SIGNED IN sends you to a login form that sees your existing session
+          and bounces you straight back here.
+
+          That loop is indistinguishable from the link being permanently broken,
+          and it is what somebody means when they say every user lands on this
+          page. §13.4 — a page that names a fix must offer it. -- */
+    body: "You are signed in as a different person. Sign out below, then open the link again from your own message.",
   },
 } as const;
 
 export type InviteStateKey = keyof typeof INVITE_STATES;
 
-export function InviteStatePage({ state }: { state: InviteStateKey }) {
+export function InviteStatePage({
+  state,
+  action,
+}: {
+  state: InviteStateKey;
+  /**
+   * Replaces the default "sign in" control.
+   *
+   * Only `wrong-recipient` uses it, and only because that page is the one you
+   * can reach WHILE SIGNED IN — so what to offer depends on whether there is a
+   * session, which a shared copy block cannot know. Every other state is
+   * reached signed out, where "sign in" is the whole answer.
+   */
+  action?: React.ReactNode;
+}) {
   const copy = INVITE_STATES[state];
 
   return (
@@ -60,9 +83,11 @@ export function InviteStatePage({ state }: { state: InviteStateKey }) {
         body={copy.body}
         action={
           // §13.4: no dead ends. Every one of these pages offers a way onward.
-          <Button asChild variant="outline" className="w-full">
-            <Link href="/login">Sign in with your work email</Link>
-          </Button>
+          action ?? (
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/login">Sign in with your work email</Link>
+            </Button>
+          )
         }
       />
     </AuthShell>

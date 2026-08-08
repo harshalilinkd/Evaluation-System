@@ -16,25 +16,32 @@ import { cn } from "@/lib/utils";
 
 /* ---------- Who said it, READABLY ----------
 
-   The tier hues were being used as the TEXT colour of the values: cyan #06B6D4
-   is 2.3:1 on white and pink #EC4899 is 3.6:1, against §13.8's 4.5:1 floor. So
-   every self and lead answer on this report — the numbers AND the wording — was
-   below the contrast minimum. On a document meant to go to the MD that is not a
-   preference, it is unreadable.
+   The tier hues were once the TEXT colour of the values: cyan #06B6D4 is 2.3:1
+   on white and pink #EC4899 is 3.6:1, against §13.8's 4.5:1 floor — so every
+   self and lead answer, numbers and wording alike, was below the contrast
+   minimum on a document meant to go to the MD.
 
-   §13.1 is unchanged and untouched: the tier still says who spoke. It says it
-   the way P15-10 already made the printed pack say it — by COLUMN rather than by
-   letterform. A tier-tinted column with ink text is ~15:1, and it identifies the
-   speaker more strongly than a tinted word ever did, because the whole column
-   carries it rather than one value at a time.
+   That was fixed by tinting the COLUMN and leaving the text ink. The values have
+   been readable ever since and stay so; what has changed is that the tint itself
+   has gone (see below), and the dot in the column heading now carries the
+   identity on its own. */
+/* -- A HAIRLINE, NOT A WASH.
+      The two answer columns used to be filled `bg-self-tint/50` and
+      `bg-lead-tint/50` all the way down. It stated the speaker unmistakably and
+      it cost the screen its composure: two saturated bands running the height
+      of every table, competing with each other, with the indigo primary, and
+      with the rose on a flagged row.
 
-   Where a column is not available (a label above a paragraph), a filled dot
-   carries the hue and the text stays ink. Colour is then never the only signal,
-   which is the other half of §13.8. */
-const TIER_COLUMN = {
-  self: "bg-self-tint/50",
-  lead: "bg-lead-tint/50",
-} as const;
+      §13.1 is untouched. The rule is that these three hues mean "who said
+      this" and are never spent on anything else — not that they must be a
+      filled cell. The identity moved to the DOT in each column heading, which
+      is the same device the queue's `TierHead` and the scorecard's legends
+      already use, so the report now says it the way the rest of the product
+      does. A hairline keeps the two columns grouped without tinting anything.
+
+      Colour is still never the only signal: the heading carries a dot AND the
+      word (§13.8). -- */
+const TIER_CELL = "border-l border-rule/60";
 
 const TIER_DOT = {
   self: "bg-self",
@@ -173,11 +180,11 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
       </div>
 
       {/* ---------- The three figures ----------
-          Every numeral is INK now. The tier is carried by the tint behind it and
-          by the dot on its label — a 15:1 reading of the number instead of the
-          2.3:1 the cyan gave it (§13.8). The gap is labelled because §11
-          confines it to HR and the MD, and a number nobody can explain is a
-          number somebody will repeat. */}
+          Every numeral is INK — 15:1 against the 2.3:1 the cyan gave it
+          (§13.8). The tier is carried by the dot on the label and the rule at
+          the edge. The gap is labelled because §11 confines it to HR and the
+          MD, and a number nobody can explain is a number somebody will
+          repeat. */}
       <div
         className={cn(
           "grid divide-y divide-rule sm:divide-x sm:divide-y-0",
@@ -186,7 +193,14 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           summary.finalOverall === null ? "sm:grid-cols-3" : "sm:grid-cols-4",
         )}
       >
-        <figure className="bg-self-tint/50 px-6 py-4">
+        {/* -- White, with the hue as a dot and a 2px rule.
+              These were filled tiles too, and three saturated blocks across the
+              top set the tone for everything under them. The dot and the rule
+              carry the same identity at a fraction of the ink, and the figure —
+              which is what anybody is here to read — is the loudest thing in
+              the tile again. -- */}
+        <figure className="relative px-6 py-5">
+          <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-self" />
           <figcaption>
             <TierTag tier="self">Self average</TierTag>
           </figcaption>
@@ -194,7 +208,8 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           <p className="font-sans text-body-sm text-ink-muted">What they said about themselves</p>
         </figure>
 
-        <figure className="bg-lead-tint/50 px-6 py-4">
+        <figure className="relative px-6 py-5">
+          <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-lead" />
           <figcaption>
             <TierTag tier="lead">Lead average</TierTag>
           </figcaption>
@@ -209,7 +224,8 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             authoritative answer", which is exactly what this is. It only
             renders once one exists — before that there is nothing agreed. */}
         {summary.finalOverall !== null ? (
-          <figure className="bg-final-tint/50 px-6 py-4">
+          <figure className="relative px-6 py-5">
+            <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-final" />
             <figcaption>
               <span className="flex items-center gap-2">
                 <span aria-hidden className="size-2 shrink-0 rounded-pill bg-final" />
@@ -223,7 +239,12 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           </figure>
         ) : null}
 
-        <figure className={cn("px-6 py-4", flagged ? "bg-critical-tint/50" : "bg-surface-mute")}>
+        {/* The gap tile keeps a ground, because it is the one panel that is
+            RESTRICTED (§5) rather than merely tinted — the lock and the muted
+            surface together say "not everyone sees this". Rose only when the
+            figure is actually over the threshold, and even then a tint rather
+            than the old half-strength fill. */}
+        <figure className={cn("px-6 py-5", flagged ? "bg-critical-tint/40" : "bg-surface-mute")}>
           <figcaption className="type-label flex items-center gap-1.5 text-ink-muted">
             <Lock className="size-3" aria-hidden />
             Gap · HR and MD only
@@ -250,17 +271,17 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           <table className="w-full min-w-[520px] border-collapse">
             <thead>
               <tr className="border-b border-rule">
-                <th className="type-label px-6 py-2 text-left font-bold text-ink">Section</th>
+                <th className="type-label px-6 py-3 text-left font-bold text-ink">Section</th>
                 {/* The heading carries the tier dot, and the column beneath it
                     carries the tint. Together they say who spoke without asking
                     anybody to read cyan text. */}
-                <th className={cn("px-3 py-2 text-right", TIER_COLUMN.self)}>
+                <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
                   <TierTag tier="self">Self</TierTag>
                 </th>
-                <th className={cn("px-3 py-2 text-right", TIER_COLUMN.lead)}>
+                <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
                   <TierTag tier="lead">Lead</TierTag>
                 </th>
-                <th className="type-label px-6 py-2 text-right font-bold text-ink">Gap</th>
+                <th className="type-label px-6 py-3 text-right font-bold text-ink">Gap</th>
               </tr>
             </thead>
             <tbody>
@@ -269,26 +290,26 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   s.gap !== null && Math.abs(s.gap) >= summary.flagThreshold;
                 return (
                   <tr key={s.section} className="border-b border-rule last:border-b-0">
-                    <td className="px-6 py-2 font-sans text-body text-ink">{s.label}</td>
+                    <td className="px-6 py-3 font-sans text-body text-ink">{s.label}</td>
                     <td
                       className={cn(
-                        "tabular px-3 py-2 text-right text-body font-semibold text-ink",
-                        TIER_COLUMN.self,
+                        "tabular px-4 py-3 text-right text-body font-semibold text-ink",
+                        TIER_CELL,
                       )}
                     >
                       {score(s.self)}
                     </td>
                     <td
                       className={cn(
-                        "tabular px-3 py-2 text-right text-body font-semibold text-ink",
-                        TIER_COLUMN.lead,
+                        "tabular px-4 py-3 text-right text-body font-semibold text-ink",
+                        TIER_CELL,
                       )}
                     >
                       {score(s.lead)}
                     </td>
                     <td
                       className={cn(
-                        "tabular px-6 py-2 text-right text-body font-semibold",
+                        "tabular px-6 py-3 text-right text-body font-semibold",
                         wide ? "text-critical" : "text-ink-muted",
                       )}
                     >
@@ -359,76 +380,73 @@ export function RatingsBand({ report }: { report: EvaluationReport }) {
                 </colgroup>
                 <thead>
                   <tr className="border-b border-rule">
-                    <th className="type-label px-4 py-2 text-left font-bold text-ink">Question</th>
-                    <th className={cn("px-4 py-2 text-left", TIER_COLUMN.self)}>
+                    <th className="type-label px-5 py-3 text-left font-bold text-ink">Question</th>
+                    <th className={cn("px-5 py-3 text-left", TIER_CELL)}>
                       <TierTag tier="self">Self</TierTag>
                     </th>
-                    <th className={cn("px-4 py-2 text-left", TIER_COLUMN.lead)}>
+                    <th className={cn("px-5 py-3 text-left", TIER_CELL)}>
                       <TierTag tier="lead">Lead</TierTag>
                     </th>
-                    <th className="type-label px-4 py-2 text-right font-bold text-ink">Gap</th>
+                    <th className="type-label px-5 py-3 text-right font-bold text-ink">Gap</th>
                   </tr>
                 </thead>
+                {/* -- THE FLAG IS A BADGE ON THE NUMBER, not a bar on the row.
+                      A 2px critical rule down the left of every flagged row,
+                      plus a red glyph, plus red text in the gap column, was
+                      three shouts for one fact — and on a report with a third
+                      of its rows flagged it read as an error state rather than
+                      as the finding the screen exists to surface.
+
+                      One rose pill now carries all three channels at once: the
+                      glyph, the tint and the figure itself (§13.8 — never
+                      colour alone). It sits ON the gap, which is the thing that
+                      is actually flagged, and the row stays calm.
+
+                      The comment lives HERE, above the map, and not inside the
+                      `=> (` below it: a braced JSX comment in that position is
+                      parsed as an object literal rather than a comment, and the
+                      error it raises names a missing paren twenty lines away.
+                      (P30 hit the same family — a line comment between two JSX
+                      attributes.) -- */}
                 <tbody>
                   {section.rows.map((row) => (
                     <tr
                       key={row.questionId}
-                      className={cn(
-                        "border-b border-rule align-top last:border-b-0",
-                        // A left bar AND a glyph AND the sr-only text: §13.8,
-                        // the flagged row is the one thing this screen exists to
-                        // surface, so it is the last place to encode a state in
-                        // hue alone. The row tint is gone — it fought the two
-                        // tier columns, and the bar plus the flag already say it.
-                        row.flag !== "none" && "border-l-2 border-l-critical",
-                      )}
+                      className="border-b border-rule align-top last:border-b-0"
                     >
-                      <td className="px-4 py-2.5">
-                        <span className="flex items-start gap-2">
-                          {row.flag !== "none" ? (
-                            <Flag className="mt-0.5 size-3.5 shrink-0 text-critical" aria-hidden />
-                          ) : null}
-                          <span>
-                            <span className="block font-sans text-body text-ink">{row.text}</span>
-                            {row.flag !== "none" ? (
-                              <span className="sr-only">Flagged difference.</span>
-                            ) : null}
-                            {row.leadComment ? (
-                              // The lead's own note on their score. Kept beside
-                              // the question rather than in the lead column, so
-                              // a long comment cannot squash the answers.
-                              <span className="mt-1.5 block border-l-2 border-lead pl-3 font-sans text-body-sm italic text-ink-muted">
-                                {row.leadComment}
-                              </span>
-                            ) : null}
+                      <td className="px-5 py-4">
+                        <span className="block font-sans text-body text-ink">{row.text}</span>
+                        {row.flag !== "none" ? (
+                          <span className="sr-only">Flagged difference.</span>
+                        ) : null}
+                        {row.leadComment ? (
+                          // The lead's own note on their score. Kept beside the
+                          // question rather than in the lead column, so a long
+                          // comment cannot squash the answers.
+                          <span className="mt-2 block border-l-2 border-lead/50 pl-3 font-sans text-body-sm italic text-ink-muted">
+                            {row.leadComment}
                           </span>
-                        </span>
+                        ) : null}
                       </td>
-                      {/* INK, not cyan and pink. The tint behind the column is
-                          what says who spoke; the wording stays readable. */}
-                      <td
-                        className={cn(
-                          "px-4 py-2.5 font-sans text-body text-ink",
-                          TIER_COLUMN.self,
-                        )}
-                      >
+                      {/* Ink, always. The heading's dot says who spoke; the
+                          wording stays readable (§13.8's 4.5:1). */}
+                      <td className={cn("px-5 py-4 font-sans text-body text-ink", TIER_CELL)}>
                         {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
-                      <td
-                        className={cn(
-                          "px-4 py-2.5 font-sans text-body text-ink",
-                          TIER_COLUMN.lead,
-                        )}
-                      >
+                      <td className={cn("px-5 py-4 font-sans text-body text-ink", TIER_CELL)}>
                         {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
-                      <td
-                        className={cn(
-                          "tabular px-4 py-2.5 text-right text-body font-semibold",
-                          row.flag !== "none" ? "text-critical" : "text-ink-muted",
+                      <td className="px-5 py-4 text-right">
+                        {row.flag !== "none" ? (
+                          <span className="tabular inline-flex items-center gap-1.5 rounded-pill bg-critical-tint px-2.5 py-1 text-body-sm font-semibold text-critical">
+                            <Flag aria-hidden className="size-3 shrink-0" />
+                            {gapText(row.gap)}
+                          </span>
+                        ) : (
+                          <span className="tabular text-body text-ink-muted">
+                            {gapText(row.gap)}
+                          </span>
                         )}
-                      >
-                        {gapText(row.gap)}
                       </td>
                     </tr>
                   ))}
@@ -468,7 +486,7 @@ export function LearningBand({ report }: { report: EvaluationReport }) {
           {/* The tint runs the full height of each half, so the two voices are
               told apart by ground rather than by tinting their words (§13.8). */}
           <div className="grid md:grid-cols-2">
-            <div className={cn("space-y-1.5 px-6 py-4", TIER_COLUMN.self)}>
+            <div className={cn("space-y-1.5 px-6 py-4", TIER_CELL)}>
               <TierTag tier="self">What {employee} said</TierTag>
               {pair.selfQuestion ? (
                 <p className="font-sans text-body-sm text-ink-muted">{pair.selfQuestion}</p>
@@ -482,7 +500,7 @@ export function LearningBand({ report }: { report: EvaluationReport }) {
               </p>
             </div>
 
-            <div className={cn("space-y-1.5 px-6 py-4", TIER_COLUMN.lead)}>
+            <div className={cn("space-y-1.5 px-6 py-4", TIER_CELL)}>
               <TierTag tier="lead">What {lead} said</TierTag>
               {pair.leadQuestion ? (
                 <p className="font-sans text-body-sm text-ink-muted">{pair.leadQuestion}</p>

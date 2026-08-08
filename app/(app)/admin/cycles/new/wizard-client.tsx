@@ -348,7 +348,25 @@ export function WizardClient({
     }
 
     setDialogOpen(false);
-    router.push(`/admin/cycles/${cycleId}?launched=1`);
+
+    /* -- The dispatch outcome travels to the board, because the board is where
+          HR reads it and it cannot be recomputed there.
+
+          Without this the confirmation said "Send the links when you are ready"
+          on every launch — copy from before P17 reversed PW-3 and made LAUNCH
+          the moment the invites go out. It is still true when HR picks nobody
+          (`recipients` may be empty), and false the rest of the time, and the
+          banner had no way to tell the two apart.
+
+          Counts only. §10 keeps a token, a name and an address out of every
+          URL, and none of those is needed to say how many messages went. -- */
+    const outcome = new URLSearchParams({
+      launched: "1",
+      sent: String(result.data.messagesSent),
+      queued: String(result.data.messagesQueued),
+      failed: String(result.data.messagesFailed),
+    });
+    router.push(`/admin/cycles/${cycleId}?${outcome.toString()}`);
   };
 
   const includedCount = people.filter((p) => state[p.id]?.included).length;

@@ -76,12 +76,58 @@ export type ActivityEntry = {
       An unmapped action falls back to a readable slug rather than rendering
       blank, so an action added later shows up as SOMETHING — a gap in a history
       is worse than an ugly line in one. */
-type Names = { actor: string; subject: string; theirSubject: string };
+type Names = {
+  actor: string;
+  subject: string;
+  theirSubject: string;
+  /** How many evaluations the launch opened. 0 outside the launch sentence. */
+  opened: number;
+};
+
+/* -- NOT SHOWN, though every one is still in `audit_log`. --
+
+      `cycle.updated` is the wizard autosaving. `updateCycle` picks its action
+      by status — `cycle.status === "ACTIVE" ? "cycle.dates_extended" :
+      "cycle.updated"` — so this literal is written ONLY while the cycle is a
+      DRAFT nobody can see. It is setup churn: the record of somebody typing a
+      period label before the cycle existed for anybody. Six of those lines
+      between "created" and "launched" bury the two events the panel is opened
+      to find, and "changed 4 settings on the cycle" does not even say which.
+
+      The meaningful edit — a deadline moved AFTER launch, when people are
+      already working to it — is `cycle.dates_extended`, a different action that
+      is untouched by this and now names the field it moved.
+
+      §12 is not weakened. `audit_log` has no DELETE policy for anyone and an
+      append-only trigger over that; every row is still there for anybody with a
+      SQL console and the standing to read it. This is a display filter, the
+      same call `collapseRuns` makes below. */
+const HIDDEN_ACTIONS = new Set(["cycle.updated"]);
+
+/* -- Folded INTO the launch line rather than listed beside it. --
+
+      A launch writes one `cycle.launched` and one `evaluation.launch` per
+      participant. Two rows saying the same thing is noise at one participant;
+      at forty-seven it is forty-eight rows, and `collapseRuns` cannot help
+      because each names a different person and so renders a different sentence.
+
+      The count is the only thing those rows carry that the launch line does
+      not, so the count moves up and the rows come out. A milestone evaluation
+      opened later is `evaluation.milestone_opened` — a separate action, still
+      shown individually, because that genuinely is its own event. */
+const LAUNCH_OPENED_ACTIONS = new Set(["evaluation.launch", "evaluation.launched"]);
 
 const SENTENCES: Record<string, (n: Names) => string> = {
   /* -- The cycle itself -- */
   "cycle.created": (n) => `${n.actor} created this cycle.`,
-  "cycle.launched": (n) => `${n.actor} launched the cycle. Everyone's questions are now frozen.`,
+  /* One sentence, not two rows. "Both forms went live at once" is dropped
+     rather than merged: it restates blind parallel rating (§1), which is how
+     every cycle in this product works, so it is a property of the system and
+     not news about this launch. */
+  "cycle.launched": (n) =>
+    n.opened > 0
+      ? `${n.actor} launched the cycle — ${n.opened} ${n.opened === 1 ? "evaluation" : "evaluations"} opened, questions frozen.`
+      : `${n.actor} launched the cycle. Everyone's questions are now frozen.`,
   "cycle.updated": (n) => `${n.actor} changed the cycle setup.`,
   "cycle.binned": (n) => `${n.actor} moved the cycle to the recycle bin.`,
   "cycle.archived": (n) => `${n.actor} moved the cycle to the recycle bin.`,
@@ -187,15 +233,21 @@ function listOf(items: string[]): string {
 }
 
 function sentenceFor(action: string, names: Names, diff?: unknown): string {
-  /* Named where we can. Falls through to the generic sentence when the diff
-     predates this change or holds only fields not worth naming. */
-  if (action === "cycle.updated") {
+  /* -- Name the field, on the edit that survives to the screen.
+        `cycle.dates_extended` is the one an ACTIVE cycle writes — somebody has
+        moved a deadline that people are already working to, which is worth a
+        line and worth saying WHICH deadline. "extended a deadline on the cycle"
+        made the reader open the cycle to find out.
+
+        The same naming used to be spent on `cycle.updated`, which is now hidden
+        outright: it is pre-launch wizard churn, and naming a field on a row
+        nobody should be reading only made the noise more specific. Falls
+        through to the generic sentence when the diff predates this or holds
+        only fields not worth naming. -- */
+  if (action === "cycle.dates_extended") {
     const fields = changedFields(diff);
     if (fields.length > 0 && fields.length <= 3) {
-      return `${names.actor} changed ${listOf(fields)}.`;
-    }
-    if (fields.length > 3) {
-      return `${names.actor} changed ${fields.length} settings on the cycle.`;
+      return `${names.actor} moved ${listOf(fields)}.`;
     }
   }
 
@@ -275,9 +327,32 @@ export async function getCycleActivity(
     .eq("id", cycleId)
     .maybeSingle();
 
+  /* -- How many evaluations this launch opened, counted before anything is
+        rendered so the launch line can carry the figure the suppressed rows
+        were carrying.
+
+        Counted from the AUDIT rows, not from `evaluations`: the table holds
+        every evaluation in the cycle including any milestone joiner added
+        months later, and attributing those to the launch would be a number
+        that grows after the event it describes. -- */
+  const openedAtLaunch = rows.filter((r) => LAUNCH_OPENED_ACTIONS.has(r.action)).length;
+
+  /* -- The per-evaluation launch rows are only folded away when there is a
+        launch line to fold them INTO. Without that guard a cycle whose
+        `cycle.launched` row is missing — an older cycle, a partial history, a
+        `limit` that cut across the boundary — would lose the fact that it ever
+        opened. A gap in a history is worse than a duplicated line in one. -- */
+  const hasLaunchRow = rows.some((r) => r.action === "cycle.launched");
+
+  const visible = rows.filter((row) => {
+    if (HIDDEN_ACTIONS.has(row.action)) return false;
+    if (hasLaunchRow && LAUNCH_OPENED_ACTIONS.has(row.action)) return false;
+    return true;
+  });
+
   return {
     ok: true,
-    data: collapseRuns(rows.map((row) => {
+    data: collapseRuns(visible.map((row) => {
       /* -- A null actor is the SYSTEM, not a gap.
             §8 raises OPEN → PENDING_HR_REVIEW with no actor on purpose (F11-4):
             naming the employee who happened to submit second would attribute a
@@ -300,7 +375,7 @@ export async function getCycleActivity(
         action: row.action,
         sentence: sentenceFor(
           row.action,
-          { actor, subject, theirSubject: possessive(subject) },
+          { actor, subject, theirSubject: possessive(subject), opened: openedAtLaunch },
           row.diff,
         ),
         reason: row.reason,

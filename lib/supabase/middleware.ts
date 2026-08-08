@@ -62,8 +62,34 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  // Signed-in users have no business on the login page.
-  if (user && pathname === ROUTES.login) {
+  /* -- A signed-in visitor who WANDERS onto the login page is sent to the app.
+        One who is trying to sign in as somebody else is not.
+
+        THIS REDIRECT WAS UNCONDITIONAL, and it made two things impossible.
+
+        1. Switching accounts on a shared device. A phone or a shop-floor
+           terminal has one browser and several people, and every one of them
+           has an email and a password. Bouncing them to a dashboard belonging
+           to whoever logged in last, with no way to reach a login form, is not
+           a session policy — it is a lockout, and the only escape was to find a
+           sign-out control on a page they had no reason to visit.
+
+        2. The invite hand-off. `/invite/[token]` signs a mismatched user out and
+           redirects to `/login?next=/invite/consume`, carrying the invite in an
+           httpOnly cookie. If the sign-out has not landed by the time that next
+           request is read, this rule saw a session, redirected to the dashboard
+           AND dropped the `next` — so the invite was silently abandoned and the
+           person never reached the form the link was for.
+
+        Both exceptions are narrow and neither weakens anything: reaching the
+        login form does not sign anybody in, and `signInWithPassword` replaces
+        the session rather than adding one. Nothing here decides what a person
+        may READ — RLS and the page guards do that, and they answer to whoever
+        the session ends up belonging to. -- */
+  const wantsToSwitch = request.nextUrl.searchParams.has("switch");
+  const midHandOff = request.nextUrl.searchParams.has("next");
+
+  if (user && pathname === ROUTES.login && !wantsToSwitch && !midHandOff) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTES.dashboard;
     redirectUrl.search = "";

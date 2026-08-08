@@ -62,11 +62,21 @@ export function BoardClient({
   board,
   candidates,
   justLaunched,
+  launchDispatch,
   activity,
 }: {
   board: CycleBoard;
   candidates: SelectablePerson[];
   justLaunched: boolean;
+  /**
+   * How many invites actually went out with the launch.
+   *
+   * Carried from the wizard rather than recomputed, because it cannot be
+   * recomputed: `notifications_log` holds every send this cycle has ever made,
+   * so counting it here would report resends and the nightly chase as though
+   * they were part of the launch.
+   */
+  launchDispatch: { sent: number; queued: number; failed: number };
   /** §12's trail, made readable. See lib/cycles/activity.ts. */
   activity: ActivityEntry[];
 }) {
@@ -265,15 +275,78 @@ export function BoardClient({
     // rows in. The gutters come back as padding here so the content still
     // breathes at the edges.
     <div data-full-bleed className="space-y-5 px-4 py-6 lg:px-6">
+      {/* ---------- The launch confirmation ----------
+          IT REPORTS WHAT HAPPENED TO THE INVITES, rather than telling HR to do
+          something the launch has already done.
+
+          It read "Send the links when you are ready" on every launch. That was
+          written when PW-3 held — the invite was a deliberate second act on the
+          distribution screen — and P17 reversed it: launching is now the moment
+          the whole company hears about it, and FIX-12 made the launch send on
+          every channel a person can be reached on. So the sentence was telling
+          HR to send links that had gone out minutes earlier, which reads either
+          as the launch having failed or as a second send being needed.
+
+          It is still true in one case — HR may pick nobody in the wizard — and
+          that is exactly why the banner has to be told the outcome instead of
+          asserting one. */}
       {justLaunched ? (
-        <p
+        <div
           role="status"
-          className="flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 text-body text-ink"
+          className="flex items-start gap-2 rounded-card bg-success-tint px-4 py-3 text-body text-ink"
         >
-          <Check aria-hidden className="size-4 text-success" />
-          Launched. {plural(board.totals.participants, "evaluation")} created and every question set
-          frozen. Send the links when you are ready.
-        </p>
+          <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+          <p className="min-w-0">
+            Launched. {plural(board.totals.participants, "evaluation")} created and every question
+            set frozen.{" "}
+            {launchDispatch.sent > 0 ? (
+              <>
+                {/* "MESSAGES", not "invites". The dispatcher counts one per
+                    CHANNEL per person, so a single evaluation whose employee
+                    and HOD both have a phone and an email is four — and "4
+                    invites sent" against "1 evaluation created" reads as a bug
+                    in exactly the way the sentence this replaced did. */}
+                {plural(launchDispatch.sent, "message")} sent, on every channel
+                each person can be reached on.
+                {/* Not `plural(n, "more")` — that yields "2 mores". The per-HOD
+                    cap is the reason these are held, so the sentence says so
+                    rather than looking like a failure. */}
+                {launchDispatch.queued > 0
+                  ? ` ${launchDispatch.queued} more ${launchDispatch.queued === 1 ? "goes" : "go"} out on tonight's sweep, so no HOD is buried at once.`
+                  : ""}
+              </>
+            ) : (
+              <>
+                No messages have gone out yet — send them from{" "}
+                <Link
+                  href={`/admin/cycles/${board.cycle.id}/distribute`}
+                  className="font-medium underline underline-offset-2"
+                >
+                  Send links
+                </Link>
+                .
+              </>
+            )}
+            {/* A failed send is the one number HR has to act on, so it is never
+                folded into the "sent" figure or left to the log to reveal. */}
+            {launchDispatch.failed > 0 ? (
+              <>
+                {" "}
+                <span className="font-medium text-critical">
+                  {plural(launchDispatch.failed, "message")} could not be delivered
+                </span>{" "}
+                — retry from{" "}
+                <Link
+                  href={`/admin/cycles/${board.cycle.id}/distribute`}
+                  className="font-medium underline underline-offset-2"
+                >
+                  Send links
+                </Link>
+                .
+              </>
+            ) : null}
+          </p>
+        </div>
       ) : null}
 
       {/* ---------- Header ----------

@@ -86,7 +86,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0040_own_current_salary',    'view',       'v_my_current_salary',
      'Without it the increment form cannot show an employee their current salary — the field renders an em dash.'),
   ('0041_read_my_lead',          'function',   'is_my_lead',
-     'Without it EVALUATED BY is blank on every self-evaluation: the employee cannot read their own HOD''s name.')
+     'Without it EVALUATED BY is blank on every self-evaluation: the employee cannot read their own HOD''s name.'),
+  ('0042_pre_increment_evaluation','function',  'milestone_notice_days',
+     'Without it the six-months-before-increment evaluation is never raised for tenured staff.')
 )
 select
   e.migration,

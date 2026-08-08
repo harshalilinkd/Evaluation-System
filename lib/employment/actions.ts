@@ -125,9 +125,26 @@ const salarySchema = z.object({
   effectiveFrom: z.string().min(1, "An effective-from date is required"),
   newCtc: z.coerce.number().positive("The new CTC must be greater than zero"),
   reason: z.enum(["JOINING", "ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
-  // Required, not optional. A pay change with no explanation is the thing
-  // somebody has to reconstruct from memory two years later.
-  note: z.string().trim().min(3, "Say why this changed — one line is enough"),
+  /* -- OPTIONAL, at the owner's explicit instruction. This reverses P19-8,
+        which made it required on the reasoning that "optional would mean
+        usually blank, and a pay change with no explanation is the thing
+        somebody has to reconstruct from memory two years later."
+
+        That reasoning has not stopped being true, so the trade is recorded
+        rather than absorbed: the `reason` is still required and still carries
+        most of the meaning (a promotion explains itself), and `recorded_by` and
+        `effective_from` still say who and when. What is lost is the sentence
+        that distinguishes two promotions on the same day.
+
+        An empty string is stored as NULL rather than "": the history renders an
+        em dash for a missing note, and a blank string would render as nothing
+        at all and read as a rendering fault. -- */
+  note: z
+    .string()
+    .trim()
+    .max(500, "Keep the note under 500 characters")
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : null)),
   evaluationId: z.string().uuid().nullable().optional(),
 });
 

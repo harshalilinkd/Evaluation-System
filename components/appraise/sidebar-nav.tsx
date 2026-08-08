@@ -24,7 +24,11 @@ import { activeHref, navFor, type AppRole, type NavIcon } from "@/components/app
 
 // Resolved here rather than in the config so nav-config.ts stays a plain data
 // file, and so the icon set is statically analysable and tree-shakeable.
-const ICONS: Record<NavIcon, LucideIcon> = {
+//
+// Exported because the mobile bottom bar draws the same destinations. Two maps
+// would drift, and a rail and a tab bar showing different glyphs for the same
+// screen is the kind of thing that makes an app feel like two apps.
+export const ICONS: Record<NavIcon, LucideIcon> = {
   dashboard: LayoutDashboard,
   myEvaluation: ClipboardList,
   team: UsersRound,

@@ -42,10 +42,18 @@ export function TableScreen({
   return (
     <div
       data-full-bleed
-      className={cn(
-        "flex h-[calc(100dvh-theme(spacing.topbar))] min-h-[26rem] flex-col overflow-hidden bg-surface",
-        className,
-      )}
+      /* -- `.table-screen` carries the height, because it has to subtract the
+            mobile tab bar as well as the topbar and that calc belongs in CSS
+            where `theme()` resolves — an inline style is not processed by
+            Tailwind and would emit the literal string.
+
+            The subtraction matters: this screen owns the viewport height and
+            scrolls its CONTENT, so an over-tall box does not produce a
+            scrollbar. It pushes the bottom of the list, and the grid's own
+            status bar with it, underneath a fixed bar that reserves no space of
+            its own. `--bottom-nav-h` is 0 above `lg`, so desktop is
+            unchanged. -- */
+      className={cn("table-screen flex min-h-[26rem] flex-col overflow-hidden bg-surface", className)}
     >
       {children}
     </div>

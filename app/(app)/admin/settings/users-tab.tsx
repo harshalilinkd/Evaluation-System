@@ -1198,13 +1198,15 @@ function EditPersonDialog({
                 </select>
               </Field>
 
-              {/* Required by the server, never optional. A pay change with no
-                  explanation is the thing somebody has to reconstruct from
-                  memory two years later (P19-8). */}
+              {/* Optional since the owner's instruction reversed P19-8 — the
+                  comment here said "required by the server, never optional",
+                  which stopped being true when `salarySchema` changed and would
+                  have sent the next reader looking for a validation rule that
+                  no longer exists. The hint still asks for one. */}
               <Field
                 id="e_salary_note"
                 label="Note"
-                hint="One line is enough. It is filed against the change and cannot be edited afterwards."
+                hint="Optional. One line is enough — it is filed against the change and cannot be edited afterwards."
               >
                 <Input
                   id="e_salary_note"

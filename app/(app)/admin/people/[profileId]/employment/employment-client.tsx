@@ -11,7 +11,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, BellRing, Loader2, Plus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BellRing, Loader2, Pencil, Plus } from "lucide-react";
 
 import { DashboardCard } from "@/components/appraise/metric-widget";
 import { Button } from "@/components/ui/button";
@@ -78,7 +78,12 @@ export function EmploymentClient({
   });
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [salaryOpen, setSalaryOpen] = React.useState(false);
+  /* -- One dialog, three ways in. `null` is closed.
+        Held as the MODE rather than a boolean plus a second state, so the two
+        cannot disagree about which dialog is open. -- */
+  const [salaryMode, setSalaryMode] = React.useState<"change" | "correct" | "joining" | null>(null);
+  const openSalary = (mode: "change" | "correct" | "joining") => setSalaryMode(mode);
+  const salaryOpen = salaryMode !== null;
 
   async function onSave() {
     setBusy(true);
@@ -216,20 +221,63 @@ export function EmploymentClient({
         )}
       </DashboardCard>
 
-      {/* ---------- Current pay ---------- */}
+      {/* ---------- Current pay ----------
+          "EDIT" IS A CORRECTION, AND THAT IS NOT PEDANTRY.
+
+          `current_ctc` is not an independent field — it is whatever the newest
+          `salary_history` row says. Writing it directly would leave the card
+          reading ₹6,00,000 above a history whose last line says ₹25,000, and
+          the history is the half that no policy permits anybody to change
+          (P19-3: append-only by trigger AND by the absence of an UPDATE policy,
+          for HR and superuser alike).
+
+          So Correct does what the owner asked for — change the number on record
+          in one step — through the mechanism that keeps the two halves
+          agreeing. The superseded entry stays visible, which is the point: a
+          pay record that can be quietly rewritten is not a record. */}
       <DashboardCard
         title="Current pay"
         action={
-          <Button variant="outline" className="min-h-11" onClick={() => setSalaryOpen(true)}>
-            <Plus aria-hidden className="size-4" />
-            Add salary change
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {r?.current_ctc != null ? (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                onClick={() => openSalary("correct")}
+              >
+                <Pencil aria-hidden className="size-4" />
+                Correct
+              </Button>
+            ) : null}
+            <Button variant="outline" className="min-h-11" onClick={() => openSalary("change")}>
+              <Plus aria-hidden className="size-4" />
+              Add salary change
+            </Button>
+          </div>
         }
       >
         <div className="grid gap-4 sm:grid-cols-3">
           <Readout label="Current CTC" value={formatInr(r?.current_ctc ?? null)} emphasis />
           <Readout label="Effective from" value={formatDate(r?.salary_effective_from ?? null)} />
-          <Readout label="Joining CTC" value={formatInr(r?.joining_ctc ?? null)} />
+
+          {/* -- The joining figure was an em dash with nothing to click, and no
+                screen said where it comes from: it is a `salary_history` row
+                with reason "Joining salary", which was already in the dropdown
+                and impossible to find. An empty readout that names its own way
+                of being filled is the difference between a gap and a dead
+                end (§13.4). -- */}
+          <div>
+            <Readout label="Joining CTC" value={formatInr(r?.joining_ctc ?? null)} />
+            {r && r.joining_ctc == null ? (
+              <Button
+                variant="ghost"
+                className="mt-1 h-auto px-0 py-1 text-body-sm text-primary"
+                onClick={() => openSalary("joining")}
+              >
+                Add joining salary
+              </Button>
+            ) : null}
+          </div>
         </div>
       </DashboardCard>
 
@@ -287,15 +335,34 @@ export function EmploymentClient({
         )}
       </DashboardCard>
 
+      {/* -- Keyed on the MODE, so opening Correct after Add gives a form built
+            for correcting rather than the previous one with its reason swapped.
+            A reset effect would render once with the stale values first, which
+            is visible as the fields changing under the pointer (P10-11). -- */}
       <SalaryDialog
-        key={salaryOpen ? "open" : "closed"}
+        key={salaryMode ?? "closed"}
         open={salaryOpen}
+        mode={salaryMode ?? "change"}
         profileId={person.id}
         currentCtc={r?.current_ctc ?? null}
         hasRecord={Boolean(r)}
-        onClose={() => setSalaryOpen(false)}
+        /* Correct is about the figure that is already in force, so it opens on
+           that date and that amount — the common case is changing one digit,
+           not retyping both fields. Joining opens on their joining date, which
+           is the only date it can honestly carry. */
+        initialEffectiveFrom={
+          salaryMode === "correct"
+            ? (r?.salary_effective_from ?? "")
+            : salaryMode === "joining"
+              ? (detail.dateOfJoining ?? "")
+              : ""
+        }
+        initialCtc={
+          salaryMode === "correct" && r?.current_ctc != null ? String(r.current_ctc) : ""
+        }
+        onClose={() => setSalaryMode(null)}
         onDone={() => {
-          setSalaryOpen(false);
+          setSalaryMode(null);
           router.refresh();
         }}
       />
@@ -354,6 +421,9 @@ function SalaryDialog({
   hasRecord,
   onClose,
   onDone,
+  mode = "change",
+  initialEffectiveFrom = "",
+  initialCtc = "",
 }: {
   open: boolean;
   profileId: string;
@@ -361,10 +431,27 @@ function SalaryDialog({
   hasRecord: boolean;
   onClose: () => void;
   onDone: () => void;
+  /**
+   * WHICH JOB THIS DIALOG IS DOING. One dialog, three entry points.
+   *
+   *   change     the ordinary case — a raise, from the card's own button.
+   *   correct    "edit current pay". See the note on the Current pay card for
+   *              why correcting is an APPEND rather than an edit.
+   *   joining    the starting salary, for somebody entered without one.
+   *
+   * It only ever pre-selects the reason and pre-fills the fields; the reason
+   * stays editable, because somebody who opened the wrong one should be able to
+   * carry on rather than cancel and start again.
+   */
+  mode?: "change" | "correct" | "joining";
+  initialEffectiveFrom?: string;
+  initialCtc?: string;
 }) {
-  const [effectiveFrom, setEffectiveFrom] = React.useState("");
-  const [newCtc, setNewCtc] = React.useState("");
-  const [reason, setReason] = React.useState<string>("ANNUAL_INCREMENT");
+  const [effectiveFrom, setEffectiveFrom] = React.useState(initialEffectiveFrom);
+  const [newCtc, setNewCtc] = React.useState(initialCtc);
+  const [reason, setReason] = React.useState<string>(
+    mode === "correct" ? "CORRECTION" : mode === "joining" ? "JOINING" : "ANNUAL_INCREMENT",
+  );
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -397,10 +484,19 @@ function SalaryDialog({
     <Dialog open={open} onOpenChange={(v) => (v ? null : onClose())}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Record a salary change</DialogTitle>
+          <DialogTitle>
+            {mode === "correct"
+              ? "Correct the current pay"
+              : mode === "joining"
+                ? "Record the joining salary"
+                : "Record a salary change"}
+          </DialogTitle>
           <DialogDescription>
-            This is appended to the history and can never be edited or removed. If you need to fix
-            an earlier entry, add a correction rather than trying to change it.
+            {mode === "correct"
+              ? "The figure on record is replaced by the one you enter. The entry it replaces stays in the history — a pay record that can be quietly rewritten is not a record, so a mistake is superseded rather than erased."
+              : mode === "joining"
+                ? "What they were paid when they joined. Date it their joining date; it becomes the first line of their history."
+                : "This is appended to the history and can never be edited or removed. If you need to fix an earlier entry, add a correction rather than trying to change it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -439,7 +535,10 @@ function SalaryDialog({
                 ))}
               </select>
             </Field>
-            <Field label="Note" required hint="Why this changed. Somebody will read it in two years.">
+            {/* Optional at the owner's instruction — see the note on
+                `salarySchema`. The hint still asks for one, because the reason
+                code says "promotion" and only this says which promotion. */}
+            <Field label="Note" hint="Optional. Why this changed — somebody will read it in two years.">
               <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
           </div>

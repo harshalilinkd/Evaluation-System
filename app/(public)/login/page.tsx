@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { AuthShell } from "@/components/appraise/auth-shell";
 import { SetupRequired } from "@/components/appraise/setup-required";
 import { SignInForm } from "@/app/(public)/login/sign-in-form";
+import { getCurrentProfile } from "@/lib/auth/roles";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -32,8 +33,29 @@ export default async function LoginPage({
 
   const { next, error } = await searchParams;
 
+  /* -- Who is signed in RIGHT NOW, if anybody.
+        Reaching this page with a session used to be impossible — middleware
+        bounced every signed-in visitor to the dashboard, which is what stopped
+        people switching accounts on a shared device. It is possible now, and
+        arriving at a blank sign-in form while quietly still signed in as
+        somebody else is disorienting: the form looks like it did nothing if you
+        type the same credentials back in.
+
+        So the page says whose session is live and that signing in will replace
+        it. Only the name — an email here would turn the login page into a way
+        of reading the last user's address off a shared phone. -- */
+  const current = await getCurrentProfile();
+
   return (
     <AuthShell title="Sign in">
+      {current ? (
+        <p className="mb-4 rounded-card bg-surface-mute px-4 py-3 text-body-sm text-ink-muted">
+          You are signed in as{" "}
+          <span className="font-medium text-ink">{current.full_name}</span>. Signing in below
+          replaces that session on this device.
+        </p>
+      ) : null}
+
       <SignInForm next={next} initialError={error ? ERRORS[error] : undefined} />
     </AuthShell>
   );

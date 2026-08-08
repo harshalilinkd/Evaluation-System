@@ -20,23 +20,30 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
       className="rail-item flex items-center gap-3 rounded-control px-2 py-1.5"
     >
       {/*
-        The company mark, with no plate behind it.
+        The company mark, on a plate when the ground is navy.
 
-        IT USED TO SIT ON A WHITE TILE, and the reason was real: the LinkD
-        artwork is drawn with heavy BLACK strokes, and black on Slate Navy
-        disappears — the "D" is almost entirely outline, so on the bare rail the
-        wordmark lost its last letter. The plate was the fix.
+        THE KNOCKED-OUT VARIANT IS NOT USED, and the reason is worth writing
+        down so it is not attempted a third time. `logo-light.png` is the same
+        artwork with the black replaced by slate-100, on the reasoning that the
+        black is a background the navy can supply itself. It is not: in this
+        mark the BLACK STROKES ARE THE LETTERFORMS. Knocking them out does not
+        reverse the drawing, it deletes it — the "D" is almost entirely stroke
+        and becomes a pale ghost, and every coloured letter is left floating
+        inside a thick white halo with the four colour bars reduced to confetti.
+        That is the "weird" the owner saw.
 
-        The better fix is a reversed mark. `logo-light.png` is the same artwork
-        with only the black knocked out to slate-100; every coloured letter is
-        untouched. It needs no plate, so the mark is transparent on the rail as
-        it should be, and it can then be given the width a 2.11:1 wordmark
-        actually needs (see `.rail-mark`) instead of being squeezed into a 40px
-        square.
+        A genuine reversed mark would have to be REDRAWN, not recoloured, and
+        that is artwork rather than code.
 
-        `onNavy` picks the ground: the mobile sheet is a white surface, where
-        the original black-stroked mark is the correct one. Neither file is a
-        substitute for the other.
+        So the plate comes back (P27-8's original call), with the one fair
+        criticism of it answered: it squeezed a 2.11:1 wordmark into a 40px
+        square. The plate is now shaped to the mark instead.
+
+        `onNavy` picks the ground, and BOTH current callers are navy — the
+        mobile sheet carries the rail's own colour rather than the card surface,
+        because it IS the rail on a small screen. The bare branch is kept for a
+        light ground, where a white plate would be an invisible box drawn around
+        the mark, and it is the reason this is a prop rather than a constant.
 
         `alt` is empty because the company name is written beside it — a screen
         reader announcing "LinkD Prints" twice is noise, not access — and
@@ -45,9 +52,13 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
       */}
       {/* eslint-disable-next-line @next/next/no-img-element -- a small fixed-width mark; the optimiser has nothing to add and next/image would defer the one element that should paint first. */}
       <img
-        src={onNavy ? "/logo-light.png" : "/logo.png"}
+        src="/logo.png"
         alt=""
-        className="rail-mark shrink-0 object-contain"
+        className={
+          onNavy
+            ? "rail-mark shrink-0 rounded-control bg-white object-contain p-1.5"
+            : "rail-mark shrink-0 object-contain"
+        }
       />
 
       {/* Faded out by CSS on collapse rather than unmounted — the transition

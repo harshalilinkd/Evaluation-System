@@ -164,6 +164,24 @@
 
     /* -- The rail -- */
     --rail-w: 264px;
+
+    /* -- The mobile tab bar --
+
+       Zero by default, because the bar itself is `lg:hidden`. Everything that
+       has to leave room for it — `.app-main`'s padding and `TableScreen`'s
+       height — subtracts this one value, so the bar's size lives in ONE place
+       and a change to it cannot leave a screen with the wrong amount of
+       clearance.
+
+       56px of row (`min-h-14`) plus its 1px top border, plus the iOS home
+       indicator, which is 0 on every device that does not have one. */
+    --bottom-nav-h: 0px;
+  }
+
+  @media (max-width: 1023.98px) {
+    :root {
+      --bottom-nav-h: calc(57px + env(safe-area-inset-bottom, 0px));
+    }
   }
 
   :root[data-rail="collapsed"] {
@@ -365,14 +383,30 @@
   */
   .app-main {
     @apply flex-1 px-4 py-8 lg:px-8;
+    /* Room for the fixed mobile tab bar. A fixed element reserves no space of
+       its own, so without this the last row of every list sits underneath it —
+       and the one most likely to be hidden is the one at the bottom of a queue
+       somebody scrolled to reach. */
+    padding-bottom: calc(theme(spacing.8) + var(--bottom-nav-h));
   }
 
   .app-container {
     @apply mx-auto w-full max-w-content;
   }
 
+  /* The list-screen shell (components/appraise/screen.tsx). Here rather than as
+     an arbitrary-value class because it subtracts a custom property, and
+     `theme()` only resolves in CSS Tailwind processes. */
+  .table-screen {
+    height: calc(100dvh - theme(spacing.topbar) - var(--bottom-nav-h));
+  }
+
   .app-main:has([data-full-bleed]) {
     @apply p-0;
+    /* The full-bleed pages keep the reservation even though they drop the
+       gutters — `TableScreen` subtracts it from its own height instead, so this
+       only matters for a full-bleed page that scrolls the document. */
+    padding-bottom: var(--bottom-nav-h);
   }
 
   .app-main:has([data-full-bleed]) .app-container {
@@ -439,9 +473,19 @@
      while `data-rail` says collapsed. */
   .rail-mark {
     /* The rail is 264px less 16px of panel padding and 8px of link padding each
-       side, so 216px is available and the name beside it needs about half. 96px
-       is what is left, and it is 2.4x the 40px the mark had inside its tile. */
-    width: 96px;
+       side, so 216px is available and the name beside it needs about half.
+
+       84px rather than 96px: the mark is 2.11:1, so 96px stood 45px tall
+       against a two-line name block of about 34px, and a mark that overhangs
+       the text it sits beside at both top and bottom is the thing that reads as
+       misaligned. At 84px — 40px tall with the plate's padding — the two are
+       within a few pixels and the row has a shared centre.
+
+       `height: auto` is load-bearing now that the mark carries padding: without
+       it `p-1.5` is added to the box rather than taken out of it, and the plate
+       grows instead of insetting the artwork. */
+    width: 84px;
+    height: auto;
     transition: width 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
   }
 
@@ -449,7 +493,7 @@
     /* 76px rail, same padding, leaves 28px — but the mark is the only thing in
        the row once the name has faded, so it may use the panel's full width and
        let the link's own padding be the margin. */
-    width: 44px;
+    width: 48px;
   }
 
   :root[data-rail="collapsed"] .rail-item {

@@ -511,6 +511,15 @@ export type LaunchOutcome = {
   messagesSent: number;
   /** Held back by the per-HOD cap; the cron sweep picks them up (item 16). */
   messagesQueued: number;
+  /**
+   * Attempted and rejected by the provider.
+   *
+   * Distinct from `messagesQueued`, which is deliberate and self-correcting,
+   * and from `messagesBlocked`, which means nothing was attempted at all. This
+   * is the count somebody has to go and retry, and it was being computed by the
+   * dispatcher and dropped before it reached a screen.
+   */
+  messagesFailed: number;
 };
 
 /**
@@ -603,6 +612,11 @@ export async function launchCycle(
       tokens: result.tokens ?? 0,
       messagesSent: dispatched.sent,
       messagesQueued: dispatched.queued,
+      /* Returned so the launch confirmation can say a send FAILED rather than
+         quietly reporting a smaller "sent" figure. A message that did not
+         arrive is the thing HR has to chase, and the count was being computed
+         and thrown away. */
+      messagesFailed: dispatched.failed,
       /* Advisory, never a failure. The cycle is launched either way; this says
          whether anybody has been told yet. */
       messagesBlocked: dispatched.blocked ?? null,

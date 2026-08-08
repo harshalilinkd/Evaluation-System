@@ -193,6 +193,11 @@ export function HrRail({ report }: { report: EvaluationReport }) {
           <Label htmlFor="hr_summary" className="type-label text-ink-muted">
             Summary
           </Label>
+          {/* -- The shadcn default is a 6px radius and a hard border, which
+                next to a 16px card reads as a browser control dropped into a
+                designed page. 12px, a hairline, and the focus ring as a soft
+                halo rather than a hard outline puts it on the same system as
+                everything around it. -- */}
           <Textarea
             id="hr_summary"
             value={summary}
@@ -200,6 +205,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
             rows={5}
             disabled={!atHr}
             placeholder="What should the MD know before they read this?"
+            className="min-h-28 resize-y rounded-card border-rule bg-surface px-3.5 py-3 text-body leading-relaxed shadow-none transition-shadow placeholder:text-ink-faint focus-visible:border-primary/50 focus-visible:ring-4 focus-visible:ring-primary/10"
           />
           <p className="font-sans text-body-sm text-ink-muted">
             {report.isIncrement
@@ -208,16 +214,28 @@ export function HrRail({ report }: { report: EvaluationReport }) {
           </p>
         </div>
 
+        {/* -- A CUSTOM DOT, because the native one cannot be styled.
+              A browser radio paints its own blue in its own size on every
+              platform, so it was the one element on the rail that ignored the
+              design system entirely — and next to a 16px card it is what made
+              the panel read as a form rather than a product.
+
+              The input is still a real `type="radio"`: it stays in the tab
+              order, arrow keys still move within the group, and the label still
+              activates it. `sr-only` hides it visually and `peer` drives the
+              drawn dot beside it, so nothing is reimplemented — only
+              repainted. The focus ring is on the drawn dot via `peer-focus`,
+              because a hidden input cannot show one (§13.8). -- */}
         <fieldset className="space-y-2" disabled={!atHr}>
           <legend className="type-label pb-1 text-ink-muted">Recommendation</legend>
           {RECOMMENDATIONS.map((option) => (
             <label
               key={option.value}
               className={cn(
-                "flex min-h-11 cursor-pointer items-center gap-3 rounded-control border px-3",
+                "flex min-h-11 cursor-pointer items-center gap-3 rounded-card border px-3.5 py-2.5 transition-colors duration-hover",
                 recommendation === option.value
-                  ? "border-primary/40 bg-accent"
-                  : "border-rule bg-surface",
+                  ? "border-primary/40 bg-primary/[0.06]"
+                  : "border-rule bg-surface hover:border-rule hover:bg-surface-mute",
                 !atHr && "cursor-default opacity-70",
               )}
             >
@@ -227,8 +245,23 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                 value={option.value}
                 checked={recommendation === option.value}
                 onChange={() => setRecommendation(option.value)}
-                className="size-4"
+                className="peer sr-only"
               />
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-[18px] shrink-0 items-center justify-center rounded-pill border-2 transition-colors duration-hover",
+                  "peer-focus-visible:ring-4 peer-focus-visible:ring-primary/20",
+                  recommendation === option.value ? "border-primary" : "border-rule",
+                )}
+              >
+                <span
+                  className={cn(
+                    "size-2 rounded-pill bg-primary transition-transform duration-hover",
+                    recommendation === option.value ? "scale-100" : "scale-0",
+                  )}
+                />
+              </span>
               <span className="font-sans text-body text-ink">{option.label}</span>
             </label>
           ))}
