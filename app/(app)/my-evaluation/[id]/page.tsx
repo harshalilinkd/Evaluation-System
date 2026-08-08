@@ -46,7 +46,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
       supabase
         .from("evaluation_cycles")
-        .select("name, period_label, self_due_on")
+        // cycle_type decides whether the salary block belongs on this form at
+        // all. Read here rather than inferred from the questions: a cycle with
+        // the expectation question retired is still an increment cycle.
+        .select("name, period_label, self_due_on, cycle_type")
         .eq("id", evaluation.cycle_id)
         .maybeSingle(),
 
@@ -92,9 +95,27 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     return <ErrorState title="Could not load your form" body={form.error.message} />;
   }
 
-  const { data: dept } = me?.department_id
-    ? await supabase.from("departments").select("name").eq("id", me.department_id).maybeSingle()
-    : { data: null };
+  /* -- The department and, on an increment cycle only, what they are on now.
+        Batched together: the department needs `me`, so this trip was happening
+        anyway (FIX-8), and the salary rides along rather than adding a third.
+
+        INCREMENT ONLY, deliberately. An ordinary evaluation has no salary
+        conversation in it, and putting a CTC on that form would be showing a
+        figure for no reason — §5 relaxed once, for one purpose, not generally.
+
+        `v_my_current_salary` (0040) returns the caller's own row and one money
+        column. It cannot return anybody else's, so this needs no filter and no
+        check of its own. -- */
+  const isIncrement = cycle?.cycle_type === "INCREMENT";
+
+  const [{ data: dept }, { data: myPay }] = await Promise.all([
+    me?.department_id
+      ? supabase.from("departments").select("name").eq("id", me.department_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    isIncrement
+      ? supabase.from("v_my_current_salary").select("current_ctc").maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const meta: SelfFormMeta = {
     evaluateeName: profile.full_name,
@@ -107,6 +128,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     // Only shown while the form is open again — once resubmitted it is history.
     returnedReason: evaluation.status === "OPEN" ? (returned?.reason ?? null) : null,
     returnedAt: evaluation.status === "OPEN" ? (returned?.created_at ?? null) : null,
+    // null on an evaluation cycle, and null when nobody has recorded a figure —
+    // the form says which rather than printing a zero (§11: missing is not 0).
+    currentCtc: myPay?.current_ctc ?? null,
+    isIncrement,
   };
 
   return (

@@ -1080,6 +1080,16 @@ export type Database = {
         };
         Relationships: [];
       };
+      /* 0040. The caller's OWN current CTC and nothing else — one row, one
+         money column. Deliberately separate from v_my_employment, which still
+         carries no salary at all (P19-2). */
+      v_my_current_salary: {
+        Row: {
+          profile_id: string;
+          current_ctc: number | null;
+        };
+        Relationships: [];
+      };
       v_cycle_progress: {
         Row: {
           cycle_id: string;

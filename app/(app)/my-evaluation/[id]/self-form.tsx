@@ -34,7 +34,7 @@ import { buildZodSchema, isBlank, validateAnswers } from "@/lib/forms/zod-genera
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
-import { formatDate, formatTime } from "@/lib/utils/date";
+import { formatDate, formatInr, formatTime } from "@/lib/utils/date";
 
 export type SelfFormMeta = {
   evaluateeName: string;
@@ -47,6 +47,9 @@ export type SelfFormMeta = {
   /** Set when the lead sent it back. Shown above everything else. */
   returnedReason: string | null;
   returnedAt: string | null;
+  /** Their OWN current CTC, on an increment cycle only (0040). Null otherwise. */
+  currentCtc: number | null;
+  isIncrement: boolean;
 };
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -509,6 +512,36 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           <p className="mt-3 text-body-sm text-ink-muted">
             For a self-evaluation these are the same person.
           </p>
+        ) : null}
+
+        {/* -- What they are on now. Increment cycles only. --
+              READ-ONLY, and not a question. P12-14: metadata is a definition
+              list rather than inputs, because a field here would let somebody
+              type a salary that disagrees with the record it is drawn from —
+              and this particular record is what a pay decision is made
+              against. It is never written back into the answers; the only
+              figure the employee supplies is their expectation, which is a
+              real question further down the form.
+
+              Shown so the expectation question can be answered against
+              something. Asking what somebody thinks is fair while withholding
+              what they are currently on invites a number anchored on nothing.
+
+              §5 is relaxed for this one figure and no further (0040): their
+              own, today's, on an increment form. Not their pay history, not
+              anybody else's, and not on an ordinary evaluation. */}
+        {meta.isIncrement ? (
+          <div className="mt-4 border-t border-rule pt-4">
+            <dt className="type-label text-ink-faint">Current salary</dt>
+            <dd className="tabular mt-0.5 text-h3 text-ink">
+              {formatInr(meta.currentCtc)}
+            </dd>
+            <p className="mt-1 text-body-sm text-ink-muted">
+              {meta.currentCtc === null
+                ? "Not on record. HR can add it — it does not stop you filling this in."
+                : "From your employment record, so it cannot be edited here. Your expectation is asked further down."}
+            </p>
+          </div>
         ) : null}
       </section>
 
