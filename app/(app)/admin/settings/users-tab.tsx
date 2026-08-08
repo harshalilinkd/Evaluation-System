@@ -503,6 +503,18 @@ function AddPersonDialog({
 }) {
   const [createState, createAction] = useActionState<ProvisionState, FormData>(createUser, {});
 
+  /* -- Has this person had a rise before today?
+        The last-increment date is the only honest signal, and it is a field HR
+        is filling in anyway. A new joiner leaves it blank and is asked for one
+        salary; somebody being backfilled sets it and is asked for two, because
+        for them the joining figure and today's figure are genuinely different
+        numbers.
+
+        Controlled purely so this can be read. Everything else on the form stays
+        uncontrolled and is submitted through FormData. -- */
+  const [lastIncrementDate, setLastIncrementDate] = useState("");
+  const hasPriorIncrement = lastIncrementDate.trim() !== "";
+
   // Close on success, so the new row is visible in the table behind. A failure
   // stays open holding its message next to the field it is about.
   useEffect(() => {
@@ -526,7 +538,13 @@ function AddPersonDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        {/* -- The action bar is a SIBLING of the scroll region, not inside it.
+              `sticky bottom-0` within a scroller floats the bar OVER the
+              content — which is why the Access options were half-covered by
+              "Create account". Making the form the flex column and giving the
+              fields their own overflow area puts the bar in a panel of its own
+              underneath, where nothing can pass beneath it. -- */}
+        <div className="flex min-h-0 flex-1 flex-col">
           <Notice state={createState} />
 
           {/*
@@ -548,8 +566,9 @@ function AddPersonDialog({
           <form
             key={createState.createdId ?? "new"}
             action={createAction}
-            className="space-y-2"
+            className="flex min-h-0 flex-1 flex-col"
           >
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
 
           {/* ---------- Identity ---------- */}
           <FormSection
@@ -638,7 +657,7 @@ function AddPersonDialog({
               <Field
                 id="reports_to"
                 label="Reports to"
-                hint="Who rates them. This is the one people leave blank and regret — a missing HOD blocks the cycle launch."
+                hint="Assigning a manager determines evaluation workflow routing. A cycle cannot launch until every participant has one."
               >
                 <select id="reports_to" name="reports_to" className={SELECT_CLASS}>
                   <option value="">Nobody yet</option>
@@ -680,7 +699,7 @@ function AddPersonDialog({
                 id="date_of_joining"
                 label="Date of joining"
                 optional
-                hint="Their first increment is worked out from this."
+                hint="Used as the starting date for increment cycle calculations."
               >
                 <Input
                   id="date_of_joining"
@@ -717,6 +736,8 @@ function AddPersonDialog({
                   id="last_increment_date"
                   name="last_increment_date"
                   type="date"
+                  value={lastIncrementDate}
+                  onChange={(e) => setLastIncrementDate(e.target.value)}
                   className="min-h-11 tabular"
                 />
               </Field>
@@ -744,11 +765,23 @@ function AddPersonDialog({
             title="Compensation"
             hint="Optional, and visible only to HR and the MD. Recorded as their opening pay history."
           >
-            <div className="grid gap-5 sm:grid-cols-3">
+            {/* -- ONE FIELD FOR A NEW JOINER, TWO FOR SOMEBODY BEING BACKFILLED.
+                  A person with no prior increment is on what they joined on, so
+                  asking for a current salary as well is asking them to type the
+                  same number twice — and inviting the two to disagree. The
+                  second field appears only once a last-increment date says
+                  there has been a rise, which is the fact that makes them
+                  different figures.
+
+                  `Last increment amount` is gone entirely. It was a manual
+                  input for something the ledger derives: the rise IS current
+                  minus the baseline, and a typed figure that disagrees with
+                  that arithmetic is a third version of the truth in a table
+                  whose job is to be evidence. -- */}
+            <div className={`grid gap-5 ${hasPriorIncrement ? "sm:grid-cols-2" : ""}`}>
               <Field
                 id="joining_ctc"
-                label="Joining salary"
-                optional
+                label="Joining salary (optional)"
                 error={createState.fieldErrors?.joining_ctc}
               >
                 <Input
@@ -760,40 +793,26 @@ function AddPersonDialog({
                 />
               </Field>
 
-              <Field
-                id="current_ctc"
-                label="Current salary"
-                optional
-                error={createState.fieldErrors?.current_ctc}
-              >
-                <Input
+              {hasPriorIncrement ? (
+                <Field
                   id="current_ctc"
-                  name="current_ctc"
-                  inputMode="numeric"
-                  placeholder="₹ 4,80,000"
-                  className="min-h-11 tabular"
-                />
-              </Field>
-
-              <Field
-                id="last_increment_amount"
-                label="Last increment amount"
-                optional
-                error={createState.fieldErrors?.last_increment_amount}
-              >
-                <Input
-                  id="last_increment_amount"
-                  name="last_increment_amount"
-                  inputMode="numeric"
-                  placeholder="₹ 80,000"
-                  className="min-h-11 tabular"
-                />
-              </Field>
+                  label="Current salary (optional)"
+                  error={createState.fieldErrors?.current_ctc}
+                >
+                  <Input
+                    id="current_ctc"
+                    name="current_ctc"
+                    inputMode="numeric"
+                    placeholder="₹ 4,80,000"
+                    className="min-h-11 tabular"
+                  />
+                </Field>
+              ) : null}
             </div>
             <p className="font-sans text-body-sm text-ink-muted">
-              Figures may be typed with ₹ and commas. The joining salary is filed against their
-              joining date and the current salary against their last increment, so the increment
-              amount is only used when that date is set.
+              {hasPriorIncrement
+                ? "Figures may be typed with ₹ and commas. The joining salary is the baseline of their pay ledger; the current salary is filed against their last increment date, and the rise between the two is calculated for you."
+                : "Figures may be typed with ₹ and commas. Their current salary is set to this automatically — with no increment recorded, the two are the same figure."}
             </p>
           </FormSection>
 
@@ -805,8 +824,10 @@ function AddPersonDialog({
             <RolePicker />
           </FormSection>
 
-          {/* §13.3: one primary action, and it stays reachable on a long form. */}
-          <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-3 border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur">
+          </div>
+
+          {/* §13.3: one primary action, in its own panel below the scroll area. */}
+          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface px-6 py-4">
             <p className="mr-auto font-sans text-body-sm text-ink-muted">
               They can sign in as soon as you save.
             </p>
@@ -881,7 +902,10 @@ function EditPersonDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
+        {/* Same structure as the add dialog: the fields scroll, the action bar
+            does not, and neither can cover the other. */}
+        <form action={action} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
           <input type="hidden" name="profile_id" value={person.id} />
           <Notice state={state} />
 
@@ -1003,7 +1027,7 @@ function EditPersonDialog({
                 label="Reports to"
                 optional
                 error={state.fieldErrors?.reports_to}
-                hint="Who rates them. A missing HOD blocks the cycle launch."
+                hint="Assigning a manager determines evaluation workflow routing."
               >
                 <select
                   id="e_reports_to"
@@ -1058,7 +1082,7 @@ function EditPersonDialog({
                 id="e_doj"
                 label="Date of joining"
                 optional
-                hint="Their first increment is worked out from this."
+                hint="Used as the starting date for increment cycle calculations."
               >
                 <Input
                   id="e_doj"
@@ -1231,7 +1255,9 @@ function EditPersonDialog({
             <RolePicker initial={person.roles} />
           </FormSection>
 
-          <div className="sticky bottom-0 -mx-6 flex items-center justify-end gap-3 border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur">
+          </div>
+
+          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface px-6 py-4">
             <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
               Cancel
             </Button>
