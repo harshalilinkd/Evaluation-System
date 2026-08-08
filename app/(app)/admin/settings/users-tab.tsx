@@ -871,8 +871,13 @@ function EditPersonDialog({
         <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
           <DialogTitle className="text-display-sm text-ink">Edit {person.full_name}</DialogTitle>
           <DialogDescription className="text-body-sm text-ink-muted">
-            Everything the add form asks for, apart from their sign-in details and their pay — both
-            are named below.
+            {/* -- This said pay was NOT in this form. It is — the Compensation
+                  band is the last section, and it appends a row to their pay
+                  history rather than overwriting a figure. Somebody reading the
+                  old sentence stopped scrolling and reported the fields as
+                  missing, which is exactly what it told them to expect. -- */}
+            Everything the add form asks for, including their pay. Scroll down for salary,
+            department and increment dates.
           </DialogDescription>
         </DialogHeader>
 
