@@ -78,7 +78,15 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0037_audit_no_returning',    'audit_ok',   'apply_evaluation_transition writes audit without RETURNING',
      'CRITICAL. Without it an EMPLOYEE cannot submit their own evaluation — only the HOD can.'),
   ('0038_raise_pending_hr_review','function',   'raise_pending_hr_review',
-     'Without it an evaluation with BOTH sides submitted sits at OPEN and never reaches HR.')
+     'Without it an evaluation with BOTH sides submitted sits at OPEN and never reaches HR.'),
+  ('0023_employment',            'table',      'employment_records',
+     'Employment and pay records. Without it the Employment tab and the increment calendar have nothing to read.'),
+  ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
+     'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
+  ('0040_own_current_salary',    'view',       'v_my_current_salary',
+     'Without it the increment form cannot show an employee their current salary — the field renders an em dash.'),
+  ('0041_read_my_lead',          'function',   'is_my_lead',
+     'Without it EVALUATED BY is blank on every self-evaluation: the employee cannot read their own HOD''s name.')
 )
 select
   e.migration,
@@ -104,6 +112,14 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
          and pg_get_functiondef(p.oid) not like '%returning id into v_audit_id%')
+    -- 0039 patches apply_evaluation_transition rather than creating an object,
+    -- so the tell is the transition itself appearing in the stored body.
+    when 'close_ok' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
+         -- The clause 0039 injects. The filename is not a tell: it appears
+         -- only in the migration's own comments and never reaches the body.
+         and pg_get_functiondef(p.oid) like '%''PENDING_HR_REVIEW'' and p_to_status = ''CLOSED''%')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'
