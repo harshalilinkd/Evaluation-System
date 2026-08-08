@@ -182,7 +182,44 @@ export async function addSalaryChange(
     );
   }
 
-  const previous = record.current_ctc === null ? null : Number(record.current_ctc);
+  /* -- WHAT CAME BEFORE THIS DATE — not what is being paid today.
+        This read `record.current_ctc`, which is the CURRENT figure whatever
+        date the new row carries. So recording a joining salary AFTER a later
+        raise had already been entered produced: previous = the later raise,
+        and a hike computed backwards. A ₹25,000 raise recorded first, then a
+        ₹1,80,000 joining salary dated nine months earlier, came out as a 620%
+        increase — a number that is not wrong by a rounding error, it is
+        describing an event that never happened, in the one table whose whole
+        job is to be evidence (P19-7).
+
+        The code twenty lines below already got this right for the OTHER half
+        of the same question: `supersedes` refuses to move today's figure when
+        the row is backdated. The two now reason the same way.
+
+        Strictly EARLIER, not on-or-before: a row effective the same day is not
+        what came before this one, and treating it as such would let two entries
+        made on one date each claim the other as their predecessor. -- */
+  const { data: preceding } = await supabase
+    .from("salary_history")
+    .select("new_ctc")
+    .eq("profile_id", v.profileId)
+    .lt("effective_from", v.effectiveFrom)
+    .order("effective_from", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  /* -- A joining salary has nothing before it, by definition.
+        Belt and braces over the date lookup, for the case that produced this
+        report: HR entering history out of order. If somebody mis-dates a
+        joining salary after an existing row, the lookup would find a
+        predecessor and compute a hike for the first salary somebody was ever
+        paid, which is nonsense whatever the dates say. -- */
+  const previous =
+    v.reason === "JOINING"
+      ? null
+      : preceding?.new_ctc === null || preceding?.new_ctc === undefined
+        ? null
+        : Number(preceding.new_ctc);
   const hikeAmount = previous === null ? null : Math.round((v.newCtc - previous) * 100) / 100;
   const hikePct =
     previous === null || previous === 0

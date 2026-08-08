@@ -457,11 +457,25 @@ function SalaryDialog({
   const [error, setError] = React.useState<string | null>(null);
 
   const parsed = Number(newCtc);
+
+  /* -- The preview obeys the same rule the server does.
+        It compared against `currentCtc` unconditionally, so recording a JOINING
+        salary showed "₹25,000 → ₹1,80,000 · hike ₹1,55,000 · 620%" before
+        anything was saved — the dialog confidently describing a raise that
+        never happened, against the figure the person is paid TODAY rather than
+        anything that preceded their joining date.
+
+        A joining salary has nothing before it, so there is nothing to compare
+        and no hike to show. The server is the authority (it looks up whatever
+        actually preceded the effective date); this only has to stop showing a
+        number it cannot know. -- */
+  const comparable = reason === "JOINING" ? null : currentCtc;
+
   const preview =
-    currentCtc !== null && Number.isFinite(parsed) && parsed > 0
+    comparable !== null && Number.isFinite(parsed) && parsed > 0
       ? {
-          hike: parsed - currentCtc,
-          pct: currentCtc === 0 ? null : Math.round(((parsed - currentCtc) / currentCtc) * 10000) / 100,
+          hike: parsed - comparable,
+          pct: comparable === 0 ? null : Math.round(((parsed - comparable) / comparable) * 10000) / 100,
         }
       : null;
 
