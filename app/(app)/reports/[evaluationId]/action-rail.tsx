@@ -93,10 +93,32 @@ export function HrRail({ report }: { report: EvaluationReport }) {
   /* -- The agreed final score, typed by HR on the MD's behalf.
         Seeded from whatever is already stored, so reopening the dialog shows
         the figure rather than an empty box that looks like nothing was set. -- */
+  /* -- THE SAME RULE AS THE INCREMENT (0046): the mean of the employee's own
+        average and their HOD's, not the HOD's alone.
+
+        It used to seed from the lead average, which quietly made the manager's
+        view the default answer and the employee's view a thing HR had to
+        remember to weigh. The owner's rule is that the figure is CALCULATED
+        from both sides and then confirmed — so both sides are in it.
+
+        Still editable, and deliberately: HR asks the MD and may agree something
+        else, which is the capability this dialog was built for. What has
+        changed is what it starts at, so pressing Complete without touching it
+        records the calculated figure rather than half of it.
+
+        A layer with no stored average is left out rather than counted as zero —
+        averaging a missing side as 0 would halve a real appraisal (§11, P7-9).
+        Identical arithmetic to `salary-band.tsx` and to 0046's SQL. -- */
+  const layerScores = [report.summary.selfOverall, report.summary.leadOverall].filter(
+    (v): v is number => v !== null && v !== undefined,
+  );
+  const calculatedFinal =
+    layerScores.length === 0
+      ? null
+      : Math.round((layerScores.reduce((a, b) => a + b, 0) / layerScores.length) * 100) / 100;
+
   const [finalScore, setFinalScore] = React.useState(
-    report.summary.leadOverall !== null && report.summary.leadOverall !== undefined
-      ? String(report.summary.leadOverall)
-      : "",
+    calculatedFinal === null ? "" : String(calculatedFinal),
   );
 
   const atHr = report.header.status === "PENDING_HR_REVIEW";
@@ -402,8 +424,10 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               </span>
             </div>
             <p id="final_score_hint" className="font-sans text-body-sm text-ink-muted">
-              This is what the employee sees if the cycle discloses a score. It starts at the
-              lead&rsquo;s average — change it to whatever you and the MD agreed.
+              Calculated as the mean of the employee&rsquo;s{" "}
+              {report.summary.selfOverall?.toFixed(2) ?? "—"} and their HOD&rsquo;s{" "}
+              {report.summary.leadOverall?.toFixed(2) ?? "—"}. Confirm it, or change it to whatever
+              you and the MD agreed. This is what the employee sees if the cycle discloses a score.
             </p>
           </div>
 

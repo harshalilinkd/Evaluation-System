@@ -15,12 +15,9 @@ import "server-only";
 import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { sendNotification } from "@/lib/notify/dispatch";
-import {
-  evaluationsOverdue,
-  hrDueDigest,
-  incrementsOverdue,
-  mdReviewDigest,
-} from "@/lib/notify/templates";
+// `mdReviewDigest` is deliberately not imported: the MD's queue digest was
+// removed, and the template stays in templates.ts unused rather than deleted.
+import { evaluationsOverdue, hrDueDigest, incrementsOverdue } from "@/lib/notify/templates";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { formatDate } from "@/lib/utils/date";
@@ -115,7 +112,8 @@ async function deliver(
       supabase,
     );
     if (result.ok) sent += 1;
-    else failed += 1;
+    // Suppressed is neither: nothing was attempted, so there is nothing to fix.
+    else if (!result.suppressed) failed += 1;
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
@@ -223,11 +221,9 @@ export async function sendDueDigests(supabase: Client, now: Date): Promise<Diges
     .eq("status", "PENDING_HR_REVIEW")
     .is("excluded_at", null);
 
-  const { count: withMd } = await supabase
-    .from("evaluations")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "HR_APPROVED")
-    .is("excluded_at", null);
+  // The count of reports sitting with the MD was read here for their queue
+  // digest. That digest is gone (see below), and nothing else asked for it, so
+  // the query goes with it rather than being left as a value nobody reads.
 
   /* ---------- 1. The daily HR digest ---------- */
   //
@@ -353,24 +349,17 @@ export async function sendDueDigests(supabase: Client, now: Date): Promise<Diges
     }
   }
 
-  /* ---------- 3. The MD's queue, every two days ---------- */
-  if ((withMd ?? 0) > 0) {
-    const alreadySent = await sentRecently(supabase, "mdReviewDigest", now);
+  /* ---------- 3. The MD's queue digest — REMOVED ----------
+        At the owner's explicit instruction: chasing the MD about the size of
+        their queue is HR's job, not the system's. The MD is messaged once, when
+        a report is approved and becomes theirs to read, and that message
+        already carries a link to it.
 
-    for (const person of await holdersOf(supabase, "MD")) {
-      if (alreadySent.has(person.id)) continue;
-      const result = await deliver(
-        supabase,
-        person,
-        "mdReviewDigest",
-        mdReviewDigest({ waiting: withMd ?? 0, link: appUrl("/reports") }),
-        { waiting: withMd ?? 0 },
-      );
-      outcome.sent += result.sent;
-      outcome.failed += result.failed;
-      if (result.note) outcome.skipped.push(result.note);
-    }
-  }
+        The template and its wording are left in `templates.ts` rather than
+        deleted — nothing else references them, and P22 deleted `leadReviewPending`
+        outright precisely because it LEAKED. This one does not; it is simply
+        unwanted, and an unused template is cheaper to restore than to rewrite.
+        `MD_MAY_RECEIVE` in dispatch.ts is the switch that would need it back. -- */
 
   return outcome;
 }

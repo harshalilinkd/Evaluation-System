@@ -129,6 +129,10 @@ async function deliver(opts: {
     });
 
     if (result.ok) notice.sent += 1;
+    // A suppressed message is a policy, not a fault: nothing was attempted and
+    // nothing can be retried, so counting it as failed would report the system
+    // working correctly as an error.
+    else if (result.suppressed) continue;
     else {
       notice.failed += 1;
       notice.problems.push(result.message);

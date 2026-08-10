@@ -31,7 +31,65 @@ export type DispatchInput = {
 
 export type DispatchResult =
   | { ok: true; notificationId: string; providerMessageId: string | null }
-  | { ok: false; notificationId: string | null; code: string; message: string };
+  | {
+      ok: false;
+      notificationId: string | null;
+      code: string;
+      message: string;
+      /**
+       * Deliberately not sent, rather than failed to send.
+       *
+       * A caller counting outcomes must not add this to its failure total: a
+       * failure is something that went wrong and can be retried, and this is a
+       * policy. Without the flag, suppressing a message would light up HR's
+       * screen with red rows describing the system working correctly.
+       */
+      suppressed?: true;
+    };
+
+/* ---------- What the MD may be sent ---------- */
+//
+// AT THE OWNER'S EXPLICIT INSTRUCTION: the MD receives ONE message, and it is
+// the report that has been approved and passed up to them. Everything else —
+// the queue digest, reminders, overdue chases, invites — is HR's work, and the
+// MD is not appraised in this organisation, so no employee-facing message
+// applies to them either.
+//
+// It lives HERE rather than at each place that picks recipients because
+// `sendNotification` is the only way a message leaves the system (§10). A rule
+// at the chokepoint cannot be forgotten by the next screen, cron job or
+// template that is added; a rule spread across four recipient queries will
+// eventually be applied to three of them.
+//
+// TO CHANGE IT, add a template key to this set. That is the whole switch.
+const MD_MAY_RECEIVE: ReadonlySet<TemplateKey> = new Set<TemplateKey>(["mdReviewPending"]);
+
+/**
+ * Would this message be suppressed for this person?
+ *
+ * `sendNotification` applies the rule itself and is the backstop, so nothing
+ * depends on a caller remembering to ask. This exists for the one caller that
+ * has WORK TO DO BEFORE sending: the launch mints a fresh, channel-scoped
+ * invite token for the email link, and issuing a token revokes the previous one
+ * for that layer and channel (§10). Minting one only to have the message
+ * suppressed would leave an orphan token behind and, on a resend, would revoke
+ * a live link for a message that was never going to go out.
+ */
+export async function isSuppressedFor(
+  client: Awaited<ReturnType<typeof createClient>>,
+  profileId: string | null | undefined,
+  template: TemplateKey,
+): Promise<boolean> {
+  if (!profileId || MD_MAY_RECEIVE.has(template)) return false;
+
+  const { data: roles } = await client
+    .from("user_roles")
+    .select("role")
+    .eq("profile_id", profileId);
+
+  const held = new Set((roles ?? []).map((r) => r.role));
+  return held.has("MD") && !held.has("HR_ADMIN");
+}
 
 /**
  * Send one message and log it, whatever happens.
@@ -132,6 +190,36 @@ export async function sendNotification(
         input.channel === "WHATSAPP"
           ? "WhatsApp is not set up, so nothing was sent on it."
           : "Email is not set up, so nothing was sent on it.",
+    };
+  }
+
+  /* -- 1c. Is this message one the MD is meant to get?
+        Checked BEFORE the QUEUED row, because a suppressed message was never
+        attempted and a `notifications_log` row means somebody tried (P11-11).
+        Logging these would fill HR's screen with rows no retry can fix.
+
+        The lookup only runs for templates the MD is NOT allowed, so the one
+        message they do receive costs no extra round trip.
+
+        FAIL-OPEN, and worth stating: `user_roles` is readable in full by HR and
+        the MD, and by the service client cron uses — every path that addresses
+        the MD. An ordinary employee reads only their own roles, so this check
+        would find nothing and let the message through. That is the right way
+        round: an employee's action raises messages to HR and to their lead,
+        never to the MD, so nothing is missed — and a role lookup that failed
+        closed would silently stop legitimate mail instead. -- */
+  // Someone holding BOTH MD and HR_ADMIN is doing HR's job as well and needs
+  // HR's messages — the rule is about a person whose only administrative role
+  // is MD. That distinction lives in `isSuppressedFor`, used here and by the
+  // launch, so there is one definition of it.
+  if (await isSuppressedFor(supabase, input.profileId, input.template)) {
+    return {
+      ok: false,
+      notificationId: null,
+      code: "NOT_FOR_MD",
+      suppressed: true,
+      message:
+        "Not sent: the MD is only messaged when a report is approved and passed up to them.",
     };
   }
 

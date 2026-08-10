@@ -5,7 +5,7 @@ import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import type { LaunchPlan } from "@/lib/cycles/launch";
-import { sendNotification } from "@/lib/notify/dispatch";
+import { isSuppressedFor, sendNotification } from "@/lib/notify/dispatch";
 import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
@@ -249,6 +249,13 @@ async function deliverInvite(opts: {
 }): Promise<{ sent: number; failed: number }> {
   const out = { sent: 0, failed: 0 };
 
+  /* -- Asked once, up front, rather than letting dispatch refuse each channel.
+        `sendNotification` applies the rule itself and is the real guarantee;
+        this is here because the email branch below MINTS a token first, and a
+        token issued for a message that is then suppressed is an orphan that has
+        also revoked whatever it replaced (§10). -- */
+  if (await isSuppressedFor(await createClient(), opts.profileId, opts.template)) return out;
+
   // WhatsApp first: §13.2 — most people open the link on a phone, and a
   // WhatsApp message is read in minutes where an email may not be read at all.
   if (opts.phone) {
@@ -262,7 +269,9 @@ async function deliverInvite(opts: {
       context: opts.context,
     });
     if (result.ok) out.sent += 1;
-    else out.failed += 1;
+    // Not a failure — the MD is deliberately not invited as an employee or a
+    // HOD, and there is nothing here for HR to retry.
+    else if (!result.suppressed) out.failed += 1;
   }
 
   if (opts.email) {
@@ -280,7 +289,7 @@ async function deliverInvite(opts: {
         context: opts.context,
       });
       if (result.ok) out.sent += 1;
-      else out.failed += 1;
+      else if (!result.suppressed) out.failed += 1;
     }
   }
 
