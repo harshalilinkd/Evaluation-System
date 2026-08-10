@@ -1,4 +1,4 @@
--- 0045 · The worker appraisal: cycles, evaluations, the frozen sheet, both layers.
+-- 0047 · The worker appraisal: cycles, evaluations, the frozen sheet, both layers.
 --
 -- §7 has described this module since P0 and only the FORM has ever been built
 -- (P24: `worker_questions`, the eight qualities, the three-tick scale). There
@@ -367,6 +367,6 @@ grant select, insert                on public.worker_evaluation_questions to aut
 grant select, insert, update on public.worker_evaluation_responses  to authenticated;
 
 comment on table public.worker_evaluations is
-  'One shop-floor appraisal. Blind parallel rating: the worker and their supervisor tick the same sheet at the same time and neither reads the other (0045, amending §8''s sequential worker table at the owner''s instruction).';
+  'One shop-floor appraisal. Blind parallel rating: the worker and their supervisor tick the same sheet at the same time and neither reads the other (0047, amending §8''s sequential worker table at the owner''s instruction).';
 
 commit;

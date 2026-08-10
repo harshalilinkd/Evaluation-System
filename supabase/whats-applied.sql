@@ -93,7 +93,7 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it a joining salary recorded after a raise is filed as a rise over today''s pay.'),
   ('0044_joining_ctc_provenance','column',      'employment_records.joining_ctc_recorded_by',
      'Without it the joining salary row in the pay ledger has nobody''s name against it.'),
-  ('0045_worker_appraisal',      'table',       'worker_evaluations',
+  ('0047_worker_appraisal',      'table',       'worker_evaluations',
      'The shop-floor appraisal. Without it there is no way to run a worker cycle at all.')
 )
 select
