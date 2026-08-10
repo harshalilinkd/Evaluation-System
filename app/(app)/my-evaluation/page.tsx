@@ -41,37 +41,20 @@ export default async function Page({
 
   const supabase = await createClient();
 
-  /* -- A SHOP-FLOOR WORKER BELONGS ON THE OTHER FORM.
-        This page reads `evaluations`, which is STAFF only (§5's module
-        boundary), so a worker signing in saw "no evaluations are open for you"
-        while their appraisal sat waiting in `worker_evaluations` — and the line
-        beneath it promised a WhatsApp that the worker flow does not send.
+  /* -- A SHOP-FLOOR WORKER FILLS NOTHING.
+        Their supervisor completes the tick sheet and HR reads it; there is no
+        worker-facing form in this module at all. This page reads `evaluations`,
+        which is STAFF only (§5), so without this they would see the staff empty
+        state promising a WhatsApp that is never sent to them.
 
-        Routed rather than merged. §7 forbids refactoring a staff function to
-        serve the worker module, and nothing here is refactored: the staff query
-        below is untouched and simply never runs for a worker. A redirect is a
-        routing decision, the same call P6-8 and N2-1 made.
-
-        THE HAND-OVER PATH STILL EXISTS AND IS UNCHANGED. It is for workers with
-        no login at all; this is for the ones who have one, and having one should
-        be enough to reach your own form. -- */
+        Routed rather than merged: §7 forbids refactoring a staff function to
+        serve the worker module, and the query below is untouched — it simply
+        never runs for a worker. -- */
   if (session.profile.track === "WORKER") {
-    const { data: mine } = await supabase
-      .from("worker_evaluations")
-      .select("id, status")
-      .eq("worker_id", session.profile.id)
-      .eq("status", "OPEN")
-      .is("excluded_at", null)
-      .is("self_submitted_at", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (mine) redirect(`/worker-appraisal/${mine.id}`);
-
     return (
       <EmptyState
-        title="Nothing to fill in right now"
-        body="When your supervisor starts an appraisal round, your sheet appears here. They may also hand you a tablet to tick it on."
+        title="Nothing to fill in"
+        body="Your supervisor completes your appraisal and HR reviews it. There is nothing here for you to do."
       />
     );
   }

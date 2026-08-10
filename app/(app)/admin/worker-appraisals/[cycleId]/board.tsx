@@ -46,16 +46,10 @@ function nextStep(row: BoardRow): { text: string; tone: "wait" | "ready" | "done
   if (row.status === "REVIEWED" || row.status === "CLOSED") {
     return { text: "Finished", tone: "done" };
   }
-  if (row.selfIn && row.supervisorIn) {
-    return { text: "Both sides in — ready for your review", tone: "ready" };
+  if (row.supervisorIn) {
+    return { text: "Filled in — ready for your review", tone: "ready" };
   }
-  if (!row.selfIn && !row.supervisorIn) {
-    return { text: `Waiting on ${row.supervisorName} to run both steps`, tone: "wait" };
-  }
-  if (!row.selfIn) {
-    return { text: `${row.supervisorName} still to hand ${row.workerName} the form`, tone: "wait" };
-  }
-  return { text: `Waiting on ${row.supervisorName} to rate them`, tone: "wait" };
+  return { text: `Waiting on ${row.supervisorName} to fill it in`, tone: "wait" };
 }
 
 export function WorkerBoard({

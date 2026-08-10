@@ -21,7 +21,7 @@ export default async function Page() {
         safe. -- */
   const { data: rows } = await supabase
     .from("worker_evaluations")
-    .select("id, worker_id, status, self_submitted_at, supervisor_submitted_at, cycle_id")
+    .select("id, worker_id, status, supervisor_submitted_at, cycle_id")
     .eq("supervisor_id", session.profile.id)
     .eq("status", "OPEN")
     .is("excluded_at", null);

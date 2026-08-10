@@ -223,13 +223,24 @@ export async function launchWorkerCycle(
       })),
     );
 
-    /* -- BOTH response rows, now. Blind parallel rating means both sheets are
-          live from this moment, so each side has somewhere to write without
-          the other having acted first (PR-7 made the same call for staff). -- */
-    await supabase.from("worker_evaluation_responses").insert([
-      { evaluation_id: evaluation.id, layer: "SELF" },
-      { evaluation_id: evaluation.id, layer: "SUPERVISOR" },
-    ]);
+    /* -- ONE response row. The supervisor fills the sheet; the worker does not.
+          At the owner's instruction, and it matches the paper form: the tick
+          sheet has one column of ticks and a Supervisor Signature under it.
+
+          `self_skipped` rather than a new column. It already means "this layer
+          is not being collected, do not wait for it" — 0047 gave it to HR for
+          advancing past a missing side, and a worker round simply never
+          collects one. Everything downstream then works unchanged:
+          `submit_worker_layer` treats a skipped layer as in, so the supervisor
+          submitting moves the record straight to PENDING_REVIEW. -- */
+    await supabase
+      .from("worker_evaluation_responses")
+      .insert([{ evaluation_id: evaluation.id, layer: "SUPERVISOR" }]);
+
+    await supabase
+      .from("worker_evaluations")
+      .update({ self_skipped: true })
+      .eq("id", evaluation.id);
 
     await supabase.rpc("log_admin_action", {
       p_entity: "worker_evaluation",

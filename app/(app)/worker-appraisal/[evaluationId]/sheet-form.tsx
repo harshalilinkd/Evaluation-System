@@ -265,15 +265,11 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         </div>
       </dl>
 
-      {/* -- Said once, plainly, on both sides.
-            The worker should know their supervisor is filling one too and that
-            neither will read the other's; the supervisor should know the same.
-            Said in the same words to both, because a difference in wording is
-            how one side starts to guess at the other's. -- */}
+      {/* -- What happens to it, said once.
+            The worker fills nothing and sees nothing: this is the paper tick
+            sheet, which has one column and a Supervisor Signature under it. -- */}
       <p className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-        {isSelf
-          ? "Your supervisor is filling in the same sheet about you at the same time. Neither of you sees the other's ticks — only HR and management see both."
-          : `${sheet.workerName} is filling in the same sheet about themselves at the same time. Neither of you sees the other's ticks — only HR and management see both.`}
+        You are rating {sheet.workerName}. HR reads this afterwards; it is not shown to them.
       </p>
 
       {sheet.isSubmitted ? (
