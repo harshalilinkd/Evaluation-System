@@ -6,6 +6,7 @@ import { WorkerBoard } from "@/app/(app)/admin/worker-appraisals/[cycleId]/board
 import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { listWorkerRaters } from "@/lib/worker/raters";
 
 export const metadata: Metadata = { title: "Worker appraisals" };
 
@@ -42,39 +43,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         .order("full_name"),
     ]);
 
-  /* -- Who may rate a worker.
-        Anybody on the STAFF track, not only people holding the SUPERVISOR role
-        — in a small company a department head or the MD genuinely does
-        supervise the floor, and refusing them would be the app overruling the
-        organisation. What the picker does instead is SHOW the role beside each
-        name, so "Rated by test MD" is visibly odd rather than silently
-        inherited from a Reports-to nobody looked at. -- */
-  const [{ data: raterPool }, { data: roleRows }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("track", "STAFF")
-      .eq("is_active", true)
-      .order("full_name"),
-    supabase.from("user_roles").select("profile_id, role"),
-  ]);
-
-  const rolesOf = new Map<string, string[]>();
-  for (const r of roleRows ?? []) {
-    rolesOf.set(r.profile_id, [...(rolesOf.get(r.profile_id) ?? []), r.role]);
-  }
-
-  /* -- The word beside a name, chosen for what it means HERE.
-        Somebody may hold several roles; the one worth showing is whether they
-        are a supervisor, because that is the question being asked. -- */
-  const describe = (id: string) => {
-    const roles = rolesOf.get(id) ?? [];
-    if (roles.includes("SUPERVISOR")) return "Supervisor";
-    if (roles.includes("MD")) return "MD — not usually a rater";
-    if (roles.includes("HR_ADMIN")) return "HR — not usually a rater";
-    if (roles.includes("HOD")) return "Head of department";
-    return "No supervisor role";
-  };
+  const raters = await listWorkerRaters();
 
   if (!cycle) return <ErrorState title="Not found" body="That round no longer exists." />;
 
@@ -114,12 +83,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
       }))}
-      raters={(raterPool ?? []).map((r) => ({
-        id: r.id,
-        name: r.full_name,
-        role: describe(r.id),
-        isSupervisor: (rolesOf.get(r.id) ?? []).includes("SUPERVISOR"),
-      }))}
+      raters={raters}
     />
   );
 }

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { WorkerCyclesClient } from "@/app/(app)/admin/worker-appraisals/cycles-client";
 import { requireRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { listWorkerRaters } from "@/lib/worker/raters";
 
 export const metadata: Metadata = { title: "Worker appraisals" };
 
@@ -57,7 +58,7 @@ export default async function Page() {
         supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
       }))}
-      raters={[]}
+      raters={await listWorkerRaters()}
     />
   );
 }

@@ -46,9 +46,7 @@ export type WorkerRow = {
 export type RaterRow = {
   id: string;
   name: string;
-  /** What they are, in the words that matter here — see the page. */
-  role: string;
-  isSupervisor: boolean;
+  designation: string | null;
 };
 
 const STATUS_WORD: Record<string, string> = {
@@ -292,10 +290,22 @@ export function StartRoundDialog({
               </p>
             </div>
 
-            {eligible.length === 0 ? (
+            {raters.length === 0 ? (
+              /* -- A dropdown reading "Nobody chosen" and nothing else states a
+                    problem in the one place that cannot explain it (§13.4). The
+                    fix is named, and it is a role grant rather than a
+                    designation — "Supervisor" typed into a job title looks
+                    identical on the users list and does nothing here. -- */
               <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
-                No shop-floor worker has a supervisor set. A worker with nobody above them cannot be
-                appraised, because there would be nobody to fill the other side.
+                <span className="font-medium">Nobody holds the Supervisor access level yet.</span>{" "}
+                A worker is rated by their supervisor, so somebody has to hold it before a round can
+                start. Set it in Settings, Users — tick <span className="font-medium">Supervisor</span>{" "}
+                under Access. A job title reading &ldquo;Supervisor&rdquo; is not the same thing.
+              </p>
+            ) : eligible.length === 0 ? (
+              <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
+                Nobody is on the shop-floor track yet. Set somebody&rsquo;s form to{" "}
+                <span className="font-medium">Shop floor</span> in Settings, Users.
               </p>
             ) : (
               <div className="overflow-hidden rounded-card border border-rule">
@@ -312,8 +322,11 @@ export function StartRoundDialog({
 
                 <ul className="max-h-64 overflow-y-auto">
                   {eligible.map((w) => {
-                    const raterId = raterFor(w);
-                    const rater = raters.find((r) => r.id === raterId);
+                    /* A default seeded from Reports-to only counts if that
+                       person is actually on the supervisor list — otherwise the
+                       select would show a blank with a value behind it. */
+                    const seeded = raterFor(w);
+                    const raterId = raters.some((r) => r.id === seeded) ? seeded : "";
                     const included = chosen.has(w.id);
 
                     return (
@@ -356,24 +369,11 @@ export function StartRoundDialog({
                             <option value="">Nobody chosen</option>
                             {raters.map((r) => (
                               <option key={r.id} value={r.id}>
-                                {r.name} · {r.role}
+                                {r.designation ? `${r.name} · ${r.designation}` : r.name}
                               </option>
                             ))}
                           </select>
                         </label>
-
-                        {/* -- Flagged, never blocked.
-                              In a small company a department head or the MD
-                              genuinely does supervise the floor, so refusing
-                              them would be the app overruling the organisation.
-                              Saying it out loud is enough — it was the SILENCE
-                              that let an MD end up rating a helper. -- */}
-                        {included && rater && !rater.isSupervisor ? (
-                          <span className="w-full font-sans text-body-sm text-warning">
-                            {rater.name} does not hold the Supervisor role. Fine if they really do
-                            supervise the floor — worth a second look if not.
-                          </span>
-                        ) : null}
 
                         {included && !raterId ? (
                           <span className="w-full font-sans text-body-sm text-critical">
