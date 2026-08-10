@@ -160,8 +160,19 @@ begin
     raise exception '0056: verification failed — the column guard still refuses HR.';
   end if;
 
-  -- The half that must NOT have moved.
-  if v_g not like '%HR''s proposal and the employee''s expectation are not the MD''s to edit%' then
+  /* -- The half that must NOT have moved.
+        MATCHED ON A FRAGMENT WITH NO APOSTROPHE IN IT, and that is the whole
+        point. `pg_get_functiondef` returns the body VERBATIM, so the sentence
+        is stored as it was typed — with the doubled quotes a plpgsql string
+        literal needs: `are not the MD''s to edit`. A LIKE pattern written
+        `'%...the MD''s...%'` resolves to ONE quote and can never match two, so
+        this check failed against a function that plainly contained the text it
+        was looking for.
+
+        Escaping to four quotes would work and would be the next thing somebody
+        gets wrong. Choosing a fragment that contains no quote at all cannot be
+        got wrong, and it is just as distinctive. -- */
+  if v_g not like '%expectation are not the MD%' then
     raise exception
       '0056: the MD''s branch was altered. It must not be — this widens one direction only.';
   end if;
