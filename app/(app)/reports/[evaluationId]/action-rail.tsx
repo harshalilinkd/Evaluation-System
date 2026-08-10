@@ -337,9 +337,16 @@ export function HrRail({ report }: { report: EvaluationReport }) {
             Close this evaluation
           </Button>
         ) : null}
+        {/* -- The old text here read "The interview step is added in P21."
+              P21 shipped, and the step it promised is the Confirm-and-close
+              card in the Salary band below. A placeholder naming an unshipped
+              phase is worse than no message: it tells the reader the product is
+              unfinished when the control they need is on the same page. -- */}
         {reviewed && report.isIncrement ? (
           <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 font-sans text-body-sm text-ink-muted">
-            This is an increment cycle. The interview step is added in P21.
+            An increment closes from the Salary section below — <span className="text-ink">Confirm
+            and close</span> writes the agreed figure to the employee&rsquo;s pay record and closes
+            the evaluation in one step.
           </p>
         ) : null}
 

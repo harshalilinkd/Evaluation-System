@@ -110,6 +110,8 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               status={data.header.status}
               isHr={isHr}
               index={data.narratives.paired.length > 0 ? 5 : 4}
+              selfOverall={data.summary.selfOverall}
+              leadOverall={data.summary.leadOverall}
             />
           ) : null}
         </div>

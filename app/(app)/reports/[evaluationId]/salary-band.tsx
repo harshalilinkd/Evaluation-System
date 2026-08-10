@@ -76,6 +76,8 @@ export function SalaryBand({
   status,
   isHr,
   index,
+  selfOverall,
+  leadOverall,
 }: {
   data: SalaryBandData;
   evaluationId: string;
@@ -83,6 +85,12 @@ export function SalaryBand({
   isHr: boolean;
   /** Counted by the page, so the sequence closes up when a band is absent. */
   index: number;
+  /* -- The two stored layer averages. Passed in rather than re-derived here:
+        the report has already computed them from the frozen snapshot, and a
+        second reading on this screen could disagree with the one the database
+        is about to store. -- */
+  selfOverall: number | null;
+  leadOverall: number | null;
 }) {
   const router = useRouter();
   const review = data.review;
@@ -195,6 +203,8 @@ export function SalaryBand({
       {/* ---------- The interview ---------- */}
       {status === "MD_REVIEWED" && review?.md_approved_ctc ? (
         <InterviewCard
+          selfOverall={selfOverall}
+          leadOverall={leadOverall}
           evaluationId={evaluationId}
           employeeName={data.employeeName}
           currentCtc={currentCtc}
@@ -534,6 +544,8 @@ function MdApproval({
 /* ---------- The interview ---------- */
 
 function InterviewCard({
+  selfOverall,
+  leadOverall,
   evaluationId,
   employeeName,
   currentCtc,
@@ -542,6 +554,8 @@ function InterviewCard({
   onDone,
 }: {
   evaluationId: string;
+  selfOverall: number | null;
+  leadOverall: number | null;
   employeeName: string;
   currentCtc: number;
   approvedCtc: number;
@@ -572,6 +586,18 @@ function InterviewCard({
 
   const finalCtc = finalText === "" ? null : Number(finalText.replace(/[₹,\s]/g, ""));
   const finalPct = hikePct(currentCtc, finalCtc);
+
+  /* -- Mirrors 0046's SQL exactly: the mean of whichever layers have a stored
+        average, to two decimals. A layer HR skipped has no score and is left
+        out rather than counted as zero — averaging a missing side as 0 would
+        halve a real appraisal. Computed here only to SHOW; the database
+        recomputes it at the moment of the write, so this can never be the
+        number of record. -- */
+  const layerScores = [selfOverall, leadOverall].filter((v): v is number => v !== null);
+  const finalOverall =
+    layerScores.length === 0
+      ? null
+      : Math.round((layerScores.reduce((a, b) => a + b, 0) / layerScores.length) * 100) / 100;
 
   async function onConfirm() {
     if (finalCtc === null) return;
@@ -611,6 +637,26 @@ function InterviewCard({
           <Input id="effective_from" type="date" value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)} className="min-h-11 tabular" />
         </div>
+      </div>
+
+      {/* -- THE FINAL SCORE, SHOWN BEFORE IT IS COMMITTED.
+            0046 computes it inside `confirm_increment` — the mean of the two
+            stored layer averages — so it is not typed and cannot be overridden
+            (§17). But a number that appears on the record only AFTER the button
+            is pressed is a number nobody confirmed, and "HR or the MD confirms
+            it" is the whole point. So it is stated here, with its arithmetic,
+            and the same mean is recomputed in SQL at the moment of the write. -- */}
+      <div className="rounded-card bg-surface-mute p-4">
+        <p className="type-label text-ink-muted">Final score to be recorded</p>
+        <p className="tabular mt-1 font-sans text-display-sm leading-none text-ink">
+          {finalOverall === null ? "—" : finalOverall.toFixed(2)}
+          <span className="ml-2 font-sans text-body-sm font-normal text-ink-muted">out of 5</span>
+        </p>
+        <p className="mt-1 font-sans text-body-sm text-ink-muted">
+          {finalOverall === null
+            ? "Neither side has a stored average, so no score can be derived."
+            : `The mean of the employee's ${selfOverall?.toFixed(2) ?? "—"} and their manager's ${leadOverall?.toFixed(2) ?? "—"}. Confirming below records it.`}
+        </p>
       </div>
 
       <Button
