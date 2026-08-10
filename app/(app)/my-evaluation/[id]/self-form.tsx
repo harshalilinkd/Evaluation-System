@@ -607,6 +607,68 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
         onChange={onChange}
       />
 
+      {/* ---------- The end of the form, on a large screen ----------
+
+            THE ONLY SUBMIT ON DESKTOP WAS IN THE HEADER, and the header is not
+            sticky (see the note above it, which removed a 160px card that was
+            eating a third of a phone screen). So on a laptop somebody answered
+            thirty-odd questions, reached the last one, and found nothing there:
+            the button was two screens up, scrolled away, and the sticky bar
+            below is `lg:hidden`.
+
+            A form should end with the thing you do when you have finished it.
+            The header keeps its Submit — that one is for somebody who opens a
+            form they have already filled in — and this is the one for somebody
+            who has just reached the bottom.
+
+            Not sticky, deliberately: it sits after the last question, which is
+            where a reader is looking when they finish, and a pinned bar on a
+            desktop screen is chrome taken from the form for no gain. -- */}
+      {!submitted && !readOnly ? (
+        <div className="mt-6 hidden lg:block">
+          {saveError ? (
+            <p role="alert" className="mb-3 text-body-sm text-critical">
+              {saveError}
+            </p>
+          ) : null}
+
+          <div className="card-surface flex flex-wrap items-center justify-between gap-4 p-5">
+            <div className="min-w-0">
+              <p className="font-sans text-body font-medium text-ink">
+                {/* -- From the counters the progress bar already uses, so the
+                      two can never disagree. `answered` counts VISIBLE
+                      questions, so a conditional nobody triggered is not
+                      reported as outstanding (§6, P12-1). -- */}
+                {total - answered === 0
+                  ? "Everything is answered."
+                  : `${total - answered} ${total - answered === 1 ? "question" : "questions"} still to answer.`}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                Your answers are saved as you go. Submitting locks them and sends the form to HR.
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap gap-3">
+              <Button
+                variant="secondary"
+                className="min-h-11"
+                onClick={() => void flush()}
+                disabled={saveState === "saving"}
+              >
+                {saveState === "saving" ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : null}
+                Save draft
+              </Button>
+              <Button className="min-h-11" onClick={attemptSubmit}>
+                <Send className="size-4" aria-hidden />
+                Submit
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* ---------- Mobile sticky bar ---------- */}
       {!submitted ? (
         <>
