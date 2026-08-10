@@ -6,7 +6,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, CalendarClock, Check, MoreHorizontal, Printer, Search, Send } from "lucide-react";
+import { Archive, CalendarClock, Check, MoreHorizontal, Printer, Rocket, Search, Send } from "lucide-react";
 
 import { SegmentedLegend, SegmentedProgress } from "@/components/appraise/segmented-bar";
 import { StatusChip } from "@/components/appraise/status-chip";
@@ -378,14 +378,39 @@ export function BoardClient({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {/* Wired in P11. Disabled only while the cycle is DRAFT: there is no
-                form behind a link until launch. */}
-            <Button asChild variant="outline" size="sm" className="min-h-9" disabled={board.cycle.status === "DRAFT"}>
-              <Link href={`/admin/cycles/${board.cycle.id}/distribute`}>
-                <Send className="size-4" aria-hidden />
-                Send links
-              </Link>
-            </Button>
+            {/* -- LAUNCH WAS NOWHERE ON THIS SCREEN.
+                  The dialog lives in the wizard's review step, so a cycle saved
+                  as a draft and left could only be launched by finding
+                  `/admin/cycles/[id]/edit` and walking back to step four — a
+                  route nothing linked to. The board offered Send links, Print
+                  pack, Extend dates and Archive, and the one thing a DRAFT
+                  actually needs was not among them. Reported as, simply, "how
+                  to launch cycle".
+
+                  It is the PRIMARY action while the cycle is a draft, and the
+                  only one on the row that is: nothing else on a draft matters
+                  until it is launched. -- */}
+            {board.cycle.status === "DRAFT" ? (
+              <Button asChild size="sm" className="min-h-9">
+                <Link href={`/admin/cycles/${board.cycle.id}/edit?step=4`}>
+                  <Rocket className="size-4" aria-hidden />
+                  Review and launch
+                </Link>
+              </Button>
+            ) : null}
+
+            {/* -- `disabled` on an asChild Button styles the SPAN and leaves the
+                  <a> inside perfectly clickable, so this only ever LOOKED
+                  disabled — the draft case was reachable all along and landed on
+                  a screen that could send nothing. Not rendered at all now. -- */}
+            {board.cycle.status === "DRAFT" ? null : (
+              <Button asChild variant="outline" size="sm" className="min-h-9">
+                <Link href={`/admin/cycles/${board.cycle.id}/distribute`}>
+                  <Send className="size-4" aria-hidden />
+                  Send links
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="outline" size="sm" className="min-h-9">
               <Link href={`/print/cycle/${board.cycle.id}`} target="_blank" rel="noopener">
                 <Printer className="size-4" aria-hidden />

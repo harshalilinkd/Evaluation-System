@@ -19,9 +19,16 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Edit cycle" };
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ step?: string }>;
+}) {
   await requireRole(ADMIN_ROLES);
   const { id } = await params;
+  const { step } = await searchParams;
 
   const supabase = await createClient();
   const { data: cycle } = await supabase
@@ -52,6 +59,9 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <WizardClient
+      /* `?step=4` is 1-based in the URL because that is how the wizard labels
+         its steps on screen; the component counts from zero. */
+      initialStep={step ? Number(step) - 1 : undefined}
       people={people.data}
       jobSkillCounts={Object.fromEntries(counts.data)}
       initial={{

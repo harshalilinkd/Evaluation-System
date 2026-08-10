@@ -65,11 +65,14 @@ export function WizardClient({
   people,
   jobSkillCounts,
   initial,
+  initialStep,
   presetCycleType,
 }: {
   people: SelectablePerson[];
   jobSkillCounts: Record<string, number>;
   initial: WizardInitial | null;
+  /** Which step to open on. Used by "Review and launch" on the cycle board. */
+  initialStep?: number;
   /** A NEW cycle that already knows its type, from a link. Never used in edit mode. */
   presetCycleType?: "EVALUATION" | "INCREMENT";
 }) {
@@ -80,7 +83,20 @@ export function WizardClient({
   // silent disabled control.
   const locked = initial?.isLaunched ?? false;
 
-  const [step, setStep] = React.useState(0);
+  /* -- `initialStep` exists so the board's "Review and launch" lands where it
+        says it will. Without it that link opened step one and left somebody to
+        press Next three times through a form they had already filled in — a
+        link that does not do what its label promises.
+
+        Clamped, because it arrives from a query string. Only a DRAFT reaches
+        this screen (the edit route redirects anything else), so the worst a bad
+        value can do is open the wrong step of a form. -- */
+  const [step, setStep] = React.useState(() => {
+    // `?step=abc` gives NaN, and NaN survives both Math.max and Math.min — the
+    // wizard would then render no step at all. Checked before it is clamped.
+    if (initialStep === undefined || !Number.isFinite(initialStep)) return 0;
+    return Math.min(Math.max(initialStep, 0), STEPS.length - 1);
+  });
   const [furthest, setFurthest] = React.useState(initial ? STEPS.length - 1 : 0);
 
   /* -- Which list step 3 opens on.
