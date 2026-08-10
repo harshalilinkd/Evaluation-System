@@ -10,6 +10,9 @@ import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { TickScale } from "@/components/appraise/tick-scale";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   saveWorkerSheet,
   submitWorkerSheet,
@@ -33,6 +36,8 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   const [saved, setSaved] = React.useState<Date | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [thanked, setThanked] = React.useState(false);
+  const [comment, setComment] = React.useState(sheet.overallComment);
+  const [training, setTraining] = React.useState<boolean | null>(sheet.trainingRequired);
 
   const isSelf = sheet.layer === "SELF";
   const readOnly = !sheet.isOpen;
@@ -46,7 +51,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
 
   async function save() {
     setBusy(true);
-    const result = await saveWorkerSheet(sheet.evaluationId, answers);
+    const result = await saveWorkerSheet(sheet.evaluationId, answers, {
+      overallComment: comment,
+      trainingRequired: training,
+    });
     setBusy(false);
     if (!result.ok) {
       setError(result.error.message);
@@ -58,7 +66,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
 
   async function submit() {
     setBusy(true);
-    const result = await submitWorkerSheet(sheet.evaluationId, answers);
+    const result = await submitWorkerSheet(sheet.evaluationId, answers, {
+      overallComment: comment,
+      trainingRequired: training,
+    });
     setBusy(false);
     if (!result.ok) {
       setError(result.error.message);
@@ -86,6 +97,34 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           {saved ? ` · saved ${formatDate(saved.toISOString())}` : ""}
         </p>
       </header>
+
+      {/* -- The paper form's metadata band.
+            Drawn from the profile and the round, never typed: a field somebody
+            can edit here is a field that can disagree with the record it came
+            from (P12-14, P2-9). Two columns even at 375px — six short values in
+            one column is most of a phone screen before the first question. -- */}
+      <dl className="card-surface grid grid-cols-2 gap-x-4 gap-y-3 p-4 sm:p-5">
+        <div>
+          <dt className="type-label text-ink-muted">Worker</dt>
+          <dd className="font-sans text-body text-ink">{sheet.workerName}</dd>
+        </div>
+        <div>
+          <dt className="type-label text-ink-muted">Period</dt>
+          <dd className="font-sans text-body text-ink">{sheet.periodLabel || "—"}</dd>
+        </div>
+        <div>
+          <dt className="type-label text-ink-muted">Department</dt>
+          <dd className="font-sans text-body text-ink">{sheet.department ?? "—"}</dd>
+        </div>
+        <div>
+          <dt className="type-label text-ink-muted">Designation</dt>
+          <dd className="font-sans text-body text-ink">{sheet.designation ?? "—"}</dd>
+        </div>
+        <div className="col-span-2">
+          <dt className="type-label text-ink-muted">Supervisor</dt>
+          <dd className="font-sans text-body text-ink">{sheet.supervisorName ?? "—"}</dd>
+        </div>
+      </dl>
 
       {/* -- Said once, plainly, on both sides.
             The worker should know their supervisor is filling one too and that
@@ -140,6 +179,53 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           </div>
         ))}
       </div>
+
+      {/* -- The two fields the paper form asks the SUPERVISOR for and nobody
+            else. Not on the worker's sheet at all — not rendered and ignored,
+            not rendered — and stored on the supervisor's response row, so the
+            worker cannot read them however the screen changes later. -- */}
+      {!isSelf ? (
+        <div className="card-surface space-y-5 p-4 sm:p-5">
+          <div className="space-y-2">
+            <Label htmlFor="worker_comment">Supervisor comment</Label>
+            <Textarea
+              id="worker_comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              disabled={readOnly}
+              rows={4}
+              placeholder="Anything worth recording about how they have worked this period."
+            />
+          </div>
+
+          <fieldset className="space-y-2" disabled={readOnly}>
+            <legend className="font-sans text-body font-medium text-ink">Training required</legend>
+            <div className="flex gap-2">
+              {/* Three states, not two: null is "not answered yet", which is a
+                  different thing from No and must not default to it. */}
+              {[
+                { label: "Yes", value: true },
+                { label: "No", value: false },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  aria-pressed={training === option.value}
+                  onClick={() => setTraining(training === option.value ? null : option.value)}
+                  className={cn(
+                    "min-h-11 flex-1 rounded-control border px-4 font-sans text-body transition-colors",
+                    training === option.value
+                      ? "border-lead bg-lead-tint text-ink"
+                      : "border-rule bg-surface text-ink-muted hover:bg-surface-mute",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
+      ) : null}
 
       {error ? (
         <p

@@ -179,6 +179,10 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
 export async function saveWorkerSheet(
   evaluationId: string,
   answers: Record<string, WorkerTick>,
+  /* -- Supervisor-only, and ignored on the SELF layer rather than rejected: the
+        worker's sheet simply has no such fields, so a browser sending them is
+        confused rather than malicious. -- */
+  extras?: { overallComment?: string; trainingRequired?: boolean | null },
 ): Promise<Result<{ savedAt: string }>> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
@@ -196,7 +200,15 @@ export async function saveWorkerSheet(
         `evaluationId` writes nothing rather than being caught here. -- */
   const { error } = await supabase
     .from("worker_evaluation_responses")
-    .update({ answers: answers as Json })
+    .update({
+      answers: answers as Json,
+      ...(sheet.data.layer === "SUPERVISOR"
+        ? {
+            overall_comment: extras?.overallComment ?? null,
+            training_required: extras?.trainingRequired ?? null,
+          }
+        : {}),
+    })
     .eq("evaluation_id", evaluationId)
     .eq("layer", sheet.data.layer);
 
@@ -215,6 +227,7 @@ export async function saveWorkerSheet(
 export async function submitWorkerSheet(
   evaluationId: string,
   answers: Record<string, WorkerTick>,
+  extras?: { overallComment?: string; trainingRequired?: boolean | null },
 ): Promise<Result<{ ok: true }>> {
   const profile = await getCurrentProfile();
   if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
@@ -241,7 +254,17 @@ export async function submitWorkerSheet(
 
   const { error } = await supabase
     .from("worker_evaluation_responses")
-    .update({ answers: answers as Json, submitted_at: now, submitted_by: profile.id })
+    .update({
+      answers: answers as Json,
+      submitted_at: now,
+      submitted_by: profile.id,
+      ...(sheet.data.layer === "SUPERVISOR"
+        ? {
+            overall_comment: extras?.overallComment ?? null,
+            training_required: extras?.trainingRequired ?? null,
+          }
+        : {}),
+    })
     .eq("evaluation_id", evaluationId)
     .eq("layer", sheet.data.layer);
 

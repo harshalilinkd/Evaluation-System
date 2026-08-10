@@ -96,7 +96,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0047_worker_appraisal',      'table',       'worker_evaluations',
      'The shop-floor appraisal. Without it there is no way to run a worker cycle at all.'),
   ('0048_worker_handover',       'function',    'submit_worker_self_handover',
-     'Without it a worker cannot tick their own sheet on their supervisor''s device.')
+     'Without it a worker cannot tick their own sheet on their supervisor''s device.'),
+  ('0050_worker_form_fields',    'table',       'worker_evaluation_decisions',
+     'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.')
 )
 select
   e.migration,
