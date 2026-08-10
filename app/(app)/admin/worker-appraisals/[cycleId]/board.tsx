@@ -3,6 +3,7 @@
 /** The round board. Every row says what is outstanding and who is holding it. */
 
 import * as React from "react";
+import Link from "next/link";
 import { Plus } from "lucide-react";
 
 import {
@@ -71,11 +72,11 @@ export function WorkerBoard({
 }) {
   const [starting, setStarting] = React.useState(false);
 
-  /* Ready means both sides are in AND nobody has reviewed it — the only state
-     on this screen HR can act on. Counting reviewed ones too meant the number
-     never fell as they worked through them. */
+  /* Ready means the supervisor has submitted AND nobody has reviewed it — the
+     only state on this screen HR can act on. Counting reviewed ones too meant
+     the number never fell as they worked through them. */
   const readyCount = rows.filter(
-    (r) => r.selfIn && r.supervisorIn && r.status !== "REVIEWED" && r.status !== "CLOSED",
+    (r) => r.supervisorIn && r.status !== "REVIEWED" && r.status !== "CLOSED",
   ).length;
 
   /* -- The tiles are the filter, because a count above a list it describes
@@ -112,25 +113,8 @@ export function WorkerBoard({
         cell: ({ row }) => <GridCell value={row.original.supervisorName} />,
       },
       {
-        id: "self",
-        header: "Worker's sheet",
-        size: 190,
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <GridCell value={row.original.selfSubmittedAt ? formatDate(row.original.selfSubmittedAt) : "Not yet"} />
-            {/* §17: a hand-over is never shown as though the worker submitted
-                independently. */}
-            {row.original.handedOver ? (
-              <span className="block truncate text-body-sm text-ink-muted">
-                on their supervisor&rsquo;s device
-              </span>
-            ) : null}
-          </div>
-        ),
-      },
-      {
         id: "supervisor",
-        header: "Supervisor's sheet",
+        header: "Filled in",
         size: 180,
         cell: ({ row }) => (
           <GridCell
@@ -141,6 +125,28 @@ export function WorkerBoard({
             }
           />
         ),
+      },
+      {
+        /* -- The way in to the review.
+              The row-detail dialog answers "what is on this row"; it cannot
+              answer "and now let me approve it", because approving is a
+              different screen with the ticks, the comment and the salary on it.
+              A board that says "ready for your review" and offers nothing to
+              press is the gap this closes. -- */
+        id: "open",
+        header: "",
+        size: 110,
+        cell: ({ row }) =>
+          row.original.supervisorIn ? (
+            <Link
+              href={`/admin/worker-appraisals/${cycle.id}/${row.original.id}`}
+              className="font-sans text-body-sm font-medium text-primary underline underline-offset-2"
+            >
+              {row.original.status === "REVIEWED" || row.original.status === "CLOSED"
+                ? "View"
+                : "Review"}
+            </Link>
+          ) : null,
       },
       {
         id: "next",
@@ -219,7 +225,7 @@ export function WorkerBoard({
               Plain now, except the one thing HR can act on. Colour marks the
               actionable state rather than decorating all three.
 
-              "Both sides in" also counted appraisals HR had already reviewed,
+              "Ready for you" also counted appraisals HR had already reviewed,
               so the number never went down as they worked through them. It
               counts what is WAITING FOR THEM. -- */}
         <KpiRow>
@@ -234,7 +240,7 @@ export function WorkerBoard({
           <KpiCard
             label="Ready for you"
             value={readyCount}
-            caption="both sides in, not yet reviewed"
+            caption="filled in, not yet reviewed"
             tone="final"
             onSelect={() => toggle("ready")}
             active={filter === "ready"}
