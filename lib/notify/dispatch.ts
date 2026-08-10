@@ -62,7 +62,27 @@ export type DispatchResult =
 // eventually be applied to three of them.
 //
 // TO CHANGE IT, add a template key to this set. That is the whole switch.
-const MD_MAY_RECEIVE: ReadonlySet<TemplateKey> = new Set<TemplateKey>(["mdReviewPending"]);
+/* -- What the MD may be sent.
+      The rule exists to stop the MD being told about a report before it has
+      been approved and passed up to them — an administrative event they have no
+      part in yet. It was reading as "the MD gets almost nothing", which is a
+      different and wrong rule: THE MD IS ALSO AN EMPLOYEE, and may also be
+      somebody's HOD (§9's simultaneous-roles case, which the product enforces
+      everywhere else — P6-8 lands a lead on their own evaluation for exactly
+      this reason).
+
+      So their own invite links are allowed. Those are addressed to them as a
+      person with a form to fill in, not as the Managing Director, and
+      suppressing them meant an MD who leads a team could never be sent the
+      review they are the only person able to write. Reported as six identical
+      failures on one launch. -- */
+const MD_MAY_RECEIVE: ReadonlySet<TemplateKey> = new Set<TemplateKey>([
+  "mdReviewPending",
+  // Their own appraisal.
+  "selfEvaluationInvite",
+  // A team they lead. Nobody else can write this layer.
+  "leadReviewInvite",
+]);
 
 /**
  * Would this message be suppressed for this person?

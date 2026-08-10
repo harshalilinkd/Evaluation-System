@@ -146,11 +146,25 @@ export function SalaryBand({
         />
       </div>
 
+      {/* -- BOTH, FOR HR. It was an if/else: HR got the proposal and the MD got
+            the approval, so the close button — which lives in the approval —
+            was on a panel HR never rendered. 0056 gave HR the permission and
+            this branch went on hiding the control, which is the whole of "HR
+            still don't get close option".
+
+            The MD still sees only the approval: proposing is HR's, and that
+            half of AMEND-2's split is untouched. -- */}
       {isHr ? (
         <HrProposal data={data} evaluationId={evaluationId} currentCtc={currentCtc} firstName={firstName} />
-      ) : (
-        <MdApproval data={data} evaluationId={evaluationId} currentCtc={currentCtc} firstName={firstName} />
-      )}
+      ) : null}
+
+      <MdApproval
+        data={data}
+        evaluationId={evaluationId}
+        currentCtc={currentCtc}
+        firstName={firstName}
+        isHr={isHr}
+      />
 
       {/* ---------- Row 4: context ---------- */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -255,6 +269,17 @@ function HrProposal({
   const [saved, setSaved] = React.useState(false);
 
   const proposed = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
+
+  /* -- GREY WHEN THERE IS NOTHING LEFT TO SAVE.
+        It stayed lit and said "Save the proposal" after saving, with only a
+        transient "Saved." above it — so the screen looked identical before and
+        after, and pressing it again rewrote the same row. Compared against the
+        STORED values rather than a flag, so it is still right after a reload
+        and re-arms the moment either the figure or the note is edited. -- */
+  const storedCtc =
+    data.review?.hr_proposed_ctc == null ? null : Number(data.review.hr_proposed_ctc);
+  const storedNote = (data.review?.hr_justification ?? "").trim();
+  const dirty = proposed !== storedCtc || justification.trim() !== storedNote;
 
   /* -- The two inputs are LINKED, and neither is the master.
         Editing one recomputes the other through calc.ts — the same functions the
@@ -455,10 +480,14 @@ function HrProposal({
           className="min-h-11"
           /* Same stale gate as the MD's, and the same fix — the server made
              this optional and the client went on refusing. */
-          disabled={busy || proposed === null || proposed <= 0}
+          disabled={busy || proposed === null || proposed <= 0 || !dirty}
           onClick={onSave}
         >
-          {busy ? "Saving…" : "Save the proposal"}
+          {busy
+            ? "Saving…"
+            : !dirty && proposed !== null
+              ? "Proposal saved"
+              : "Save the proposal"}
         </Button>
       </article>
     </>
@@ -472,11 +501,14 @@ function MdApproval({
   evaluationId,
   currentCtc,
   firstName,
+  isHr,
 }: {
   data: SalaryBandData;
   evaluationId: string;
   currentCtc: number;
   firstName: string;
+  /** Changes the wording only. Both roles may act here since 0056. */
+  isHr: boolean;
 }) {
   const router = useRouter();
   const review = data.review;
@@ -561,7 +593,23 @@ function MdApproval({
       </div>
 
       <article className="card-surface space-y-4 p-6">
-        <h3 className="font-sans text-body font-medium text-ink">Your approval</h3>
+        <h3 className="font-sans text-body font-medium text-ink">
+          {isHr ? "Approve and close" : "Your approval"}
+        </h3>
+        {/* -- HR needs to know whether the MD has already set a figure, because
+              theirs is the same control. Without this they would be typing over
+              an approval they could not see. -- */}
+        <p className="font-sans text-body-sm text-ink-muted">
+          {review?.md_approved_ctc
+            ? `The MD approved ${money(review.md_approved_ctc)}${
+                review.md_approved_hike_pct === null
+                  ? ""
+                  : ` (${pctText(review.md_approved_hike_pct)})`
+              }.`
+            : isHr
+              ? "The MD has not set a figure. You may approve and close this yourself."
+              : "HR proposes; you approve. Both figures are kept."}
+        </p>
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         <div className="grid gap-5 sm:grid-cols-2">
