@@ -254,6 +254,34 @@ export function DistributeClient({
             The stacked <Label> above each control is gone; each keeps its
             accessible name on the control itself, which is what a toolbar of
             three filters needs and what every other screen here does. */}
+        {/* -- A DEAD END, MADE ACTIONABLE.
+              A draft cycle has no evaluations, so it has no forms and no
+              tokens — there is genuinely nothing to link to, and every row said
+              so. But the same sentence repeated down a table is a diagnosis
+              with no treatment: it explains the disabled checkboxes four times
+              and never once says what to do (§13.4).
+
+              Said once, at the top, with the button that fixes it. The per-row
+              reason stays for the OTHER blocked cases, which are per-person —
+              already submitted, no contact details — and genuinely differ row
+              by row. -- */}
+        {board.cycle.status === "DRAFT" ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule bg-warning-tint px-4 py-3 lg:px-6">
+            <div className="min-w-0">
+              <p className="font-sans text-body font-medium text-ink">
+                This cycle has not been launched.
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                Nobody has a form yet, so there is no link to send. Launching creates everybody&rsquo;s
+                evaluation and their invite links; you can send from here straight afterwards.
+              </p>
+            </div>
+            <Button asChild className="min-h-11 shrink-0">
+              <Link href={`/admin/cycles/${board.cycle.id}`}>Go to the cycle and launch it</Link>
+            </Button>
+          </div>
+        ) : null}
+
         <ScreenToolbar>
           <div className="relative min-w-0 flex-1 sm:w-[260px] sm:flex-none">
             <Search
