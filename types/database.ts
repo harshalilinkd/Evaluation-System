@@ -1464,6 +1464,13 @@ export type Database = {
         Args: { p_evaluation_id: string };
         Returns: boolean;
       };
+      /* 0054. Hand-authored like the rest of this file — Docker is unavailable
+         here so `supabase gen types` cannot be run (P1-6). A cast at the call
+         site would compile and leave the next `db:types` run to drop it. */
+      complete_worker_appraisal: {
+        Args: { p_evaluation_id: string };
+        Returns: boolean;
+      };
       compute_due_items: {
         Args: { p_on?: string };
         Returns: number;

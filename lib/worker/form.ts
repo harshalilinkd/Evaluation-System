@@ -325,14 +325,32 @@ export async function submitWorkerSheet(
     .eq("id", evaluationId)
     .maybeSingle();
 
-  const selfIn = Boolean(after?.self_submitted_at) || Boolean(after?.self_skipped);
   const supervisorIn = Boolean(after?.supervisor_submitted_at) || Boolean(after?.supervisor_skipped);
 
-  if (selfIn && supervisorIn) {
-    await supabase
-      .from("worker_evaluations")
-      .update({ status: "PENDING_REVIEW" })
-      .eq("id", evaluationId);
+  /* -- THE SUPERVISOR'S SHEET IS WHAT COMPLETES IT (0054).
+        The worker's own sheet is no longer collected — the shop floor has one
+        action, Rate them — so waiting for both sides would leave every round
+        at OPEN for ever.
+
+        Through the RPC rather than a direct update, and that is not tidiness:
+        the only write policy on `worker_evaluations` is
+        `worker_evaluations_hr_write`, so the plain `.update()` that used to be
+        here matched ZERO rows for a supervisor. PostgREST does not call that an
+        error, so the submit reported success and the status never moved. The
+        definer function re-checks the assignment and marks the uncollected
+        self layer SKIPPED rather than pretending it came in (§17). -- */
+  if (supervisorIn) {
+    const { error: advanceError } = await supabase.rpc("complete_worker_appraisal", {
+      p_evaluation_id: evaluationId,
+    });
+
+    if (advanceError) {
+      // Not fatal: the ratings are saved and locked. But it is the difference
+      // between HR seeing this appraisal and not, so it must not be silent.
+      console.error(
+        `[worker appraisal] ${evaluationId} rated but not advanced: ${advanceError.message}`,
+      );
+    }
   }
 
   await supabase.rpc("log_admin_action", {

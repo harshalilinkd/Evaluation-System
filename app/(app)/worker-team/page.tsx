@@ -85,24 +85,17 @@ export default async function Page() {
         </p>
       </header>
 
-      {/* -- How the flow works, said once and in order.
-            The two buttons on each row are not interchangeable and the order
-            matters: the worker answers first, in private, and the supervisor
-            rates afterwards. Somebody who rates first and hands over second has
-            told the worker what they think, which is what blind rating is for. -- */}
+      {/* -- ONE STEP NOW, at the owner's instruction. The hand-over is gone,
+            so the two-step explainer went with it: an instruction describing a
+            button that is not there is worse than none. -- */}
       <div className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-        <p className="font-medium">Two steps for each person, in this order.</p>
-        <p className="mt-1">
-          First hand them the device so they tick their own sheet — step away while they do it.
-          Then rate them yourself. You will not see their answers and they will not see yours;
-          only HR and management see both.
-        </p>
+        Rate each person on the eight qualities, add the salary block, and submit. It goes to HR
+        for review as soon as you do.
       </div>
 
       <ul className="space-y-3">
         {list.map((row) => {
           const worker = byId.get(row.worker_id);
-          const theirsIn = Boolean(row.self_submitted_at);
           const yoursIn = Boolean(row.supervisor_submitted_at);
 
           return (
@@ -116,31 +109,20 @@ export default async function Page() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {/* -- STEP 1. Disabled once done, with the reason beside it
-                        rather than in a tooltip — there is no hover on a
-                        tablet, and this whole flow happens on one (§13.4). -- */}
-                  {theirsIn ? (
-                    <span className="inline-flex min-h-11 items-center rounded-control bg-surface-mute px-4 font-sans text-body-sm text-ink-muted">
-                      They have answered
-                    </span>
-                  ) : (
-                    <Button asChild variant="outline" className="min-h-11">
-                      <Link href={`/worker-team/${row.id}/handover`}>
-                        Hand them the form
-                        <ArrowRight className="ml-1.5 size-4" aria-hidden />
-                      </Link>
-                    </Button>
-                  )}
-
-                  {/* -- STEP 2. The supervisor's own sheet, which is the one
-                        route they may write. -- */}
+                  {/* -- The one action. Once it is in, the row says so rather
+                        than offering a button that would reopen a locked sheet
+                        — there is no hover on a tablet, and this whole flow
+                        happens on one, so the state is written out (§13.4). -- */}
                   {yoursIn ? (
                     <span className="inline-flex min-h-11 items-center rounded-control bg-success-tint px-4 font-sans text-body-sm text-ink">
-                      Your rating is in
+                      Rated — with HR
                     </span>
                   ) : (
                     <Button asChild className="min-h-11">
-                      <Link href={`/worker-appraisal/${row.id}`}>Rate them</Link>
+                      <Link href={`/worker-appraisal/${row.id}`}>
+                        Rate them
+                        <ArrowRight className="ml-1.5 size-4" aria-hidden />
+                      </Link>
                     </Button>
                   )}
                 </div>
