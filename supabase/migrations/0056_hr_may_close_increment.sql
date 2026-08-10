@@ -90,11 +90,11 @@ begin
     into v_def
     from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace
-   where n.nspname = 'public' and p.proname = 'guard_increment_review_columns'
+   where n.nspname = 'public' and p.proname = 'increment_reviews_guard_columns'
    limit 1;
 
   if v_def is null then
-    raise exception '0056: guard_increment_review_columns does not exist. Apply 0030 first.';
+    raise exception '0056: increment_reviews_guard_columns does not exist. Apply 0030 first.';
   end if;
 
   if v_def not like '%HR may not award themselves%' then
@@ -140,7 +140,7 @@ begin
      and pronamespace = 'public'::regnamespace limit 1;
 
   select pg_get_functiondef(oid) into v_g from pg_proc
-   where proname = 'guard_increment_review_columns'
+   where proname = 'increment_reviews_guard_columns'
      and pronamespace = 'public'::regnamespace limit 1;
 
   if v_t not like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%' then
