@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
+import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { TickScale } from "@/components/appraise/tick-scale";
 import { Button } from "@/components/ui/button";
 import { submitHandover } from "@/lib/worker/handover";
@@ -47,6 +48,7 @@ export function HandoverSheet({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState(false);
+  const [thanked, setThanked] = React.useState(false);
 
   const answered = questions.filter((q) => answers[q.questionId]).length;
 
@@ -60,6 +62,7 @@ export function HandoverSheet({
       return;
     }
     setDone(true);
+    setThanked(true);
   }
 
   /* -- What the SUPERVISOR sees when the device comes back.
@@ -68,17 +71,45 @@ export function HandoverSheet({
         the screen where it would be easiest to undo by accident. -- */
   if (done) {
     return (
-      <div className="mx-auto max-w-form space-y-5 py-10 text-center">
-        <CheckCircle2 className="mx-auto size-12 text-success" aria-hidden />
-        <h1 className="text-display-sm font-semibold text-ink">Thank you</h1>
-        <p className="font-sans text-body text-ink-muted">
-          {workerName}&rsquo;s answers are recorded. They are sealed — not even their supervisor can
-          read them. Only HR and management see both sides.
-        </p>
-        <Button onClick={() => router.push("/worker-team")} className="min-h-11">
-          Back to the shop floor
-        </Button>
-      </div>
+      <>
+        <div className="mx-auto max-w-form space-y-5 py-10 text-center">
+          <CheckCircle2 className="mx-auto size-12 text-success" aria-hidden />
+          <h1 className="text-display-sm font-semibold text-ink">Thank you</h1>
+          <p className="font-sans text-body text-ink-muted">
+            {workerName}&rsquo;s answers are recorded. They are sealed — not even their supervisor
+            can read them. Only HR and management see both sides.
+          </p>
+          <Button onClick={() => router.push("/worker-team")} className="min-h-11">
+            Back to the shop floor
+          </Button>
+        </div>
+
+        {/* -- THE SAME GREETING EVERY OTHER FORM GIVES, and it rides ON TOP of
+              the replacement page rather than replacing it.
+
+              The three other forms show this dialog over their own form, which
+              is fine because the person who filled it in is the person still
+              looking at it. This one is a SHARED DEVICE: the worker ticks the
+              sheet and hands the tablet straight back to their supervisor, so
+              the page underneath must already be scrubbed of the answers before
+              anything is shown over it. A dialog alone would leave the worker's
+              ticks sitting behind a translucent overlay for the supervisor to
+              read — §5, breached by a courtesy.
+
+              So the page still replaces itself, and the greeting sits on top of
+              a screen that is already safe. Addressed to the worker, because
+              they are the one still holding it when it appears; the page behind
+              is the supervisor's hand-back screen. -- */}
+        <SubmittedDialog
+          open={thanked}
+          onOpenChange={setThanked}
+          tier="self"
+          title="Thank you — that is your sheet in."
+          body={`Your answers are sealed, ${workerName}. Nobody on the floor can read them — only HR and management, alongside your supervisor's separate ratings. Please hand the device back.`}
+          actionLabel="Done"
+          onAction={() => setThanked(false)}
+        />
+      </>
     );
   }
 
