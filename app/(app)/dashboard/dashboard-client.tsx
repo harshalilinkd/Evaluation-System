@@ -947,18 +947,30 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
             scored answer in the cycle, and without the count a reader cannot
             tell whether that is four hundred answers or forty. */}
         <Panel
+          /* -- "PEOPLE", not "answers". The view counts one row per
+                EVALUATION, banded by that person's overall score — it has never
+                counted answers, and the old subtitle sent a reader looking for
+                a figure the panel does not carry. -- */
           title="Where the ratings sit"
           subtitle={
             populationLine
-              ? `Every scored answer this cycle, by band. From ${populationLine}`
-              : "Every scored answer this cycle, by band"
+              ? `How many people landed in each score band. From ${populationLine}`
+              : "How many people landed in each score band"
           }
         >
           {distribution.length === 0 ? (
-            <PanelEmpty>Bands appear here once ratings come in.</PanelEmpty>
+            /* -- The empty line used to read "once ratings come in", which was
+                  false on the screen that prompted this: ratings were in, and
+                  the view was filtering on `final_overall` — a column the
+                  ordinary HR-completes-it path never fills (0049). It now names
+                  what is actually missing. -- */
+            <PanelEmpty>
+              Bands appear once an appraisal has a settled score — the agreed
+              figure, or the HOD&rsquo;s rating where there is no agreed one.
+            </PanelEmpty>
           ) : (
             <ChartFigure
-              caption="Scored answers by band"
+              caption="People per score band"
               rows={[...distribution].sort(
                 (a, b) =>
                   ratingBandIndex(String(a.bucket ?? "")) - ratingBandIndex(String(b.bucket ?? "")),

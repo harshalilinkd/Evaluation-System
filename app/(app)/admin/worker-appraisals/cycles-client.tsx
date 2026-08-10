@@ -112,7 +112,7 @@ export function WorkerCyclesClient({
         </div>
       )}
 
-      <StartDialog open={open} onOpenChange={setOpen} workers={workers} />
+      <StartRoundDialog open={open} onOpenChange={setOpen} workers={workers} />
     </div>
   );
 }
@@ -126,7 +126,7 @@ export function WorkerCyclesClient({
  * their supervisor comes from their profile, so what is left is a name, three
  * dates and a list of people, which is one screenful.
  */
-function StartDialog({
+export function StartRoundDialog({
   open,
   onOpenChange,
   workers,
