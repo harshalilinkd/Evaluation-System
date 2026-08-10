@@ -36,7 +36,7 @@ import {
   monthlyFromAnnual,
   newCtcFromPct,
 } from "@/lib/increment/calc";
-import { confirmIncrement, saveApproval, saveProposal } from "@/lib/increment/actions";
+import { approveAndClose, confirmIncrement, saveProposal } from "@/lib/increment/actions";
 import type { SalaryBand as SalaryBandData } from "@/lib/increment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -498,6 +498,12 @@ function MdApproval({
         a button that did not work. HR's half of this component has had a Saved
         notice since P21; the MD's never got one. -- */
   const [saved, setSaved] = React.useState(false);
+  /* -- The one thing the close needs that an approval does not: when the new
+        salary starts being paid. Defaulted to the first of next month, which is
+        what payroll does unless somebody says otherwise — so the common case is
+        one press and no typing. -- */
+  const [effectiveFrom, setEffectiveFrom] = React.useState(firstOfNextMonth(new Date()));
+
 
   const approved = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
   const pct = hikePct(currentCtc, approved);
@@ -506,7 +512,12 @@ function MdApproval({
     if (approved === null) return;
     setBusy(true);
     setError(null);
-    const result = await saveApproval({ evaluationId, approvedCtc: approved, remarks });
+    const result = await approveAndClose({
+      evaluationId,
+      approvedCtc: approved,
+      remarks,
+      effectiveFrom,
+    });
     setBusy(false);
     if (!result.ok) setError(result.error.message);
     else {
@@ -566,6 +577,26 @@ function MdApproval({
             <p className="font-sans text-body-sm text-ink-muted">
               Defaults to HR&rsquo;s proposal. {pctText(pct)} on the current salary.
             </p>
+
+            {/* -- The close needs a start date; the approval did not. Defaulted
+                  to the first of next month, which is what payroll does unless
+                  somebody says otherwise, so the common case is one press and
+                  no typing. -- */}
+            <div className="space-y-2 pt-2">
+              <Label htmlFor="md_effective_from" className="type-label text-ink-muted">
+                Effective from
+              </Label>
+              <Input
+                id="md_effective_from"
+                type="date"
+                value={effectiveFrom}
+                onChange={(e) => setEffectiveFrom(e.target.value)}
+                className="min-h-11 tabular"
+              />
+              <p className="font-sans text-body-sm text-ink-muted">
+                When the new salary starts being paid.
+              </p>
+            </div>
           </div>
           <div className="space-y-2">
             <Label
@@ -599,10 +630,10 @@ function MdApproval({
                 the worst kind: nothing explains it, because there is nothing
                 left to explain. The figure is still required — an approval with
                 no amount approves nothing. -- */
-          disabled={busy || approved === null || approved <= 0}
+          disabled={busy || approved === null || approved <= 0 || effectiveFrom === ""}
           onClick={onApprove}
         >
-          {busy ? "Saving…" : "Approve this figure"}
+          {busy ? "Approving and closing…" : "Approve this figure and close"}
         </Button>
 
         {/* -- SAID AFTER THE FACT, and it says what happens next.
@@ -615,9 +646,9 @@ function MdApproval({
         {saved && !error ? (
           <Notice tone="ok">
             Approved at {money(approved)}
-            {pct === null ? "" : ` — ${pctText(pct)} on the current salary`}. It is recorded
-            against you and dated. To finish the increment, use Confirm and close below: that is
-            what writes the figure to {firstName}&rsquo;s pay record.
+            {pct === null ? "" : ` — ${pctText(pct)} on the current salary`}, effective{" "}
+            {formatDate(effectiveFrom)}. It is on {firstName}&rsquo;s pay record and the
+            increment is closed.
           </Notice>
         ) : null}
       </article>

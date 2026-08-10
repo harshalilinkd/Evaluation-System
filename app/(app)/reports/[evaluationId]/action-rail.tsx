@@ -133,6 +133,11 @@ export function HrRail({ report }: { report: EvaluationReport }) {
         that failed to load. The Salary section below shows what is on record. -- */
   const [proposedCtc, setProposedCtc] = React.useState("");
   const [proposalNote, setProposalNote] = React.useState("");
+  /* -- When the interview is booked. Optional, and kept with the proposal
+        rather than asked for at the close: HR knows the date when they arrange
+        it, which is now, not weeks later when somebody is recording what
+        happened. -- */
+  const [interviewDate, setInterviewDate] = React.useState("");
 
   const atHr = report.header.status === "PENDING_HR_REVIEW";
   const reviewed = report.header.status === "MD_REVIEWED";
@@ -181,6 +186,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
         evaluationId: report.evaluationId,
         proposedCtc: amount,
         justification: proposalNote.trim(),
+        interviewDate: interviewDate || undefined,
       });
       if (!proposal.ok) {
         setBusy(false);
@@ -321,6 +327,26 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               either way they approve it, and the full salary panel is in section{" "}
               {report.narratives.paired.length > 0 ? 5 : 4} below.
             </p>
+
+            <div className="space-y-1.5 pt-1">
+              <Label
+                htmlFor="interview_scheduled"
+                className="flex items-baseline gap-1.5 type-label text-ink-muted"
+              >
+                Interview scheduled
+                <span className="font-normal normal-case tracking-normal">optional</span>
+              </Label>
+              <Input
+                id="interview_scheduled"
+                type="date"
+                value={interviewDate}
+                onChange={(e) => setInterviewDate(e.target.value)}
+                className="tabular min-h-11"
+              />
+              <p className="font-sans text-body-sm text-ink-muted">
+                When you and the MD are due to discuss this. Kept with the record.
+              </p>
+            </div>
           </div>
         ) : null}
 

@@ -49,6 +49,15 @@ const proposalSchema = z.object({
   evaluationId: z.string().uuid(),
   proposedCtc: z.number().positive("A proposed salary must be more than zero."),
   justification: z.string().trim().default(""),
+  /* -- WHEN THE CONVERSATION IS BOOKED, at the owner's instruction: an optional
+        date HR sets while sending to the MD.
+
+        `interview_date` already exists on `increment_reviews` (0030) and was
+        only ever written at the close, recording when the interview HAPPENED.
+        Writing it earlier is the same fact learned sooner — and the column
+        guard lets HR write it, because the trigger's HR branch refuses only the
+        MD's three columns. -- */
+  interviewDate: z.string().trim().optional(),
 });
 
 /**
@@ -65,6 +74,7 @@ export async function saveProposal(input: {
   evaluationId: string;
   proposedCtc: number;
   justification?: string;
+  interviewDate?: string;
 }): Promise<CycleResult<{ hikePct: number | null }>> {
   const auth = await requireHr();
   if (!auth.ok) return auth;
@@ -110,6 +120,8 @@ export async function saveProposal(input: {
       hr_proposed_ctc: parsed.data.proposedCtc,
       hr_proposed_hike_pct: pct,
       hr_justification: parsed.data.justification || null,
+      // Only when given: an absent date must not blank one already set.
+      ...(parsed.data.interviewDate ? { interview_date: parsed.data.interviewDate } : {}),
       status: "HR_PROPOSED",
     },
     { onConflict: "evaluation_id" },
