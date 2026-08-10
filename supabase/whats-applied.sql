@@ -83,6 +83,18 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Employment and pay records. Without it the Employment tab and the increment calendar have nothing to read.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
+  ('0046_increment_final_score', 'final_score','confirm_increment records a final score',
+     'Without it a closed INCREMENT stores no final rating at all — the FINAL column stays an em dash for ever.'),
+  ('0052_expectation_from_snapshot','expectation','the expectation is found in the snapshot',
+     'Without it "What they asked for" reads Not stated whenever the form does not carry 0030''s exact question id.'),
+  ('0053_supervisor_reads_their_workers','function','is_my_worker',
+     'Without it the shop floor shows every worker as "Worker" with a dash — a supervisor cannot read the name of somebody they were assigned to rate.'),
+  ('0054_supervisor_completes_worker_appraisal','function','complete_worker_appraisal',
+     'Without it a supervisor''s rating never reaches HR: the appraisal stays OPEN for ever, because the update that should move it matches zero rows.'),
+  ('0055_expectation_says_annual','question_text','the salary question says ANNUAL',
+     'Without it the question asks for a salary "for the year ahead" — a period, not a unit — so employees answer monthly and the figure is out by twelve.'),
+  ('0056_hr_may_close_increment','hr_close_inc','HR may approve and close an INCREMENT',
+     'Without it HR pressing Approve and close is refused: "You are not permitted to move this evaluation from HR_APPROVED to MD_REVIEWED".'),
   ('0040_own_current_salary',    'view',       'v_my_current_salary',
      'Without it the increment form cannot show an employee their current salary — the field renders an em dash.'),
   ('0041_read_my_lead',          'function',   'is_my_lead',
@@ -145,6 +157,22 @@ select
          -- The clause 0039 injects. The filename is not a tell: it appears
          -- only in the migration's own comments and never reaches the body.
          and pg_get_functiondef(p.oid) like '%''PENDING_HR_REVIEW'' and p_to_status = ''CLOSED''%')
+    when 'final_score' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'confirm_increment'
+         and pg_get_functiondef(p.oid) like '%final_overall%')
+    when 'expectation' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'record_salary_expectation'
+         and pg_get_functiondef(p.oid) like '%evaluation_questions%')
+    when 'question_text' then exists (
+      select 1 from public.questions
+       where id = md5('linkd.q.salary_expectation_annual')::uuid
+         and text like '%annual CTC%')
+    when 'hr_close_inc' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
+         and pg_get_functiondef(p.oid) like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'
