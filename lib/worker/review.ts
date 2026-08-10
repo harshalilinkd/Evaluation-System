@@ -135,20 +135,26 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
 }
 
 /**
- * Record that it has been reviewed, and close it.
+ * Record HR's review, and either close it or pass it to the MD.
  *
- * ONE STEP, not two. §8's staff machine separates HR's review from the MD's
- * because a pay decision needs a second pair of eyes (AMEND-2) — and the worker
- * sheet has no pay decision on it unless the supervisor filled one, which HR
- * and the MD can both see here. Splitting it would add a queue and a handover
- * to a form that is eight ticks long.
+ * TWO ENDINGS, ONE ACTION. The paper form carries three signatures —
+ * supervisor, HR, MD — but not every appraisal needs the third: a sheet with no
+ * pay change is HR's to finish, and one that proposes an increment is the
+ * decision AMEND-2 restored a second pair of eyes for.
  *
- * The status move is the record. There is no separate "approved" flag to
- * disagree with it later.
+ * NO NEW STATUS VALUE, and no migration. The enum already distinguishes them:
+ * REVIEWED means HR is done and it is with the MD; CLOSED means it is finished.
+ * Adding a WITH_MD would need `alter type` in its own transaction (AMEND-3 spent
+ * a whole migration on that) to express something the two existing values
+ * already say.
  */
 export async function reviewWorkerAppraisal(
   evaluationId: string,
   remarks: string,
+  /* -- What HR is doing, stated by them rather than inferred from whether a
+        salary happens to be present. An appraisal with no pay change may still
+        deserve the MD's eye, and one with a small correction may not. -- */
+  outcome: "CLOSE" | "SEND_TO_MD" = "CLOSE",
 ): Promise<Result<{ ok: true }>> {
   const auth = await checkRole(["HR_ADMIN", "MD"]);
   if (!auth.ok) return { ok: false, error: auth.error };
@@ -166,7 +172,16 @@ export async function reviewWorkerAppraisal(
   /* -- Both sides have to be in. The board only offers this on a row that is
         ready, but a screen is not a guard (§9) and this action is reachable
         from any signed-in administrator's session. -- */
-  if (evaluation.status !== "PENDING_REVIEW") {
+  /* -- WHERE IT MAY BE ACTED ON FROM.
+        PENDING_REVIEW is HR's to close or pass on. REVIEWED is with the MD, who
+        may close it — so an MD arriving at one HR has already sent is not told
+        it is finished when it is waiting for them. -- */
+  const allowed =
+    outcome === "CLOSE"
+      ? ["PENDING_REVIEW", "REVIEWED"]
+      : ["PENDING_REVIEW"];
+
+  if (!allowed.includes(evaluation.status)) {
     return {
       ok: false,
       error: {
@@ -174,7 +189,9 @@ export async function reviewWorkerAppraisal(
         message:
           evaluation.status === "OPEN"
             ? "The supervisor has not submitted it yet."
-            : "This appraisal has already been reviewed.",
+            : evaluation.status === "CLOSED"
+              ? "This appraisal is closed."
+              : "This appraisal is already with management.",
       },
     };
   }
@@ -198,18 +215,25 @@ export async function reviewWorkerAppraisal(
     }
   }
 
+  const now = new Date().toISOString();
   const { error } = await supabase
     .from("worker_evaluations")
-    .update({ status: "REVIEWED", md_reviewed_at: new Date().toISOString() })
+    .update(
+      outcome === "SEND_TO_MD"
+        ? { status: "REVIEWED" }
+        : { status: "CLOSED", md_reviewed_at: now, closed_at: now },
+    )
     .eq("id", evaluationId)
-    .eq("status", "PENDING_REVIEW");
+    // Matched on the status we read, so two people acting at once cannot both
+    // succeed — the second affects no rows rather than overwriting the first.
+    .eq("status", evaluation.status);
 
   if (error) return { ok: false, error: { code: "SAVE_FAILED", message: error.message } };
 
   await supabase.rpc("log_admin_action", {
     p_entity: "worker_evaluation",
     p_entity_id: evaluationId,
-    p_action: "worker.reviewed",
+    p_action: outcome === "SEND_TO_MD" ? "worker.sent_to_md" : "worker.closed",
     // §5: no figure in the diff. audit_log is readable by a lead for their own
     // reports (0013), so a salary there would walk past the confinement rule.
     p_diff: { remarks_recorded: remarks.trim() !== "" } as Json,

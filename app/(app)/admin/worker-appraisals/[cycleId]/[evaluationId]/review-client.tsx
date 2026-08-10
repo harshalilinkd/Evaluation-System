@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Loader2, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -46,13 +46,15 @@ export function WorkerReviewClient({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const done = review.status === "REVIEWED" || review.status === "CLOSED";
+  const closed = review.status === "CLOSED";
+  const withMd = review.status === "REVIEWED";
+  const done = closed;
 
-  async function finish() {
+  async function finish(outcome: "CLOSE" | "SEND_TO_MD") {
     setBusy(true);
     setError(null);
     try {
-      const result = await reviewWorkerAppraisal(review.evaluationId, remarks);
+      const result = await reviewWorkerAppraisal(review.evaluationId, remarks, outcome);
       if (!result.ok) {
         setError(result.error.message);
         return;
@@ -78,17 +80,35 @@ export function WorkerReviewClient({
           <ArrowLeft className="size-4" aria-hidden />
           Back to the round
         </Link>
-        <h1 className="mt-2 font-sans text-h2 text-ink">{review.workerName}</h1>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+          <h1 className="font-sans text-h2 text-ink">{review.workerName}</h1>
+          {/* -- Available at every stage, not only once closed.
+                A signed-off copy is the common case, but HR printing one to
+                carry into a conversation is exactly as legitimate — and the
+                sheet says which state it is in at its foot, so a draft cannot
+                be mistaken for a final one. -- */}
+          <Button asChild variant="outline" className="min-h-11">
+            <a href={`/print/worker/${review.evaluationId}`} target="_blank" rel="noreferrer">
+              <Printer className="size-4" aria-hidden />
+              Print / PDF
+            </a>
+          </Button>
+        </div>
         <p className="font-sans text-body-sm text-ink-muted">
           {[review.designation, review.department].filter(Boolean).join(" · ") || "—"} ·{" "}
           {review.cycleName} {review.periodLabel}
         </p>
       </div>
 
-      {done ? (
+      {closed ? (
         <p className="flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 font-sans text-body-sm text-ink">
           <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
-          Reviewed. Nothing further is needed.
+          Closed. Nothing further is needed.
+        </p>
+      ) : withMd ? (
+        <p className="flex items-center gap-2 rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
+          <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+          HR has reviewed this and sent it to management. It closes when they sign it off.
         </p>
       ) : null}
 
@@ -205,15 +225,32 @@ export function WorkerReviewClient({
             </p>
           ) : null}
 
-          {/* §13.3: one primary action. */}
-          <div className="flex items-center justify-between gap-3">
+          {/* -- §13.3 is one PRIMARY action, not one action. Closing is the
+                primary; sending to management is the other ending the paper
+                form's three signatures imply, and it is secondary because most
+                sheets do not need it. -- */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="font-sans text-body-sm text-ink-muted">
-              This closes the appraisal. Nothing can be changed afterwards.
+              {withMd
+                ? "Signing this off closes it. Nothing can be changed afterwards."
+                : "Closing is final. Send it to management instead if the MD should sign it."}
             </p>
-            <Button onClick={() => void finish()} disabled={busy} className="min-h-11">
-              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-              Mark reviewed
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {!withMd ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void finish("SEND_TO_MD")}
+                  disabled={busy}
+                  className="min-h-11"
+                >
+                  Send to MD
+                </Button>
+              ) : null}
+              <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
+                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                {withMd ? "Sign off and close" : "Approve and close"}
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

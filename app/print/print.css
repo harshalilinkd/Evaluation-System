@@ -521,3 +521,98 @@
     min-height: 210mm;
   }
 }
+
+/* ============================================================================
+   The worker appraisal sheet
+   ==========================================================================
+   Raw hex, like the rest of this file and unlike anywhere else in the project.
+   §2 forbids a hex in a component because a token can move; here a token cannot
+   help — a printer has no custom properties, no dark theme and no tints that
+   survive a monochrome laser (P15-2).
+
+   This block is a TICK SHEET, so it keeps its gridlines where P27-2 removed
+   them from the staff pack. The three columns exist to be marked in, and a
+   cell you are meant to read a mark out of needs a border to be a cell.
+   ========================================================================== */
+
+.print-ratings {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 3mm;
+  font-size: 9.5pt;
+}
+
+.print-ratings th,
+.print-ratings td {
+  border: 0.5pt solid #333333;
+  padding: 1.6mm 2mm;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.print-ratings thead th {
+  background: #f2f2f2;
+  font-weight: 700;
+  text-align: center;
+}
+
+.print-ratings thead th:nth-child(2) {
+  text-align: left;
+}
+
+/* The mark itself. Centred and large enough to read at arm's length across a
+   desk, which is how a signed sheet is actually looked at. */
+.print-tick {
+  text-align: center;
+  font-size: 12pt;
+  line-height: 1;
+}
+
+/* A hand-fillable box, for the lines the paper form prints as squares. Kept
+   even where the app knows the answer: the printed sheet has to look like the
+   one people are used to signing. */
+.print-box {
+  display: inline-block;
+  min-width: 7mm;
+  padding: 0 1mm;
+  border: 0.5pt solid #333333;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.print-inline-tick {
+  margin-left: 6mm;
+  white-space: nowrap;
+}
+
+/* A written comment, given room to be one. A single ruled line invites two
+   words; a box invites a sentence. */
+.print-comment {
+  min-height: 14mm;
+  margin-top: 1.5mm;
+  padding: 2mm;
+  border: 0.5pt solid #999999;
+  white-space: pre-wrap;
+}
+
+.print-salary {
+  margin-top: 3mm;
+}
+
+/* The figure sits ON the rule, as it does when written by hand. */
+.print-rule {
+  display: inline-block;
+  min-width: 28mm;
+  margin: 0 4mm 0 1mm;
+  padding-bottom: 0.5mm;
+  border-bottom: 0.5pt solid #333333;
+  text-align: center;
+}
+
+/* Provenance, small, at the foot. A printed record that cannot say when it was
+   printed is one nobody can place in a sequence later. */
+.print-footnote {
+  margin-top: 6mm;
+  font-size: 8pt;
+  color: #666666;
+}
