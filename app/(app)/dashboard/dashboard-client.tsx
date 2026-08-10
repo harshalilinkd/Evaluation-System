@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 
 import {
+  RadialGauge,
   StatusDonutChart,
   TIER_CHART_COLORS,
   TrendAreaChart,
@@ -170,7 +171,18 @@ export function DashboardClient({
   const isAdmin = audience === "hr" || audience === "md";
 
   return (
-    <div className="space-y-8">
+    /* -- EDGE TO EDGE. The dashboard is a GRID, and UI2-9 gave it full bleed for
+          exactly that reason: "a grid centred in 1180px wastes half a wide
+          monitor. A 2000px-wide text input does not." The attribute had been
+          lost somewhere, so a six-tile strip and three-column rows were being
+          squeezed into 1180 with a band of canvas either side.
+
+          `data-full-bleed` drops the shell's cap AND its gutters, so the
+          padding comes back here — small, and on the page rather than the
+          shell, which is the same shape the cycle board uses. Cards flush to
+          the viewport edge look like a rendering fault; 16px of gutter reads as
+          a decision. -- */
+    <div data-full-bleed className="space-y-6 px-4 py-6 lg:px-6">
       {/* ---------- Always first: what THIS person has to do ----------
           Whatever their role, everybody has their own appraisal. A dashboard
           that opens on company statistics while the reader's own form is
@@ -593,7 +605,8 @@ function adminMetrics(analytics: Analytics): Metric[] {
 }
 
 function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPulse | null }) {
-  const { departments, sections, variance, distribution, needsAttention, timeline } = analytics;
+  const { departments, sections, variance, distribution, needsAttention, timeline, progress } =
+    analytics;
 
   /* -- IS THERE A CURVE TO DRAW, or just a rule?
         `timeline.length < 2` was the wrong test. A cycle with one participant
@@ -670,28 +683,57 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           waiting for HR, waiting for the MD. Each is a link, because a count
           somebody cannot act on is a fact rather than a dashboard. */}
       {pulse ? (
-        <section className="grid gap-4 sm:grid-cols-3">
-          <PipelineTile
-            label="Being filled in"
-            value={pulse.inProgress}
-            caption="both sides still rating"
-            href="/admin/cycles"
-            tone="primary"
-          />
-          <PipelineTile
-            label="Waiting for HR"
-            value={pulse.awaitingHr}
-            caption="both sides in, ready to read"
-            href="/reports"
-            tone="amber"
-          />
-          <PipelineTile
-            label="With the MD"
-            value={pulse.withMd}
-            caption="sent on, awaiting approval"
-            href="/reports"
-            tone="green"
-          />
+        <section className="grid gap-4 lg:grid-cols-4">
+          {/* -- An ARC, beside three numbers.
+                `RadialGauge` has existed since UI-2 and nothing had ever used
+                it. It earns its place here rather than being variety for its
+                own sake: this is a single proportion, which is the one thing a
+                dial does better than a number — it reads from across a room,
+                and unlike a donut it does not imply the remainder is a second
+                category.
+
+                `percent_complete` is the view's own figure, not one recomputed
+                here: 0027 defines it as three steps per evaluation so the arc
+                moves as work happens rather than only when somebody finishes
+                entirely, and a second definition on this screen would disagree
+                with the segmented bar under the cycle header. -- */}
+          <div className="card-surface flex flex-col justify-center p-5">
+            <p className="font-sans text-body-sm text-ink-muted">Cycle progress</p>
+            <RadialGauge
+              value={Number(progress?.percent_complete ?? 0)}
+              max={100}
+              height={148}
+              color="primary"
+            />
+            <p className="text-center font-sans text-body-sm text-ink-muted">
+              {Number(progress?.total ?? 0)} in this cycle · every appraisal is three
+              steps
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3 lg:col-span-3">
+            <PipelineTile
+              label="Being filled in"
+              value={pulse.inProgress}
+              caption="both sides still rating"
+              href="/admin/cycles"
+              tone="primary"
+            />
+            <PipelineTile
+              label="Waiting for HR"
+              value={pulse.awaitingHr}
+              caption="both sides in, ready to read"
+              href="/reports"
+              tone="amber"
+            />
+            <PipelineTile
+              label="With the MD"
+              value={pulse.withMd}
+              caption="sent on, awaiting approval"
+              href="/reports"
+              tone="green"
+            />
+          </div>
         </section>
       ) : null}
 

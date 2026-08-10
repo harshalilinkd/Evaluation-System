@@ -375,6 +375,8 @@ export type Database = {
           excluded_at: string | null;
           excluded_reason: string | null;
           overall_tick: string | null;
+          self_filled_via: string | null;
+          self_filled_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -403,6 +405,8 @@ export type Database = {
           excluded_at?: string | null;
           excluded_reason?: string | null;
           overall_tick?: string | null;
+          self_filled_via?: string | null;
+          self_filled_by?: string | null;
         };
         Relationships: [];
       };
@@ -1469,6 +1473,16 @@ export type Database = {
       in_transition: { Args: { evaluation_id: string }; Returns: boolean };
       invite_pending_email: { Args: { p_invite_id: string }; Returns: string };
       is_evaluatee: { Args: { evaluation_id: string }; Returns: boolean };
+      /* 0048: the worker ticks their own side on the supervisor's device.
+         SECURITY DEFINER, because 0047's policy admits the SELF layer only to
+         the worker's own session and must keep doing so. */
+      submit_worker_self_handover: {
+        Args: {
+          p_evaluation_id: string;
+          p_answers: Json;
+        };
+        Returns: undefined;
+      };
       log_admin_action: {
         Args: {
           p_entity: string;
