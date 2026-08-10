@@ -4264,3 +4264,55 @@ toolbar in `reports/queue-client.tsx`.
 Chrome above the first row: ~460px → ~360px on a 375px screen. Typecheck 0,
 lint 0 errors, build clean. Not rendered against a device — measured from the
 type scale and the token padding, not observed.
+
+---
+
+### FIX-13 — The MD receives one message
+
+At the owner's explicit instruction: **the MD is not appraised in this
+organisation and does not chase anybody**, so the only message that applies to
+them is the report HR has approved and passed up. Everything else — the queue
+digest, invites, reminders, overdue chases — is HR's work.
+
+Before this, the MD could receive six kinds of message: `mdReviewPending`, a
+queue digest every two days, and — whenever they were a cycle participant or
+somebody's `lead_id` — the whole employee and HOD set.
+
+| # | Decision | Why |
+|---|---|---|
+| F13-1 | **The rule lives in `sendNotification`, as one allowlist** | Not at the four places that pick recipients. `sendNotification` is the only way a message leaves the system (§10), so a rule there cannot be forgotten by the next screen, cron job or template — and a rule spread across four recipient queries will eventually be applied to three of them. `MD_MAY_RECEIVE` holds one key, and a suite check extracts the set and fails if it ever holds two. |
+| F13-2 | Suppression is **not** filtering the recipient lists | Removing the MD from a participant roster would be a data change HR could undo by accident, and it would not cover a future caller. The allowlist holds whatever the data says. |
+| F13-3 | **Someone holding MD *and* HR_ADMIN is not suppressed** | The rule is about a person whose only administrative role is MD. Without the carve-out, giving the MD an HR hat would silence HR's own digests — the failure would be silence, which nobody reports. |
+| F13-4 | A suppressed message is **flagged, not failed** | `DispatchResult` gained `suppressed?: true`, and the three places that tally outcomes skip it. Counting it as a failure would light up HR's screen with red rows describing the system working correctly, and no retry could ever clear them. |
+| F13-5 | Nothing is logged, because nothing was attempted | P11-11's rule. The check runs BEFORE the QUEUED row — a `notifications_log` row means somebody tried. |
+| F13-6 | **Fail-open, and said plainly** | `user_roles` is readable in full by HR, the MD and the service client cron uses — every path that addresses the MD. An ordinary employee reads only their own roles, so the check finds nothing and lets the message through. That is the right way round: an employee's action raises messages to HR and to their lead, never to the MD, and a role lookup that failed closed would silently stop legitimate mail. |
+| F13-7 | The launch asks **before** it mints | `isSuppressedFor` is exported for one caller. The launch mints a fresh channel-scoped token for the email link, and issuing one revokes the previous token for that layer and channel (§10) — minting for a message that is then suppressed leaves an orphan that has also revoked a live link. Pinned by a test comparing the CALL sites, not the identifiers: both appear in the import block, where the order is alphabetical and means nothing. |
+| F13-8 | **`mdReviewDigest` is DELETED, not left unwired** | An orphaned template is a body sitting where the next person will reach for it — P22 had to remove `leadReviewPending` for exactly that reason. The union member, the label, the preview entry and the cadence constant went with it. The wording is in git. |
+
+#### Two suites were asserting behaviour the product had deliberately changed
+
+- **p22 pinned `mdReviewDigest: 44`** — "the MD is chased every two days". Rewritten to assert the reversal from both sides: no MD digest, and HR's untouched.
+- **p6 asserted `MD lands on /review`**, and `/review` was deleted when P20's
+  `/reports` replaced it. The suite was **green-lighting a 404 on the MD's
+  sign-in**, and `requiredRolesFor("/review")` correctly returning null made the
+  next line crash rather than fail — so p6 had been reporting nothing at all.
+  Now 68/0. Not caused by this phase; found by it.
+
+**A third suite gap, found the same way.** `evaluationsOverdue` was declared and
+wired but absent from p11b's `WIRING` map — and the "every declared key is
+wired" check could not say so, because it filtered `declared` down to keys
+already in `WIRING` before comparing. The same shape of flaw its own comment
+describes. Added.
+
+**The comment trap, ninth occurrence.** My own new assertion `!/mdReviewDigest/`
+matched the comment in `due-digest.ts` explaining that the digest was removed.
+The rule is written down and was still not followed: **an absence check runs
+over `code()`, never raw source.**
+
+**Verification — p11b 66 checks (up from 52), p6 68, p11 69, p17 49, p22 3
+failed (down from 4), p23 42/0.** Typecheck 0, lint 0 errors, build clean.
+
+**Regression: 1523 passed, 19 failed across 29 suites.** Every failure was
+re-run against a baseline with this phase's six files stashed and came back
+**identical** — they belong to the concurrent increment/salary work landing in
+parallel (p4-pure, p7, p8patch, p9b, p12, p13, p18, p19, p19c, p20, p21, p22).

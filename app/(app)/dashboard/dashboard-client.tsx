@@ -22,9 +22,6 @@ import {
 } from "lucide-react";
 
 import {
-  LabelledBarChart,
-  RankedBarChart,
-  SectionRadarChart,
   StatusDonutChart,
   TIER_CHART_COLORS,
   TrendAreaChart,
@@ -493,6 +490,29 @@ function adminMetrics(analytics: Analytics): Metric[] {
 function AdminView({ analytics }: { analytics: Analytics }) {
   const { departments, sections, variance, distribution, needsAttention, timeline } = analytics;
 
+  /* -- IS THERE A CURVE TO DRAW, or just a rule?
+        `timeline.length < 2` was the wrong test. A cycle with one participant
+        who submitted on day one produces three, five, ten timeline points that
+        are all the same number — so the guard passed and the panel drew a
+        perfectly flat line at y=1 across three days, with a filled gradient
+        under it. It looks like a chart, reads like a trend, and says nothing.
+
+        This chart exists to answer "will this land by the due date", which is a
+        SLOPE. Two conditions have to hold for that to be a real question: the
+        series must actually rise across the window, and the numbers must be
+        large enough that the rise is a shape rather than a single step. Below
+        that the honest answer is the two counts as words, which is what the
+        panel says instead. -- */
+  const timelinePeak = Math.max(0, ...timeline.map((r) => Math.max(r.self, r.lead)));
+  const timelineFirst = timeline[0];
+  const timelineLast = timeline[timeline.length - 1];
+  const timelineRises =
+    timeline.length > 1 &&
+    timelineFirst !== undefined &&
+    timelineLast !== undefined &&
+    (timelineLast.self > timelineFirst.self || timelineLast.lead > timelineFirst.lead);
+  const showTimeline = timelineRises && timelinePeak >= 3;
+
   /*
     A CYCLE THAT HAS PRODUCED NOTHING YET IS NOT A PAGE OF EMPTY CHARTS.
 
@@ -518,9 +538,13 @@ function AdminView({ analytics }: { analytics: Analytics }) {
             title="How the cycle is filling up"
             subtitle="Cumulative submissions. The two sides are counted separately — they rate at the same time and neither sees the other."
           >
-            {timeline.length < 2 ? (
+            {!showTimeline ? (
+              /* The counts, in words, rather than a flat line pretending to be
+                 a trend. This is the number somebody wanted anyway. */
               <PanelEmpty>
-                The curve appears once submissions start arriving on more than one day.
+                {timelineLast
+                  ? `${timelineLast.self} self-${timelineLast.self === 1 ? "evaluation" : "evaluations"} and ${timelineLast.lead} HOD ${timelineLast.lead === 1 ? "rating" : "ratings"} are in. The curve appears once enough submissions arrive across several days to show a trend.`
+                  : "The curve appears once submissions start arriving."}
               </PanelEmpty>
             ) : (
               <ChartFigure
@@ -605,80 +629,55 @@ function AdminView({ analytics }: { analytics: Analytics }) {
         </Panel>
       </section>
 
-      <section className="grid items-start gap-6 lg:grid-cols-2">
+      {/* ---------- Where the two sides disagree ----------
+          THIS PANEL REPLACES TWO. It used to sit at the bottom of the page
+          under a radar of the same numbers ("The shape of the two sides") and a
+          bar chart of department averages that "Where each team stands" already
+          covers below. Three datasets were each drawn twice, in six panels, and
+          the earlier reasoning for that — "two questions, two encodings" — was
+          wrong in practice: a reader does not arrive asking two questions, they
+          arrive asking one, and the second panel is where they lose the thread.
+
+          The radar went for a second reason the owner named exactly: it plotted
+          COMPANY-WIDE averages, so its outline belongs to nobody. There is no
+          department on it and no person, and with a single employee in the
+          cycle it was that employee's profile presented as an organisation's.
+          A radar earns its place on the scorecard, where the axes are one named
+          person; it does not earn it here.
+
+          The dumbbell survives because it answers the same question in numbers
+          somebody can repeat: two dots on one track, the distance between them
+          IS the gap, and the figure is printed at the end of the row. */}
+      {sections.length > 0 ? (
         <Panel
-          title="By department"
-          subtitle="Lead averages. Job Specific Skills is excluded — the questions differ per team, so the numbers are not comparable."
+          title="Where the two sides disagree"
+          subtitle="Every section, with what people said about themselves against what their HOD said. The longer the line, the further apart they are."
         >
-          {departments.length === 0 ? (
-            <PanelEmpty>Averages appear as each team&rsquo;s ratings arrive.</PanelEmpty>
-          ) : (
-            <ChartFigure
-              caption="Lead averages by department"
-              rows={departments}
-              columns={[
-                { header: "Department", cell: (d) => String(d.department_name ?? "—") },
-                { header: "Lead average", cell: (d) => score(d.avg_lead), align: "right" },
-              ]}
-            >
-            <LabelledBarChart
-              data={departments.map((d) => ({
-                label: String(d.department_name ?? "—"),
-                value: Number(d.avg_lead ?? 0),
+          <ChartFigure
+            caption="Section averages, self against lead"
+            rows={pivotSections(sections)}
+            columns={[
+              { header: "Section", cell: (r) => r.label },
+              { header: "They rated themselves", cell: (r) => score(r.self), align: "right" },
+              { header: "Their HOD rated them", cell: (r) => score(r.lead), align: "right" },
+              {
+                header: "Difference",
+                cell: (r) =>
+                  r.gap === null ? "—" : `${r.gap > 0 ? "+" : ""}${r.gap.toFixed(2)}`,
+                align: "right",
+              },
+            ]}
+          >
+            <GapChart
+              rows={pivotSections(sections).map((r) => ({
+                label: r.label,
+                self: r.self,
+                lead: r.lead,
               }))}
-              labelKey="label"
-              valueKey="value"
-              color="pink"
             />
-            </ChartFigure>
-          )}
+          </ChartFigure>
         </Panel>
-
-        {/* ---------- The shape of the two sides ----------
-            This half of the row was empty, and a radar is the right thing to
-            put in it rather than a fourth bar chart: the question here is the
-            PROFILE — which parts of the job the company rates itself strong and
-            weak on — and a shape is read at a glance where seven pairs of bars
-            are not.
-
-            It is not a duplicate of the dumbbell further down. That one answers
-            "how far apart are the two sides on this section", to two decimals,
-            and is the better tool for it. This one answers "what shape is the
-            company", which no other panel asks. Two questions, two encodings.
-
-            Both polygons wear their TIER colour, which is exactly what §13.1
-            reserves them for — the series ARE the layers. */}
-        <Panel
-          title="The shape of the two sides"
-          subtitle="Company-wide averages across the comparable sections. Where the two outlines pull apart is where the sides disagree."
-        >
-          {sections.length === 0 ? (
-            <PanelEmpty>The profile appears once both sides have been scored.</PanelEmpty>
-          ) : (
-            <ChartFigure
-              caption="Company-wide section averages, self and lead"
-              rows={pivotSections(sections)}
-              columns={[
-                { header: "Section", cell: (r) => r.label },
-                { header: "Self", cell: (r) => score(r.self), align: "right" },
-                { header: "Lead", cell: (r) => score(r.lead), align: "right" },
-              ]}
-            >
-              <SectionRadarChart
-                data={pivotSections(sections).map((r) => ({
-                  section: r.label,
-                  self: r.self,
-                  lead: r.lead,
-                }))}
-                series={[
-                  { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                  { key: "lead", label: "HOD", color: TIER_CHART_COLORS.lead },
-                ]}
-              />
-            </ChartFigure>
-          )}
-        </Panel>
-      </section>
+      ) : null}
 
       {/* ---------- Where each team stands ----------
           The most actionable thing on an HR dashboard and it was not here.
@@ -775,111 +774,28 @@ function AdminView({ analytics }: { analytics: Analytics }) {
         </Panel>
       ) : null}
 
-      <section className="grid items-start gap-6 lg:grid-cols-2">
-        <Panel
-          title="How far each HOD sits from their team"
-          subtitle="Mean difference from the employee's own score, largest first."
-        >
-          {variance.length === 0 ? (
-            <PanelEmpty>This fills in as reviews arrive.</PanelEmpty>
-          ) : (
-            <ChartFigure
-              caption="How each lead rates, against their team's own scores"
-              rows={[...variance].sort(
-                (a, b) => Number(b.mean_delta ?? 0) - Number(a.mean_delta ?? 0),
-              )}
-              columns={[
-                { header: "Lead", cell: (v) => String(v.lead_name ?? "—") },
-                {
-                  header: "Mean difference",
-                  cell: (v) => {
-                    const d = Number(v.mean_delta ?? 0);
-                    // Signed in the table too: "0.40" and "-0.40" are opposite
-                    // findings and must not read the same at a glance.
-                    return `${d > 0 ? "+" : ""}${d.toFixed(2)}`;
-                  },
-                  align: "right",
-                },
-              ]}
-            >
-            <RankedBarChart
-              /* Signed data: above the line the lead rated higher than the
-                 employee did, below it lower. Sorted so the two poles sit at
-                 the ends and the leads who agree with their team collapse
-                 toward the middle — which is the shape HR is looking for. */
-              data={[...variance]
-                .sort((a, b) => Number(b.mean_delta ?? 0) - Number(a.mean_delta ?? 0))
-                .map((v) => ({
-                  label: String(v.lead_name ?? "—"),
-                  value: Number(v.mean_delta ?? 0),
-                }))}
-              labelKey="label"
-              valueKey="value"
-              diverging
-            />
-            </ChartFigure>
-          )}
-        </Panel>
-
-        <Panel
-          title="Needs chasing"
-          subtitle="Oldest first"
-          action={
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/admin/cycles">Open cycles</Link>
-            </Button>
-          }
-        >
-          {needsAttention.length === 0 ? (
-            <PanelEmpty>Nobody is late. Everything outstanding is still within its date.</PanelEmpty>
-          ) : (
-            <LateList people={needsAttention} limit={6} />
-          )}
-        </Panel>
-      </section>
-
-      {sections.length > 0 ? (
-        <Panel
-          title="By section"
-          subtitle="Company-wide averages, self against lead"
-        >
-          {/*
-            A TABLE OF FOUR NUMBERS PER ROW IS NOT HOW YOU READ A GAP.
-
-            The question this panel answers is "where do the two sides
-            disagree", and a reader had to subtract in their head across a
-            column. A dumbbell puts the two points on one track and makes the
-            distance between them the most visible thing — the gap becomes the
-            shape, not an arithmetic exercise.
-
-            `ChartFigure` keeps the table a click away, which is also what
-            discharges the cyan contrast warning the palette validator raised.
-          */}
-          <ChartFigure
-            caption="Company-wide section averages, self against lead"
-            rows={pivotSections(sections)}
-            columns={[
-              { header: "Section", cell: (r) => r.label },
-              { header: "Self", cell: (r) => score(r.self), align: "right" },
-              { header: "Lead", cell: (r) => score(r.lead), align: "right" },
-              {
-                header: "Gap",
-                cell: (r) =>
-                  r.gap === null ? "—" : `${r.gap > 0 ? "+" : ""}${r.gap.toFixed(2)}`,
-                align: "right",
-              },
-            ]}
-          >
-            <GapChart
-              rows={pivotSections(sections).map((r) => ({
-                label: r.label,
-                self: r.self,
-                lead: r.lead,
-              }))}
-            />
-          </ChartFigure>
-        </Panel>
-      ) : null}
+      {/* ---------- Needs chasing ----------
+          The diverging bar chart that used to share this row is gone. It ranked
+          leads by mean difference — exactly the figure the table directly above
+          already prints, beside the lead's name, their rated count, and a
+          position bar showing where they sit. The chart was the same data with
+          less of it, and at one HOD it was a single bar labelled with the only
+          name on the page. */}
+      <Panel
+        title="Needs chasing"
+        subtitle="Oldest first"
+        action={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/admin/cycles">Open cycles</Link>
+          </Button>
+        }
+      >
+        {needsAttention.length === 0 ? (
+          <PanelEmpty>Nobody is late. Everything outstanding is still within its date.</PanelEmpty>
+        ) : (
+          <LateList people={needsAttention} limit={6} />
+        )}
+      </Panel>
     </>
   );
 }

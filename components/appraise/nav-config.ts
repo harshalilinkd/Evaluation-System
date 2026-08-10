@@ -105,6 +105,18 @@ export const NAV: readonly NavGroup[] = [
       // that this screen exists, because its name says what it holds.
       // P22: "This screen is how HR runs the year." First in Admin, and above
       // Increments — an increment is one of the things it lists.
+      /* -- Its own entry, directly under the staff one.
+            §7 keeps the two modules apart, and the menu is where somebody first
+            decides which they are in. Folding worker appraisals into "Evaluation
+            Cycles" as a filter would make the shop-floor sheet look like a view
+            of the staff form, which it is not — different questions, a different
+            scale and different people. -- */
+      {
+        href: "/admin/worker-appraisals",
+        label: "Worker Appraisals",
+        icon: "cycles",
+        roles: ["HR_ADMIN", "MD"],
+      },
       { href: "/admin/due", label: "What is due", icon: "cycles", roles: ["HR_ADMIN", "MD"] },
       { href: "/admin/increments", label: "Increments", icon: "increments", roles: ["HR_ADMIN", "MD"] },
       { href: ROUTES.adminPeople, label: "Team review", icon: "people", roles: ["HR_ADMIN", "MD"] },

@@ -314,6 +314,152 @@ export type Database = {
        * Deliberately shares NO structure with `questions`: §5's module boundary
        * is enforced by 0008's CHECK, and the two banks never join.
        */
+      /* -- The worker appraisal (0047). Four tables, and none of them shares a
+            row with the staff module — §7's isolation rule made structural. -- */
+      worker_cycles: {
+        Row: {
+          id: string;
+          name: string;
+          period_label: string;
+          starts_on: string | null;
+          self_due_on: string | null;
+          supervisor_due_on: string | null;
+          md_due_on: string | null;
+          status: "DRAFT" | "ACTIVE" | "CLOSED";
+          disclosure: string;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          period_label: string;
+          starts_on?: string | null;
+          self_due_on?: string | null;
+          supervisor_due_on?: string | null;
+          md_due_on?: string | null;
+          status?: "DRAFT" | "ACTIVE" | "CLOSED";
+          disclosure?: string;
+          created_by?: string | null;
+          deleted_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          period_label?: string;
+          starts_on?: string | null;
+          self_due_on?: string | null;
+          supervisor_due_on?: string | null;
+          md_due_on?: string | null;
+          status?: "DRAFT" | "ACTIVE" | "CLOSED";
+          disclosure?: string;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      worker_evaluations: {
+        Row: {
+          id: string;
+          cycle_id: string;
+          worker_id: string;
+          supervisor_id: string | null;
+          department_id: string | null;
+          status: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          self_submitted_at: string | null;
+          supervisor_submitted_at: string | null;
+          self_skipped: boolean;
+          supervisor_skipped: boolean;
+          md_reviewed_at: string | null;
+          closed_at: string | null;
+          excluded_at: string | null;
+          excluded_reason: string | null;
+          overall_tick: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          cycle_id: string;
+          worker_id: string;
+          supervisor_id?: string | null;
+          department_id?: string | null;
+          status?: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          self_submitted_at?: string | null;
+          supervisor_submitted_at?: string | null;
+          self_skipped?: boolean;
+          supervisor_skipped?: boolean;
+          overall_tick?: string | null;
+        };
+        Update: {
+          supervisor_id?: string | null;
+          status?: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          self_submitted_at?: string | null;
+          supervisor_submitted_at?: string | null;
+          self_skipped?: boolean;
+          supervisor_skipped?: boolean;
+          md_reviewed_at?: string | null;
+          closed_at?: string | null;
+          excluded_at?: string | null;
+          excluded_reason?: string | null;
+          overall_tick?: string | null;
+        };
+        Relationships: [];
+      };
+      worker_evaluation_questions: {
+        Row: {
+          id: string;
+          evaluation_id: string;
+          question_id: string;
+          text: string;
+          help_text: string | null;
+          sort_order: number;
+          is_required: boolean;
+          is_overall: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          evaluation_id: string;
+          question_id: string;
+          text: string;
+          help_text?: string | null;
+          sort_order: number;
+          is_required?: boolean;
+          is_overall?: boolean;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      worker_evaluation_responses: {
+        Row: {
+          id: string;
+          evaluation_id: string;
+          layer: "SELF" | "SUPERVISOR" | "MD";
+          answers: Json;
+          comments: Json;
+          submitted_at: string | null;
+          submitted_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          evaluation_id: string;
+          layer: "SELF" | "SUPERVISOR" | "MD";
+          answers?: Json;
+          comments?: Json;
+          submitted_at?: string | null;
+          submitted_by?: string | null;
+        };
+        Update: {
+          answers?: Json;
+          comments?: Json;
+          submitted_at?: string | null;
+          submitted_by?: string | null;
+        };
+        Relationships: [];
+      };
       worker_questions: {
         Row: {
           id: string;

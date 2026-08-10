@@ -20,7 +20,6 @@ import {
   leadReviewInvite,
   leadReviewOverdue,
   leadReviewReminder,
-  mdReviewDigest,
   mdReviewPending,
   reportReady,
   selfEvaluationInvite,
@@ -74,7 +73,6 @@ const PREVIEWS: Record<TemplateKey, RenderedMessage> = {
     cycleName: "Q3 FY26",
     link: SAMPLE.link,
   }),
-  mdReviewDigest: mdReviewDigest({ waiting: 2, link: SAMPLE.link }),
 };
 
 export type TemplatePreview = {

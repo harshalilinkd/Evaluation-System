@@ -35,7 +35,6 @@ const CADENCE_HOURS = {
         about the same nine people is how a channel stops being read (P22-15).
         Two days is often enough that nothing sits unnoticed for a week. -- */
   evaluationsOverdue: 44,
-  mdReviewDigest: 44, // every two days
 } as const;
 
 function appUrl(path: string): string {

@@ -52,7 +52,8 @@ export type TemplateKey =
   | "hrDueDigest"
   | "incrementsOverdue"
   | "evaluationsOverdue"
-  | "mdReviewDigest"
+  // `mdReviewDigest` was here. The MD gets one message only — see the note
+  // beside where its body used to live, and `MD_MAY_RECEIVE` in dispatch.ts.
   | "mdReviewPending"
   | "reportReady"
   | "formReturned"
@@ -70,7 +71,6 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   hrDueDigest: "What is due (to HR)",
   incrementsOverdue: "Increments overdue (to HR)",
   evaluationsOverdue: "Forms overdue (to HR)",
-  mdReviewDigest: "Reports waiting (to the MD)",
   mdReviewPending: "Management review pending",
   reportReady: "Report ready for HR",
   formReturned: "Form returned",
@@ -668,17 +668,13 @@ export function evaluationsOverdue(v: {
   };
 }
 
-/** Every two days. The MD is not chased daily about a queue they are working through. */
-export function mdReviewDigest(v: { waiting: number; link: string }): RenderedMessage {
-  return {
-    subject: `${v.waiting} report${v.waiting === 1 ? "" : "s"} waiting for your approval`,
-    body:
-      `${v.waiting} report${v.waiting === 1 ? " is" : "s are"} waiting for your approval. ` +
-      `Open them here: ${v.link} — Appraise, LinkD Prints`,
-    html: shell({
-      heading: "Reports waiting for you",
-      bodyHtml: p(`${v.waiting} report${v.waiting === 1 ? " is" : "s are"} waiting for your approval.`),
-      cta: { label: "Open the reports", href: v.link },
-    }),
-  };
-}
+/* -- `mdReviewDigest` was here, and is DELETED.
+      At the owner's instruction the MD receives one message and one only: the
+      report HR has approved and passed up to them. Chasing them about the size
+      of their queue is HR's job.
+
+      Deleted rather than left unused. An orphaned template is a body sitting
+      where the next person will reach for it, and P22 had to remove
+      `leadReviewPending` for exactly that reason. `MD_MAY_RECEIVE` in
+      dispatch.ts is where the decision now lives; the wording is in git if it
+      is ever wanted back. -- */
