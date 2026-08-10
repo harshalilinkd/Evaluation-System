@@ -3,7 +3,6 @@
 /** The round board. Every row says what is outstanding and who is holding it. */
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import {
@@ -12,7 +11,7 @@ import {
   type WorkerRow,
 } from "@/app/(app)/admin/worker-appraisals/cycles-client";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
-import { KpiCard, KpiRow, SCREEN_SELECT_CLASS } from "@/components/appraise/screen";
+import { KpiCard, KpiRow } from "@/components/appraise/screen";
 import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils/date";
@@ -61,7 +60,6 @@ function nextStep(row: BoardRow): { text: string; tone: "wait" | "ready" | "done
 
 export function WorkerBoard({
   cycle,
-  allCycles,
   rows,
   workers,
   raters,
@@ -73,12 +71,10 @@ export function WorkerBoard({
     status: string;
     supervisor_due_on: string | null;
   };
-  allCycles: Array<{ id: string; name: string; period_label: string }>;
   rows: BoardRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
 }) {
-  const router = useRouter();
   const [starting, setStarting] = React.useState(false);
 
   const bothIn = rows.filter((r) => r.selfIn && r.supervisorIn).length;
@@ -197,23 +193,15 @@ export function WorkerBoard({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Only when there is a choice to make. A picker holding one round is
-              a control that cannot do anything. */}
-          {allCycles.length > 1 ? (
-            <select
-              value={cycle.id}
-              onChange={(e) => router.push(`/admin/worker-appraisals/${e.target.value}`)}
-              aria-label="Which round"
-              className={SCREEN_SELECT_CLASS}
-            >
-              {allCycles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} · {c.period_label}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          {/* -- THE ROUND PICKER IS GONE, at the owner's instruction.
+                It listed every round in a select — five entries here, three of
+                them reading "Floor · Aug" because rounds are free to share a
+                name — so it offered a choice nobody could tell apart, to switch
+                to a screen reachable from the list one click away.
 
+                Worker Appraisals in the sidebar IS that list, and it shows each
+                round with its status and dates. One way to change round, on the
+                screen built for it. -- */}
           <Button onClick={() => setStarting(true)} className="min-h-11">
             <Plus className="size-4" aria-hidden />
             Start a round

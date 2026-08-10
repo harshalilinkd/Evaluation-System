@@ -16,7 +16,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
   const { cycleId } = await params;
   const supabase = await createClient();
 
-  const [{ data: cycle }, { data: rows }, { data: allCycles }, { data: workerPool }] =
+  const [{ data: cycle }, { data: rows }, { data: workerPool }] =
     await Promise.all([
       supabase
         .from("worker_cycles")
@@ -30,11 +30,6 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         )
         .eq("cycle_id", cycleId)
         .is("excluded_at", null),
-      supabase
-        .from("worker_cycles")
-        .select("id, name, period_label")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false }),
       supabase
         .from("profiles")
         .select("id, full_name, employee_code, reports_to")
@@ -63,7 +58,6 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
   return (
     <WorkerBoard
       cycle={cycle}
-      allCycles={allCycles ?? []}
       rows={(rows ?? []).map((r) => ({
         id: r.id,
         workerName: nameOf.get(r.worker_id) ?? "—",
