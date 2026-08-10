@@ -315,20 +315,52 @@ function HrProposal({
         </article>
 
         <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">Against your proposal</h3>
+          <h3 className="type-label text-ink-muted">Your proposal against their ask</h3>
           {gap.amount === null ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
               {review?.employee_expectation_ctc ? "Enter a proposal to compare." : "Nothing to compare."}
             </p>
           ) : (
             <>
-              <p className={cn("mt-1 tabular text-display-md", gap.amount < 0 ? "text-critical" : "text-ink")}>
-                {gap.amount > 0 ? "+" : ""}
-                {money(gap.amount)}
+              {/* -- A SIGNED FIGURE WITH NO VERB IS A PUZZLE.
+                    It read "+₹1,85,000.00" under the heading "Against your
+                    proposal", then "740.00% against what they asked for" — three
+                    ambiguities at once: which way the sign points, whether the
+                    percent describes the proposal or the difference, and paise
+                    on a rounded difference nobody quotes to the paisa.
+
+                    Now the number is the size of the gap and the words carry the
+                    direction. -- */}
+              <p
+                className={cn(
+                  "mt-1 tabular text-display-md",
+                  gap.amount < 0 ? "text-critical" : "text-ink",
+                )}
+              >
+                {gap.amount === 0 ? money(0) : money(Math.abs(gap.amount))}
               </p>
               <p className="font-sans text-body-sm text-ink-muted">
-                {pctText(gap.pct)} against what they asked for.
+                {gap.amount === 0
+                  ? "Exactly what they asked for."
+                  : gap.amount > 0
+                    ? `more than they asked for${gap.pct === null ? "" : ` — ${pctText(gap.pct)} above their figure`}.`
+                    : `less than they asked for${gap.pct === null ? "" : ` — ${pctText(Math.abs(gap.pct))} below their figure`}.`}
               </p>
+
+              {/* -- A UNITS CHECK, phrased as a question rather than a verdict.
+                    An employee who types a MONTHLY figure into an annual field
+                    produces exactly this shape — a proposal several times their
+                    stated ask — and the arithmetic above is then meaningless
+                    while looking perfectly precise. 0055 makes the question ask
+                    for an annual figure in as many words, but answers already
+                    given cannot be re-asked, and a pay decision should not rest
+                    on a number whose units are in doubt. -- */}
+              {gap.pct !== null && gap.pct >= 200 ? (
+                <p className="mt-2 rounded-control bg-warning-tint px-2.5 py-1.5 font-sans text-body-sm text-ink">
+                  That is a long way apart. Worth checking they gave an annual figure rather than a
+                  monthly one before this anchors anything.
+                </p>
+              ) : null}
             </>
           )}
         </article>
