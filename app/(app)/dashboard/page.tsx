@@ -6,6 +6,7 @@ import { DashboardClient } from "@/app/(app)/dashboard/dashboard-client";
 import { ErrorState } from "@/components/appraise/states";
 import { requireAuth } from "@/lib/auth/guards";
 import { getAnalytics } from "@/lib/analytics/queries";
+import { getSystemPulse } from "@/lib/analytics/pulse";
 import { getDueList } from "@/lib/due/queries";
 import { createClient } from "@/lib/supabase/server";
 import { greetingFor } from "@/lib/utils/date";
@@ -39,8 +40,16 @@ export default async function Page() {
         P22: the due list is fetched only for the roles that can act on it. An
         employee has no business seeing who is due an increment (§5), so the
         query does not run rather than running and being hidden. -- */
-  const [analytics, due, { data: mine }, { count: toRate }] = await Promise.all([
+  const [analytics, pulse, due, { data: mine }, { count: toRate }] = await Promise.all([
     getAnalytics(profile.id, roles),
+
+    /* -- The operational half: what is in flight, what finished, what is
+          coming, who scored well. HR and the MD only — every figure in it
+          crosses people, and §9 gives an employee nothing about anyone else.
+          Not fetched at all for the other audiences rather than fetched and
+          hidden, which is P16-7's rule and the same call the due list makes
+          two lines down. -- */
+    isAdmin ? getSystemPulse() : Promise.resolve(null),
 
     isAdmin ? getDueList() : Promise.resolve(null),
 
@@ -87,6 +96,10 @@ export default async function Page() {
   return (
     <DashboardClient
       analytics={analytics.data}
+      /* An unreadable pulse is an absent one, never a broken page: the panels
+         it feeds are additive, and a failure here must not take down the
+         dashboard somebody signed in to reach. */
+      pulse={pulse?.ok ? pulse.data : null}
       firstName={profile.full_name.trim().split(/\s+/)[0] ?? "there"}
       greeting={greetingFor()}
       myEvaluationId={mine?.id ?? null}

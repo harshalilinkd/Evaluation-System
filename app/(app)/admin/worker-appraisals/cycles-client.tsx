@@ -3,6 +3,7 @@
 /** The worker appraisal list, and the one dialog that starts a round. */
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { HardHat, Loader2, Plus } from "lucide-react";
 
@@ -88,16 +89,25 @@ export function WorkerCyclesClient({
       ) : (
         <div className="grid gap-4">
           {cycles.map((cycle) => (
-            <DashboardCard key={cycle.id} title={cycle.name}>
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <p className="font-sans text-body-sm text-ink-muted">
-                  {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
-                </p>
-                <p className="tabular font-sans text-body-sm text-ink-muted">
-                  Supervisor due {formatDate(cycle.supervisor_due_on)}
-                </p>
-              </div>
-            </DashboardCard>
+            /* The whole card opens the round. A card that looks like a record
+               and does nothing when pressed reads as a broken link, which is
+               exactly how this was reported. */
+            <Link
+              key={cycle.id}
+              href={`/admin/worker-appraisals/${cycle.id}`}
+              className="block rounded-card transition-colors hover:bg-surface-mute"
+            >
+              <DashboardCard title={cycle.name}>
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <p className="font-sans text-body-sm text-ink-muted">
+                    {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
+                  </p>
+                  <p className="tabular font-sans text-body-sm text-ink-muted">
+                    Supervisor due {formatDate(cycle.supervisor_due_on)}
+                  </p>
+                </div>
+              </DashboardCard>
+            </Link>
           ))}
         </div>
       )}

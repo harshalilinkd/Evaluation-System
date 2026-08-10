@@ -17,6 +17,8 @@ import {
   CircleCheck,
   ClipboardCheck,
   Star,
+  TrendingDown,
+  TrendingUp,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -38,6 +40,7 @@ import { HeroCard } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { Analytics } from "@/lib/analytics/queries";
+import type { SystemPulse } from "@/lib/analytics/pulse";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 
@@ -137,6 +140,7 @@ const signedScore = (v: number | null | undefined) => {
 
 export function DashboardClient({
   analytics,
+  pulse,
   firstName,
   greeting,
   myEvaluationId,
@@ -145,6 +149,8 @@ export function DashboardClient({
   due,
 }: {
   analytics: Analytics;
+  /** HR and the MD only, and null for everybody else — see `getSystemPulse`. */
+  pulse: SystemPulse | null;
   firstName: string;
   /**
    * "Good morning" / "Good afternoon" / "Good evening", already resolved.
@@ -350,7 +356,11 @@ export function DashboardClient({
             )}
           </Panel>
 
-          {isAdmin ? <AdminView analytics={analytics} /> : <LeadView analytics={analytics} />}
+          {isAdmin ? (
+            <AdminView analytics={analytics} pulse={pulse} />
+          ) : (
+            <LeadView analytics={analytics} />
+          )}
         </>
       )}
     </div>
@@ -391,6 +401,101 @@ function LateList({
 }
 
 /* ---------- HR and the MD ---------- */
+
+/**
+ * One stage of the pipeline, as a link.
+ *
+ * A count somebody cannot act on is a fact, not a dashboard — so each of these
+ * goes somewhere: the cycle board for work still being filled in, the report
+ * queue for anything waiting on a person.
+ *
+ * The tone is a chart/status hue, never a tier. §13.1 reserves cyan, pink and
+ * indigo for "who said this", and a pipeline stage is not a layer — that was
+ * the exact misuse `Tally` was written to avoid.
+ */
+function PipelineTile({
+  label,
+  value,
+  caption,
+  href,
+  tone,
+}: {
+  label: string;
+  value: number;
+  caption: string;
+  href: string;
+  tone: "primary" | "amber" | "green";
+}) {
+  // Written out in full: Tailwind scans statically, so an interpolated class
+  // name compiles to nothing at all.
+  const bar = {
+    primary: "bg-accent-primary",
+    amber: "bg-warning",
+    green: "bg-accent-green",
+  }[tone];
+
+  return (
+    <Link
+      href={href}
+      className="card-surface group flex items-center gap-4 p-5 transition-shadow duration-hover hover:shadow-dashboard-hover"
+    >
+      <span aria-hidden className={cn("h-10 w-1 shrink-0 rounded-pill", bar)} />
+      <span className="min-w-0 flex-1">
+        <span className="block font-sans text-body-sm text-ink-muted">{label}</span>
+        <span className="tabular block font-sans text-display-md leading-tight text-ink">
+          {value}
+        </span>
+        <span className="block truncate font-sans text-body-sm text-ink-muted">{caption}</span>
+      </span>
+      <ArrowRight
+        aria-hidden
+        className="size-4 shrink-0 text-ink-faint transition-transform duration-hover group-hover:translate-x-0.5"
+      />
+    </Link>
+  );
+}
+
+/**
+ * This month against last, as a pill.
+ *
+ * Green up / red down is the TREND colour and never a tier (UI2-2) — it appears
+ * here because it describes movement. The arrow carries the direction too, so
+ * the sign is never colour alone (§13.8).
+ *
+ * A first month says "first month" rather than "+9": there is nothing to
+ * compare against, and a rise measured from no baseline is not a rise.
+ */
+function MonthDelta({ current, previous }: { current: number; previous: number }) {
+  if (previous === 0 && current === 0) {
+    return <span className="font-sans text-body-sm text-ink-muted">nothing closed yet</span>;
+  }
+  if (previous === 0) {
+    return <span className="font-sans text-body-sm text-ink-muted">nothing closed last month</span>;
+  }
+
+  const delta = current - previous;
+  if (delta === 0) {
+    return <span className="font-sans text-body-sm text-ink-muted">same as last month</span>;
+  }
+
+  const up = delta > 0;
+  return (
+    <span
+      className={cn(
+        "tabular inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-body-sm font-medium",
+        up ? "bg-success-tint text-success" : "bg-critical-tint text-critical",
+      )}
+    >
+      {up ? (
+        <TrendingUp aria-hidden className="size-3" />
+      ) : (
+        <TrendingDown aria-hidden className="size-3" />
+      )}
+      {up ? "+" : "−"}
+      {Math.abs(delta)} vs last month
+    </span>
+  );
+}
 
 /* ---------- The headline figures ---------- */
 /**
@@ -487,7 +592,7 @@ function adminMetrics(analytics: Analytics): Metric[] {
   ];
 }
 
-function AdminView({ analytics }: { analytics: Analytics }) {
+function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPulse | null }) {
   const { departments, sections, variance, distribution, needsAttention, timeline } = analytics;
 
   /* -- IS THERE A CURVE TO DRAW, or just a rule?
@@ -555,6 +660,197 @@ function AdminView({ analytics }: { analytics: Analytics }) {
   */
   return (
     <>
+      {/* ---------- WHERE THE WORK IS ----------
+          The dashboard opened on six panels of company-wide averages, which is
+          a research question. The one an administrator actually arrives with is
+          "what is happening, and what needs me" — a state of the system, not a
+          distribution of its output.
+
+          These three counts are the whole pipeline in one row: filling in,
+          waiting for HR, waiting for the MD. Each is a link, because a count
+          somebody cannot act on is a fact rather than a dashboard. */}
+      {pulse ? (
+        <section className="grid gap-4 sm:grid-cols-3">
+          <PipelineTile
+            label="Being filled in"
+            value={pulse.inProgress}
+            caption="both sides still rating"
+            href="/admin/cycles"
+            tone="primary"
+          />
+          <PipelineTile
+            label="Waiting for HR"
+            value={pulse.awaitingHr}
+            caption="both sides in, ready to read"
+            href="/reports"
+            tone="amber"
+          />
+          <PipelineTile
+            label="With the MD"
+            value={pulse.withMd}
+            caption="sent on, awaiting approval"
+            href="/reports"
+            tone="green"
+          />
+        </section>
+      ) : null}
+
+      {pulse ? (
+        <section className="grid items-start gap-6 lg:grid-cols-3">
+          {/* ---------- Finished, and how that compares ----------
+              A count on its own is a number; a count against last month is a
+              direction. The comparison is what turns "9 completed" into
+              something somebody can act on. */}
+          <Panel
+            title="Finished this month"
+            subtitle="Evaluations closed, against the same point last month."
+          >
+            <div className="flex items-end gap-4">
+              <p className="tabular text-display-lg leading-none text-ink">
+                {pulse.completedThisMonth}
+              </p>
+              <MonthDelta
+                current={pulse.completedThisMonth}
+                previous={pulse.completedLastMonth}
+              />
+            </div>
+            <p className="mt-3 font-sans text-body-sm text-ink-muted">
+              {pulse.completedLastMonth} closed last month.
+            </p>
+
+            {/* -- A COUNT, never an amount. §5 confines pay figures to HR and
+                  the MD, and while this panel is theirs alone, a dashboard is a
+                  screen people read over each other's shoulders. -- */}
+            <div className="mt-4 border-t border-rule pt-4">
+              <p className="type-label text-ink-muted">Pay changes recorded</p>
+              <p className="tabular mt-0.5 font-sans text-body-lg text-ink">
+                {pulse.incrementsThisMonth}{" "}
+                <span className="font-sans text-body-sm text-ink-muted">
+                  {pulse.incrementsThisMonth === 1 ? "this month" : "this month"}
+                </span>
+              </p>
+            </div>
+          </Panel>
+
+          {/* ---------- Coming up ---------- */}
+          <Panel
+            title="Coming up"
+            subtitle="Scheduled reviews and increments not yet started."
+            action={
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/admin/due">Open</Link>
+              </Button>
+            }
+          >
+            {pulse.upcoming.length === 0 ? (
+              <PanelEmpty>Nothing scheduled in the next 90 days.</PanelEmpty>
+            ) : (
+              <>
+                <ul className="space-y-2.5">
+                  {pulse.upcoming.map((item) => (
+                    <li
+                      key={`${item.profileId}-${item.milestone}-${item.dueOn}`}
+                      className="flex items-center gap-3"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-sans text-body-sm text-ink">
+                          {item.name}
+                        </span>
+                        <span className="block truncate font-sans text-body-sm text-ink-muted">
+                          {item.milestone}
+                        </span>
+                      </span>
+                      {/* Overdue is a failure, not a tier — and the word
+                          carries it as well as the colour (§13.8). */}
+                      <span
+                        className={cn(
+                          "tabular shrink-0 text-body-sm",
+                          item.daysAway < 0 ? "font-medium text-critical" : "text-ink-muted",
+                        )}
+                      >
+                        {item.daysAway < 0
+                          ? `${Math.abs(item.daysAway)}d late`
+                          : item.daysAway === 0
+                            ? "today"
+                            : `in ${item.daysAway}d`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {pulse.upcomingMore > 0 ? (
+                  <p className="mt-3 font-sans text-body-sm text-ink-muted">
+                    and {pulse.upcomingMore} more.
+                  </p>
+                ) : null}
+              </>
+            )}
+          </Panel>
+
+          {/* ---------- Who scored well ----------
+              The question the owner asked for by name, and the one panel here
+              that names individuals. It ranks on the SETTLED figure — final
+              where one was agreed, else the HOD's — and never on the person's
+              own score, because a leaderboard built partly on self-assessment
+              ranks confidence rather than performance (§11's precedence). */}
+          <Panel
+            title="Scored highest"
+            subtitle="Most recent appraisal per person, best first."
+            action={
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/admin/people">Everyone</Link>
+              </Button>
+            }
+          >
+            {pulse.topPerformers.length === 0 ? (
+              <PanelEmpty>
+                Appears once appraisals are rated. Nobody has a settled score yet.
+              </PanelEmpty>
+            ) : (
+              <>
+                <ol className="space-y-2.5">
+                  {pulse.topPerformers.map((p, i) => (
+                    <li key={p.profileId} className="flex items-center gap-3">
+                      <span
+                        aria-hidden
+                        className="tabular w-4 shrink-0 text-body-sm text-ink-faint"
+                      >
+                        {i + 1}
+                      </span>
+                      <span
+                        aria-hidden
+                        className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-surface-mute text-body-sm font-medium text-ink"
+                      >
+                        {p.initials}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <Link
+                          href={`/scorecard?person=${p.profileId}`}
+                          className="block truncate font-sans text-body-sm text-ink hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                        <span className="block truncate font-sans text-body-sm text-ink-muted">
+                          {p.department ?? "No team set"}
+                        </span>
+                      </span>
+                      <span className="tabular shrink-0 font-sans text-body font-semibold text-ink">
+                        {p.score.toFixed(2)}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                {/* §11: a headline figure says which layer produced it. */}
+                <p className="mt-3 font-sans text-body-sm text-ink-muted">
+                  {pulse.performersThin
+                    ? "Only one person has a settled score so far, so this is not yet a ranking."
+                    : "Out of 5, from the agreed score where there is one and the HOD's rating otherwise."}
+                </p>
+              </>
+            )}
+          </Panel>
+        </section>
+      ) : null}
+
       {/* ---------- How the cycle is filling up ----------
           The one thing an HR dashboard is actually asked — "will this land by
           the due date" — is a level and a slope, and nothing on this screen
