@@ -491,6 +491,13 @@ function MdApproval({
   const [remarks, setRemarks] = React.useState(review?.md_remarks ?? "");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /* -- Approving showed NOTHING. It saved, called `router.refresh()`, and the
+        card came back looking identical — the figure was already in the box,
+        because it defaults to HR's proposal. So the one irreversible-feeling
+        act on this screen gave the MD no acknowledgement at all, which reads as
+        a button that did not work. HR's half of this component has had a Saved
+        notice since P21; the MD's never got one. -- */
+  const [saved, setSaved] = React.useState(false);
 
   const approved = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
   const pct = hikePct(currentCtc, approved);
@@ -502,7 +509,10 @@ function MdApproval({
     const result = await saveApproval({ evaluationId, approvedCtc: approved, remarks });
     setBusy(false);
     if (!result.ok) setError(result.error.message);
-    else router.refresh();
+    else {
+      setSaved(true);
+      router.refresh();
+    }
   }
 
   return (
@@ -594,6 +604,22 @@ function MdApproval({
         >
           {busy ? "Saving…" : "Approve this figure"}
         </Button>
+
+        {/* -- SAID AFTER THE FACT, and it says what happens next.
+              "Saved." would have been enough to stop the button reading as
+              broken, but it is not the whole answer: approving a figure does
+              NOT close the increment. §8 runs MD_REVIEWED -> INTERVIEW_DONE ->
+              CLOSED, and the control that does it is Confirm and close, further
+              down this same page. An acknowledgement that stops at "saved"
+              leaves the MD believing they have finished. -- */}
+        {saved && !error ? (
+          <Notice tone="ok">
+            Approved at {money(approved)}
+            {pct === null ? "" : ` — ${pctText(pct)} on the current salary`}. It is recorded
+            against you and dated. To finish the increment, use Confirm and close below: that is
+            what writes the figure to {firstName}&rsquo;s pay record.
+          </Notice>
+        ) : null}
       </article>
     </>
   );
