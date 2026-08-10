@@ -75,23 +75,31 @@ export function WorkerBoard({
   /* Ready means the supervisor has submitted AND nobody has reviewed it — the
      only state on this screen HR can act on. Counting reviewed ones too meant
      the number never fell as they worked through them. */
-  const readyCount = rows.filter(
-    (r) => r.supervisorIn && r.status !== "REVIEWED" && r.status !== "CLOSED",
-  ).length;
+  const inProgress = rows.filter((r) => r.status === "OPEN").length;
+  const readyCount = rows.filter((r) => r.status === "PENDING_REVIEW").length;
+  const withMd = rows.filter((r) => r.status === "REVIEWED").length;
+  const closedCount = rows.filter((r) => r.status === "CLOSED").length;
 
   /* -- The tiles are the filter, because a count above a list it describes
         invites a press and there was nothing behind it. Three states and no
         "All" tile: the ACTIVE one toggles off, which is one control rather than
         four and means the row cannot end up with nothing selected. -- */
-  const [filter, setFilter] = React.useState<"all" | "ready" | "waiting">("all");
+  const [filter, setFilter] = React.useState<
+    "all" | "waiting" | "ready" | "md" | "closed"
+  >("all");
 
   const visible = React.useMemo(() => {
-    if (filter === "ready") return rows.filter((r) => r.selfIn && r.supervisorIn);
-    if (filter === "waiting") return rows.filter((r) => !(r.selfIn && r.supervisorIn));
+    /* Keyed on the STATUS, not on the timestamps. The status is the one thing
+       that distinguishes "waiting for HR" from "with the MD" — both have the
+       supervisor's side in, so a timestamp cannot tell them apart. */
+    if (filter === "waiting") return rows.filter((r) => r.status === "OPEN");
+    if (filter === "ready") return rows.filter((r) => r.status === "PENDING_REVIEW");
+    if (filter === "md") return rows.filter((r) => r.status === "REVIEWED");
+    if (filter === "closed") return rows.filter((r) => r.status === "CLOSED");
     return rows;
   }, [rows, filter]);
 
-  const toggle = (next: "all" | "ready" | "waiting") =>
+  const toggle = (next: "waiting" | "ready" | "md" | "closed") =>
     setFilter((current) => (current === next ? "all" : next));
 
   /* ---------- Columns ----------
@@ -215,27 +223,28 @@ export function WorkerBoard({
       </div>
 
       <div className="shrink-0 space-y-3 border-b border-rule px-4 py-3 lg:px-6">
-        {/* -- WHAT THESE THREE SAY, and what they used to.
-              They were tinted self / final / lead — the TIER colours, which on
-              every other screen mean who said something. Here they meant
-              nothing, and three saturated cards gave arithmetic the weight of
-              three findings: the numbers always sum to each other, so two of
-              them are derived from the third.
+        {/* -- THE STAGES, in the order an appraisal passes through them.
+              They were "In this round / Ready for you / With their supervisor",
+              which mixed a TOTAL with two of its own parts — the numbers summed
+              to each other, so the first was arithmetic on the other two and
+              read as a third finding.
 
-              Plain now, except the one thing HR can act on. Colour marks the
-              actionable state rather than decorating all three.
+              These are three points on one journey instead, which is what
+              somebody scanning the screen is actually trying to place a row in.
 
-              "Ready for you" also counted appraisals HR had already reviewed,
-              so the number never went down as they worked through them. It
-              counts what is WAITING FOR THEM. -- */}
+              WITH MANAGEMENT appears only when it has something to report. Most
+              rounds never use Send to MD, and a permanent zero is a column
+              teaching people to ignore it — but leaving the state out entirely
+              would let rows vanish from every count, which is worse than a
+              fourth card. -- */}
         <KpiRow>
           <KpiCard
-            label="In this round"
-            value={rows.length}
-            caption={rows.length === 1 ? "worker" : "workers"}
+            label="In progress"
+            value={inProgress}
+            caption="with their supervisor"
             tone="plain"
-            onSelect={() => setFilter("all")}
-            active={filter === "all"}
+            onSelect={() => toggle("waiting")}
+            active={filter === "waiting"}
           />
           <KpiCard
             label="Ready for you"
@@ -245,15 +254,44 @@ export function WorkerBoard({
             onSelect={() => toggle("ready")}
             active={filter === "ready"}
           />
+          {withMd > 0 ? (
+            <KpiCard
+              label="With management"
+              value={withMd}
+              caption="sent to the MD to sign off"
+              tone="lead"
+              onSelect={() => toggle("md")}
+              active={filter === "md"}
+            />
+          ) : null}
           <KpiCard
-            label="With their supervisor"
-            value={rows.length - readyCount}
-            caption="nothing for you to do yet"
+            label="Closed"
+            value={closedCount}
+            caption="finished"
             tone="plain"
-            onSelect={() => toggle("waiting")}
-            active={filter === "waiting"}
+            onSelect={() => toggle("closed")}
+            active={filter === "closed"}
           />
         </KpiRow>
+
+        {/* -- A way back, said out loud.
+              Pressing the active card again clears it, and nobody knows that.
+              The "In this round" card used to be the way out; now that the
+              cards are stages rather than a total plus its parts, the escape
+              has to be its own thing or a filtered board is a dead end
+              (§13.4). -- */}
+        {filter !== "all" ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            Showing {visible.length} of {rows.length}.{" "}
+            <button
+              type="button"
+              onClick={() => setFilter("all")}
+              className="font-medium text-primary underline underline-offset-2"
+            >
+              Show all
+            </button>
+          </p>
+        ) : null}
 
         {/* -- Said once, above the grid, because it is the answer to "so what do
               I do now" for the whole round rather than for one row. HR fills
