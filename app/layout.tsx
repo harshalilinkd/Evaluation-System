@@ -1,6 +1,7 @@
 /** Root layout: font loading, global tokens, and the base document shell. */
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 
 import { THEME_SCRIPT } from "@/components/appraise/theme";
@@ -42,11 +43,28 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <head>
-        {/* Render-blocking on purpose. Applying the stored theme after
-            hydration means a dark-theme user gets a full-brightness flash on
-            every page load, and a collapsed rail makes the layout jump. Both
-            have to be settled before the first paint, which React cannot do. */}
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* -- Render-blocking on purpose. Applying the stored theme after
+              hydration means a dark-theme user gets a full-brightness flash on
+              every page load, and a collapsed rail makes the layout jump. Both
+              have to be settled before the first paint, which React cannot do
+              (UI2-2).
+
+              `next/script` with `beforeInteractive` rather than a bare
+              `<script>`. React 19 warns on the bare tag — "Scripts inside React
+              components are never executed when rendering on the client" — and
+              the warning is accurate rather than pedantic: the tag runs on the
+              server-rendered document and does NOT run again on a client
+              navigation. That is survivable here only because the attributes it
+              sets persist on <html> across those navigations; it would be a
+              real bug for any script that had to run per page.
+
+              `beforeInteractive` is Next's supported form for exactly this
+              case, is only valid in the root layout, and keeps the script ahead
+              of first paint. Not a new dependency (§17) — `next/script` ships
+              with the framework. -- */}
+        <Script id="theme" strategy="beforeInteractive">
+          {THEME_SCRIPT}
+        </Script>
       </head>
       {/* Background, ink, font and antialiasing are all set on `body` in
           globals.css, so print routes inherit the same base. */}
