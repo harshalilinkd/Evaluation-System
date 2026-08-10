@@ -110,13 +110,26 @@ export async function createWorkerCycle(input: {
  * copied into `worker_evaluation_questions` at this moment, and editing the
  * worker form afterwards can never change what somebody was asked.
  */
+export type WorkerAssignment = {
+  workerId: string;
+  /* -- Chosen by HR at launch, defaulted from `reports_to` but not bound to it.
+        A profile's Reports-to was set once for a different purpose, and
+        inheriting it silently is what put the MD down as the rater of a
+        shop-floor helper. It is copied onto the appraisal here, so a later
+        change to the profile cannot move an in-flight round (P3-6). -- */
+  supervisorId: string | null;
+};
+
 export async function launchWorkerCycle(
   cycleId: string,
-  workerIds: string[],
+  assignments: WorkerAssignment[],
 ): Promise<WorkerResult<{ opened: number }>> {
   const auth = await guard();
   if (!auth.ok) return fail(auth.error.code, auth.error.message);
-  if (workerIds.length === 0) return fail("NO_PARTICIPANTS", "Add at least one worker first.");
+  if (assignments.length === 0) return fail("NO_PARTICIPANTS", "Add at least one worker first.");
+
+  const supervisorOf = new Map(assignments.map((a) => [a.workerId, a.supervisorId]));
+  const workerIds = assignments.map((a) => a.workerId);
 
   const supabase = await createClient();
 
@@ -159,17 +172,17 @@ export async function launchWorkerCycle(
   /* -- A worker with no supervisor cannot be appraised: nobody would be asked
         to fill the other side. Named, rather than launched and discovered
         later (P9-7's reasoning, applied to the thing that matters here). -- */
-  const unsupervised = eligible.filter((p) => !p.reports_to);
+  const unsupervised = eligible.filter((p) => !supervisorOf.get(p.id));
   if (unsupervised.length > 0) {
     return fail(
       "NO_SUPERVISOR",
       `${unsupervised.map((p) => p.full_name).join(", ")} ${
         unsupervised.length === 1 ? "has" : "have"
-      } no supervisor. Set one on their profile first.`,
+      } nobody chosen to rate them.`,
     );
   }
 
-  const selfLed = eligible.filter((p) => p.reports_to === p.id);
+  const selfLed = eligible.filter((p) => supervisorOf.get(p.id) === p.id);
   if (selfLed.length > 0) {
     return fail(
       "SELF_SUPERVISED",
@@ -185,7 +198,7 @@ export async function launchWorkerCycle(
       .insert({
         cycle_id: cycleId,
         worker_id: person.id,
-        supervisor_id: person.reports_to,
+        supervisor_id: supervisorOf.get(person.id) ?? null,
         department_id: person.department_id,
         status: "OPEN",
       })

@@ -38,7 +38,17 @@ export type WorkerRow = {
   id: string;
   name: string;
   employeeCode: string | null;
+  /** Their `reports_to`. The DEFAULT rater, not the only possible one. */
+  supervisorId: string | null;
   supervisorName: string | null;
+};
+
+export type RaterRow = {
+  id: string;
+  name: string;
+  /** What they are, in the words that matter here — see the page. */
+  role: string;
+  isSupervisor: boolean;
 };
 
 const STATUS_WORD: Record<string, string> = {
@@ -50,9 +60,11 @@ const STATUS_WORD: Record<string, string> = {
 export function WorkerCyclesClient({
   cycles,
   workers,
+  raters,
 }: {
   cycles: WorkerCycleRow[];
   workers: WorkerRow[];
+  raters: RaterRow[];
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -112,7 +124,7 @@ export function WorkerCyclesClient({
         </div>
       )}
 
-      <StartRoundDialog open={open} onOpenChange={setOpen} workers={workers} />
+      <StartRoundDialog open={open} onOpenChange={setOpen} workers={workers} raters={raters} />
     </div>
   );
 }
@@ -130,10 +142,12 @@ export function StartRoundDialog({
   open,
   onOpenChange,
   workers,
+  raters,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workers: WorkerRow[];
+  raters: RaterRow[];
 }) {
   const router = useRouter();
   const [name, setName] = React.useState("");
@@ -142,13 +156,24 @@ export function StartRoundDialog({
   const [supervisorDue, setSupervisorDue] = React.useState("");
   const [mdDue, setMdDue] = React.useState("");
   const [chosen, setChosen] = React.useState<Set<string>>(new Set());
+
+  /* -- Who rates each worker, seeded from their Reports-to and CHANGEABLE here.
+        Inheriting it silently is what put "Rated by test MD" on a shop-floor
+        worker: the field was set once on a profile, for a different purpose,
+        and nothing since had asked whether it was right for this. A default is
+        fine; a default nobody can see or override is not. -- */
+  const [raterOf, setRaterOf] = React.useState<Record<string, string>>({});
+  const raterFor = (w: WorkerRow) => raterOf[w.id] ?? w.supervisorId ?? "";
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   /* Nobody is ticked to begin with. Starting a round opens a real appraisal for
      real people, and a pre-ticked list is a decision the app made that HR is
      presumed to have agreed with. The header checkbox is one press away. */
-  const eligible = workers.filter((w) => w.supervisorName);
+  /* Everybody is listed now. A worker with no Reports-to is not excluded — they
+     simply start with no rater chosen, which is a thing HR can fix here instead
+     of being told to go and edit a profile. */
+  const eligible = workers;
   const allChosen = eligible.length > 0 && chosen.size === eligible.length;
 
   async function submit() {
@@ -168,7 +193,13 @@ export function StartRoundDialog({
       return;
     }
 
-    const launched = await launchWorkerCycle(created.data.id, [...chosen]);
+    const launched = await launchWorkerCycle(
+      created.data.id,
+      [...chosen].map((id) => ({
+        workerId: id,
+        supervisorId: raterOf[id] ?? workers.find((w) => w.id === id)?.supervisorId ?? null,
+      })),
+    );
     setBusy(false);
     if (!launched.ok) {
       /* The cycle exists as a draft by now. Say so, rather than leaving
@@ -280,11 +311,18 @@ export function StartRoundDialog({
                 </label>
 
                 <ul className="max-h-64 overflow-y-auto">
-                  {eligible.map((w) => (
-                    <li key={w.id}>
-                      <label className="flex items-center gap-3 border-b border-rule px-4 py-2.5 last:border-b-0">
+                  {eligible.map((w) => {
+                    const raterId = raterFor(w);
+                    const rater = raters.find((r) => r.id === raterId);
+                    const included = chosen.has(w.id);
+
+                    return (
+                      <li
+                        key={w.id}
+                        className="flex flex-wrap items-center gap-3 border-b border-rule px-4 py-2.5 last:border-b-0"
+                      >
                         <Checkbox
-                          checked={chosen.has(w.id)}
+                          checked={included}
                           onCheckedChange={(checked) =>
                             setChosen((prev) => {
                               const next = new Set(prev);
@@ -295,22 +333,61 @@ export function StartRoundDialog({
                           }
                           aria-label={`Include ${w.name}`}
                         />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate font-sans text-body-sm text-ink">
-                            {w.name}
-                          </span>
-                          <span className="block truncate font-sans text-body-sm text-ink-muted">
-                            Rated by {w.supervisorName}
-                          </span>
+
+                        <span className="min-w-0 flex-1 font-sans text-body-sm text-ink">
+                          {w.name}
                         </span>
-                      </label>
-                    </li>
-                  ))}
+
+                        {/* -- The rater, on the row, as a control.
+                              This was a line of text reading whatever the
+                              profile's Reports-to happened to say. Showing it
+                              was not enough: somebody has to be able to fix it
+                              at the moment they notice it is wrong. -- */}
+                        <label className="flex items-center gap-2">
+                          <span className="font-sans text-body-sm text-ink-muted">Rated by</span>
+                          <select
+                            value={raterId}
+                            onChange={(e) =>
+                              setRaterOf((prev) => ({ ...prev, [w.id]: e.target.value }))
+                            }
+                            aria-label={`Who rates ${w.name}`}
+                            className="min-h-11 min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                          >
+                            <option value="">Nobody chosen</option>
+                            {raters.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name} · {r.role}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        {/* -- Flagged, never blocked.
+                              In a small company a department head or the MD
+                              genuinely does supervise the floor, so refusing
+                              them would be the app overruling the organisation.
+                              Saying it out loud is enough — it was the SILENCE
+                              that let an MD end up rating a helper. -- */}
+                        {included && rater && !rater.isSupervisor ? (
+                          <span className="w-full font-sans text-body-sm text-warning">
+                            {rater.name} does not hold the Supervisor role. Fine if they really do
+                            supervise the floor — worth a second look if not.
+                          </span>
+                        ) : null}
+
+                        {included && !raterId ? (
+                          <span className="w-full font-sans text-body-sm text-critical">
+                            Choose who rates {w.name} before starting.
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
 
-            {workers.length > eligible.length ? (
+            {false ? (
               <p className="mt-2 font-sans text-body-sm text-ink-muted">
                 {workers.length - eligible.length} not listed, because there is no supervisor on
                 their profile.
@@ -334,7 +411,10 @@ export function StartRoundDialog({
           </Button>
           <Button
             onClick={() => void submit()}
-            disabled={busy || chosen.size === 0}
+            disabled={busy || chosen.size === 0 || [...chosen].some((id) => {
+              const w = workers.find((x) => x.id === id);
+              return !w || !raterFor(w);
+            })}
             className="min-h-11"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}

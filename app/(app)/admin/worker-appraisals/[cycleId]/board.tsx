@@ -6,7 +6,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import { StartRoundDialog, type WorkerRow } from "@/app/(app)/admin/worker-appraisals/cycles-client";
+import {
+  StartRoundDialog,
+  type RaterRow,
+  type WorkerRow,
+} from "@/app/(app)/admin/worker-appraisals/cycles-client";
 import { KpiCard, KpiRow } from "@/components/appraise/screen";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils/date";
@@ -56,6 +60,7 @@ export function WorkerBoard({
   allCycles,
   rows,
   workers,
+  raters,
 }: {
   cycle: {
     id: string;
@@ -67,6 +72,7 @@ export function WorkerBoard({
   allCycles: Array<{ id: string; name: string; period_label: string }>;
   rows: BoardRow[];
   workers: WorkerRow[];
+  raters: RaterRow[];
 }) {
   const router = useRouter();
   const [starting, setStarting] = React.useState(false);
@@ -201,7 +207,12 @@ export function WorkerBoard({
         menu. Once both sides are in, the appraisal comes to you.
       </p>
 
-      <StartRoundDialog open={starting} onOpenChange={setStarting} workers={workers} />
+      <StartRoundDialog
+        open={starting}
+        onOpenChange={setStarting}
+        workers={workers}
+        raters={raters}
+      />
     </div>
   );
 }

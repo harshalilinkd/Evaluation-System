@@ -54,8 +54,10 @@ export default async function Page() {
         id: w.id,
         name: w.full_name,
         employeeCode: w.employee_code,
+        supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
       }))}
+      raters={[]}
     />
   );
 }
