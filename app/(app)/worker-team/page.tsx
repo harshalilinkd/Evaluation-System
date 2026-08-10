@@ -26,7 +26,30 @@ export default async function Page() {
     .eq("status", "OPEN")
     .is("excluded_at", null);
 
-  const list = rows ?? [];
+  /* -- ONE ROUND AT A TIME.
+        This selected every OPEN appraisal assigned to the supervisor across
+        ALL rounds and listed them together, so a few test rounds produced five
+        rows for what is one worker — and the header above still named a single
+        round and a single due date, so the page contradicted itself.
+
+        Newest round only. The rest are not lost: they are still OPEN and appear
+        the moment this one closes, and HR's board is the screen that shows the
+        whole picture. A supervisor is working one round at a time by the nature
+        of the job. -- */
+  const all = rows ?? [];
+
+  /* -- The round is chosen from `worker_cycles`, not by sorting the evaluation
+        rows. A uuid has no chronological order, so picking "the newest
+        cycle_id" would be picking one at random and calling it the latest. -- */
+  const { data: openCycles } = await supabase
+    .from("worker_cycles")
+    .select("id, name, period_label, supervisor_due_on, created_at")
+    .in("id", [...new Set(all.map((r) => r.cycle_id))])
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const round = openCycles?.[0] ?? null;
+  const list = round ? all.filter((r) => r.cycle_id === round.id) : [];
 
   if (list.length === 0) {
     return (
@@ -37,17 +60,15 @@ export default async function Page() {
     );
   }
 
-  const [{ data: people }, { data: cycle }] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("id, full_name, employee_code")
-      .in("id", list.map((r) => r.worker_id)),
-    supabase
-      .from("worker_cycles")
-      .select("name, period_label, supervisor_due_on")
-      .eq("id", list[0]!.cycle_id)
-      .maybeSingle(),
-  ]);
+  /* `round` above already IS this cycle — it was selected to decide which
+     round to show. Fetching it a second time would be another round trip for a
+     row we are holding. */
+  const cycle = round;
+
+  const { data: people } = await supabase
+    .from("profiles")
+    .select("id, full_name, employee_code")
+    .in("id", list.map((r) => r.worker_id));
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
 
