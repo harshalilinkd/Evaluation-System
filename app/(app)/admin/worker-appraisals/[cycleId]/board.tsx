@@ -77,7 +77,12 @@ export function WorkerBoard({
 }) {
   const [starting, setStarting] = React.useState(false);
 
-  const bothIn = rows.filter((r) => r.selfIn && r.supervisorIn).length;
+  /* Ready means both sides are in AND nobody has reviewed it — the only state
+     on this screen HR can act on. Counting reviewed ones too meant the number
+     never fell as they worked through them. */
+  const readyCount = rows.filter(
+    (r) => r.selfIn && r.supervisorIn && r.status !== "REVIEWED" && r.status !== "CLOSED",
+  ).length;
 
   /* -- The tiles are the filter, because a count above a list it describes
         invites a press and there was nothing behind it. Three states and no
@@ -210,28 +215,41 @@ export function WorkerBoard({
       </div>
 
       <div className="shrink-0 space-y-3 border-b border-rule px-4 py-3 lg:px-6">
+        {/* -- WHAT THESE THREE SAY, and what they used to.
+              They were tinted self / final / lead — the TIER colours, which on
+              every other screen mean who said something. Here they meant
+              nothing, and three saturated cards gave arithmetic the weight of
+              three findings: the numbers always sum to each other, so two of
+              them are derived from the third.
+
+              Plain now, except the one thing HR can act on. Colour marks the
+              actionable state rather than decorating all three.
+
+              "Both sides in" also counted appraisals HR had already reviewed,
+              so the number never went down as they worked through them. It
+              counts what is WAITING FOR THEM. -- */}
         <KpiRow>
           <KpiCard
             label="In this round"
             value={rows.length}
-            caption="workers"
-            tone="self"
+            caption={rows.length === 1 ? "worker" : "workers"}
+            tone="plain"
             onSelect={() => setFilter("all")}
             active={filter === "all"}
           />
           <KpiCard
-            label="Both sides in"
-            value={bothIn}
-            caption="ready for review"
+            label="Ready for you"
+            value={readyCount}
+            caption="both sides in, not yet reviewed"
             tone="final"
             onSelect={() => toggle("ready")}
             active={filter === "ready"}
           />
           <KpiCard
-            label="Still waiting"
-            value={rows.length - bothIn}
-            caption="one or both outstanding"
-            tone="lead"
+            label="With their supervisor"
+            value={rows.length - readyCount}
+            caption="nothing for you to do yet"
+            tone="plain"
             onSelect={() => toggle("waiting")}
             active={filter === "waiting"}
           />

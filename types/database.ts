@@ -1536,6 +1536,17 @@ export type Database = {
         };
         Returns: undefined;
       };
+      /* 0052: stamps one side's submission. SECURITY DEFINER because
+         worker_evaluations is UPDATE-able by HR alone, and each side must be
+         able to record its own submission without gaining the power to move
+         the status. */
+      submit_worker_layer: {
+        Args: {
+          p_evaluation_id: string;
+          p_layer: "SELF" | "SUPERVISOR" | "MD";
+        };
+        Returns: undefined;
+      };
       log_admin_action: {
         Args: {
           p_entity: string;

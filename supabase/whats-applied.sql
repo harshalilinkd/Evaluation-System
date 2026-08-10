@@ -100,7 +100,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0050_worker_form_fields',    'table',       'worker_evaluation_decisions',
      'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.'),
   ('0051_worker_supervisor_salary','policy',     'worker_decisions_supervisor_read',
-     'Without it the supervisor cannot see the salary block while filling the sheet.')
+     'Without it the supervisor cannot see the salary block while filling the sheet.'),
+  ('0052_worker_submit',         'function',    'submit_worker_layer',
+     'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".')
 )
 select
   e.migration,

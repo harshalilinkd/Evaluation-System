@@ -8,6 +8,7 @@ import { z } from "zod";
 import { checkRole } from "@/lib/auth/guards";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { hikePct, monthsSince } from "@/lib/increment/calc";
+import { mdApprove } from "@/lib/reports/actions";
 import { createClient } from "@/lib/supabase/server";
 
 async function requireHr() {
@@ -289,4 +290,88 @@ export async function saveHikeBands(bands: number[]): Promise<CycleResult<{ save
 
   revalidatePath("/admin/settings");
   return { ok: true, data: { saved: true } };
+}
+
+/* ---------- One press: approve and close ---------- */
+
+/**
+ * The MD approves the figure AND finishes the increment.
+ *
+ * AT THE OWNER'S INSTRUCTION the two acts are joined: "after MD approved figure
+ * it considered as reviewed so after this it should get closed."
+ *
+ * Three §8 steps were three separate presses on two different parts of the
+ * page — approve the figure in the Salary band, approve the report on the rail,
+ * then Confirm and close back in the Salary band. Nothing in that sequence
+ * needed a human decision between the steps, and it was reported twice as "the
+ * cycle did not close". A sequence with no decision points in it is one action
+ * wearing three buttons.
+ *
+ * ORDER IS NOT ARBITRARY. The figure must be stored before the record moves,
+ * because `confirm_increment` refuses without an approved amount; the record
+ * must reach MD_REVIEWED before it can be closed, because §8 has no other route
+ * in. Each step is the existing, guarded one — nothing here reimplements a
+ * transition or a salary write.
+ *
+ * IT IS NOT ATOMIC ACROSS ALL THREE, and that is stated rather than hidden.
+ * The close itself is one transaction (0030), so the money and the status can
+ * never disagree. What can happen is that the approval lands and the close does
+ * not — a failure between steps leaves the figure approved and the record at
+ * MD_REVIEWED, which is a real, valid, recoverable state with a Confirm and
+ * close button already pointing at it. The message says so.
+ */
+export async function approveAndClose(input: {
+  evaluationId: string;
+  approvedCtc: number;
+  remarks?: string;
+  effectiveFrom: string;
+}): Promise<CycleResult<{ closed: true; effectiveFrom: string }>> {
+  const auth = await requireMd();
+  if (!auth.ok) return auth;
+
+  const approval = await saveApproval({
+    evaluationId: input.evaluationId,
+    approvedCtc: input.approvedCtc,
+    remarks: input.remarks ?? "",
+  });
+  if (!approval.ok) return approval;
+
+  /* -- The MD's review of the REPORT, which is what moves HR_APPROVED ->
+        MD_REVIEWED. Skipped when the record has already been moved, so pressing
+        this on a record the MD reviewed earlier does not fail on a transition
+        that has nothing left to do. -- */
+  const supabase = await createClient();
+  const { data: evaluation } = await supabase
+    .from("evaluations")
+    .select("status")
+    .eq("id", input.evaluationId)
+    .maybeSingle();
+
+  if (evaluation?.status === "HR_APPROVED") {
+    const reviewed = await mdApprove({
+      evaluationId: input.evaluationId,
+      remarks: input.remarks ?? "",
+    });
+    if (!reviewed.ok) {
+      return cycleError(
+        "REVIEW_FAILED",
+        `The figure is approved and saved, but the record could not be moved to review: ${reviewed.error.message}`,
+      );
+    }
+  }
+
+  const closed = await confirmIncrement({
+    evaluationId: input.evaluationId,
+    finalCtc: input.approvedCtc,
+    effectiveFrom: input.effectiveFrom,
+  });
+
+  if (!closed.ok) {
+    return cycleError(
+      closed.error.code,
+      `${closed.error.message} The figure is approved and the record is with you — use Confirm and close below to finish.`,
+    );
+  }
+
+  return { ok: true, data: { closed: true, effectiveFrom: closed.data.effectiveFrom } };
 }

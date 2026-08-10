@@ -45,6 +45,23 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   /* -- The salary block. Present only when the server sent one, which happens
         only for a supervisor or an administrator (0051) — a worker's sheet has
         `salary: null` and this state is never used. -- */
+  /* -- One helper, so the two inputs cannot disagree about the arithmetic.
+        Null rather than Infinity on a zero old salary: `numeric` cannot store
+        Infinity and no screen can render it as anything a person should read
+        (P21-3 hit the same edge). -- */
+  const withPct = (next: {
+    salaryChanged: boolean;
+    oldCtc: number | null;
+    incrementPct: number | null;
+    newCtc: number | null;
+  }) => ({
+    ...next,
+    incrementPct:
+      next.oldCtc && next.newCtc && next.oldCtc > 0
+        ? Math.round(((next.newCtc - next.oldCtc) / next.oldCtc) * 10000) / 100
+        : null,
+  });
+
   const [salary, setSalary] = React.useState(
     sheet.salary ?? { salaryChanged: false, oldCtc: null, incrementPct: null, newCtc: null },
   );
@@ -410,27 +427,30 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   disabled={readOnly}
                   value={salary.oldCtc ?? ""}
                   onChange={(e) => {
-                    setSalary((s) => ({ ...s, oldCtc: e.target.value === "" ? null : Number(e.target.value) }));
+                    setSalary((s) => withPct({ ...s, oldCtc: e.target.value === "" ? null : Number(e.target.value) }));
                     setDirty(true);
                   }}
                   className="min-h-11 tabular"
                 />
               </div>
+              {/* -- DERIVED, not typed.
+                    A percentage somebody enters by hand is a third version of
+                    the truth beside the two figures it comes from, and it is
+                    the one nobody recomputes when a salary is corrected. Shown
+                    read-only so it is plainly a consequence rather than a
+                    field left blank. -- */}
               <div className="space-y-1.5">
                 <Label htmlFor="w_pct">Increment %</Label>
                 <Input
                   id="w_pct"
-                  inputMode="decimal"
-                  disabled={readOnly}
-                  value={salary.incrementPct ?? ""}
-                  onChange={(e) => {
-                    setSalary((s) => ({
-                      ...s,
-                      incrementPct: e.target.value === "" ? null : Number(e.target.value),
-                    }));
-                    setDirty(true);
-                  }}
-                  className="min-h-11 tabular"
+                  readOnly
+                  tabIndex={-1}
+                  aria-live="polite"
+                  value={
+                    salary.incrementPct === null ? "" : `${salary.incrementPct.toFixed(2)}%`
+                  }
+                  placeholder="Worked out for you"
+                  className="min-h-11 tabular bg-surface-mute text-ink-muted"
                 />
               </div>
               <div className="space-y-1.5">
@@ -441,7 +461,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   disabled={readOnly}
                   value={salary.newCtc ?? ""}
                   onChange={(e) => {
-                    setSalary((s) => ({ ...s, newCtc: e.target.value === "" ? null : Number(e.target.value) }));
+                    setSalary((s) => withPct({ ...s, newCtc: e.target.value === "" ? null : Number(e.target.value) }));
                     setDirty(true);
                   }}
                   className="min-h-11 tabular"

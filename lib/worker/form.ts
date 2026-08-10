@@ -143,14 +143,26 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   /* -- Read through the AUTHENTICATED client, so RLS decides. A worker gets
         nothing back here and the field is null for them — the screen is not
         making that decision, the policy is. -- */
-  const { data: decisions } =
+  const [{ data: decisions }, { data: employment }] =
     layer === "SUPERVISOR"
-      ? await supabase
-          .from("worker_evaluation_decisions")
-          .select("salary_changed, old_ctc, increment_pct, new_ctc")
-          .eq("evaluation_id", evaluationId)
-          .maybeSingle()
-      : { data: null };
+      ? await Promise.all([
+          supabase
+            .from("worker_evaluation_decisions")
+            .select("salary_changed, old_ctc, increment_pct, new_ctc")
+            .eq("evaluation_id", evaluationId)
+            .maybeSingle(),
+          /* -- Their salary on record, so "Old salary" arrives filled in.
+                Retyping a figure the system already holds is how the two come
+                to disagree — and the one that gets typed is the one somebody
+                is guessing at. Read through the authenticated client, so 0051's
+                policy decides whether this supervisor may see it at all. -- */
+          supabase
+            .from("employment_records")
+            .select("current_ctc")
+            .eq("profile_id", evaluation.worker_id)
+            .maybeSingle(),
+        ])
+      : [{ data: null }, { data: null }];
 
   const { data: supervisor } = evaluation.supervisor_id
     ? await supabase
@@ -186,7 +198,8 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         layer === "SUPERVISOR"
           ? {
               salaryChanged: decisions?.salary_changed ?? false,
-              oldCtc: decisions?.old_ctc ?? null,
+              // What was recorded on this appraisal, else what they are on now.
+              oldCtc: decisions?.old_ctc ?? employment?.current_ctc ?? null,
               incrementPct: decisions?.increment_pct ?? null,
               newCtc: decisions?.new_ctc ?? null,
             }
@@ -280,14 +293,12 @@ export async function submitWorkerSheet(
   }
 
   const supabase = await createClient();
-  const now = new Date().toISOString();
 
-  const { error } = await supabase
+  /* -- The answers first, through RLS, by the person who gave them. -- */
+  const { error: answersError } = await supabase
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
-      submitted_at: now,
-      submitted_by: profile.id,
       ...(sheet.data.layer === "SUPERVISOR"
         ? {
             overall_comment: extras?.overallComment ?? null,
@@ -298,67 +309,24 @@ export async function submitWorkerSheet(
     .eq("evaluation_id", evaluationId)
     .eq("layer", sheet.data.layer);
 
-  if (error) return fail("SAVE_FAILED", error.message);
+  if (answersError) return fail("SAVE_FAILED", answersError.message);
 
-  /* -- The record's own timestamp, and §11's overall where this is the
-        supervisor. The overall is the supervisor's tick, stored at submission
-        and never recomputed on read (§5's "scores are never recomputed from
-        mutable config"). -- */
-  const overallQuestion = sheet.data.questions.find((q) => q.isOverall);
-  const patch =
-    sheet.data.layer === "SELF"
-      ? { self_submitted_at: now }
-      : {
-          supervisor_submitted_at: now,
-          overall_tick: overallQuestion ? (answers[overallQuestion.questionId] ?? null) : null,
-        };
+  /* -- THEN the submission itself, through 0052's function.
+        This used to `update worker_evaluations` directly — which is HR-only
+        (0047), so from a supervisor's session it matched no rows and returned
+        no error. The answers saved; the fact that they had been SUBMITTED did
+        not, and HR's board sat on "Not yet" for a sheet that was finished.
 
-  await supabase.from("worker_evaluations").update(patch).eq("id", evaluationId);
-
-  /* -- Both sides in? Then it goes to review. Read back rather than inferred
-        from what this call just wrote, because the other side may have landed
-        in between. A skipped layer counts as in — HR advanced past it
-        deliberately (F11-3). -- */
-  const { data: after } = await supabase
-    .from("worker_evaluations")
-    .select("self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped")
-    .eq("id", evaluationId)
-    .maybeSingle();
-
-  const supervisorIn = Boolean(after?.supervisor_submitted_at) || Boolean(after?.supervisor_skipped);
-
-  /* -- THE SUPERVISOR'S SHEET IS WHAT COMPLETES IT (0054).
-        The worker's own sheet is no longer collected — the shop floor has one
-        action, Rate them — so waiting for both sides would leave every round
-        at OPEN for ever.
-
-        Through the RPC rather than a direct update, and that is not tidiness:
-        the only write policy on `worker_evaluations` is
-        `worker_evaluations_hr_write`, so the plain `.update()` that used to be
-        here matched ZERO rows for a supervisor. PostgREST does not call that an
-        error, so the submit reported success and the status never moved. The
-        definer function re-checks the assignment and marks the uncollected
-        self layer SKIPPED rather than pretending it came in (§17). -- */
-  if (supervisorIn) {
-    const { error: advanceError } = await supabase.rpc("complete_worker_appraisal", {
-      p_evaluation_id: evaluationId,
-    });
-
-    if (advanceError) {
-      // Not fatal: the ratings are saved and locked. But it is the difference
-      // between HR seeing this appraisal and not, so it must not be silent.
-      console.error(
-        `[worker appraisal] ${evaluationId} rated but not advanced: ${advanceError.message}`,
-      );
-    }
-  }
-
-  await supabase.rpc("log_admin_action", {
-    p_entity: "worker_evaluation",
-    p_entity_id: evaluationId,
-    p_action: sheet.data.layer === "SELF" ? "worker.self_submit" : "worker.supervisor_submit",
-    p_diff: {} as Json,
+        The function also makes it atomic: the timestamp, §11's overall tick and
+        the move to review were three round trips that could half-happen. -- */
+  const { error: submitError } = await supabase.rpc("submit_worker_layer", {
+    p_evaluation_id: evaluationId,
+    p_layer: sheet.data.layer,
   });
+
+  if (submitError) {
+    return fail("SUBMIT_FAILED", submitError.message.replace(/^.*?:\s*/, "").trim() || submitError.message);
+  }
 
   revalidatePath("/worker-appraisal");
   revalidatePath(`/worker-appraisal/${evaluationId}`);
