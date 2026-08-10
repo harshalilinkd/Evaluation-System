@@ -10,10 +10,12 @@ import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { TickScale } from "@/components/appraise/tick-scale";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  saveWorkerSalary,
   saveWorkerSheet,
   submitWorkerSheet,
   type WorkerSheet,
@@ -38,6 +40,14 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   const [thanked, setThanked] = React.useState(false);
   const [comment, setComment] = React.useState(sheet.overallComment);
   const [training, setTraining] = React.useState<boolean | null>(sheet.trainingRequired);
+  const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  /* -- The salary block. Present only when the server sent one, which happens
+        only for a supervisor or an administrator (0051) — a worker's sheet has
+        `salary: null` and this state is never used. -- */
+  const [salary, setSalary] = React.useState(
+    sheet.salary ?? { salaryChanged: false, oldCtc: null, incrementPct: null, newCtc: null },
+  );
 
   const isSelf = sheet.layer === "SELF";
   const readOnly = !sheet.isOpen;
@@ -46,26 +56,123 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
 
   function tick(questionId: string, value: WorkerTick) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
+    setDirty(true);
     setError(null);
   }
 
+  /* -- AUTOSAVE. §13.6: never lose a half-filled form.
+        This screen had none — ticks lived in the page until somebody pressed
+        Save draft, so a refresh threw the lot away. That is the same class of
+        loss FIX-3 and FIX-4 fixed on the staff form, arriving here because this
+        one was written fresh rather than from that one.
+
+        The hand-over sheet still has none, and that is deliberate rather than
+        an oversight: a draft there would sit in the SUPERVISOR's session
+        between hand-overs, readable by whoever holds the tablet. -- */
+  /* -- AUTOSAVE. §13.6: never lose a half-filled form.
+        This screen had none — ticks lived in the page until somebody pressed
+        Save draft, so a refresh threw the lot away. Same class of loss FIX-3
+        and FIX-4 fixed on the staff form, arriving here because this one was
+        written fresh rather than from that one.
+
+        DEBOUNCED ON STATE, with no refs. The first version mirrored every field
+        into a ref so a 15-second interval could read the latest values without
+        being torn down — and `react-hooks/immutability` refused it, because a
+        ref captured by a hook may not then be written to. It was also more
+        machinery than the problem needs: eight ticks and three fields settle in
+        under a second, so waiting for a pause and saving is both simpler and
+        has no stale closure to get wrong.
+
+        The hand-over sheet still has NO autosave, and that stays deliberate: a
+        draft there would sit in the supervisor's session between hand-overs,
+        readable by whoever holds the tablet. -- */
+  const [dirty, setDirty] = React.useState(false);
+  const inFlight = React.useRef(false);
+
+  const persist = React.useCallback(async (): Promise<boolean> => {
+    if (readOnly || inFlight.current) return true;
+    inFlight.current = true;
+    setSaveState("saving");
+
+    /* -- The await is GUARDED. A rejected promise — a dropped connection, a
+          500 — would otherwise skip `inFlight.current = false` and every line
+          after it, leaving the flag true for the life of the page so nothing
+          was ever sent again. That is precisely what happened on the staff form
+          (FIX-12); `finally` is what makes the flag honest. -- */
+    try {
+      const result = await saveWorkerSheet(sheet.evaluationId, answers, {
+        overallComment: comment,
+        trainingRequired: training,
+      });
+      if (!result.ok) {
+        setSaveState("error");
+        setError(result.error.message);
+        return false;
+      }
+
+      /* -- The salary block rides the same save as a SECOND call, not a merged
+            one: a different table with different policies, and one call whose
+            failure could mean either "your ticks did not save" or "you may not
+            record salary" would be two problems wearing one message. -- */
+      if (sheet.salary) {
+        const salaryResult = await saveWorkerSalary(sheet.evaluationId, salary);
+        if (!salaryResult.ok) {
+          setSaveState("error");
+          setError(salaryResult.error.message);
+          return false;
+        }
+      }
+
+      setDirty(false);
+      setSaveState("saved");
+      setSaved(new Date(result.data.savedAt));
+      setError(null);
+      return true;
+    } catch {
+      setSaveState("error");
+      setError("The connection dropped before your ticks reached us. They are still on screen.");
+      return false;
+    } finally {
+      inFlight.current = false;
+    }
+  }, [readOnly, sheet.evaluationId, sheet.salary, answers, comment, training, salary]);
+
+  // Save once the person stops for a moment.
+  React.useEffect(() => {
+    if (!dirty || readOnly) return;
+    const timer = setTimeout(() => void persist(), 1200);
+    return () => clearTimeout(timer);
+  }, [dirty, readOnly, persist]);
+
+  /* -- `visibilitychange`, not only `beforeunload`. iOS Safari does not
+        reliably fire unload when an app is backgrounded — which is exactly when
+        somebody on a phone leaves a form (P12-11). -- */
+  React.useEffect(() => {
+    if (!dirty || readOnly) return;
+    const flush = () => void persist();
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [dirty, readOnly, persist]);
+
   async function save() {
     setBusy(true);
-    const result = await saveWorkerSheet(sheet.evaluationId, answers, {
-      overallComment: comment,
-      trainingRequired: training,
-    });
+    await persist();
     setBusy(false);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    setSaved(new Date(result.data.savedAt));
-    setError(null);
   }
 
   async function submit() {
     setBusy(true);
+    /* -- If the draft never reached the server, say so rather than submitting
+          a copy the server does not have — which is how "N still need a tick"
+          reaches somebody looking at a full form (FIX-3). -- */
+    if (dirty && !(await persist())) {
+      setBusy(false);
+      return;
+    }
     const result = await submitWorkerSheet(sheet.evaluationId, answers, {
       overallComment: comment,
       trainingRequired: training,
@@ -92,9 +199,24 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           {sheet.cycleName} · {sheet.periodLabel}
           {sheet.dueOn ? ` · due ${formatDate(sheet.dueOn)}` : ""}
         </p>
+        {/* -- The save state, where somebody filling the form can see it.
+              §13.6 asks for a visible "Saved HH:MM"; the point of showing the
+              failure is that a form which has quietly stopped saving looks
+              identical to one that is saving fine. -- */}
         <p className="tabular mt-3 font-sans text-body-sm text-ink-invert/70">
           {answered} of {sheet.questions.length} ticked
-          {saved ? ` · saved ${formatDate(saved.toISOString())}` : ""}
+          {saveState === "saving"
+            ? " · saving…"
+            : saveState === "error"
+              ? " · not saved"
+              : saved
+                ? ` · saved ${saved.toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                    timeZone: "Asia/Kolkata",
+                  })}`
+                : ""}
         </p>
       </header>
 
@@ -191,7 +313,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
             <Textarea
               id="worker_comment"
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              onChange={(e) => {
+                setComment(e.target.value);
+                setDirty(true);
+              }}
               disabled={readOnly}
               rows={4}
               placeholder="Anything worth recording about how they have worked this period."
@@ -211,7 +336,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   key={option.label}
                   type="button"
                   aria-pressed={training === option.value}
-                  onClick={() => setTraining(training === option.value ? null : option.value)}
+                  onClick={() => {
+                    setTraining(training === option.value ? null : option.value);
+                    setDirty(true);
+                  }}
                   className={cn(
                     "min-h-11 flex-1 rounded-control border px-4 font-sans text-body transition-colors",
                     training === option.value
@@ -224,6 +352,103 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
               ))}
             </div>
           </fieldset>
+        </div>
+      ) : null}
+
+      {/* -- The salary block (0051).
+            Rendered only when the server sent one. §5 confines salary to HR and
+            the MD; 0051 admits the worker's own supervisor as well, at the
+            owner's instruction and for this module only. The WORKER never sees
+            it — not by this condition, but because no policy admits them to the
+            row, so there is nothing to render. -- */}
+      {sheet.salary ? (
+        <div className="card-surface space-y-5 p-4 sm:p-5">
+          <div>
+            <p className="font-sans text-body-lg text-ink">Salary</p>
+            <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
+              Seen by you, HR and management. Never by {sheet.workerName}.
+            </p>
+          </div>
+
+          <fieldset className="space-y-2" disabled={readOnly}>
+            <legend className="font-sans text-body font-medium text-ink">After this appraisal</legend>
+            <div className="flex gap-2">
+              {[
+                { label: "Same", value: false },
+                { label: "New salary", value: true },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  aria-pressed={salary.salaryChanged === option.value}
+                  onClick={() => {
+                    setSalary((s) => ({ ...s, salaryChanged: option.value }));
+                    setDirty(true);
+                  }}
+                  className={cn(
+                    "min-h-11 flex-1 rounded-control border px-4 font-sans text-body transition-colors",
+                    salary.salaryChanged === option.value
+                      ? "border-lead bg-lead-tint text-ink"
+                      : "border-rule bg-surface text-ink-muted hover:bg-surface-mute",
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          {/* Only when there is a change to describe. Three figures under a
+              "Same" tick are three fields that must be left blank. */}
+          {salary.salaryChanged ? (
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="w_old">Old salary</Label>
+                <Input
+                  id="w_old"
+                  inputMode="numeric"
+                  disabled={readOnly}
+                  value={salary.oldCtc ?? ""}
+                  onChange={(e) => {
+                    setSalary((s) => ({ ...s, oldCtc: e.target.value === "" ? null : Number(e.target.value) }));
+                    setDirty(true);
+                  }}
+                  className="min-h-11 tabular"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="w_pct">Increment %</Label>
+                <Input
+                  id="w_pct"
+                  inputMode="decimal"
+                  disabled={readOnly}
+                  value={salary.incrementPct ?? ""}
+                  onChange={(e) => {
+                    setSalary((s) => ({
+                      ...s,
+                      incrementPct: e.target.value === "" ? null : Number(e.target.value),
+                    }));
+                    setDirty(true);
+                  }}
+                  className="min-h-11 tabular"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="w_new">New salary</Label>
+                <Input
+                  id="w_new"
+                  inputMode="numeric"
+                  disabled={readOnly}
+                  value={salary.newCtc ?? ""}
+                  onChange={(e) => {
+                    setSalary((s) => ({ ...s, newCtc: e.target.value === "" ? null : Number(e.target.value) }));
+                    setDirty(true);
+                  }}
+                  className="min-h-11 tabular"
+                />
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

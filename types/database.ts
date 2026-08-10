@@ -410,6 +410,43 @@ export type Database = {
         };
         Relationships: [];
       };
+      /* 0050/0051: the worker form's salary block. Its own table because
+         worker_evaluations is readable by the worker and their supervisor, and
+         a column cannot be withheld by RLS — only a row. */
+      worker_evaluation_decisions: {
+        Row: {
+          evaluation_id: string;
+          salary_changed: boolean;
+          old_ctc: number | null;
+          increment_pct: number | null;
+          new_ctc: number | null;
+          md_remarks: string | null;
+          decided_by: string | null;
+          decided_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          evaluation_id: string;
+          salary_changed?: boolean;
+          old_ctc?: number | null;
+          increment_pct?: number | null;
+          new_ctc?: number | null;
+          md_remarks?: string | null;
+          decided_by?: string | null;
+          decided_at?: string | null;
+        };
+        Update: {
+          salary_changed?: boolean;
+          old_ctc?: number | null;
+          increment_pct?: number | null;
+          new_ctc?: number | null;
+          md_remarks?: string | null;
+          decided_by?: string | null;
+          decided_at?: string | null;
+        };
+        Relationships: [];
+      };
       worker_evaluation_questions: {
         Row: {
           id: string;

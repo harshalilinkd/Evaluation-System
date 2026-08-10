@@ -46,6 +46,15 @@ export type WorkerSheet = {
   overallComment: string;
   /** Paper form: "Training Required Yes/No". Supervisor layer only. */
   trainingRequired: boolean | null;
+  /* -- The salary block. SUPERVISOR AND ADMINS ONLY — null on a worker's own
+        sheet, because no policy admits them to that row and there is nothing to
+        read (0051). Not "hidden": absent. -- */
+  salary: {
+    salaryChanged: boolean;
+    oldCtc: number | null;
+    incrementPct: number | null;
+    newCtc: number | null;
+  } | null;
   isSubmitted: boolean;
   /** Open for writing: the record is OPEN and this layer is neither in nor skipped. */
   isOpen: boolean;
@@ -131,6 +140,18 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   const submittedAt = response?.submitted_at ?? null;
   const skipped = layer === "SELF" ? evaluation.self_skipped : evaluation.supervisor_skipped;
 
+  /* -- Read through the AUTHENTICATED client, so RLS decides. A worker gets
+        nothing back here and the field is null for them — the screen is not
+        making that decision, the policy is. -- */
+  const { data: decisions } =
+    layer === "SUPERVISOR"
+      ? await supabase
+          .from("worker_evaluation_decisions")
+          .select("salary_changed, old_ctc, increment_pct, new_ctc")
+          .eq("evaluation_id", evaluationId)
+          .maybeSingle()
+      : { data: null };
+
   const { data: supervisor } = evaluation.supervisor_id
     ? await supabase
         .from("profiles")
@@ -161,6 +182,15 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
       answers: (response?.answers ?? {}) as Record<string, WorkerTick>,
       overallComment: response?.overall_comment ?? "",
       trainingRequired: response?.training_required ?? null,
+      salary:
+        layer === "SUPERVISOR"
+          ? {
+              salaryChanged: decisions?.salary_changed ?? false,
+              oldCtc: decisions?.old_ctc ?? null,
+              incrementPct: decisions?.increment_pct ?? null,
+              newCtc: decisions?.new_ctc ?? null,
+            }
+          : null,
       isSubmitted: submittedAt !== null,
       isOpen: evaluation.status === "OPEN" && submittedAt === null && !skipped,
     },
@@ -314,5 +344,73 @@ export async function submitWorkerSheet(
 
   revalidatePath("/worker-appraisal");
   revalidatePath(`/worker-appraisal/${evaluationId}`);
+  return { ok: true, data: { ok: true } };
+}
+
+
+/* ---------- The salary block ---------- */
+
+export type WorkerSalaryInput = {
+  salaryChanged: boolean;
+  oldCtc: number | null;
+  incrementPct: number | null;
+  newCtc: number | null;
+};
+
+/**
+ * Save the salary block on a worker's sheet.
+ *
+ * SEPARATE FROM `saveWorkerSheet`, deliberately. It writes a different table
+ * with different policies, and folding it into the ratings save would mean one
+ * call whose failure could be either "your ticks did not save" or "you may not
+ * see salary" — two problems with nothing in common and different answers.
+ *
+ * §5 AS AMENDED BY 0051: the supervisor of that worker may write this while
+ * their own sheet is unsubmitted, and HR and the MD at any time. The worker has
+ * no policy on this table at all, so a forged call from their session writes
+ * nothing — this function does not need to check that, and does not.
+ */
+export async function saveWorkerSalary(
+  evaluationId: string,
+  input: WorkerSalaryInput,
+): Promise<Result<{ ok: true }>> {
+  const profile = await getCurrentProfile();
+  if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
+
+  /* -- A rise that lowers pay is a typo or a decision that should not be filed
+        under that word. Caught here so it reads as a sentence; the CHECK
+        constraint behind it is the backstop, not the message (P21-3). -- */
+  if (
+    input.salaryChanged &&
+    input.oldCtc !== null &&
+    input.newCtc !== null &&
+    input.newCtc < input.oldCtc
+  ) {
+    return fail("LOWER", "The new salary is below the old one. Check the two figures.");
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("worker_evaluation_decisions").upsert(
+    {
+      evaluation_id: evaluationId,
+      salary_changed: input.salaryChanged,
+      // "Same" means no figures, not zeroes. A stored 0 would read as a salary.
+      old_ctc: input.salaryChanged ? input.oldCtc : null,
+      increment_pct: input.salaryChanged ? input.incrementPct : null,
+      new_ctc: input.salaryChanged ? input.newCtc : null,
+    },
+    { onConflict: "evaluation_id" },
+  );
+
+  if (error) {
+    return fail(
+      "SAVE_FAILED",
+      error.message.includes("row-level security")
+        ? "You are not able to record salary on this appraisal."
+        : error.message,
+    );
+  }
+
   return { ok: true, data: { ok: true } };
 }
