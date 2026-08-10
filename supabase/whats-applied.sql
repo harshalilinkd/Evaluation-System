@@ -102,7 +102,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0051_worker_supervisor_salary','policy',     'worker_decisions_supervisor_read',
      'Without it the supervisor cannot see the salary block while filling the sheet.'),
   ('0052_worker_submit',         'function',    'submit_worker_layer',
-     'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".')
+     'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".'),
+  ('0053_worker_submit_backfill','none',        'repair — nothing to detect',
+     'Repairs sheets submitted BEFORE 0052: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0052.')
 )
 select
   e.migration,
@@ -130,6 +132,10 @@ select
          and pg_get_functiondef(p.oid) not like '%returning id into v_audit_id%')
     -- 0039 patches apply_evaluation_transition rather than creating an object,
     -- so the tell is the transition itself appearing in the stored body.
+    -- A pure data repair creates no object, so there is nothing to look for.
+    -- Reported rather than guessed at: a check that always says "missing" is
+    -- worse than one that says it cannot tell.
+    when 'none' then null
     when 'policy' then exists (
       select 1 from pg_policies
        where schemaname = 'public' and policyname = e.object_name)

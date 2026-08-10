@@ -218,6 +218,17 @@ export function StartRoundDialog({
       }
 
       onOpenChange(false);
+
+      /* -- Go TO the new round, rather than refreshing the old one.
+            The board is a per-cycle route, so `router.refresh()` re-rendered
+            whichever round was already on screen — the new one existed, nothing
+            was broken, and it was nowhere to be seen. Reported as "I'm trying
+            to add a new entry, it's not visible", which is exactly what it
+            looked like.
+
+            `refresh()` after the push so the round switcher picks up the new
+            option too; the push alone would leave it listing yesterday's. -- */
+      router.push(`/admin/worker-appraisals/${created.data.id}`);
       router.refresh();
     } catch (cause) {
       setError(
