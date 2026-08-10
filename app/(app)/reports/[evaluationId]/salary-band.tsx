@@ -431,7 +431,13 @@ function HrProposal({
         </dl>
 
         <div className="space-y-2">
-          <Label htmlFor="justification" className="type-label text-ink-muted">Justification</Label>
+          <Label
+            htmlFor="justification"
+            className="flex items-baseline gap-1.5 type-label text-ink-muted"
+          >
+            Justification
+            <span className="font-normal normal-case tracking-normal">optional</span>
+          </Label>
           <Textarea
             id="justification"
             value={justification}
@@ -440,14 +446,16 @@ function HrProposal({
             placeholder="Why is this the right figure?"
           />
           <p className="font-sans text-body-sm text-ink-muted">
-            Required. It goes to the MD with the number.
+            Optional. It goes to the MD with the number.
           </p>
         </div>
 
         <Button
           type="button"
           className="min-h-11"
-          disabled={busy || proposed === null || proposed <= 0 || justification.trim() === ""}
+          /* Same stale gate as the MD's, and the same fix — the server made
+             this optional and the client went on refusing. */
+          disabled={busy || proposed === null || proposed <= 0}
           onClick={onSave}
         >
           {busy ? "Saving…" : "Save the proposal"}
@@ -550,20 +558,38 @@ function MdApproval({
             </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="md_salary_remarks" className="type-label text-ink-muted">Remarks</Label>
+            <Label
+              htmlFor="md_salary_remarks"
+              className="flex items-baseline gap-1.5 type-label text-ink-muted"
+            >
+              Remarks
+              <span className="font-normal normal-case tracking-normal">optional</span>
+            </Label>
             <Textarea
               id="md_salary_remarks"
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               rows={4}
+              placeholder="Anything the record should carry."
             />
+            <p className="font-sans text-body-sm text-ink-muted">
+              Approving without a note is fine — the figure is still dated and attributed to you.
+            </p>
           </div>
         </div>
 
         <Button
           type="button"
           className="min-h-11"
-          disabled={busy || approved === null || approved <= 0 || remarks.trim() === ""}
+          /* -- Remarks no longer gate this, at the owner's instruction.
+                The SERVER stopped requiring them when `approvalSchema` was made
+                optional; this client check outlived it, so the button stayed
+                grey and the screen still behaved as though a note were
+                mandatory. A control disabled by a rule that no longer exists is
+                the worst kind: nothing explains it, because there is nothing
+                left to explain. The figure is still required — an approval with
+                no amount approves nothing. -- */
+          disabled={busy || approved === null || approved <= 0}
           onClick={onApprove}
         >
           {busy ? "Saving…" : "Approve this figure"}
