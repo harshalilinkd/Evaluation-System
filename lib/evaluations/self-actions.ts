@@ -163,7 +163,35 @@ export async function submitSelfEvaluation(
         deliberately not awaited for its result: a figure that failed to copy
         must not turn a submitted evaluation into a reported failure, and HR's
         first proposal calls it again. -- */
-  await supabase.rpc("record_salary_expectation", { p_evaluation_id: evaluationId });
+  /* -- ITS OUTCOME IS NO LONGER DISCARDED.
+        The result was thrown away entirely, so the two ways this can fail were
+        both silent: the RPC erroring, and the RPC returning `false` because it
+        found nothing to copy. Either way the employee saw a clean submit and
+        HR later read "Not stated" against a figure the employee had plainly
+        typed, with nothing anywhere to say why.
+
+        Still not fatal, and that part was right: a figure that failed to copy
+        must not turn a submitted evaluation into a reported failure, and HR's
+        first proposal calls it again (P21-8). But §0.7 says fail loudly, and a
+        server log is the least this can do — it is the difference between a
+        bug somebody can find and one they can only guess at. -- */
+  const { data: copied, error: copyError } = await supabase.rpc("record_salary_expectation", {
+    p_evaluation_id: evaluationId,
+  });
+
+  if (copyError) {
+    console.error(
+      `[salary expectation] evaluation ${evaluationId}: ${copyError.message}. ` +
+        "The answer is safe in the SELF layer; HR's first proposal will copy it again.",
+    );
+  } else if (copied === false) {
+    // Expected on a plain evaluation cycle, which never asks the question.
+    // Worth a line on an increment, where it means the figure did not land.
+    console.info(
+      `[salary expectation] evaluation ${evaluationId}: nothing copied — ` +
+        "no answer given, or no current salary on record to anchor a review row to.",
+    );
+  }
 
   /* -- Who reviews it next, for the confirmation card -- */
   const { data: evaluation } = await supabase

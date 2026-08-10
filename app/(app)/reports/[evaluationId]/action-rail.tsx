@@ -28,6 +28,7 @@ import {
   saveHrReview,
   sendToMd,
 } from "@/lib/reports/actions";
+import { saveProposal } from "@/lib/increment/actions";
 import type { EvaluationReport } from "@/lib/reports/types";
 import { formatDateTime } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -121,6 +122,18 @@ export function HrRail({ report }: { report: EvaluationReport }) {
     calculatedFinal === null ? "" : String(calculatedFinal),
   );
 
+  /* -- HR's proposed salary, offered HERE rather than only in the Salary
+        section further down.
+
+        Starts BLANK rather than seeded. `ReportSalary` carries the outcome
+        columns — old, pct, new — not the proposal, and inventing a field on it
+        to prefill a box would put a second source of truth beside
+        `increment_reviews`. Blank also reads correctly: the field is optional,
+        and an empty one says "the MD sets it" rather than looking like a figure
+        that failed to load. The Salary section below shows what is on record. -- */
+  const [proposedCtc, setProposedCtc] = React.useState("");
+  const [proposalNote, setProposalNote] = React.useState("");
+
   const atHr = report.header.status === "PENDING_HR_REVIEW";
   const reviewed = report.header.status === "MD_REVIEWED";
 
@@ -139,6 +152,43 @@ export function HrRail({ report }: { report: EvaluationReport }) {
   async function onSend() {
     setBusy(true);
     setError(null);
+
+    /* -- THE PROPOSAL GOES FIRST, and only if HR typed one.
+          It was only ever reachable from the Salary section further down the
+          report, and HR presses Send from up here — so a record could reach the
+          MD with "HR PROPOSED —" and nothing for them to approve, which is what
+          was reported.
+
+          Optional, at the owner's instruction: HR may genuinely want the MD to
+          set the first figure. So a blank field sends exactly as before.
+
+          Before the transition rather than after: `saveProposal` also re-runs
+          `record_salary_expectation`, which is the second chance at lifting the
+          employee's stated figure out of the answers blob (P21-8). Doing it
+          after the record has moved would leave the MD reading a report whose
+          expectation had not been picked up yet. A failure here stops the send
+          rather than being swallowed — a proposal HR believes they made is
+          worse than one they know did not save. -- */
+    const typed = proposedCtc.trim().replace(/[₹,\s]/g, "");
+    if (report.isIncrement && typed !== "") {
+      const amount = Number(typed);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        setBusy(false);
+        setError("That proposed salary is not a number. Leave it blank to let the MD set it.");
+        return;
+      }
+      const proposal = await saveProposal({
+        evaluationId: report.evaluationId,
+        proposedCtc: amount,
+        justification: proposalNote.trim(),
+      });
+      if (!proposal.ok) {
+        setBusy(false);
+        setError(proposal.error.message);
+        return;
+      }
+    }
+
     const result = await sendToMd({ evaluationId: report.evaluationId, summary, recommendation });
     setBusy(false);
     if (!result.ok) setError(result.error.message);
@@ -235,6 +285,44 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               : "Required either way — to complete this yourself, or to send it to the MD."}
           </p>
         </div>
+
+        {/* -- THE PROPOSED SALARY, on an increment and while it is HR's.
+              It existed only in the Salary section further down the report, and
+              HR presses Send from up here — so a record could reach the MD with
+              nothing proposed and nothing for them to approve.
+
+              OPTIONAL, at the owner's instruction. Blank sends exactly as
+              before, which is the right default when HR wants the MD to set the
+              first figure themselves. The label says so rather than leaving an
+              empty field looking like something forgotten. -- */}
+        {report.isIncrement && atHr ? (
+          <div className="space-y-2">
+            <Label htmlFor="hr_proposed_ctc" className="flex items-baseline gap-1.5 type-label text-ink-muted">
+              Proposed salary
+              <span className="font-normal normal-case tracking-normal">optional</span>
+            </Label>
+            <Input
+              id="hr_proposed_ctc"
+              value={proposedCtc}
+              onChange={(e) => setProposedCtc(e.target.value)}
+              inputMode="numeric"
+              placeholder="e.g. 210000"
+              className="tabular min-h-11"
+            />
+            <Textarea
+              value={proposalNote}
+              onChange={(e) => setProposalNote(e.target.value)}
+              rows={2}
+              placeholder="Why this figure (optional)"
+              className="resize-y rounded-card border-rule bg-surface px-3.5 py-2.5 text-body shadow-none placeholder:text-ink-faint focus-visible:border-primary/50 focus-visible:ring-4 focus-visible:ring-primary/10"
+            />
+            <p className="font-sans text-body-sm text-ink-muted">
+              Saved with the record when you send. Leave blank to let the MD set the figure —
+              either way they approve it, and the full salary panel is in section{" "}
+              {report.narratives.paired.length > 0 ? 5 : 4} below.
+            </p>
+          </div>
+        ) : null}
 
         {/* -- A CUSTOM DOT, because the native one cannot be styled.
               A browser radio paints its own blue in its own size on every

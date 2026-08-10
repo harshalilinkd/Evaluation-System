@@ -98,7 +98,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0048_worker_handover',       'function',    'submit_worker_self_handover',
      'Without it a worker cannot tick their own sheet on their supervisor''s device.'),
   ('0050_worker_form_fields',    'table',       'worker_evaluation_decisions',
-     'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.')
+     'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.'),
+  ('0051_worker_supervisor_salary','policy',     'worker_decisions_supervisor_read',
+     'Without it the supervisor cannot see the salary block while filling the sheet.')
 )
 select
   e.migration,
@@ -126,6 +128,9 @@ select
          and pg_get_functiondef(p.oid) not like '%returning id into v_audit_id%')
     -- 0039 patches apply_evaluation_transition rather than creating an object,
     -- so the tell is the transition itself appearing in the stored body.
+    when 'policy' then exists (
+      select 1 from pg_policies
+       where schemaname = 'public' and policyname = e.object_name)
     when 'close_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'

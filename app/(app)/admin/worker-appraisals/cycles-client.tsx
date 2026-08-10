@@ -178,36 +178,56 @@ export function StartRoundDialog({
     setBusy(true);
     setError(null);
 
-    const created = await createWorkerCycle({
-      name,
-      periodLabel: period,
-      selfDueOn: selfDue,
-      supervisorDueOn: supervisorDue,
-      mdDueOn: mdDue,
-    });
-    if (!created.ok) {
+    /* -- EVERY await is inside the try, and `finally` clears the button.
+          Both actions RETURN their errors, so the branches below cover an
+          expected failure — but a server action can also THROW: a missing
+          table, a Postgres error raised rather than returned, a dropped
+          connection. That rejection propagated out of an async function called
+          as `void submit()`, which discards it. The result was a button that
+          did nothing at all and a dialog with no message on it, which is how
+          this was reported.
+
+          A failure somebody cannot see is worse than a failure with an ugly
+          message (§0.7). The raw text is shown rather than a paraphrase,
+          because the paraphrase is what would have hidden this. -- */
+    try {
+      const created = await createWorkerCycle({
+        name,
+        periodLabel: period,
+        selfDueOn: selfDue,
+        supervisorDueOn: supervisorDue,
+        mdDueOn: mdDue,
+      });
+      if (!created.ok) {
+        setError(created.error.message);
+        return;
+      }
+
+      const launched = await launchWorkerCycle(
+        created.data.id,
+        [...chosen].map((id) => ({
+          workerId: id,
+          supervisorId: raterOf[id] ?? workers.find((w) => w.id === id)?.supervisorId ?? null,
+        })),
+      );
+      if (!launched.ok) {
+        /* The cycle exists as a draft by now. Say so, rather than leaving
+           somebody to wonder whether pressing the button again makes a second. */
+        setError(`${launched.error.message} The round has been saved as a draft.`);
+        return;
+      }
+
+      onOpenChange(false);
+      router.refresh();
+    } catch (cause) {
+      setError(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : "Something went wrong and the round was not started.",
+      );
+    } finally {
       setBusy(false);
-      setError(created.error.message);
-      return;
     }
-
-    const launched = await launchWorkerCycle(
-      created.data.id,
-      [...chosen].map((id) => ({
-        workerId: id,
-        supervisorId: raterOf[id] ?? workers.find((w) => w.id === id)?.supervisorId ?? null,
-      })),
-    );
-    setBusy(false);
-    if (!launched.ok) {
-      /* The cycle exists as a draft by now. Say so, rather than leaving
-         somebody to wonder whether pressing the button again makes a second. */
-      setError(`${launched.error.message} The round has been saved as a draft.`);
-      return;
-    }
-
-    onOpenChange(false);
-    router.refresh();
   }
 
   return (
@@ -395,15 +415,20 @@ export function StartRoundDialog({
             ) : null}
           </div>
 
-          {error ? (
-            <p
-              role="alert"
-              className="rounded-control bg-critical-tint px-4 py-3 text-body-sm text-critical"
-            >
-              {error}
-            </p>
-          ) : null}
         </div>
+
+        {/* -- Above the footer, not at the bottom of the scroll region.
+              A message inside the scroller can be below the fold on a short
+              dialog, so the button appears to have done nothing — which is the
+              exact symptom this was reported as. -- */}
+        {error ? (
+          <p
+            role="alert"
+            className="shrink-0 border-t border-critical/30 bg-critical-tint px-6 py-3 font-sans text-body-sm text-critical"
+          >
+            {error}
+          </p>
+        ) : null}
 
         <DialogFooter className="shrink-0 border-t border-rule px-6 py-4">
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="min-h-11">
