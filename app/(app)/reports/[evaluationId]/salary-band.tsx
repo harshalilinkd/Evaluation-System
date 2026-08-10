@@ -164,6 +164,7 @@ export function SalaryBand({
         currentCtc={currentCtc}
         firstName={firstName}
         isHr={isHr}
+        status={status}
       />
 
       {/* ---------- Row 4: context ---------- */}
@@ -509,6 +510,11 @@ function MdApproval({
   firstName: string;
   /** Changes the wording only. Both roles may act here since 0056. */
   isHr: boolean;
+  /* -- Tells "approved" from "approved and closed". Approving now closes, so a
+        record with a figure on it and a status short of CLOSED means the close
+        did not run — and saying "closed" there would be a lie the reader would
+        act on. -- */
+  status: string;
 }) {
   const router = useRouter();
   const review = data.review;
@@ -601,11 +607,15 @@ function MdApproval({
               an approval they could not see. -- */}
         <p className="font-sans text-body-sm text-ink-muted">
           {review?.md_approved_ctc
-            ? `The MD approved ${money(review.md_approved_ctc)}${
+            ? `MD approved ${money(review.md_approved_ctc)}${
                 review.md_approved_hike_pct === null
                   ? ""
                   : ` (${pctText(review.md_approved_hike_pct)})`
-              }.`
+              }${
+                status === "CLOSED" || status === "INTERVIEW_DONE"
+                  ? " and closed."
+                  : ". Not closed yet — approving again will close it."
+              }`
             : isHr
               ? "The MD has not set a figure. You may approve and close this yourself."
               : "HR proposes; you approve. Both figures are kept."}
@@ -681,7 +691,7 @@ function MdApproval({
           disabled={busy || approved === null || approved <= 0 || effectiveFrom === ""}
           onClick={onApprove}
         >
-          {busy ? "Approving and closing…" : "Approve this figure and close"}
+          {busy ? "Approving and closing…" : "Approve and close"}
         </Button>
 
         {/* -- SAID AFTER THE FACT, and it says what happens next.
