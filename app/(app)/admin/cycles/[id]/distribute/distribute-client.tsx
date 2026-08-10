@@ -850,7 +850,30 @@ function ConfirmSendDialog({
         ? "the HOD only"
         : "the employee only";
 
+  /* -- A CEILING, AND NOW LABELLED AS ONE.
+        `people × recipients × channels`. One person with both boxes ticked and
+        both channels on is 1 × 2 × 2 = 4, which is arithmetically right and read
+        as a surprise — "Send to 1 person?" above "Send 4 messages" invites the
+        reader to think something has gone wrong.
+
+        It is also a MAXIMUM rather than a count. A missing contact detail is not
+        a failure and nothing is attempted (P11-11), so a HOD with no email
+        receives three of these four. The row carries the employee's phone and
+        address but not their HOD's, so the exact figure is not knowable on this
+        screen — and a number presented as certain when it is an upper bound is
+        the kind of thing somebody reconciles against `notifications_log` an hour
+        later and reports as a bug.
+
+        So the dialog shows the working instead of only the product. -- */
   const messages = count * channels.length * recipients.length;
+
+  const perPerson = channels.length * recipients.length;
+  /* `plural` appends an s, which gives "12 persons". The word is people. */
+  const peopleText = count === 1 ? "1 person" : `${count} people`;
+  const breakdown = `${peopleText} × ${plural(recipients.length, "recipient")} × ${plural(
+    channels.length,
+    "channel",
+  )}`;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onCancel()}>
@@ -914,14 +937,24 @@ function ConfirmSendDialog({
           })}
         </fieldset>
 
-        <p className="rounded-control bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
-          {plural(messages, "message")} to {who}.
-        </p>
+        <div className="rounded-control bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
+          <p className="text-ink">
+            Up to {plural(messages, "message")} to {who}, over {channelText}.
+          </p>
+          <p className="mt-0.5">
+            {breakdown}
+            {/* "N each" only says something when there is more than one person —
+                at a count of one it restates the total and reads as a second,
+                contradictory figure. */}
+            {count > 1 && perPerson > 1 ? ` — ${plural(perPerson, "message")} each` : null}. Anybody
+            missing a number or an address simply gets fewer; nothing is sent to a blank.
+          </p>
+        </div>
 
         <DialogFooter>
           <Button variant="outline" className="min-h-11" onClick={onCancel}>Cancel</Button>
           <Button className="min-h-11" onClick={onConfirm}>
-            Send {plural(messages, "message")}
+            Send links
           </Button>
         </DialogFooter>
       </DialogContent>
