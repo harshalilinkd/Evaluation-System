@@ -15,7 +15,14 @@ import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { KpiCard, KpiRow } from "@/components/appraise/screen";
 import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/utils/date";
+import { formatDate, formatInr } from "@/lib/utils/date";
+
+/* §17 keeps the source form's wording; these are the three cells it prints. */
+const OVERALL_WORD: Record<string, string> = {
+  EXCELLENT: "Excellent",
+  SATISFACTORY: "Satisfactory",
+  NEEDS_IMPROVEMENT: "Needs improvement",
+};
 import { cn } from "@/lib/utils";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -30,6 +37,17 @@ export type BoardRow = {
   handedOver: boolean;
   status: string;
   overallTick: string | null;
+  department: string | null;
+  trainingRequired: boolean | null;
+  /* -- §5 data, on a screen guarded to HR and the MD. Null where nobody has
+        recorded it, never 0 — a salary of zero is a different claim from one
+        that has not been entered (P7-9). -- */
+  salaryChanged: boolean | null;
+  newCtc: number | null;
+  incrementPct: number | null;
+  currentCtc: number | null;
+  lastIncrementDate: string | null;
+  nextIncrementDate: string | null;
 };
 
 /**
@@ -130,6 +148,73 @@ export function WorkerBoard({
               row.original.supervisorSubmittedAt
                 ? formatDate(row.original.supervisorSubmittedAt)
                 : "Not yet"
+            }
+          />
+        ),
+      },
+      {
+        id: "department",
+        header: "Department",
+        size: 150,
+        cell: ({ row }) => <GridCell value={row.original.department ?? "—"} />,
+      },
+      {
+        id: "overall",
+        header: "Overall",
+        size: 150,
+        cell: ({ row }) => (
+          <GridCell
+            value={
+              row.original.overallTick
+                ? (OVERALL_WORD[row.original.overallTick] ?? row.original.overallTick)
+                : "—"
+            }
+          />
+        ),
+      },
+      {
+        id: "training",
+        header: "Training",
+        size: 110,
+        cell: ({ row }) => (
+          <GridCell
+            value={
+              row.original.trainingRequired === null
+                ? "—"
+                : row.original.trainingRequired
+                  ? "Yes"
+                  : "No"
+            }
+          />
+        ),
+      },
+      {
+        /* -- Pay, in one column rather than four.
+              Old, new, percent and "same or new" as separate columns would be
+              four headings for one decision, three of them blank on every
+              appraisal that changes nothing — which is most of them. One column
+              that says either "No change" or "+15% to ₹2,40,000" carries the
+              whole answer and stays readable at a glance. -- */
+        id: "salary",
+        header: "Salary",
+        size: 190,
+        cell: ({ row }) => {
+          const r = row.original;
+          if (r.salaryChanged === null) return <GridCell value="—" />;
+          if (!r.salaryChanged) return <GridCell value="No change" />;
+          const pct = r.incrementPct === null ? null : `+${r.incrementPct}%`;
+          const to = r.newCtc === null ? null : formatInr(r.newCtc);
+          return <GridCell value={[pct, to].filter(Boolean).join(" to ") || "New salary"} />;
+        },
+      },
+      {
+        id: "lastIncrement",
+        header: "Last increment",
+        size: 150,
+        cell: ({ row }) => (
+          <GridCell
+            value={
+              row.original.lastIncrementDate ? formatDate(row.original.lastIncrementDate) : "—"
             }
           />
         ),
@@ -298,9 +383,9 @@ export function WorkerBoard({
               neither sheet, and a screen that does not say so leaves somebody
               looking for a button that should not exist. -- */}
         <p className="font-sans text-body-sm text-ink-muted">
-          You do not fill either sheet. Each supervisor hands their worker the form to tick, then
-          rates them separately — both from <span className="font-medium text-ink">Shop floor</span>{" "}
-          in their own menu. Once both sides are in, the appraisal comes to you.
+          You do not fill the sheet. Each supervisor completes it from{" "}
+          <span className="font-medium text-ink">Shop floor</span> in their own menu, and it reaches
+          you when they submit. The worker fills nothing.
         </p>
       </div>
 

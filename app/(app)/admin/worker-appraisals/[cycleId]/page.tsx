@@ -26,7 +26,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
       supabase
         .from("worker_evaluations")
         .select(
-          "id, worker_id, supervisor_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped, self_filled_via, overall_tick",
+          "id, worker_id, supervisor_id, department_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped, self_filled_via, overall_tick",
         )
         .eq("cycle_id", cycleId)
         .is("excluded_at", null),
@@ -41,6 +41,44 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
   const raters = await listWorkerRaters();
 
   if (!cycle) return <ErrorState title="Not found" body="That round no longer exists." />;
+
+  const evaluationIds = (rows ?? []).map((r) => r.id);
+  const workerIds = (rows ?? []).map((r) => r.worker_id);
+
+  /* -- The detail columns.
+        Every one of these is HR-and-MD-only data (§5), and this page is guarded
+        to exactly those two — but the guard is the clean exit, not the
+        protection: all three go through the authenticated client, so 0050's and
+        0051's policies decide, and a caller who slipped past the guard would
+        get empty columns rather than figures. -- */
+  const [{ data: decisions }, { data: employment }, { data: supervisorRows }, { data: departments }] =
+    await Promise.all([
+      evaluationIds.length
+        ? supabase
+            .from("worker_evaluation_decisions")
+            .select("evaluation_id, salary_changed, old_ctc, increment_pct, new_ctc")
+            .in("evaluation_id", evaluationIds)
+        : Promise.resolve({ data: [] }),
+      workerIds.length
+        ? supabase
+            .from("employment_records")
+            .select("profile_id, last_increment_date, next_increment_date, current_ctc")
+            .in("profile_id", workerIds)
+        : Promise.resolve({ data: [] }),
+      evaluationIds.length
+        ? supabase
+            .from("worker_evaluation_responses")
+            .select("evaluation_id, training_required")
+            .eq("layer", "SUPERVISOR")
+            .in("evaluation_id", evaluationIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from("departments").select("id, name"),
+    ]);
+
+  const decisionOf = new Map((decisions ?? []).map((d) => [d.evaluation_id, d]));
+  const employmentOf = new Map((employment ?? []).map((e) => [e.profile_id, e]));
+  const trainingOf = new Map((supervisorRows ?? []).map((r) => [r.evaluation_id, r.training_required]));
+  const departmentOf = new Map((departments ?? []).map((d) => [d.id, d.name]));
 
   const ids = [
     ...new Set(
@@ -69,6 +107,14 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         handedOver: r.self_filled_via === "HANDOVER",
         status: r.status,
         overallTick: r.overall_tick,
+        department: r.department_id ? (departmentOf.get(r.department_id) ?? null) : null,
+        trainingRequired: trainingOf.get(r.id) ?? null,
+        salaryChanged: decisionOf.get(r.id)?.salary_changed ?? null,
+        newCtc: decisionOf.get(r.id)?.new_ctc ?? null,
+        incrementPct: decisionOf.get(r.id)?.increment_pct ?? null,
+        currentCtc: employmentOf.get(r.worker_id)?.current_ctc ?? null,
+        lastIncrementDate: employmentOf.get(r.worker_id)?.last_increment_date ?? null,
+        nextIncrementDate: employmentOf.get(r.worker_id)?.next_increment_date ?? null,
       }))}
       workers={(workerPool ?? []).map((w) => ({
         id: w.id,

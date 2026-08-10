@@ -384,7 +384,8 @@ function NextStep({
   if (!hasApproval) steps.push("The MD approves the figure.");
   if (status === "HR_APPROVED") steps.push("The MD records their review on the full report.");
   if (status === "MD_REVIEWED") {
-    steps.push("Confirm the final amount on the full report — that closes it.");
+    // Reachable from this screen now, so it no longer sends anybody elsewhere.
+    steps.push("Confirm the final amount — Approve and close, above.");
   }
   /* -- Kept, and it should almost never fire. `confirm_increment` runs
         MD_REVIEWED -> INTERVIEW_DONE -> CLOSED in one transaction, so a record

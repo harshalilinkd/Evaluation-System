@@ -3,6 +3,7 @@
 /** The interactive hike calculator on the executive summary. */
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -12,10 +13,11 @@ import {
   annualisedPct,
   hikeAmount,
   hikePct,
+  firstOfNextMonth,
   monthlyFromAnnual,
   newCtcFromPct,
 } from "@/lib/increment/calc";
-import { saveApproval, saveProposal } from "@/lib/increment/actions";
+import { approveAndClose, saveApproval, saveProposal } from "@/lib/increment/actions";
 import type { SalaryBand } from "@/lib/increment/queries";
 import { formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,7 @@ export function HikeCalculator({
   /** The increment is confirmed and on the pay record. Read-only from here. */
   settled?: boolean;
 }) {
+  const router = useRouter();
   const current = band.currentCtc;
   const isHr = role === "HR_ADMIN";
 
@@ -67,6 +70,11 @@ export function HikeCalculator({
     (isHr ? band.review?.hr_justification : band.review?.md_remarks) ?? "",
   );
   const [saving, setSaving] = useState(false);
+  /* -- The one thing a close needs that a save does not. First of next month,
+        which is what payroll does unless somebody says otherwise, so the common
+        case is one press and no typing. -- */
+  const [effectiveFrom, setEffectiveFrom] = useState(firstOfNextMonth(new Date()));
+  const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -144,6 +152,43 @@ export function HikeCalculator({
       return;
     }
     setSaved(true);
+  }
+
+  /* -- APPROVE AND CLOSE, on the summary too.
+        This screen is where the MD sits during the interview, so finishing the
+        increment from the full report and nowhere else meant leaving the
+        conversation to go and find another page. Same server action as the
+        salary band — nothing here reimplements a transition or a salary write,
+        and HR and the MD are both admitted by it since 0056. -- */
+  async function closeIt() {
+    setError(null);
+
+    if (target === null || target <= 0) {
+      setError("Enter a percentage or a new CTC first.");
+      return;
+    }
+    if (!effectiveFrom) {
+      setError("Set the date the new salary starts being paid.");
+      return;
+    }
+
+    setClosing(true);
+    const result = await approveAndClose({
+      evaluationId,
+      approvedCtc: target,
+      remarks: note.trim(),
+      effectiveFrom,
+    });
+    setClosing(false);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setSaved(true);
+    /* `settled` is decided by the server from the evaluation's status, so
+       without this the panel would go on offering to close a closed record. */
+    router.refresh();
   }
 
   if (current === null || current <= 0) {
@@ -280,6 +325,25 @@ export function HikeCalculator({
         />
       </div>
 
+      {/* -- Only shown while the increment can still be closed. On a settled one
+            it is a date nobody can change and the pay record already carries
+            it. -- */}
+      {settled ? null : (
+        <div className="sm:max-w-xs">
+          <Label htmlFor="hike-effective">Effective from</Label>
+          <Input
+            id="hike-effective"
+            type="date"
+            value={effectiveFrom}
+            onChange={(e) => setEffectiveFrom(e.target.value)}
+            className="tabular mt-1"
+          />
+          <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
+            When the new salary starts being paid. Used by Approve and close.
+          </p>
+        </div>
+      )}
+
       {error ? (
         <p role="alert" className="font-sans text-body-sm text-critical">
           {error}
@@ -309,10 +373,29 @@ export function HikeCalculator({
                   : "Approve this figure"}
         </Button>
 
+        {/* -- APPROVE AND CLOSE, for HR and the MD alike (0056).
+              Beside the save rather than instead of it: HR often wants to
+              record a proposal and leave it, and the MD may want to store a
+              figure before the conversation is finished. This is the button
+              that ends the increment, so it is the one that says so.
+
+              `variant="secondary"` for HR because saving the proposal is their
+              ordinary act and closing is the exceptional one; for the MD it is
+              the primary, because approving IS their job here. -- */}
+        {settled ? null : (
+          <Button
+            onClick={closeIt}
+            disabled={!live || closing || saving || effectiveFrom === ""}
+            variant={isHr ? "secondary" : "default"}
+            className="w-full sm:w-auto"
+          >
+            {closing ? "Approving and closing…" : "Approve and close"}
+          </Button>
+        )}
+
         {!settled && !dirty && live ? (
-          <p className="font-sans text-body-sm text-ink-muted">
-            Nothing has changed since it was last saved. Adjust the figure or the note to save
-            again.
+          <p className="w-full font-sans text-body-sm text-ink-muted">
+            Saved. Approve and close finishes the increment and writes it to their pay record.
           </p>
         ) : null}
       </div>
