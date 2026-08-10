@@ -6,35 +6,46 @@
 -- run only ever counts. If you ran it and the counts came back unchanged, that
 -- is what happened — nothing was wrong, the delete was never uncommented.
 --
---   KEEPS  people and their logins · roles · departments · the question bank ·
---          the worker form · section names · employment and salary records ·
---          the audit trail
+--   KEEPS  people and their logins · roles · departments · the staff question
+--          bank · the worker form · section names · employment and salary
+--          records · the audit trail
 --
---   DELETES  cycles · evaluations · everyone's answers · the frozen question
---            sets · reports · increment reviews · invite links · the sent-message
---            log · due items
+--   DELETES  STAFF: cycles · evaluations · everyone's answers · the frozen
+--            question sets · reports · increment reviews · invite links
+--            WORKER: appraisal rounds · appraisals · both sides' ticks · the
+--            frozen sheets
+--            BOTH: the sent-message log · due items
 --
 -- ============================================================================
 -- THIS CANNOT BE UNDONE. Take a backup first:
 --   Supabase dashboard → Database → Backups → the current point-in-time
 -- ============================================================================
+--
+-- The two modules are deleted SEPARATELY, in their own blocks, because they
+-- share no table (§7). That is not tidiness: `worker_evaluations` has no
+-- foreign key into anything staff, so deleting one module cannot cascade into
+-- the other by accident — and the worker block is wrapped so a database without
+-- 0047 applied still runs this file rather than failing on a missing table.
 
 begin;
 
-/* -- The blocker, checked INSIDE the transaction rather than in a separate pass.
-      `salary_history.evaluation_id` and `increment_reminders.evaluation_id`
-      point at evaluations with no cascade and no "set null" (0023), and both
-      tables refuse UPDATE and DELETE by trigger (P19-3, §5) for every caller
-      including the owner of this database.
+/* ============================================================================
+   The blocker, checked INSIDE the transaction rather than in a separate pass
+   ==========================================================================
+   `salary_history.evaluation_id` and `increment_reminders.evaluation_id` point
+   at evaluations with no cascade and no "set null" (0023), and both tables
+   refuse UPDATE and DELETE by trigger (P19-3, §5) for every caller including
+   the owner of this database.
 
-      So a confirmed increment genuinely pins its evaluation in place. Without
-      this check the run would reach `delete from evaluations` and fail there on
-      a raw foreign-key violation, which names a constraint rather than the
-      decision behind it. Raising here says what is actually true: somebody's
-      pay record is attached to a record you are about to destroy, and getting
-      past it means switching off the guarantee that record rests on.
+   So a confirmed increment genuinely pins its evaluation in place. Without this
+   check the run would reach `delete from evaluations` and fail there on a raw
+   foreign-key violation, which names a constraint rather than the decision
+   behind it. Raising here says what is actually true: somebody's pay record is
+   attached to a record you are about to destroy, and getting past it means
+   switching off the guarantee that record rests on.
 
-      Everything is one transaction, so this raise leaves nothing deleted. -- */
+   Everything is one transaction, so this raise leaves nothing deleted —
+   including the worker data below, which is why the check comes first. */
 do $$
 declare
   v_salary int := 0;
@@ -58,10 +69,15 @@ begin
 end;
 $$;
 
-/* -- Most of this goes by cascade from `evaluations` (0003, 0006, 0029, 0030):
-      answers, frozen question sets, decisions, reports, increment reviews and
-      invite links all have ON DELETE CASCADE. They are listed explicitly anyway
-      so a table that ever loses its cascade cannot quietly survive a reset. -- */
+/* ============================================================================
+   1 · Staff evaluations
+   ========================================================================== */
+--
+-- Most of this goes by cascade from `evaluations` (0003, 0006, 0029, 0030):
+-- answers, frozen question sets, decisions, reports, increment reviews and
+-- invite links all have ON DELETE CASCADE. They are listed explicitly anyway so
+-- a table that ever loses its cascade cannot quietly survive a reset.
+
 delete from public.invite_tokens;
 delete from public.evaluation_responses;
 delete from public.evaluation_questions;
@@ -90,23 +106,69 @@ alter table public.evaluation_cycles disable trigger evaluation_cycles_guard_del
 delete from public.evaluation_cycles;
 alter table public.evaluation_cycles enable trigger evaluation_cycles_guard_delete;
 
+/* ============================================================================
+   2 · Worker appraisals
+   ========================================================================== */
+--
+-- Wrapped in one block, so a database that has not had 0047 applied runs this
+-- file unchanged instead of failing on a table that does not exist yet.
+--
+-- `worker_cycles` has NO delete guard, unlike its staff counterpart. That is
+-- not an oversight in 0047: the staff guard exists because a launched staff
+-- cycle cascades to per-department frozen question sets that can never be
+-- rebuilt. A worker round freezes the same eight qualities for everybody, so
+-- there is nothing unrecoverable to protect — the sheet is still in
+-- `worker_questions`, which this file does not touch.
+--
+-- Both child tables cascade from `worker_evaluations`, which cascades from
+-- `worker_cycles`. Listed explicitly for the same reason the staff ones are.
+
+do $$
+begin
+  delete from public.worker_evaluation_responses;
+  delete from public.worker_evaluation_questions;
+  delete from public.worker_evaluations;
+  delete from public.worker_cycles;
+exception
+  when undefined_table then
+    raise notice 'Worker appraisal tables are not present (0047 not applied). Nothing to delete there.';
+end;
+$$;
+
 commit;
 
 
 /* ============================================================================
    Confirm. Left side all 0; right side unchanged from before.
-   ========================================================================== */
+   ==========================================================================
+   The worker counts are read through a function rather than a plain subquery,
+   because a `select` naming a missing table fails to PARSE — the exception
+   handler above cannot save a query that never runs. This returns -1 where the
+   tables are absent, which reads as "not applicable" rather than as a count. */
+
+create or replace function pg_temp.count_or_absent(p_table text)
+returns bigint language plpgsql as $$
+declare v_n bigint;
+begin
+  execute format('select count(*) from public.%I', p_table) into v_n;
+  return v_n;
+exception when undefined_table then return -1;
+end;
+$$;
 
 select
-  (select count(*) from public.evaluation_cycles)     as cycles_left,
-  (select count(*) from public.evaluations)           as evaluations_left,
-  (select count(*) from public.evaluation_responses)  as answers_left,
-  (select count(*) from public.evaluation_questions)  as frozen_left,
+  (select count(*) from public.evaluation_cycles)     as staff_cycles_left,
+  (select count(*) from public.evaluations)           as staff_evaluations_left,
+  (select count(*) from public.evaluation_responses)  as staff_answers_left,
+  (select count(*) from public.evaluation_questions)  as staff_frozen_left,
+  pg_temp.count_or_absent('worker_cycles')            as worker_rounds_left,
+  pg_temp.count_or_absent('worker_evaluations')       as worker_appraisals_left,
+  pg_temp.count_or_absent('worker_evaluation_responses') as worker_ticks_left,
   (select count(*) from public.invite_tokens)         as tokens_left,
   (select count(*) from public.notifications_log)     as messages_left,
   '|'                                                 as kept,
   (select count(*) from public.profiles)              as people,
   (select count(*) from public.user_roles)            as role_grants,
   (select count(*) from public.departments)           as departments,
-  (select count(*) from public.questions)             as questions,
-  (select count(*) from public.department_questions)  as question_mappings;
+  (select count(*) from public.questions)             as staff_questions,
+  pg_temp.count_or_absent('worker_questions')         as worker_qualities;
