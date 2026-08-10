@@ -69,7 +69,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, employee_code, phone_e164, designation, date_of_joining, department_id, reports_to, is_active, departments(name)",
+        "id, full_name, email, employee_code, track, phone_e164, designation, date_of_joining, department_id, reports_to, is_active, departments(name)",
       )
       .order("full_name"),
     supabase.from("departments").select("id, name").eq("is_active", true).order("name"),
@@ -113,6 +113,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       full_name: p.full_name,
       email: p.email,
       employee_code: p.employee_code,
+      track: p.track,
       phone_e164: p.phone_e164,
       designation: p.designation,
       date_of_joining: p.date_of_joining,

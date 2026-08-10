@@ -148,6 +148,10 @@ export const createUserSchema = z.object({
      A blank string has to survive `z.coerce.number()`, which turns "" into 0 —
      and a joining salary of zero is not the same fact as "not recorded". The
      preprocess is what keeps the difference. */
+  /* §7: which MODULE they are in — the staff 0-5 form or the shop-floor tick
+     sheet. Independent of department, because both modules have people in the
+     same teams. */
+  track: z.enum(["STAFF", "WORKER"]).default("STAFF"),
   joining_ctc: money("Joining salary"),
   current_ctc: money("Current salary"),
   last_increment_amount: money("Last increment amount"),

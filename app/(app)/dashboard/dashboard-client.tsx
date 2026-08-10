@@ -503,6 +503,33 @@ function AdminView({ analytics }: { analytics: Analytics }) {
         large enough that the rise is a shape rather than a single step. Below
         that the honest answer is the two counts as words, which is what the
         panel says instead. -- */
+  /* -- WHOSE NUMBERS THESE ARE, said out loud.
+        Every aggregate panel below was headed "Company-wide averages" and named
+        no population at all — so a reader could not tell whether they were
+        looking at forty people or one, and with a single employee in the cycle
+        the page was that person's appraisal presented as an organisation's.
+        That is the same fault the radar had, and it is not fixed by removing
+        the radar.
+
+        `v_department_scores` has carried `people` and `self_count` since P16.
+        The counts and the team names come from there; the panel states them,
+        and links to /reports so a reader can go from "the two sides disagree
+        here" to the actual names. -- */
+  const populationPeople = departments.reduce((n, d) => n + Number(d.people ?? 0), 0);
+  const populationTeams = departments.length;
+  const teamNames = departments
+    .map((d) => String(d.department_name ?? "").trim())
+    .filter(Boolean);
+
+  /* At one team the name IS the useful fact and there is room for it; past
+     three, a list of names is longer than the sentence it sits in. */
+  const populationLine =
+    populationPeople === 0
+      ? null
+      : `${populationPeople} ${populationPeople === 1 ? "person" : "people"} across ${populationTeams} ${populationTeams === 1 ? "team" : "teams"}${
+          teamNames.length > 0 && teamNames.length <= 3 ? ` — ${teamNames.join(", ")}` : ""
+        }.`;
+
   const timelinePeak = Math.max(0, ...timeline.map((r) => Math.max(r.self, r.lead)));
   const timelineFirst = timeline[0];
   const timelineLast = timeline[timeline.length - 1];
@@ -578,7 +605,17 @@ function AdminView({ analytics }: { analytics: Analytics }) {
           </Panel>
         </div>
 
-        <Panel title="Where the ratings sit" subtitle="Every scored answer this cycle, by band">
+        {/* Named its population too, for the same reason — this ring is every
+            scored answer in the cycle, and without the count a reader cannot
+            tell whether that is four hundred answers or forty. */}
+        <Panel
+          title="Where the ratings sit"
+          subtitle={
+            populationLine
+              ? `Every scored answer this cycle, by band. From ${populationLine}`
+              : "Every scored answer this cycle, by band"
+          }
+        >
           {distribution.length === 0 ? (
             <PanelEmpty>Bands appear here once ratings come in.</PanelEmpty>
           ) : (
@@ -651,7 +688,18 @@ function AdminView({ analytics }: { analytics: Analytics }) {
       {sections.length > 0 ? (
         <Panel
           title="Where the two sides disagree"
-          subtitle="Every section, with what people said about themselves against what their HOD said. The longer the line, the further apart they are."
+          subtitle={
+            populationLine
+              ? `Averaged over ${populationLine} Each section shows what people said about themselves against what their HOD said — the longer the line, the further apart they are.`
+              : "Each section shows what people said about themselves against what their HOD said — the longer the line, the further apart they are."
+          }
+          action={
+            /* From the finding to the names. The panel is an average and can
+               never say WHO on its own; this is the one click that can. */
+            <Button asChild variant="ghost" size="sm">
+              <Link href="/reports">See the people</Link>
+            </Button>
+          }
         >
           <ChartFigure
             caption="Section averages, self against lead"
@@ -806,31 +854,72 @@ function AdminView({ analytics }: { analytics: Analytics }) {
  * view a plain aggregate that any caller can read (P16), and the gap is computed
  * once from the pair — never stored, because §11 makes it a reporting figure.
  */
+/**
+ * Section averages across every department in the cycle.
+ *
+ * IT USED TO ASSIGN, NOT AGGREGATE — and that was a real fault, invisible at
+ * one department and wrong at ten.
+ *
+ * `v_section_scores` returns one row per (cycle, DEPARTMENT, section, layer).
+ * The old loop did `entry.self = row.avg_score` for each matching row, so every
+ * department overwrote the one before it and the panel rendered whichever
+ * department happened to come last out of Postgres — presented, in a heading,
+ * as the company-wide figure. No ordering is guaranteed on that view, so the
+ * number could change between two loads of the same page with no data change.
+ *
+ * The fix is a weighted mean, and weighted rather than plain because a section
+ * a forty-person team answered is not worth the same as one a two-person team
+ * answered. `answer_count` is on the view for exactly this and had never been
+ * read.
+ */
 function pivotSections(rows: Analytics["sections"]) {
-  const bySection = new Map<string, { label: string; self: number | null; lead: number | null }>();
+  type Acc = { sum: number; weight: number };
+  const zero = (): Acc => ({ sum: 0, weight: 0 });
+  const mean = (a: Acc) => (a.weight === 0 ? null : Math.round((a.sum / a.weight) * 100) / 100);
+
+  const bySection = new Map<string, { label: string; self: Acc; lead: Acc }>();
 
   for (const row of rows) {
     // Job Specific Skills asks different questions per department, so a
     // company-wide average of it compares unrelated things. The view flags it;
     // this is the consumer honouring the flag (P16-4).
     if (!row.is_comparable) continue;
+    if (row.avg_score === null) continue;
 
     const key = String(row.section);
     const entry = bySection.get(key) ?? {
       label: SECTION_LABELS[row.section] ?? key,
-      self: null,
-      lead: null,
+      self: zero(),
+      lead: zero(),
     };
-    if (row.layer === "SELF") entry.self = row.avg_score === null ? null : Number(row.avg_score);
-    if (row.layer === "LEAD") entry.lead = row.avg_score === null ? null : Number(row.avg_score);
+
+    // Weight of 1 where the count is missing: an unweighted contribution is
+    // wrong, but dropping the row entirely loses a real department's answer.
+    const weight = Number(row.answer_count ?? 0) || 1;
+    const value = Number(row.avg_score);
+
+    if (row.layer === "SELF") {
+      entry.self.sum += value * weight;
+      entry.self.weight += weight;
+    }
+    if (row.layer === "LEAD") {
+      entry.lead.sum += value * weight;
+      entry.lead.weight += weight;
+    }
     bySection.set(key, entry);
   }
 
-  return [...bySection.entries()].map(([section, v]) => ({
-    section,
-    ...v,
-    gap: v.self === null || v.lead === null ? null : Math.round((v.lead - v.self) * 100) / 100,
-  }));
+  return [...bySection.entries()].map(([section, v]) => {
+    const self = mean(v.self);
+    const lead = mean(v.lead);
+    return {
+      section,
+      label: v.label,
+      self,
+      lead,
+      gap: self === null || lead === null ? null : Math.round((lead - self) * 100) / 100,
+    };
+  });
 }
 
 /* ---------- A head of department ---------- */

@@ -4316,3 +4316,64 @@ failed (down from 4), p23 42/0.** Typecheck 0, lint 0 errors, build clean.
 re-run against a baseline with this phase's six files stashed and came back
 **identical** — they belong to the concurrent increment/salary work landing in
 parallel (p4-pure, p7, p8patch, p9b, p12, p13, p18, p19, p19c, p20, p21, p22).
+
+---
+
+### FIX-14 — Editing your own details demoted you to EMPLOYEE
+
+Reported as "whenever HR admin edits anything in Settings › Users their access
+gets changed to normal employee — I just added a phone number and after saving
+access changed". Exactly right, and the cause is an RLS interaction rather than
+a missing field.
+
+`updatePerson` replaced access levels wholesale:
+
+```
+delete from user_roles where profile_id = … and role <> 'EMPLOYEE'
+insert  into user_roles …the desired set…
+```
+
+Those are **two separate PostgREST requests**, and `user_roles_hr_all` (0012)
+gates both on `is_admin()`, which reads `user_roles` for `auth.uid()`. So when
+HR edited **themselves**:
+
+1. the delete removed their own `HR_ADMIN` row — permitted, because it was
+   still there when the statement began;
+2. the insert arrived as a new request, `is_admin()` was now **false**, and RLS
+   refused it;
+3. **neither call checked its error**, so it failed in silence.
+
+The account came back as a plain EMPLOYEE, from an edit that never touched
+access. P8P-6's replace-wholesale reasoning is right for department mappings —
+nothing there can revoke the permission doing the writing — and wrong here.
+
+| # | Decision | Why |
+|---|---|---|
+| F14-1 | **Diffed, not replaced** | Only roles genuinely being added are inserted and only roles genuinely being removed are deleted. The common case — an edit that does not touch access at all — now issues **no write to `user_roles`** and therefore cannot fail. That is the whole of the reported bug, gone by construction rather than by a guard. |
+| F14-2 | Adds run **before** removes | A partial failure then leaves more access rather than less. Losing access silently is the failure mode that brought this in; the reverse is visible and harmless. |
+| F14-3 | **Both writes report their error** | The silence was half the bug. A refused role write now surfaces as a warning on the dialog, alongside the salary warning that already worked that way. |
+| F14-4 | **You cannot remove your own administrator access here** | P8-4 already refuses self-deactivation for the same reason: locking the last administrator out is a support call the database cannot undo, and here it would happen by unticking a box. The rest of the edit still saves and the dialog says what was left alone — the details are correct, and re-typing them would be the wrong next move. |
+| F14-5 | EMPLOYEE is still never touched | P8-3. There is no user of this system who does not fill in their own appraisal. |
+
+**Verification — fix14, 15 checks, 0 failed, on real Postgres** with 0012's
+`is_admin()`, `is_hr()`, `is_md()` and the `user_roles_hr_all` policy reproduced
+line for line, run under `set role authenticated` with a JWT subject.
+
+The bug is **reproduced first**: the delete succeeds, the re-insert is refused
+by RLS, and the account is left holding EMPLOYEE alone — the reported symptom,
+asserted as such. Then the fix: an unchanged access level issues zero writes and
+HR is still HR; unticking your own administrator access is blocked and the role
+survives; granting and removing HOD for somebody else both still work; EMPLOYEE
+is never removed from anybody.
+
+**Three of my own mistakes, recorded because two are recurring shapes.**
+`pgcrypto` is not available in PGlite and the setup failed on it — and the
+runner's `grep error` matched PGlite's minified bundle again rather than the
+message, the same trap P19B-9 fixed once. An enum orders by **declaration**, not
+alphabetically, so `order by role` returned `HR_ADMIN, MD, HOD, SUPERVISOR,
+EMPLOYEE` and made a correct result look wrong. And an assertion tested
+`const toRemove` where the source says `let` — pinning a keyword, not a claim.
+
+**Regression: p5 73/0, p8 42/0, p23 42/0.** p7 (5) and p19c (1) fail identically
+with this change stashed — they belong to the concurrent worker-appraisal,
+scorecard and salary-form work. Typecheck 0, lint 0, build clean.

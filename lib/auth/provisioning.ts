@@ -68,6 +68,14 @@ export async function createUser(
     department_id: formData.get("department_id") ?? "",
     roles: formData.getAll("roles").map(String),
     employee_code: formData.get("employee_code") ?? "",
+    /* -- §7: `profiles.track` decides which MODULE somebody is in, and it is
+          independent of their department. A shop-floor worker in Printing and a
+          staff member in Printing are both real; the department says which team
+          they are on, the track says which form they fill.
+          Never inferred from a department or a job title — both change, and a
+          person quietly moving between modules would move which appraisal they
+          receive. -- */
+    track: formData.get("track") ?? "STAFF",
     phone: formData.get("phone") ?? "",
     designation: formData.get("designation") ?? "",
     reports_to: formData.get("reports_to") ?? "",
@@ -167,6 +175,7 @@ async function provisionPerson(
       full_name: input.full_name,
       department_id: input.department_id ? input.department_id : null,
       employee_code: input.employee_code ? input.employee_code : null,
+      track: input.track === "WORKER" ? "WORKER" : "STAFF",
       phone_e164: phoneE164,
       designation: input.designation ? input.designation : null,
       reports_to: input.reports_to ? input.reports_to : null,
@@ -464,6 +473,9 @@ export async function updatePerson(
   const after = {
     full_name: fullName,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
+    track: (String(formData.get("track") ?? "STAFF") === "WORKER"
+      ? "WORKER"
+      : "STAFF") as "STAFF" | "WORKER",
     designation: String(formData.get("designation") ?? "").trim() || null,
     department_id: departmentId || null,
     reports_to: reportsTo || null,
@@ -659,24 +671,85 @@ export async function updatePerson(
     if (!salary.ok) warnings.push(`the pay change — ${salary.error.message}`);
   }
 
-  /* -- Access levels. Replaced wholesale rather than diffed, for the same
-        reason department mappings are (P8P-6): unticking a level has to
-        actually remove it, and a diff leaves stale grants behind. EMPLOYEE is
-        never removed — there is no user of this system who does not fill in
-        their own appraisal (P8-3). -- */
-  const roles = new Set<string>(["EMPLOYEE", ...formData.getAll("roles").map(String).filter(Boolean)]);
+  /* -- Access levels. DIFFED, not replaced wholesale.
+        ⚠ THE WHOLESALE VERSION LOCKED HR OUT OF THEIR OWN ACCOUNT.
 
-  await supabase.from("user_roles").delete().eq("profile_id", profileId).neq("role", "EMPLOYEE");
+        It ran `delete … where role <> 'EMPLOYEE'` and then re-inserted the
+        desired set. Those are two separate PostgREST requests, and
+        `user_roles_hr_all` gates both on `is_admin()`, which reads `user_roles`
+        for `auth.uid()`. So when HR edited THEMSELVES:
 
-  const extra = [...roles].filter((r) => r !== "EMPLOYEE");
-  if (extra.length > 0) {
-    await supabase
-      .from("user_roles")
-      .upsert(
-        extra.map((role) => ({ profile_id: profileId, role: role as AppRole })),
-        { onConflict: "profile_id,role", ignoreDuplicates: true },
+          1. the delete removed their own HR_ADMIN row — permitted, because it
+             was still there when the statement began;
+          2. the re-insert arrived as a new request, `is_admin()` was now false,
+             and RLS refused it;
+          3. neither call checked its error, so it failed in silence.
+
+        Editing your own phone number demoted you to EMPLOYEE. P8P-6's
+        replace-wholesale reasoning is right for department mappings — nothing
+        there can revoke the permission doing the writing — and wrong here.
+
+        Diffing also means the common case, an edit that does not touch access
+        at all, issues NO write to this table and cannot fail. EMPLOYEE is never
+        touched: there is no user of this system who does not fill in their own
+        appraisal (P8-3). -- */
+  const desired = new Set<string>([
+    "EMPLOYEE",
+    ...formData.getAll("roles").map(String).filter(Boolean),
+  ]);
+
+  const { data: currentRoleRows, error: rolesReadError } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("profile_id", profileId);
+
+  if (rolesReadError) {
+    warnings.push(`the access level — ${rolesReadError.message}`);
+  } else {
+    const current = new Set((currentRoleRows ?? []).map((r) => String(r.role)));
+    const toAdd = [...desired].filter((r) => r !== "EMPLOYEE" && !current.has(r));
+    let toRemove = [...current].filter((r) => r !== "EMPLOYEE" && !desired.has(r));
+
+    /* -- You cannot take your own admin access away.
+          P8-4 already refuses self-deactivation, for the same reason: locking
+          the last administrator out is a support call the database cannot
+          undo, and here it would happen by ticking a box. The rest of the
+          edit still saves — the details are correct and re-typing them would
+          be the wrong next move. -- */
+    const isSelf = profileId === auth.session.profile.id;
+    const selfDemotion = isSelf && toRemove.filter((r) => r === "HR_ADMIN" || r === "MD");
+    if (selfDemotion && selfDemotion.length > 0) {
+      toRemove = toRemove.filter((r) => r !== "HR_ADMIN" && r !== "MD");
+      warnings.push(
+        "your own administrator access was left unchanged — ask another administrator to change it",
       );
+    }
+
+    // Added BEFORE anything is removed, so a partial failure leaves more
+    // access rather than less.
+    if (toAdd.length > 0) {
+      const { error } = await supabase
+        .from("user_roles")
+        .upsert(
+          toAdd.map((role) => ({ profile_id: profileId, role: role as AppRole })),
+          { onConflict: "profile_id,role", ignoreDuplicates: true },
+        );
+      if (error) warnings.push(`the access level — ${error.message}`);
+    }
+
+    if (toRemove.length > 0) {
+      const { error } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("profile_id", profileId)
+        // Every member came out of `user_roles.role`, so it is an app_role by
+        // construction; the Set widened it to string on the way through.
+        .in("role", toRemove as AppRole[]);
+      if (error) warnings.push(`the access level — ${error.message}`);
+    }
   }
+
+  const roles = desired;
 
   // §12. No salary field passes through this action, so no figure can reach a
   // diff — 0013 lets a lead read audit_log for their own reports (P19-10).

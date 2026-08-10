@@ -58,6 +58,8 @@ export type PersonRow = {
   full_name: string;
   email: string;
   employee_code: string | null;
+  /** §7: which module they are in. Decides which appraisal form they receive. */
+  track: string | null;
   phone_e164: string | null;
   designation: string | null;
   date_of_joining: string | null;
@@ -646,6 +648,22 @@ function AddPersonDialog({
               </Field>
 
               <Field
+                id="track"
+                label="Which form do they fill?"
+                hint="Staff answer the 0-5 evaluation. Shop floor answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams."
+              >
+                <select
+                  id="track"
+                  name="track"
+                  defaultValue="STAFF"
+                  className={SELECT_CLASS}
+                >
+                  <option value="STAFF">Staff - 0 to 5 evaluation</option>
+                  <option value="WORKER">Shop floor - three-tick sheet</option>
+                </select>
+              </Field>
+
+              <Field
                 id="designation"
                 label="Designation"
                 optional
@@ -1005,6 +1023,22 @@ function EditPersonDialog({
                       {d.name}
                     </option>
                   ))}
+                </select>
+              </Field>
+
+              <Field
+                id="e_track"
+                label="Which form do they fill?"
+                hint="Staff answer the 0-5 evaluation. Shop floor answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams."
+              >
+                <select
+                  id="e_track"
+                  name="track"
+                  defaultValue={person.track ?? "STAFF"}
+                  className={SELECT_CLASS}
+                >
+                  <option value="STAFF">Staff - 0 to 5 evaluation</option>
+                  <option value="WORKER">Shop floor - three-tick sheet</option>
                 </select>
               </Field>
 
