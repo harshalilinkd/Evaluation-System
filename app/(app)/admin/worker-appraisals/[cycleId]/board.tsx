@@ -83,6 +83,21 @@ export function WorkerBoard({
 
   const bothIn = rows.filter((r) => r.selfIn && r.supervisorIn).length;
 
+  /* -- The tiles are the filter, because a count above a list it describes
+        invites a press and there was nothing behind it. Three states and no
+        "All" tile: the ACTIVE one toggles off, which is one control rather than
+        four and means the row cannot end up with nothing selected. -- */
+  const [filter, setFilter] = React.useState<"all" | "ready" | "waiting">("all");
+
+  const visible = React.useMemo(() => {
+    if (filter === "ready") return rows.filter((r) => r.selfIn && r.supervisorIn);
+    if (filter === "waiting") return rows.filter((r) => !(r.selfIn && r.supervisorIn));
+    return rows;
+  }, [rows, filter]);
+
+  const toggle = (next: "all" | "ready" | "waiting") =>
+    setFilter((current) => (current === next ? "all" : next));
+
   /* ---------- Columns ----------
      Defined once and memoised, because `DataGrid` keys its stored widths on
      column identity — a fresh array each render re-registers every column and
@@ -208,13 +223,29 @@ export function WorkerBoard({
 
       <div className="shrink-0 space-y-3 border-b border-rule px-4 py-3 lg:px-6">
         <KpiRow>
-          <KpiCard label="In this round" value={rows.length} caption="workers" tone="self" />
-          <KpiCard label="Both sides in" value={bothIn} caption="ready for review" tone="final" />
+          <KpiCard
+            label="In this round"
+            value={rows.length}
+            caption="workers"
+            tone="self"
+            onSelect={() => setFilter("all")}
+            active={filter === "all"}
+          />
+          <KpiCard
+            label="Both sides in"
+            value={bothIn}
+            caption="ready for review"
+            tone="final"
+            onSelect={() => toggle("ready")}
+            active={filter === "ready"}
+          />
           <KpiCard
             label="Still waiting"
             value={rows.length - bothIn}
             caption="one or both outstanding"
             tone="lead"
+            onSelect={() => toggle("waiting")}
+            active={filter === "waiting"}
           />
         </KpiRow>
 
@@ -230,7 +261,7 @@ export function WorkerBoard({
       </div>
 
       <DataGrid
-        data={rows}
+        data={visible}
         columns={columns}
         storageKey="appraise.worker-board.column-widths"
         rowNoun="worker"
@@ -238,8 +269,12 @@ export function WorkerBoard({
         minWidth={1100}
         empty={
           <EmptyState
-            title="Nobody is in this round"
-            body="Start a round and choose who is in it."
+            title={filter === "all" ? "Nobody is in this round" : "Nothing matches"}
+            body={
+              filter === "all"
+                ? "Start a round and choose who is in it."
+                : "Press the same tile again to show everybody."
+            }
           />
         }
       />

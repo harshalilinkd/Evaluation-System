@@ -61,7 +61,31 @@ export const NAV: readonly NavGroup[] = [
         href: ROUTES.team,
         label: "My Team",
         icon: "team",
-        roles: ["HOD", "SUPERVISOR", "HR_ADMIN", "MD"],
+        /* -- SUPERVISOR removed. A supervisor's reports are shop-floor workers,
+              and `/team` is the STAFF queue — it reads `evaluations`, which §5
+              keeps to the staff module entirely. So a supervisor opening it saw
+              "Nobody on your team has submitted yet" for ever, which is true of
+              a list they will never have a row in and reads as a broken screen.
+
+              Their queue is Shop floor, below. A supervisor who is ALSO a HOD
+              still sees this one, on the HOD role. -- */
+        roles: ["HOD", "HR_ADMIN", "MD"],
+      },
+      /* -- SHOP FLOOR. It did not exist, and the worker board's own standing
+            note told supervisors to use it — "both from Shop floor in their own
+            menu" — so the instruction pointed at a menu item nobody had. A
+            supervisor had no route to the worker module at all; they landed on
+            the staff team screen and found it empty.
+
+            `/worker-team` is where they hand a worker the sheet and where they
+            rate them afterwards. HR and the MD are deliberately NOT here: their
+            way in is Worker Appraisals under Administration, which is the whole
+            round rather than one supervisor's people. -- */
+      {
+        href: "/worker-team",
+        label: "Shop floor",
+        icon: "team",
+        roles: ["SUPERVISOR"],
       },
       // AMEND-3 item 9 retired the collision view and left this slot empty,
       // noting its replacement would be P20's. This is it.

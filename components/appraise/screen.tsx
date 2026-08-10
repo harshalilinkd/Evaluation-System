@@ -252,14 +252,53 @@ export function KpiCard({
   value,
   caption,
   tone = "plain",
+  onSelect,
+  active = false,
 }: {
   label: string;
   value: React.ReactNode;
   caption?: React.ReactNode;
   tone?: KpiTone;
+  /**
+   * Makes the tile a filter.
+   *
+   * A count sitting above a list it describes invites a press — "show me those
+   * three" — and a tile that does nothing when pressed reads as a broken
+   * control rather than as a label. Optional, because a tile that filters
+   * nothing should not pretend it can: the ones that stay `div`s are genuinely
+   * read-only figures, and only a caller with something to filter passes this.
+   */
+  onSelect?: () => void;
+  /** Whether this tile's filter is the one currently applied. */
+  active?: boolean;
 }) {
+  const interactive = Boolean(onSelect);
+
+  /* -- A real <button> when it does something, a <div> when it does not.
+        A div with an onClick is unreachable by keyboard and announces nothing;
+        §13.8 wants the control to BE a control. `aria-pressed` is what says
+        "this filter is on" to a screen reader, since the ring alone says it
+        only to somebody who can see it. -- */
+  const Tag = interactive ? "button" : "div";
+
   return (
-    <div className={cn("min-w-0 rounded-card px-2.5 py-2 sm:px-4 sm:py-2.5", KPI_TONE[tone])}>
+    <Tag
+      {...(interactive
+        ? {
+            type: "button" as const,
+            onClick: onSelect,
+            "aria-pressed": active,
+            title: `Show only: ${label}`,
+          }
+        : {})}
+      className={cn(
+        "min-w-0 rounded-card px-2.5 py-2 text-left sm:px-4 sm:py-2.5",
+        KPI_TONE[tone],
+        interactive &&
+          "cursor-pointer transition-shadow duration-hover hover:shadow-dashboard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1",
+        active && "ring-2 ring-primary",
+      )}
+    >
       {/* -- Written as utilities rather than `.type-label`, because the label
             has to give ground on a phone and a component class cannot be
             varied by breakpoint. At three-across on a 375px screen a tile is
@@ -283,6 +322,6 @@ export function KpiCard({
           {caption}
         </p>
       ) : null}
-    </div>
+    </Tag>
   );
 }
