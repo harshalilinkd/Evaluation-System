@@ -72,7 +72,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
     <div className="mx-auto max-w-form space-y-5 pb-24 lg:pb-6">
       <header className="rounded-card-lg bg-ink p-4 sm:p-5">
         <FormLetterhead tone="dark" className="mb-3" />
-        <p className="font-sans text-h3 text-ink-invert">
+        <p className="font-sans text-display-sm text-ink-invert">
           {/* Named for whose sheet it is. A supervisor may hold several open at
               once, and "Worker appraisal" on all of them is not a heading. */}
           {isSelf ? "Your appraisal" : sheet.workerName}

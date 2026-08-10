@@ -70,7 +70,7 @@ export function HandoverSheet({
     return (
       <div className="mx-auto max-w-form space-y-5 py-10 text-center">
         <CheckCircle2 className="mx-auto size-12 text-success" aria-hidden />
-        <h1 className="font-sans text-h2 text-ink">Thank you</h1>
+        <h1 className="text-display-sm font-semibold text-ink">Thank you</h1>
         <p className="font-sans text-body text-ink-muted">
           {workerName}&rsquo;s answers are recorded. They are sealed — not even their supervisor can
           read them. Only HR and management see both sides.
@@ -87,7 +87,7 @@ export function HandoverSheet({
       <header className="rounded-card-lg bg-ink p-4 sm:p-5">
         <FormLetterhead tone="dark" className="mb-3" />
         {/* Addressed to the WORKER, because they are the one holding it now. */}
-        <p className="font-sans text-h3 text-ink-invert">{workerName}, this is your sheet</p>
+        <p className="font-sans text-display-sm text-ink-invert">{workerName}, this is your sheet</p>
         <p className="mt-1 font-sans text-body-sm text-ink-invert/70">
           Tick how you feel you have done. Your supervisor cannot see your answers.
         </p>

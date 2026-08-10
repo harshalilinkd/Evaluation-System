@@ -442,6 +442,11 @@ export type Database = {
           layer: "SELF" | "SUPERVISOR" | "MD";
           answers: Json;
           comments: Json;
+          // 0050: the paper form's Supervisor Comment and Training Required.
+          // On the RESPONSE row, so blindness comes from the existing per-layer
+          // policy rather than needing a new one.
+          overall_comment: string | null;
+          training_required: boolean | null;
           submitted_at: string | null;
           submitted_by: string | null;
           created_at: string;
@@ -453,12 +458,16 @@ export type Database = {
           layer: "SELF" | "SUPERVISOR" | "MD";
           answers?: Json;
           comments?: Json;
+          overall_comment?: string | null;
+          training_required?: boolean | null;
           submitted_at?: string | null;
           submitted_by?: string | null;
         };
         Update: {
           answers?: Json;
           comments?: Json;
+          overall_comment?: string | null;
+          training_required?: boolean | null;
           submitted_at?: string | null;
           submitted_by?: string | null;
         };

@@ -11,9 +11,13 @@ import {
   type RaterRow,
   type WorkerRow,
 } from "@/app/(app)/admin/worker-appraisals/cycles-client";
-import { KpiCard, KpiRow } from "@/components/appraise/screen";
+import { DataGrid, GridCell } from "@/components/appraise/data-grid";
+import { KpiCard, KpiRow, SCREEN_SELECT_CLASS } from "@/components/appraise/screen";
+import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils/date";
+import { cn } from "@/lib/utils";
+import type { ColumnDef } from "@tanstack/react-table";
 
 export type BoardRow = {
   id: string;
@@ -79,14 +83,101 @@ export function WorkerBoard({
 
   const bothIn = rows.filter((r) => r.selfIn && r.supervisorIn).length;
 
+  /* ---------- Columns ----------
+     Defined once and memoised, because `DataGrid` keys its stored widths on
+     column identity — a fresh array each render re-registers every column and
+     the remembered widths are lost on the next keystroke anywhere on the page. */
+  const columns = React.useMemo<ColumnDef<BoardRow>[]>(
+    () => [
+      {
+        accessorKey: "workerName",
+        header: "Worker",
+        size: 200,
+        cell: ({ row }) => <GridCell value={row.original.workerName} />,
+      },
+      {
+        accessorKey: "supervisorName",
+        header: "Supervisor",
+        size: 190,
+        cell: ({ row }) => <GridCell value={row.original.supervisorName} />,
+      },
+      {
+        id: "self",
+        header: "Worker's sheet",
+        size: 190,
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <GridCell value={row.original.selfSubmittedAt ? formatDate(row.original.selfSubmittedAt) : "Not yet"} />
+            {/* §17: a hand-over is never shown as though the worker submitted
+                independently. */}
+            {row.original.handedOver ? (
+              <span className="block truncate text-body-sm text-ink-muted">
+                on their supervisor&rsquo;s device
+              </span>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "supervisor",
+        header: "Supervisor's sheet",
+        size: 180,
+        cell: ({ row }) => (
+          <GridCell
+            value={
+              row.original.supervisorSubmittedAt
+                ? formatDate(row.original.supervisorSubmittedAt)
+                : "Not yet"
+            }
+          />
+        ),
+      },
+      {
+        id: "next",
+        header: "What happens next",
+        size: 340,
+        cell: ({ row }) => {
+          const step = nextStep(row.original);
+          return (
+            <span
+              className={cn(
+                "truncate font-sans text-body-sm",
+                step.tone === "ready"
+                  ? "font-medium text-primary"
+                  : step.tone === "done"
+                    ? "text-ink-muted"
+                    : "text-ink",
+              )}
+            >
+              {step.text}
+            </span>
+          );
+        },
+      },
+    ],
+    [],
+  );
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    /* -- The same shell as Evaluation cycles: full-bleed, pinned to the
+          viewport, a fixed header bar, the counts, then the grid filling what
+          is left. `data-full-bleed` drops the shell's 1180px cap — a roster is a
+          grid, and a grid centred in 1180px wastes half a wide monitor
+          (UI2-9). -- */
+    <div
+      data-full-bleed
+      className="flex h-[calc(100dvh-theme(spacing.topbar))] min-h-[26rem] flex-col overflow-hidden bg-surface"
+    >
+      <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 border-b border-rule px-4 py-3 lg:px-6">
         <div className="min-w-0">
-          <h1 className="font-sans text-h2 text-ink">Worker appraisals</h1>
-          <p className="mt-1 font-sans text-body-sm text-ink-muted">
-            The shop-floor three-tick sheet. The worker and their supervisor tick the same sheet at
-            the same time, and neither sees the other&rsquo;s answers.
+          {/* -- `text-h2` was here and is not a class this project defines, so
+                Tailwind emitted nothing and preflight rendered the page title at
+                plain body size. `display-sm` is the step the type scale actually
+                ships, and the one the cycles screen uses. -- */}
+          <h1 className="text-display-sm font-semibold text-ink">Worker appraisals</h1>
+          <p className="mt-0.5 text-body-sm text-ink-muted">
+            {cycle.name} · {cycle.period_label} · supervisor due{" "}
+            {formatDate(cycle.supervisor_due_on)}
           </p>
         </div>
 
@@ -98,7 +189,7 @@ export function WorkerBoard({
               value={cycle.id}
               onChange={(e) => router.push(`/admin/worker-appraisals/${e.target.value}`)}
               aria-label="Which round"
-              className="min-h-11 rounded-input border border-rule bg-surface px-3 font-sans text-body text-ink"
+              className={SCREEN_SELECT_CLASS}
             >
               {allCycles.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -113,99 +204,45 @@ export function WorkerBoard({
             Start a round
           </Button>
         </div>
-      </header>
+      </div>
 
-      <div>
-        <p className="font-sans text-body-lg text-ink">{cycle.name}</p>
+      <div className="shrink-0 space-y-3 border-b border-rule px-4 py-3 lg:px-6">
+        <KpiRow>
+          <KpiCard label="In this round" value={rows.length} caption="workers" tone="self" />
+          <KpiCard label="Both sides in" value={bothIn} caption="ready for review" tone="final" />
+          <KpiCard
+            label="Still waiting"
+            value={rows.length - bothIn}
+            caption="one or both outstanding"
+            tone="lead"
+          />
+        </KpiRow>
+
+        {/* -- Said once, above the grid, because it is the answer to "so what do
+              I do now" for the whole round rather than for one row. HR fills
+              neither sheet, and a screen that does not say so leaves somebody
+              looking for a button that should not exist. -- */}
         <p className="font-sans text-body-sm text-ink-muted">
-          {cycle.period_label} · supervisor due {formatDate(cycle.supervisor_due_on)}
+          You do not fill either sheet. Each supervisor hands their worker the form to tick, then
+          rates them separately — both from <span className="font-medium text-ink">Shop floor</span>{" "}
+          in their own menu. Once both sides are in, the appraisal comes to you.
         </p>
       </div>
 
-      <KpiRow>
-        <KpiCard label="In this round" value={rows.length} caption="workers" />
-        <KpiCard label="Both sides in" value={bothIn} caption="ready for review" tone="final" />
-        <KpiCard
-          label="Still waiting"
-          value={rows.length - bothIn}
-          caption="one or both outstanding"
-          tone="lead"
-        />
-      </KpiRow>
-
-      <div className="overflow-x-auto rounded-card border border-rule">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-rule bg-surface-mute">
-              {["Worker", "Supervisor", "Worker's sheet", "Supervisor's sheet", "What happens next"].map(
-                (h) => (
-                  <th key={h} scope="col" className="type-label whitespace-nowrap px-4 py-2.5 text-left text-ink">
-                    {h}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 font-sans text-body-sm text-ink-muted">
-                  Nobody is in this round.
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => {
-                const step = nextStep(row);
-                return (
-                  <tr key={row.id} className="border-b border-rule last:border-b-0">
-                    <td className="px-4 py-3 font-sans text-body-sm text-ink">{row.workerName}</td>
-                    <td className="px-4 py-3 font-sans text-body-sm text-ink-muted">
-                      {row.supervisorName}
-                    </td>
-                    {/* Both sides shown, because this screen is HR's — §5 keeps
-                        each side from the OTHER, never from HR, who are the one
-                        party entitled to see both. */}
-                    <td className="whitespace-nowrap px-4 py-3 font-sans text-body-sm text-ink-muted">
-                      {row.selfSubmittedAt ? formatDate(row.selfSubmittedAt) : "Not yet"}
-                      {/* §17: a hand-over is never shown as though the worker
-                          submitted independently. */}
-                      {row.handedOver ? (
-                        <span className="block text-[11px] text-ink-faint">on their supervisor&rsquo;s device</span>
-                      ) : null}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-sans text-body-sm text-ink-muted">
-                      {row.supervisorSubmittedAt ? formatDate(row.supervisorSubmittedAt) : "Not yet"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={
-                          step.tone === "ready"
-                            ? "font-sans text-body-sm font-medium text-primary"
-                            : step.tone === "done"
-                              ? "font-sans text-body-sm text-ink-muted"
-                              : "font-sans text-body-sm text-ink"
-                        }
-                      >
-                        {step.text}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* -- Said once, under the table, because it is the answer to "so what do
-            I do now" for the whole round rather than for one row. HR fills
-            neither sheet, and a screen that does not say so leaves somebody
-            looking for a button that should not exist. -- */}
-      <p className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-        You do not fill either sheet. Each supervisor hands their worker the form to tick, then rates
-        them separately — both from <span className="font-medium">Shop floor</span> in their own
-        menu. Once both sides are in, the appraisal comes to you.
-      </p>
+      <DataGrid
+        data={rows}
+        columns={columns}
+        storageKey="appraise.worker-board.column-widths"
+        rowNoun="worker"
+        rowTitle={(r) => r.workerName}
+        minWidth={1100}
+        empty={
+          <EmptyState
+            title="Nobody is in this round"
+            body="Start a round and choose who is in it."
+          />
+        }
+      />
 
       <StartRoundDialog
         open={starting}

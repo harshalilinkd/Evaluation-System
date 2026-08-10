@@ -54,7 +54,7 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="flex items-center gap-2 font-sans text-h2 text-ink">
+        <h1 className="flex items-center gap-2 text-display-sm font-semibold text-ink">
           <HardHat className="size-5 text-ink-muted" aria-hidden />
           Shop floor
         </h1>

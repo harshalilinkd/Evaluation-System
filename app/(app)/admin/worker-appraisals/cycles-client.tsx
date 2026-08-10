@@ -70,7 +70,7 @@ export function WorkerCyclesClient({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="font-sans text-h2 text-ink">Worker appraisals</h1>
+          <h1 className="text-display-sm font-semibold text-ink">Worker appraisals</h1>
           {/* Said once, at the top. The two modules look alike and are not:
               different form, different scale, different people. Somebody who
               arrives expecting the staff cycle screen should learn that here

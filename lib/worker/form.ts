@@ -27,6 +27,13 @@ export type WorkerSheetQuestion = {
 
 export type WorkerSheet = {
   evaluationId: string;
+  /* -- The paper form's metadata band.
+        Read from `profiles` and the evaluation, never asked as questions
+        (P2-9): a field somebody can type into is a field that can disagree with
+        the record it was drawn from. -- */
+  department: string | null;
+  designation: string | null;
+  supervisorName: string | null;
   /** Which side the VIEWER is on. Decided here, never sent by the browser. */
   layer: "SELF" | "SUPERVISOR";
   workerName: string;
@@ -35,6 +42,10 @@ export type WorkerSheet = {
   dueOn: string | null;
   questions: WorkerSheetQuestion[];
   answers: Record<string, WorkerTick>;
+  /** Paper form: "Supervisor Comment". Supervisor layer only. */
+  overallComment: string;
+  /** Paper form: "Training Required Yes/No". Supervisor layer only. */
+  trainingRequired: boolean | null;
   isSubmitted: boolean;
   /** Open for writing: the record is OPEN and this layer is neither in nor skipped. */
   isOpen: boolean;
@@ -93,7 +104,11 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         .select("name, period_label, self_due_on, supervisor_due_on")
         .eq("id", evaluation.cycle_id)
         .maybeSingle(),
-      supabase.from("profiles").select("full_name").eq("id", evaluation.worker_id).maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("full_name, designation, departments(name)")
+        .eq("id", evaluation.worker_id)
+        .maybeSingle(),
       supabase
         .from("worker_evaluation_questions")
         .select("question_id, text, help_text, is_required, is_overall, sort_order")
@@ -101,7 +116,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         .order("sort_order"),
       supabase
         .from("worker_evaluation_responses")
-        .select("answers, submitted_at")
+        .select("answers, submitted_at, overall_comment, training_required")
         .eq("evaluation_id", evaluationId)
         .eq("layer", layer)
         .maybeSingle(),
@@ -116,12 +131,23 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   const submittedAt = response?.submitted_at ?? null;
   const skipped = layer === "SELF" ? evaluation.self_skipped : evaluation.supervisor_skipped;
 
+  const { data: supervisor } = evaluation.supervisor_id
+    ? await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", evaluation.supervisor_id)
+        .maybeSingle()
+    : { data: null };
+
   return {
     ok: true,
     data: {
       evaluationId,
       layer,
       workerName: worker?.full_name ?? "This worker",
+      department: worker?.departments?.name ?? null,
+      designation: worker?.designation ?? null,
+      supervisorName: supervisor?.full_name ?? null,
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",
       dueOn: layer === "SELF" ? (cycle?.self_due_on ?? null) : (cycle?.supervisor_due_on ?? null),
@@ -133,6 +159,8 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         isOverall: q.is_overall,
       })),
       answers: (response?.answers ?? {}) as Record<string, WorkerTick>,
+      overallComment: response?.overall_comment ?? "",
+      trainingRequired: response?.training_required ?? null,
       isSubmitted: submittedAt !== null,
       isOpen: evaluation.status === "OPEN" && submittedAt === null && !skipped,
     },
