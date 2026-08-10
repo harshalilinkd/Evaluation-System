@@ -45,22 +45,37 @@ export type ThemeChoice = "light" | "dark" | "system";
  * It is a string because it must be inlined verbatim, and it is deliberately
  * tiny and dependency-free — it runs render-blocking on every page load.
  */
-export const THEME_SCRIPT = `
-(function(){
+/* -- THE PRE-PAINT SCRIPT IS GONE, and nothing replaced it.
+      It existed to read localStorage before first paint, and it was the only
+      script this project injected. React 19 warns about it on every page load,
+      and the warning is legitimate — a script rendered inside a component is a
+      script that will not run on a client navigation.
+
+      Both of its jobs are now done without JavaScript:
+
+        · SYSTEM PREFERENCE is a `@media (prefers-color-scheme: dark)` block in
+          globals.css. The browser has always been able to answer that; it was
+          never asked.
+        · AN EXPLICIT CHOICE is a cookie, read on the server, so <html> arrives
+          carrying the right `data-theme` and `data-rail`. Nothing has to run
+          before the paint because the markup is already correct.
+
+      No flash either way, which is what the script was defending — and it is a
+      stronger guarantee than the script gave, because it also holds with
+      JavaScript disabled. localStorage is still written alongside, so the
+      toggles keep reading the value they always did. -- */
+
+/** How long a remembered theme lasts. A year — it is a preference, not a session. */
+const PREF_MAX_AGE = 60 * 60 * 24 * 365;
+
+function writeCookie(name: string, value: string) {
   try {
-    var t = localStorage.getItem('${THEME_STORAGE_KEY}') || 'system';
-    var dark = t === 'dark' || (t === 'system' &&
-      window.matchMedia('(prefers-color-scheme: dark)').matches);
-    var r = document.documentElement;
-    r.setAttribute('data-theme', dark ? 'dark' : 'light');
-    r.classList.toggle('dark', dark);
-    r.setAttribute('data-rail', localStorage.getItem('${RAIL_STORAGE_KEY}') === 'collapsed' ? 'collapsed' : 'open');
-  } catch (e) {
-    /* Private mode blocks localStorage. Light and open are the defaults the
-       markup already assumes, so doing nothing is the correct fallback. */
+    document.cookie = `${name}=${value}; path=/; max-age=${PREF_MAX_AGE}; samesite=lax`;
+  } catch {
+    /* Cookies disabled. The attribute is already set for this page. */
   }
-})();
-`;
+}
+
 
 function applyTheme(choice: ThemeChoice) {
   const dark =
@@ -75,6 +90,12 @@ function applyTheme(choice: ThemeChoice) {
   } catch {
     // Nothing to do — the choice still applies for this page.
   }
+  /* -- The cookie is what the SERVER reads on the next request, so the next
+        page arrives already correct instead of being corrected after paint.
+        "system" is written as an absence: with no cookie the media query
+        decides, which is exactly what "system" means. -- */
+  if (choice === "system") writeCookie(THEME_STORAGE_KEY, "");
+  else writeCookie(THEME_STORAGE_KEY, dark ? "dark" : "light");
 }
 
 /* ---------- Theme toggle ---------- */
@@ -194,6 +215,7 @@ export function RailToggle({ className }: { className?: string }) {
     } catch {
       /* the toggle still works for this page */
     }
+    writeCookie(RAIL_STORAGE_KEY, next ? "collapsed" : "open");
     emit();
   };
 

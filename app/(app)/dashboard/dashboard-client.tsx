@@ -25,21 +25,15 @@ import {
 
 import {
   RadialGauge,
-  StatusDonutChart,
   TIER_CHART_COLORS,
   TrendAreaChart,
-  ratingBandColor,
-  ratingBandIndex,
 } from "@/components/appraise/charts";
-import { LeadPerformanceTable } from "@/components/appraise/lead-performance-table";
 import { MetricStrip, type Metric } from "@/components/appraise/metric-strip";
 import { CycleShapeChart } from "@/components/appraise/cycle-shape-chart";
 import { HistoryTrendChart } from "@/components/appraise/history-trend-chart";
 import { ChartFigure } from "@/components/appraise/chart-figure";
-import { GapChart } from "@/components/appraise/gap-chart";
 import { HeroCard } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { Analytics } from "@/lib/analytics/queries";
 import type { SystemPulse } from "@/lib/analytics/pulse";
 import { formatDate } from "@/lib/utils/date";
@@ -126,6 +120,13 @@ function Figure({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+/* -- How many cycles a trend line draws.
+      Eight is where the x-axis stops being readable at the widths this chart is
+      given, and it is more history than anybody reads off a line — the rest is
+      in the table beside it. One constant, so every trend in the product agrees
+      on the same bound rather than each picking its own. -- */
+const TREND_POINTS = 8;
 
 const score = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(2);
@@ -605,8 +606,7 @@ function adminMetrics(analytics: Analytics): Metric[] {
 }
 
 function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPulse | null }) {
-  const { departments, sections, variance, distribution, needsAttention, timeline, progress } =
-    analytics;
+  const { departments, needsAttention, timeline, progress } = analytics;
 
   /* -- IS THERE A CURVE TO DRAW, or just a rule?
         `timeline.length < 2` was the wrong test. A cycle with one participant
@@ -621,33 +621,6 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
         large enough that the rise is a shape rather than a single step. Below
         that the honest answer is the two counts as words, which is what the
         panel says instead. -- */
-  /* -- WHOSE NUMBERS THESE ARE, said out loud.
-        Every aggregate panel below was headed "Company-wide averages" and named
-        no population at all — so a reader could not tell whether they were
-        looking at forty people or one, and with a single employee in the cycle
-        the page was that person's appraisal presented as an organisation's.
-        That is the same fault the radar had, and it is not fixed by removing
-        the radar.
-
-        `v_department_scores` has carried `people` and `self_count` since P16.
-        The counts and the team names come from there; the panel states them,
-        and links to /reports so a reader can go from "the two sides disagree
-        here" to the actual names. -- */
-  const populationPeople = departments.reduce((n, d) => n + Number(d.people ?? 0), 0);
-  const populationTeams = departments.length;
-  const teamNames = departments
-    .map((d) => String(d.department_name ?? "").trim())
-    .filter(Boolean);
-
-  /* At one team the name IS the useful fact and there is room for it; past
-     three, a list of names is longer than the sentence it sits in. */
-  const populationLine =
-    populationPeople === 0
-      ? null
-      : `${populationPeople} ${populationPeople === 1 ? "person" : "people"} across ${populationTeams} ${populationTeams === 1 ? "team" : "teams"}${
-          teamNames.length > 0 && teamNames.length <= 3 ? ` — ${teamNames.join(", ")}` : ""
-        }.`;
-
   const timelinePeak = Math.max(0, ...timeline.map((r) => Math.max(r.self, r.lead)));
   const timelineFirst = timeline[0];
   const timelineLast = timeline[timeline.length - 1];
@@ -711,7 +684,12 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3 lg:col-span-3">
+          {/* -- FOUR STAGES, NOT THREE. The pipeline ended at "With the MD",
+                so a record the MD had reviewed was counted nowhere and the row
+                read as though nothing were outstanding — the same hole the
+                reports queue had until today, and the one place work stalls
+                silently because each side assumes the other has it. -- */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 xl:grid-cols-4">
             <PipelineTile
               label="Being filled in"
               value={pulse.inProgress}
@@ -733,12 +711,24 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
               href="/reports"
               tone="green"
             />
+            {/* -- Amber, like "Waiting for HR", because both are somebody's
+                  outstanding work rather than a stage running its course. The
+                  caption names the action and not the state: "reviewed" would
+                  read as finished, which is exactly the misreading that let
+                  these sit. -- */}
+            <PipelineTile
+              label="Ready to close"
+              value={pulse.readyToClose}
+              caption="reviewed — nothing left but to finish it"
+              href="/reports"
+              tone="amber"
+            />
           </div>
         </section>
       ) : null}
 
       {pulse ? (
-        <section className="grid items-start gap-6 lg:grid-cols-3">
+        <section className="grid items-stretch gap-6 lg:grid-cols-3">
           {/* ---------- Finished, and how that compares ----------
               A count on its own is a number; a count against last month is a
               direction. The comparison is what turns "9 completed" into
@@ -828,87 +818,22 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
             )}
           </Panel>
 
-          {/* ---------- Who scored well ----------
-              The question the owner asked for by name, and the one panel here
-              that names individuals. It ranks on the SETTLED figure — final
-              where one was agreed, else the HOD's — and never on the person's
-              own score, because a leaderboard built partly on self-assessment
-              ranks confidence rather than performance (§11's precedence). */}
-          <Panel
-            title="Scored highest"
-            subtitle="Most recent appraisal per person, best first."
-            action={
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/admin/people">Everyone</Link>
-              </Button>
-            }
-          >
-            {pulse.topPerformers.length === 0 ? (
-              <PanelEmpty>
-                Appears once appraisals are rated. Nobody has a settled score yet.
-              </PanelEmpty>
-            ) : (
-              <>
-                <ol className="space-y-2.5">
-                  {pulse.topPerformers.map((p, i) => (
-                    <li key={p.profileId} className="flex items-center gap-3">
-                      <span
-                        aria-hidden
-                        className="tabular w-4 shrink-0 text-body-sm text-ink-faint"
-                      >
-                        {i + 1}
-                      </span>
-                      <span
-                        aria-hidden
-                        className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-surface-mute text-body-sm font-medium text-ink"
-                      >
-                        {p.initials}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <Link
-                          href={`/scorecard?person=${p.profileId}`}
-                          className="block truncate font-sans text-body-sm text-ink hover:underline"
-                        >
-                          {p.name}
-                        </Link>
-                        <span className="block truncate font-sans text-body-sm text-ink-muted">
-                          {p.department ?? "No team set"}
-                        </span>
-                      </span>
-                      <span className="tabular shrink-0 font-sans text-body font-semibold text-ink">
-                        {p.score.toFixed(2)}
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {/* §11: a headline figure says which layer produced it. */}
-                <p className="mt-3 font-sans text-body-sm text-ink-muted">
-                  {pulse.performersThin
-                    ? "Only one person has a settled score so far, so this is not yet a ranking."
-                    : "Out of 5, from the agreed score where there is one and the HOD's rating otherwise."}
-                </p>
-              </>
-            )}
-          </Panel>
-        </section>
-      ) : null}
-
-      {/* ---------- How the cycle is filling up ----------
-          The one thing an HR dashboard is actually asked — "will this land by
-          the due date" — is a level and a slope, and nothing on this screen
-          carried it. */}
-      <section className="grid items-start gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+          {/* ---------- How the cycle is filling up ----------
+              Moved here from a row of its own. It was two-thirds wide beside
+              the leaderboard, and when that went the row was one card and a
+              gap. Three equal columns instead: what closed, what is coming,
+              and how the current cycle is filling — one question about the
+              state of the cycle, answered three ways, in a single band. */}
           <Panel
             title="How the cycle is filling up"
-            subtitle="Cumulative submissions. The two sides are counted separately — they rate at the same time and neither sees the other."
+            subtitle="Cumulative submissions. Each side is counted separately."
           >
             {!showTimeline ? (
               /* The counts, in words, rather than a flat line pretending to be
                  a trend. This is the number somebody wanted anyway. */
               <PanelEmpty>
                 {timelineLast
-                  ? `${timelineLast.self} self-${timelineLast.self === 1 ? "evaluation" : "evaluations"} and ${timelineLast.lead} HOD ${timelineLast.lead === 1 ? "rating" : "ratings"} are in. The curve appears once enough submissions arrive across several days to show a trend.`
+                  ? `${timelineLast.self} self-${timelineLast.self === 1 ? "evaluation" : "evaluations"} and ${timelineLast.lead} HOD ${timelineLast.lead === 1 ? "rating" : "ratings"} are in. The curve appears once submissions span several days.`
                   : "The curve appears once submissions start arriving."}
               </PanelEmpty>
             ) : (
@@ -941,80 +866,9 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
               </ChartFigure>
             )}
           </Panel>
-        </div>
 
-        {/* Named its population too, for the same reason — this ring is every
-            scored answer in the cycle, and without the count a reader cannot
-            tell whether that is four hundred answers or forty. */}
-        <Panel
-          /* -- "PEOPLE", not "answers". The view counts one row per
-                EVALUATION, banded by that person's overall score — it has never
-                counted answers, and the old subtitle sent a reader looking for
-                a figure the panel does not carry. -- */
-          title="Where the ratings sit"
-          subtitle={
-            populationLine
-              ? `How many people landed in each score band. From ${populationLine}`
-              : "How many people landed in each score band"
-          }
-        >
-          {distribution.length === 0 ? (
-            /* -- The empty line used to read "once ratings come in", which was
-                  false on the screen that prompted this: ratings were in, and
-                  the view was filtering on `final_overall` — a column the
-                  ordinary HR-completes-it path never fills (0049). It now names
-                  what is actually missing. -- */
-            <PanelEmpty>
-              Bands appear once an appraisal has a settled score — the agreed
-              figure, or the HOD&rsquo;s rating where there is no agreed one.
-            </PanelEmpty>
-          ) : (
-            <ChartFigure
-              caption="People per score band"
-              rows={[...distribution].sort(
-                (a, b) =>
-                  ratingBandIndex(String(a.bucket ?? "")) - ratingBandIndex(String(b.bucket ?? "")),
-              )}
-              columns={[
-                { header: "Band", cell: (b) => String(b.bucket ?? "—") },
-                { header: "People", cell: (b) => String(b.people ?? 0), align: "right" },
-              ]}
-            >
-            <StatusDonutChart
-              /*
-                The bands are ORDINAL — 0-1 through 4-5 is one scale, not five
-                kinds of thing — so they take the single-hue ramp, light to
-                dark, exactly as `ordinalStep` was built for.
-
-                What was here before did three wrong things at once. It cycled
-                `i % 4` over FIVE bands, so two shared a colour. It coloured by
-                the row's position in a `group by` result, which has no
-                guaranteed order — a band emptying would have repainted every
-                other one. And it reached for `--critical`, `--warning` and
-                `--final`: two reserved status colours and, worse, a TIER
-                colour. §13.1 keeps indigo meaning "the MD said this" and
-                nothing else, and UI2-12 keeps the tiers out of chart series
-                altogether.
-
-                Sorted and mapped BY BAND, so a colour always means the same
-                score whatever the query returns.
-              */
-              data={[...distribution]
-                .sort(
-                  (a, b) =>
-                    ratingBandIndex(String(a.bucket ?? "")) -
-                    ratingBandIndex(String(b.bucket ?? "")),
-                )
-                .map((b) => ({
-                  name: String(b.bucket ?? ""),
-                  value: Number(b.people ?? 0),
-                  fill: ratingBandColor(String(b.bucket ?? "")),
-                }))}
-            />
-            </ChartFigure>
-          )}
-        </Panel>
-      </section>
+        </section>
+      ) : null}
 
       {/* ---------- Where the two sides disagree ----------
           THIS PANEL REPLACES TWO. It used to sit at the bottom of the page
@@ -1035,47 +889,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           The dumbbell survives because it answers the same question in numbers
           somebody can repeat: two dots on one track, the distance between them
           IS the gap, and the figure is printed at the end of the row. */}
-      {sections.length > 0 ? (
-        <Panel
-          title="Where the two sides disagree"
-          subtitle={
-            populationLine
-              ? `Averaged over ${populationLine} Each section shows what people said about themselves against what their HOD said — the longer the line, the further apart they are.`
-              : "Each section shows what people said about themselves against what their HOD said — the longer the line, the further apart they are."
-          }
-          action={
-            /* From the finding to the names. The panel is an average and can
-               never say WHO on its own; this is the one click that can. */
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/reports">See the people</Link>
-            </Button>
-          }
-        >
-          <ChartFigure
-            caption="Section averages, self against lead"
-            rows={pivotSections(sections)}
-            columns={[
-              { header: "Section", cell: (r) => r.label },
-              { header: "They rated themselves", cell: (r) => score(r.self), align: "right" },
-              { header: "Their HOD rated them", cell: (r) => score(r.lead), align: "right" },
-              {
-                header: "Difference",
-                cell: (r) =>
-                  r.gap === null ? "—" : `${r.gap > 0 ? "+" : ""}${r.gap.toFixed(2)}`,
-                align: "right",
-              },
-            ]}
-          >
-            <GapChart
-              rows={pivotSections(sections).map((r) => ({
-                label: r.label,
-                self: r.self,
-                lead: r.lead,
-              }))}
-            />
-          </ChartFigure>
-        </Panel>
-      ) : null}
+      {/* Removed: the section gap is analysis and belongs to a report being read, not to a landing page. /reports carries it per person. */}
 
       {/* ---------- Where each team stands ----------
           The most actionable thing on an HR dashboard and it was not here.
@@ -1163,14 +977,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           a name off and then acts. The diverging bar below it answers the shape
           question — who is furthest out — and the table answers the specific
           one: who, how many, and which way. */}
-      {variance.length > 0 ? (
-        <Panel
-          title="How each HOD rated their team"
-          subtitle="For HR and the MD only. A HOD who sits consistently above or below their team is worth a conversation, not a mark against them."
-        >
-          <LeadPerformanceTable rows={variance} />
-        </Panel>
-      ) : null}
+      {/* Removed: a per-HOD variance table is a study, not a task. /reports sorts by gap, which is the same finding at the moment somebody acts on it. */}
 
       {/* ---------- Needs chasing ----------
           The diverging bar chart that used to share this row is gone. It ranked
@@ -1196,80 +1003,6 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
       </Panel>
     </>
   );
-}
-
-/**
- * `v_section_scores` carries ONE ROW PER LAYER, so the self and lead figures for
- * a section arrive as two rows. Pivoting here rather than in the view keeps the
- * view a plain aggregate that any caller can read (P16), and the gap is computed
- * once from the pair — never stored, because §11 makes it a reporting figure.
- */
-/**
- * Section averages across every department in the cycle.
- *
- * IT USED TO ASSIGN, NOT AGGREGATE — and that was a real fault, invisible at
- * one department and wrong at ten.
- *
- * `v_section_scores` returns one row per (cycle, DEPARTMENT, section, layer).
- * The old loop did `entry.self = row.avg_score` for each matching row, so every
- * department overwrote the one before it and the panel rendered whichever
- * department happened to come last out of Postgres — presented, in a heading,
- * as the company-wide figure. No ordering is guaranteed on that view, so the
- * number could change between two loads of the same page with no data change.
- *
- * The fix is a weighted mean, and weighted rather than plain because a section
- * a forty-person team answered is not worth the same as one a two-person team
- * answered. `answer_count` is on the view for exactly this and had never been
- * read.
- */
-function pivotSections(rows: Analytics["sections"]) {
-  type Acc = { sum: number; weight: number };
-  const zero = (): Acc => ({ sum: 0, weight: 0 });
-  const mean = (a: Acc) => (a.weight === 0 ? null : Math.round((a.sum / a.weight) * 100) / 100);
-
-  const bySection = new Map<string, { label: string; self: Acc; lead: Acc }>();
-
-  for (const row of rows) {
-    // Job Specific Skills asks different questions per department, so a
-    // company-wide average of it compares unrelated things. The view flags it;
-    // this is the consumer honouring the flag (P16-4).
-    if (!row.is_comparable) continue;
-    if (row.avg_score === null) continue;
-
-    const key = String(row.section);
-    const entry = bySection.get(key) ?? {
-      label: SECTION_LABELS[row.section] ?? key,
-      self: zero(),
-      lead: zero(),
-    };
-
-    // Weight of 1 where the count is missing: an unweighted contribution is
-    // wrong, but dropping the row entirely loses a real department's answer.
-    const weight = Number(row.answer_count ?? 0) || 1;
-    const value = Number(row.avg_score);
-
-    if (row.layer === "SELF") {
-      entry.self.sum += value * weight;
-      entry.self.weight += weight;
-    }
-    if (row.layer === "LEAD") {
-      entry.lead.sum += value * weight;
-      entry.lead.weight += weight;
-    }
-    bySection.set(key, entry);
-  }
-
-  return [...bySection.entries()].map(([section, v]) => {
-    const self = mean(v.self);
-    const lead = mean(v.lead);
-    return {
-      section,
-      label: v.label,
-      self,
-      lead,
-      gap: self === null || lead === null ? null : Math.round((lead - self) * 100) / 100,
-    };
-  });
 }
 
 /* ---------- A head of department ---------- */
@@ -1370,10 +1103,21 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
               { header: "Agreed", cell: (r) => score(r.final_overall), align: "right" },
             ]}
           >
+            {/* -- BOUNDED, AND IT SAYS SO.
+                  `ownHistory` is every cycle this person has ever had, and it
+                  only grows. A trend line does not get more useful past a
+                  handful of points — it gets narrower gaps, colliding x-axis
+                  labels and a chart nobody can read, and the newest points are
+                  the ones being looked at.
+
+                  The most recent eight, oldest-first so time runs left to
+                  right. Nothing is lost: `ChartFigure` shows every cycle in the
+                  table beside it, and the line below says how many are not
+                  drawn. A cap that stays quiet reads as "this is all of it",
+                  which is the one thing it must not say. -- */}
             <HistoryTrendChart
-              /* Oldest first: time runs left to right, and the view hands them
-                 back newest first. */
               points={[...ownHistory]
+                .slice(0, TREND_POINTS)
                 .reverse()
                 .map((row) => ({
                   label: String(row.period_label ?? row.cycle_name ?? "—"),
@@ -1382,6 +1126,16 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
                   final: row.final_overall === null ? null : Number(row.final_overall),
                 }))}
             />
+
+            {/* The dataviz rule this exists for: a bound that stays quiet reads
+                as complete coverage. Named, with where the rest is. */}
+            {ownHistory.length > TREND_POINTS ? (
+              <p className="mt-2 font-sans text-body-sm text-ink-muted">
+                Showing your most recent {TREND_POINTS} cycles.{" "}
+                {ownHistory.length - TREND_POINTS} older{" "}
+                {ownHistory.length - TREND_POINTS === 1 ? "one is" : "ones are"} in the table.
+              </p>
+            ) : null}
           </ChartFigure>
         )}
       </Panel>

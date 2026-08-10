@@ -172,6 +172,29 @@ export function BandHeading({
 
 export function HeaderBand({ report }: { report: EvaluationReport }) {
   const { header, summary } = report;
+
+  /* -- THE FINAL SCORE, BEFORE IT IS STORED.
+        `final_overall` is written at the close and not a moment earlier, so the
+        tile was absent for the whole life of a record and appeared only once
+        there was nothing left to decide. That is the wrong way round: the
+        figure is what HR and the MD are discussing, and it was the one number
+        not on the screen while they discussed it.
+
+        Identical arithmetic to 0046's SQL and to both dialogs — the mean of the
+        two stored layer averages, a missing side left out rather than counted
+        as zero (§11, P7-9). It is a PREVIEW and the caption says so: nothing is
+        stored until the record closes, and a figure presented as final before
+        it is agreed would be a claim the record cannot back. -- */
+  const layerScores = [summary.selfOverall, summary.leadOverall].filter(
+    (v): v is number => v !== null && v !== undefined,
+  );
+  const projectedFinal =
+    layerScores.length === 0
+      ? null
+      : Math.round((layerScores.reduce((a, b) => a + b, 0) / layerScores.length) * 100) / 100;
+
+  /** What the tile shows: the stored figure once there is one, else the preview. */
+  const shownFinal = summary.finalOverall ?? projectedFinal;
   const flagged =
     summary.overallGap !== null && Math.abs(summary.overallGap) >= summary.flagThreshold;
 
@@ -207,7 +230,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           "grid divide-y divide-rule sm:divide-x sm:divide-y-0",
           // A fourth panel only once there is a final score. An empty "Final —"
           // on a report still with HR would read as a figure somebody forgot.
-          summary.finalOverall === null ? "sm:grid-cols-3" : "sm:grid-cols-4",
+          shownFinal === null ? "sm:grid-cols-3" : "sm:grid-cols-4",
         )}
       >
         {/* -- White, with the hue as a dot and a 2px rule.
@@ -240,18 +263,33 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             §13.1's third tier, and legitimately so: indigo means "the final,
             authoritative answer", which is exactly what this is. It only
             renders once one exists — before that there is nothing agreed. */}
-        {summary.finalOverall !== null ? (
+        {shownFinal !== null ? (
           <figure className="relative px-6 py-5">
             <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-final" />
             <figcaption>
               <span className="flex items-center gap-2">
                 <span aria-hidden className="size-2 shrink-0 rounded-pill bg-final" />
                 <span className="type-label font-bold text-ink">Final score</span>
+                {summary.finalOverall === null ? (
+                  <span className="type-label font-normal normal-case tracking-normal text-ink-muted">
+                    not yet recorded
+                  </span>
+                ) : null}
               </span>
             </figcaption>
-            <p className="tabular mt-1 text-display-lg text-ink">{score(summary.finalOverall)}</p>
+            <p
+              className={cn(
+                "tabular mt-1 text-display-lg",
+                // Muted while it is a projection, so it does not read as decided.
+                summary.finalOverall === null ? "text-ink-muted" : "text-ink",
+              )}
+            >
+              {score(shownFinal)}
+            </p>
             <p className="font-sans text-body-sm text-ink-muted">
-              Agreed with the MD and recorded by HR
+              {summary.finalOverall === null
+                ? "The mean of both averages. Recorded when the cycle closes."
+                : "Agreed with the MD and recorded by HR"}
             </p>
           </figure>
         ) : null}

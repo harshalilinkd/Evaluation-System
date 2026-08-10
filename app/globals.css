@@ -301,6 +301,125 @@
     --sidebar-active: 129 140 248;
   }
 
+  /* -- SYSTEM PREFERENCE, RESOLVED BY CSS ALONE.
+        Dark used to be decided by a render-blocking script reading
+        localStorage, and that script was the only reason this project had one.
+        The browser can answer "is this person on a dark system" with no
+        JavaScript at all — it just was never asked.
+
+        `:not([data-theme="light"])` is what keeps an explicit choice winning:
+        somebody on a dark system who has chosen Light gets light. With nothing
+        chosen there is no attribute, so this applies — and there is no flash to
+        prevent, because nothing had to run first.
+
+        The declarations are identical to the block above BY CONSTRUCTION: they
+        were generated from it rather than retyped, so the two cannot drift. -- */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+    /*
+       RE-BALANCED, and every value below was measured rather than picked.
+       Two defects the old set carried:
+
+       1. `--rule` and `--surface-mute` were BOTH #334155 — the identical
+          colour. Every hairline drawn on a muted ground was therefore
+          invisible, which is why the dark tables had no column separators and
+          the toolbars had no edges. That is the single biggest reason dark
+          looked wrong: the structure was there and simply not being painted.
+
+       2. `--ink-faint` on `--surface-mute` came to 2.18:1 and `--ink-muted` to
+          4.04:1, both under §13.8's 4.5:1 floor. Six text/ground combinations
+          failed in total.
+
+       The set below clears 4.5:1 on all four grounds and leaves the rule
+       visibly lighter than everything it is drawn on (1.75:1 on surface,
+       1.49:1 on surface-mute). The grounds also sit closer together than
+       before — the old jump from #1E293B to #334155 is what made the header
+       bands read as stripes.
+    */
+    /*
+       The owner's six-step cool neutral ramp, taken in its own order:
+         #06141B  #11212D  #253745  #4A5C6A  #9BA8AB  #CCD0CF
+       Two levels are interpolated because the system needs eight and the ramp
+       supplies six — `--surface` (cards have to lift off the canvas) and
+       `--ink-muted` (there are three ink weights, not two). Both are marked.
+
+       Measured, not chosen. Every ink/ground pair clears §13.8's 4.5:1 — the
+       worst is ink-faint on surface-mute at 5.02:1. And the rule is a clear
+       step above every ground it is drawn on (2.07:1 on surface, 1.77:1 on
+       surface-mute), which is what the old set got wrong: `--rule` and
+       `--surface-mute` were the SAME colour, so every hairline on a muted
+       ground was invisible and the tables lost their gridlines entirely.
+    */
+    --background: 17 33 45; /* #11212D  ramp 2 — the canvas */
+    --surface: 27 44 56; /* #1B2C38  interpolated — cards lift OFF the canvas */
+    --surface-mute: 37 55 69; /* #253745  ramp 3 — header bands, hover */
+    --rule: 74 92 106; /* #4A5C6A  ramp 4 — hairlines, visible on all grounds */
+
+    --ink: 204 208 207; /* #CCD0CF  ramp 6 */
+    --ink-muted: 180 189 189; /* #B4BDBD  interpolated */
+    --ink-faint: 155 168 171; /* #9BA8AB  ramp 5 — 5.02:1 at its worst */
+    --ink-invert: 6 20 27; /* #06141B  text on a solid accent */
+
+    /* Brand hues hold their identity. Indigo is lifted one step so it keeps
+       its 4.5:1 against the darker ground (§13.8). */
+    --accent-primary: 129 140 248; /* #818CF8 */
+    --accent-cyan: 34 211 238; /* #22D3EE */
+    --accent-pink: 244 114 182; /* #F472B6 */
+    --accent-green: 52 211 153; /* #34D399 */
+    --accent-tint: 36 49 71; /* #243147  the "soft fill" behind active nav */
+
+    --success: 52 211 153;
+    --success-tint: 6 78 59; /* #064E3B */
+    --warning: 251 191 36;
+    --warning-tint: 120 53 15; /* #78350F */
+    --critical: 248 113 113;
+    --critical-tint: 127 29 29; /* #7F1D1D */
+
+    /* Tier identity is unchanged — cyan is still the employee, pink still the
+       lead, indigo still the MD (§13.1). Only the tints invert. */
+    --self: 34 211 238;
+    --self-tint: 22 78 99; /* #164E63 */
+    --lead: 244 114 182;
+    --lead-tint: 131 24 67; /* #831843 */
+    --final: 129 140 248;
+    --final-tint: 49 46 129; /* #312E81 */
+
+    /* Chart ramps, re-stepped for the dark surface — SELECTED, not flipped.
+       #22D3EE sits at L 0.80 and #818CF8 at 0.68, both outside the 0.48–0.67
+       band a dark-surface mark needs, so the series slots take their own steps
+       rather than inheriting the brand tokens above.
+
+       The ordinal ramp reverses its anchor: on a dark ground the LIGHTEST step
+       is the most prominent, so step 1 is palest and step 5 deepest reads
+       backwards — the ramp runs the other way and the earliest stage is the
+       faintest against the surface, exactly as it is in light. */
+    --chart-series-1: 99 102 241; /* #6366F1 */
+    --chart-series-2: 14 165 196; /* #0EA5C4 */
+
+    --chart-step-1: 224 231 255; /* #E0E7FF  earliest stage */
+    --chart-step-2: 199 210 254; /* #C7D2FE */
+    --chart-step-3: 165 180 252; /* #A5B4FC */
+    --chart-step-4: 129 140 248; /* #818CF8 */
+    --chart-step-5: 99 102 241; /* #6366F1  latest stage */
+
+    --chart-grid: 45 62 78; /* #2D3E4E  one shade off the surface, like light */
+
+    /* The rail takes the ramp's deepest step, so it is still the anchor it is in
+       the light theme — one step below the canvas rather than the near-black
+       hole #020617 punched in it. */
+    --sidebar: 6 20 27; /* #06141B  ramp 1 */
+    --sidebar-ink: 204 208 207; /* #CCD0CF  12.01:1 on the rail */
+    --sidebar-ink-muted: 155 168 171; /* #9BA8AB  7.64:1 */
+    --sidebar-rule: 37 55 69; /* #253745  ramp 3, visible on ramp 1 */
+    --sidebar-active: 129 140 248;
+    }
+
+    :root:not([data-theme="light"]) .card-surface {
+      @apply border border-rule shadow-none;
+    }
+  }
+
+
   /* ---------- Base ---------- */
   body {
     @apply bg-background text-ink font-sans text-body antialiased;

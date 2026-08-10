@@ -57,6 +57,14 @@ export type SystemPulse = {
   awaitingHr: number;
   /** HR has sent it on. */
   withMd: number;
+  /* -- The MD has read it and nobody has finished it.
+        This state had no counter anywhere until today, on this screen or on the
+        reports queue — so the moment the MD did their job the record fell out of
+        every total and read as "nothing outstanding" while it sat there. It is
+        the one bucket where work stalls silently, because both parties think
+        the other has it. INTERVIEW_DONE counts too: an increment stops there
+        only if the close was interrupted. -- */
+  readyToClose: number;
   completedThisMonth: number;
   completedLastMonth: number;
   /** Pay changes recorded this month. A COUNT — never an amount (§5). */
@@ -115,6 +123,7 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     inProgress,
     awaitingHr,
     withMd,
+    readyToClose,
     doneThisMonth,
     doneLastMonth,
     increments,
@@ -124,9 +133,10 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     /* -- `!inner` on the cycle throughout, so a BINNED cycle is excluded.
           0032 gave cycles a `deleted_at`; anything counting evaluations without
           it reports work nobody is doing on a cycle nobody can open. -- */
-    countEvaluations(supabase, "OPEN"),
-    countEvaluations(supabase, "PENDING_HR_REVIEW"),
-    countEvaluations(supabase, "HR_APPROVED"),
+    countEvaluations(supabase, ["OPEN"]),
+    countEvaluations(supabase, ["PENDING_HR_REVIEW"]),
+    countEvaluations(supabase, ["HR_APPROVED"]),
+    countEvaluations(supabase, ["MD_REVIEWED", "INTERVIEW_DONE"]),
 
     /* -- Finished, by WHEN it finished.
           `closed_at` rather than the status alone: "completed this month" is a
@@ -268,6 +278,7 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
       inProgress: inProgress ?? 0,
       awaitingHr: awaitingHr ?? 0,
       withMd: withMd ?? 0,
+      readyToClose: readyToClose ?? 0,
       completedThisMonth: doneThisMonth.count ?? 0,
       completedLastMonth: doneLastMonth.count ?? 0,
       incrementsThisMonth: increments.count ?? 0,
@@ -285,12 +296,15 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
 /** One status count, with the binned-cycle exclusion applied consistently. */
 async function countEvaluations(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  status: "OPEN" | "PENDING_HR_REVIEW" | "HR_APPROVED",
+  /* -- An ARRAY, because one bucket is two statuses. `in` with a single-item
+        list is the same query `eq` was making, so every existing caller is
+        unchanged in behaviour as well as in shape. -- */
+  status: ReadonlyArray<"OPEN" | "PENDING_HR_REVIEW" | "HR_APPROVED" | "MD_REVIEWED" | "INTERVIEW_DONE">,
 ): Promise<number> {
   const { count } = await supabase
     .from("evaluations")
     .select("id, evaluation_cycles!inner(deleted_at)", { count: "exact", head: true })
-    .eq("status", status)
+    .in("status", [...status])
     .is("excluded_at", null)
     .is("evaluation_cycles.deleted_at", null);
   return count ?? 0;

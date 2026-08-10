@@ -503,6 +503,16 @@ function MdApproval({
   currentCtc,
   firstName,
   isHr,
+  /* -- MISSING FROM THIS LIST AND TYPECHECKED CLEAN, which is worth recording.
+        `status` is a DOM GLOBAL — `window.status`, typed `string` in lib.dom —
+        so every use of it below resolved to that instead of to the prop, and
+        tsc had nothing to complain about. It failed only at runtime, on the
+        server, where `window` does not exist: "status is not defined".
+
+        A prop name that collides with a browser global gets no help from the
+        compiler. `name`, `length`, `origin`, `top` and `self` are the same
+        trap. -- */
+  status,
 }: {
   data: SalaryBandData;
   evaluationId: string;
@@ -542,25 +552,58 @@ function MdApproval({
         one press and no typing. -- */
   const [effectiveFrom, setEffectiveFrom] = React.useState(firstOfNextMonth(new Date()));
 
+  /* -- Finished. The figure is on `salary_history`, which refuses UPDATE and
+        DELETE for EVERYONE by trigger — not merely by policy (P19-3) — so there
+        is nothing here left to change, and a live button would be offering
+        something the database will not do. -- */
+  const [justClosed, setJustClosed] = React.useState(false);
+  const settled = justClosed || status === "CLOSED" || status === "INTERVIEW_DONE";
+
 
   const approved = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
   const pct = hikePct(currentCtc, approved);
 
   async function onApprove() {
-    if (approved === null) return;
+    if (approved === null || busy) return;
     setBusy(true);
     setError(null);
-    const result = await approveAndClose({
-      evaluationId,
-      approvedCtc: approved,
-      remarks,
-      effectiveFrom,
-    });
-    setBusy(false);
-    if (!result.ok) setError(result.error.message);
-    else {
+
+    /* -- THE AWAIT IS GUARDED. A server action that THROWS — a dropped
+          connection, a 500, a redeploy mid-request — skips every line after it,
+          so `setBusy(false)` never ran and the button sat on "Approving and
+          closing…" for the life of the page with no way to retry. `finally` is
+          what makes the flag honest; FIX-12 fixed the identical shape on the
+          worker sheet. -- */
+    try {
+      const result = await approveAndClose({
+        evaluationId,
+        approvedCtc: approved,
+        remarks,
+        effectiveFrom,
+      });
+
+      if (!result.ok) {
+        setError(result.error.message);
+        return;
+      }
+
+      /* -- LOCKED IMMEDIATELY, not when the server says so.
+            `settled` is derived from the `status` prop, which only changes once
+            `router.refresh()` has been to the server and back. Between the
+            close committing and that arriving, the panel went on saying "Not
+            closed yet" beside a live button — inviting a second press at
+            exactly the moment the first had already succeeded. The refresh
+            still runs and still corrects everything else; this just stops the
+            gap being a window somebody can act in. -- */
+      setJustClosed(true);
       setSaved(true);
       router.refresh();
+    } catch {
+      setError(
+        "The connection dropped before we heard back. Reload the report before trying again — the increment may already have closed.",
+      );
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -612,7 +655,7 @@ function MdApproval({
                   ? ""
                   : ` (${pctText(review.md_approved_hike_pct)})`
               }${
-                status === "CLOSED" || status === "INTERVIEW_DONE"
+                settled
                   ? " and closed."
                   : ". Not closed yet — approving again will close it."
               }`
@@ -630,6 +673,7 @@ function MdApproval({
               value={ctcText}
               onChange={(e) => setCtcText(e.target.value)}
               inputMode="numeric"
+              disabled={settled}
               className="min-h-11 tabular"
             />
             <p className="font-sans text-body-sm text-ink-muted">
@@ -649,6 +693,7 @@ function MdApproval({
                 type="date"
                 value={effectiveFrom}
                 onChange={(e) => setEffectiveFrom(e.target.value)}
+                disabled={settled}
                 className="min-h-11 tabular"
               />
               <p className="font-sans text-body-sm text-ink-muted">
@@ -669,6 +714,7 @@ function MdApproval({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               rows={4}
+              disabled={settled}
               placeholder="Anything the record should carry."
             />
             <p className="font-sans text-body-sm text-ink-muted">
@@ -688,10 +734,10 @@ function MdApproval({
                 the worst kind: nothing explains it, because there is nothing
                 left to explain. The figure is still required — an approval with
                 no amount approves nothing. -- */
-          disabled={busy || approved === null || approved <= 0 || effectiveFrom === ""}
+          disabled={settled || busy || approved === null || approved <= 0 || effectiveFrom === ""}
           onClick={onApprove}
         >
-          {busy ? "Approving and closing…" : "Approve and close"}
+          {settled ? "Closed" : busy ? "Approving and closing…" : "Approve and close"}
         </Button>
 
         {/* -- SAID AFTER THE FACT, and it says what happens next.
@@ -701,6 +747,37 @@ function MdApproval({
               CLOSED, and the control that does it is Confirm and close, further
               down this same page. An acknowledgement that stops at "saved"
               leaves the MD believing they have finished. -- */}
+        {/* -- "EDIT" IS NOT AVAILABLE, AND SAYING SO IS THE FEATURE.
+              Asked for as an edit option if somebody needs a correction. There
+              is no edit: `salary_history` refuses UPDATE and DELETE for
+              everyone by trigger, and §8 has no path out of CLOSED. That is not
+              an oversight to work around — it is what makes a pay record
+              evidence rather than a current opinion, and P19-3 built it
+              deliberately.
+
+              What a correction actually is, is a NEW row: `addSalaryChange`
+              takes a CORRECTION reason, computes the previous figure from what
+              is on record, and appends. The old figure stays visible, which is
+              the point — somebody asking "why did this change twice" gets an
+              answer instead of a mystery.
+
+              So this offers the real thing and names it accurately, rather than
+              an Edit button that would have to refuse. -- */}
+        {settled ? (
+          <div className="rounded-control border border-rule bg-surface-mute px-3 py-2.5">
+            <p className="font-sans text-body-sm text-ink">Need to correct this?</p>
+            <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
+              A closed increment cannot be edited — the pay record is append-only, so the figure
+              stands and a correction is recorded as its own dated entry beside it.
+            </p>
+            <Button asChild variant="secondary" size="sm" className="mt-2">
+              <Link href={`/admin/people/${data.profileId}/employment`}>
+                Record a correction on their Employment tab
+              </Link>
+            </Button>
+          </div>
+        ) : null}
+
         {saved && !error ? (
           <Notice tone="ok">
             Approved at {money(approved)}

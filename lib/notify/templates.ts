@@ -94,10 +94,17 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
  * used here and only here, on the email card. Noted so it does not look like a
  * stray value.
  */
-function shell({ heading, bodyHtml, cta }: {
+function shell({ heading, bodyHtml, cta, personal = true }: {
   heading: string;
   bodyHtml: string;
   cta?: { label: string; href: string };
+  /* -- Whether this message carries a link meant for one person.
+        The footer said "this link is personal to you, do not forward it" on
+        EVERY email — including the digests, which carry a link to an admin
+        screen and go to several people at once. A standing warning that is
+        untrue on a third of the messages is one nobody reads on the two thirds
+        where it matters. -- */
+  personal?: boolean;
 }): string {
   const button = cta
     ? `
@@ -143,8 +150,8 @@ function shell({ heading, bodyHtml, cta }: {
           <tr>
             <td style="border-top:1px solid ${EMAIL.rule};padding:20px 32px;">
               <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:${EMAIL.inkFaint};">
-                This link is personal to you. Please do not forward it.<br>
-                LinkD Prints &middot; sent by HR
+                ${personal ? "This link is personal to you. Please do not forward it.<br>" : ""}
+                LinkD Prints &middot; Sent by the HR team &middot; Please do not reply to this message
               </p>
             </td>
           </tr>
@@ -155,6 +162,38 @@ function shell({ heading, bodyHtml, cta }: {
   </table>
 </body>
 </html>`;
+}
+
+/**
+ * A labelled detail block — the facts, out of the prose.
+ *
+ * A deadline inside a sentence is a deadline somebody has to read a sentence to
+ * find. These are the two or three things the reader is actually looking for,
+ * set apart so the message can be scanned rather than read.
+ *
+ * A table rather than a definition list: Outlook renders `dl` inconsistently and
+ * strips the margins, and half of email clients drop `<style>` entirely (P11-14),
+ * so structure has to be built from the elements that survive.
+ */
+function details(rows: Array<[string, string]>): string {
+  if (rows.length === 0) return "";
+  return `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px 0;border-collapse:collapse;">
+        ${rows
+          .map(
+            ([label, value]) => `
+        <tr>
+          <td style="padding:6px 24px 6px 0;font-family:Helvetica,Arial,sans-serif;font-size:13px;color:${EMAIL.inkFaint};white-space:nowrap;">${escapeHtml(label)}</td>
+          <td style="padding:6px 0;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:${EMAIL.ink};">${escapeHtml(value)}</td>
+        </tr>`,
+          )
+          .join("")}
+      </table>`;
+}
+
+/** A courteous close. Every message ends the same way, because they are all from the same team. */
+function signOff(): string {
+  return `<p style="margin:24px 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${EMAIL.inkMuted};">Thank you,<br><span style="font-weight:600;color:${EMAIL.ink};">The HR team</span><br><span style="font-size:13px;color:${EMAIL.inkFaint};">LinkD Prints</span></p>`;
 }
 
 function p(text: string): string {
@@ -214,10 +253,12 @@ export function selfEvaluationInvite(v: {
       `This link is personal to you. Please do not forward it.\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `Hello ${escapeHtml(v.name)}`,
+      heading: "Your performance evaluation is open",
       bodyHtml:
-        p(`Your performance evaluation for ${v.period} is open.`) +
-        p(`Please fill your self-evaluation by ${v.dueDate}.`),
+        p(`Dear ${v.name},`) +
+        p("Your self-evaluation is now open. It takes about ten minutes, and your answers are read by HR and your head of department.") +
+        details([["Period", v.period], ["Please complete by", v.dueDate]]) +
+        signOff(),
       cta: { label: "Open your form", href: v.link },
     }),
   };
@@ -242,10 +283,12 @@ export function selfEvaluationReminder(v: {
       `This link is personal to you. Please do not forward it.\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `${daysLeft}, ${escapeHtml(v.name)}`,
+      heading: "A reminder about your evaluation",
       bodyHtml:
-        p(`Your performance evaluation for ${v.period} is still open.`) +
-        p(`Please fill your self-evaluation by ${v.dueDate}.`),
+        p(`Dear ${v.name},`) +
+        p("Your self-evaluation is still open. We would be grateful if you could complete it before the date below.") +
+        details([["Period", v.period], ["Due", v.dueDate], ["Time left", daysLeft]]) +
+        signOff(),
       cta: { label: "Open your form", href: v.link },
     }),
   };
@@ -273,8 +316,12 @@ export function selfEvaluationOverdue(v: {
       `Please complete it as soon as you can:\n${v.link}\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: "Your evaluation is past its date",
-      bodyHtml: p(`Your self-evaluation for ${v.period} was due on ${v.dueDate} and is still open.`),
+      heading: "Your evaluation is now overdue",
+      bodyHtml:
+        p(`Dear ${v.name},`) +
+        p("Your self-evaluation has passed its date and is still open. Please complete it at your earliest convenience — it remains open and nothing has been lost.") +
+        details([["Period", v.period], ["Was due", v.dueDate]]) +
+        signOff(),
       cta: { label: "Complete it now", href: v.link },
     }),
   };
@@ -317,10 +364,17 @@ export function leadReviewInvite(v: {
       `This link is personal to you. Please do not forward it.\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `Hello ${escapeHtml(v.leadName)}`,
+      heading: "A review is open for you",
       bodyHtml:
-        p(`The performance evaluation for ${escapeHtml(v.employeeName)} (${escapeHtml(v.department)}) is open for ${escapeHtml(v.period)}.`) +
-        p(`Please complete your rating by ${escapeHtml(v.dueDate)}.`),
+        p(`Dear ${v.leadName},`) +
+        p("A performance review is now open for one of your team. Their own answers are not shown to you, and yours are not shown to them.") +
+        details([
+          ["Employee", v.employeeName],
+          ["Department", v.department],
+          ["Period", v.period],
+          ["Please complete by", v.dueDate],
+        ]) +
+        signOff(),
       cta: { label: "Open your form", href: v.link },
     }),
   };
@@ -341,10 +395,16 @@ export function mdReviewPending(v: {
       `Open it here: ${v.link} ` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `${escapeHtml(v.employeeName)} is ready for review`,
+      heading: "A review is ready for you",
       bodyHtml:
-        p(`${v.leadName} has completed their review of ${v.employeeName} for ${v.period}.`) +
-        p(`Management review is due by ${v.dueDate}.`),
+        p("A performance review has been completed and is ready for your attention.") +
+        details([
+          ["Employee", v.employeeName],
+          ["Reviewed by", v.leadName],
+          ["Period", v.period],
+          ["Please review by", v.dueDate],
+        ]) +
+        signOff(),
       cta: { label: "Open the review", href: v.link },
     }),
   };
@@ -369,12 +429,13 @@ export function reportReady(v: {
       `Both sides of ${v.employeeName}'s evaluation for ${v.period} are now in, ` +
       `and the combined report is ready for your review. ` +
       `Open it here: ${v.link} ` +
-      `— LinkD Prints`,
+      `— HR, LinkD Prints`,
     html: shell({
-      heading: `${escapeHtml(v.employeeName)}'s report is ready`,
+      heading: "A combined report is ready",
       bodyHtml:
-        p(`Both sides of ${escapeHtml(v.employeeName)}'s evaluation for ${escapeHtml(v.period)} are now in.`) +
-        p("The combined report is ready for your review."),
+        p("Both sides of an evaluation have now been submitted, and the combined report is ready for your review.") +
+        details([["Employee", v.employeeName], ["Period", v.period]]) +
+        signOff(),
       cta: { label: "Open the report", href: v.link },
     }),
   };
@@ -403,9 +464,10 @@ export function formReturned(v: {
       `Your answers are still there — open your form, make the changes and submit it again:\n${v.link}\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: "Your evaluation has been sent back",
+      heading: "Your evaluation has been returned",
       bodyHtml:
-        p(`Your self-evaluation for ${v.period} has been returned for another look.`) +
+        p(`Dear ${v.name},`) +
+        p(`Your self-evaluation for ${v.period} has been returned to you for another look. The reason given was:`) +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px 0;">
            <tr><td style="border-left:3px solid ${EMAIL.rule};padding:4px 0 4px 14px;">
              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${EMAIL.ink};font-style:italic;">${escapeHtml(v.reason)}</p>
@@ -432,8 +494,13 @@ export function evaluationFinalised(v: {
     html: shell({
       heading: "An evaluation has been finalised",
       bodyHtml:
-        p(`${v.employeeName}'s evaluation for ${v.period} has been finalised by the MD.`) +
-        p(`Final score: ${v.finalScore}.`),
+        p("An evaluation has been finalised by management and is now on record.") +
+        details([
+          ["Employee", v.employeeName],
+          ["Period", v.period],
+          ["Final score", String(v.finalScore)],
+        ]) +
+        signOff(),
       cta: { label: "Open the record", href: v.link },
     }),
   };
@@ -521,9 +588,12 @@ export function leadReviewReminder(v: {
       `Open your form:\n${v.link}\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `Hello ${escapeHtml(v.leadName)}`,
+      heading: "A reminder about your review",
       bodyHtml:
-        p(`Your rating for ${escapeHtml(v.employeeName)} (${escapeHtml(v.period)}) is due on ${escapeHtml(v.dueDate)}.`),
+        p(`Dear ${v.leadName},`) +
+        p("One of your team is still waiting on your rating. We would be grateful if you could complete it before the date below.") +
+        details([["Employee", v.employeeName], ["Period", v.period], ["Due", v.dueDate]]) +
+        signOff(),
       cta: { label: "Open your form", href: v.link },
     }),
   };
@@ -545,9 +615,12 @@ export function leadReviewOverdue(v: {
       `Please complete it:\n${v.link}\n\n` +
       `— HR, LinkD Prints`,
     html: shell({
-      heading: `Hello ${escapeHtml(v.leadName)}`,
+      heading: "Your review is now overdue",
       bodyHtml:
-        p(`Your rating for ${escapeHtml(v.employeeName)} (${escapeHtml(v.period)}) was due on ${escapeHtml(v.dueDate)}.`),
+        p(`Dear ${v.leadName},`) +
+        p("A rating for one of your team has passed its date. The form is still open and takes only a few minutes.") +
+        details([["Employee", v.employeeName], ["Period", v.period], ["Was due", v.dueDate]]) +
+        signOff(),
       cta: { label: "Open your form", href: v.link },
     }),
   };
@@ -590,11 +663,30 @@ export function hrDueDigest(v: {
   const bodyText = parts.join(" ");
   return {
     subject: "What needs your attention today",
-    body: `Good morning. ${bodyText} Open the list: ${v.link} — Appraise, LinkD Prints`,
+    body:
+      `*Today's summary*
+
+` +
+      `Good morning.
+
+` +
+      `${bodyText}
+
+` +
+      `Open the list:
+${v.link}
+
+` +
+      `— HR, LinkD Prints`,
     html: shell({
-      heading: "What needs your attention",
-      bodyHtml: parts.map((line) => p(line)).join(""),
+      heading: "Today's summary",
+      bodyHtml:
+        p("Good morning,") +
+        p("Here is what needs your attention today.") +
+        parts.map((line) => p(line)).join("") +
+        signOff(),
       cta: { label: "Open the list", href: v.link },
+      personal: false,
     }),
   };
 }
@@ -613,12 +705,29 @@ export function incrementsOverdue(v: {
   return {
     subject: `${v.items.length} increment${v.items.length === 1 ? " is" : "s are"} overdue`,
     body:
-      `${v.items.length} increment${v.items.length === 1 ? " is" : "s are"} past their due date: ` +
-      `${nameList(v.items)}. Open the list: ${v.link} — Appraise, LinkD Prints`,
+      `*Increments past their date*
+
+` +
+      `${v.items.length} ${v.items.length === 1 ? "increment is" : "increments are"} past the date they were due:
+` +
+      `${nameList(v.items)}
+
+` +
+      `Open the list:
+${v.link}
+
+` +
+      `— HR, LinkD Prints`,
     html: shell({
-      heading: "Overdue increments",
-      bodyHtml: p(`${v.items.length} past their due date: ${nameList(v.items)}.`),
+      heading: "Increments past their date",
+      bodyHtml:
+        p(
+          `${v.items.length} ${v.items.length === 1 ? "increment is" : "increments are"} past the date they were due. They are listed below and on the increments screen.`,
+        ) +
+        p(nameList(v.items)) +
+        signOff(),
       cta: { label: "Open the list", href: v.link },
+      personal: false,
     }),
   };
 }
@@ -656,14 +765,22 @@ export function evaluationsOverdue(v: {
     subject: `${total} form${total === 1 ? " is" : "s are"} overdue in ${v.cycleName}`,
     body:
       `*${total} form${total === 1 ? " is" : "s are"} overdue* in ${v.cycleName}: ` +
-      `${parts.join(" and ")} have not submitted. ` +
-      `See who: ${v.link} — Appraise, LinkD Prints`,
+      `${parts.join(" and ")} have not submitted.
+
+` +
+      `See who:
+${v.link}
+
+` +
+      `— HR, LinkD Prints`,
     html: shell({
       heading: "Forms are overdue",
-      bodyHtml: p(
-        `${parts.join(" and ")} have not submitted in ${v.cycleName}.`,
-      ),
+      bodyHtml:
+        p("Some forms in the current cycle have passed their date and are still outstanding.") +
+        details([["Cycle", v.cycleName], ["Still to submit", parts.join(" and ")]]) +
+        signOff(),
       cta: { label: "See who", href: v.link },
+      personal: false,
     }),
   };
 }

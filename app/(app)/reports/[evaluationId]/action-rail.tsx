@@ -3,6 +3,7 @@
 /** The sticky rails. HR prepares and reviews; the MD approves — never the same person. */
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Printer } from "lucide-react";
 
@@ -741,9 +742,40 @@ export function MdRail({ report }: { report: EvaluationReport }) {
 
         {atMd ? (
           <div className="space-y-2">
-            <Button type="button" className="min-h-11 w-full" disabled={busy} onClick={onApprove}>
-              {busy ? "Working…" : "Approve"}
-            </Button>
+            {/* -- ONE APPROVE PER SCREEN.
+                  The rail carried "Approve" and the Salary section carried
+                  "Approve and close", so an increment showed the MD two approve
+                  buttons and no way to tell which was the real one. Naming them
+                  differently helped and did not fix it — two buttons is the
+                  problem, not two labels.
+
+                  The rail's is the redundant one, and provably so:
+                  `approveAndClose` runs the report review itself, as its middle
+                  step, before it closes. So on an increment the Salary button
+                  already does everything this one did and then finishes the job.
+                  Rendering it as well offered a strictly worse version of the
+                  action beside the complete one.
+
+                  Kept on an EVALUATION, where it is the whole act — there is no
+                  salary, and approving IS the ending. -- */}
+            {report.isIncrement ? (
+              <p className="rounded-control bg-surface-mute px-3 py-2 font-sans text-body-sm text-ink-muted">
+                Approve this increment from the{" "}
+                <span className="text-ink">Salary</span> section below, or on the{" "}
+                <Link
+                  href={`/reports/${report.evaluationId}/summary`}
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  executive summary
+                </Link>
+                . One press records your figure, your review and closes it.
+              </p>
+            ) : (
+              <Button type="button" className="min-h-11 w-full" disabled={busy} onClick={onApprove}>
+                {busy ? "Working…" : "Approve"}
+              </Button>
+            )}
+
             <Button
               type="button"
               variant="ghost"
