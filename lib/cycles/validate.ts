@@ -3,7 +3,6 @@
 import "server-only";
 
 import { cycleError, plural, today, type CycleResult, type ReadinessIssue, type ReadinessReport } from "@/lib/cycles/schema";
-import { checkAppUrl, resolveAppUrl } from "@/lib/notify/preflight";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
 
@@ -313,26 +312,28 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
     perLead.set(p.leadId, entry);
   }
 
-  /* -- Can an invite link even be built? --
-        A WARNING, not a block. The cycle is perfectly launchable with an
-        unreachable app URL — the evaluations, the snapshots and the tokens are
-        all written and the forms work for anybody already signed in. What does
-        not work is MESSAGING people, and until now that only surfaced as a
-        runtime error thrown after the launch had already committed: HR saw a
-        crash on a cycle that was in fact live.
+  /* -- THE APP-URL WARNING WAS HERE AND IS REMOVED, at the owner's instruction.
+        Recorded rather than deleted silently, because it was doing a real job
+        and somebody will wonder where it went.
 
-        Saying it here means HR reads it on the readiness screen, before
-        pressing Launch, which is when they can do something about it. */
-  const appUrl = checkAppUrl(resolveAppUrl());
-  if (!appUrl.ok) {
-    warnings.push({
-      code: appUrl.code,
-      message: `${appUrl.title}. The cycle will launch, but no invite link can be sent until this is fixed.`,
-      subjects: [appUrl.detail, appUrl.fix],
-      href: `/admin/cycles/${cycleId}/distribute`,
-      hrefLabel: "Send links later",
-    });
-  }
+        P28 added it: `absoluteUrl` refuses to build a link with no reachable
+        site in front of it, and before this warning existed that refusal
+        arrived as a runtime error thrown AFTER the launch had committed — HR
+        saw a crash on a cycle that was in fact live. It also caught the quieter
+        case: an invite built on a localhost address sends, `notifications_log`
+        says Sent, and the message arrives as plain text no phone can open.
+
+        WHAT IT COST: it fires on every launch from a development machine, where
+        `NEXT_PUBLIC_APP_URL` is localhost by definition and the warning is
+        never news. In production it is self-suppressing — a deployed app has a
+        real address and it never appeared.
+
+        WHAT IS NOT LOST: the guard that matters is untouched.
+        `sendEvaluationLink` still refuses to send with an unreachable URL
+        (P28-1), and `dispatchLaunchInvites` still cannot throw (PW-2, PR-11) —
+        it returns `blocked` and the launch confirmation states it. So a bad URL
+        still cannot produce a link that opens nothing; it is simply reported
+        when somebody tries to send rather than before they launch. */
 
   const overloaded = [...perLead.values()].filter((l) => l.count > 12);
   if (overloaded.length > 0) {
