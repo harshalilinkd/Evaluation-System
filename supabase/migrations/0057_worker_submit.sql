@@ -1,4 +1,4 @@
--- 0052 · Submitting a worker sheet actually records the submission.
+-- 0057 · Submitting a worker sheet actually records the submission.
 --
 -- THE BUG. A supervisor filled and submitted their sheet, and HR's board still
 -- said "Not yet". Nothing errored.
@@ -130,7 +130,7 @@ end;
 $$;
 
 comment on function public.submit_worker_layer(uuid, public.worker_rating_layer) is
-  'Locks one side of a worker appraisal and stamps its timestamp. SECURITY DEFINER because worker_evaluations is UPDATE-able by HR alone (0047) and each side must be able to record its own submission without gaining the power to move the status, the supervisor or the exclusion (0052).';
+  'Locks one side of a worker appraisal and stamps its timestamp. SECURITY DEFINER because worker_evaluations is UPDATE-able by HR alone (0047) and each side must be able to record its own submission without gaining the power to move the status, the supervisor or the exclusion (0057).';
 
 revoke all on function public.submit_worker_layer(uuid, public.worker_rating_layer) from public;
 grant execute on function public.submit_worker_layer(uuid, public.worker_rating_layer) to authenticated;

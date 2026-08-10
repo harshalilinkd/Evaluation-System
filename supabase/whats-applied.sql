@@ -101,10 +101,10 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.'),
   ('0051_worker_supervisor_salary','policy',     'worker_decisions_supervisor_read',
      'Without it the supervisor cannot see the salary block while filling the sheet.'),
-  ('0052_worker_submit',         'function',    'submit_worker_layer',
+  ('0057_worker_submit',         'function',    'submit_worker_layer',
      'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".'),
-  ('0053_worker_submit_backfill','none',        'repair — nothing to detect',
-     'Repairs sheets submitted BEFORE 0052: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0052.')
+  ('0058_worker_submit_backfill','none',        'repair — nothing to detect',
+     'Repairs sheets submitted BEFORE 0057: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0057.')
 )
 select
   e.migration,

@@ -117,7 +117,16 @@ begin
       || E'\n    -- who really pressed it.'
       || E'\n    return new;'
       || E'\n  end if;',
-    'n'  -- `.` matches newlines, so the multi-line block is reachable
+    /* -- NO FLAG, and this was the bug.
+          Postgres's `n` means NEWLINE-SENSITIVE matching, under which `.` does
+          NOT match a newline — the exact opposite of the comment that was here.
+          The HR branch spans ten lines, so with 'n' the pattern could never
+          match it, and the migration raised "could not find the HR branch"
+          against a function that plainly contains one.
+
+          The default is newline-INsensitive, where `.` matches everything
+          including newlines. That is what this needs. -- */
+    ''
   );
 
   if v_new = v_def then

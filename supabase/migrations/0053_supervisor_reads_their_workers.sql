@@ -48,6 +48,12 @@ revoke all on function public.is_my_worker(uuid) from public;
 grant execute on function public.is_my_worker(uuid) to authenticated;
 
 drop policy if exists "profiles: read self, reports, my lead, or all as HR/MD" on public.profiles;
+/* -- And the name this file itself creates.
+      Dropping only the OLD name meant a second run failed with "policy already
+      exists" — which is what a half-finished apply chain produces every time
+      somebody re-runs it. A migration that cannot be run twice is a migration
+      that punishes recovering from an error. -- */
+drop policy if exists "profiles: read self, reports, my lead, my workers, or all as HR/MD" on public.profiles;
 
 create policy "profiles: read self, reports, my lead, my workers, or all as HR/MD"
   on public.profiles
