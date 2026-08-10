@@ -30,6 +30,16 @@ async function requireMd() {
   return { ok: true as const, session: auth.session };
 }
 
+/* -- HR or the MD. 0056 gave HR the increment close, so the two acts that used
+      to be the MD's alone — recording the review and approving the figure —
+      now admit either. `audit_log` takes its actor from the session, so the
+      record still says which of them it was. -- */
+async function requireHrOrMd() {
+  const auth = await checkRole(["HR_ADMIN", "MD"]);
+  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
+  return { ok: true as const, session: auth.session };
+}
+
 /** The actor shape §8's state machine expects. */
 function actorOf(session: { profile: { id: string }; roles: readonly string[] }) {
   return { profileId: session.profile.id, roles: [...session.roles] as never };
@@ -245,7 +255,14 @@ export async function mdApprove(input: {
   evaluationId: string;
   remarks: string;
 }): Promise<CycleResult<{ status: string }>> {
-  const auth = await requireMd();
+  /* -- HR OR THE MD (0056), at the owner's instruction, so HR can carry an
+        increment through to close on their own. §8's row and its SQL twin move
+        with it (P5-1).
+
+        `mdSendBack` below is deliberately NOT widened. Returning a record to HR
+        is the MD's judgement that it is not ready, and HR returning it to
+        themselves is not a review — it is a round trip with nobody else in it. -- */
+  const auth = await requireHrOrMd();
   if (!auth.ok) return auth;
 
   const parsed = mdReviewSchema.safeParse(input);

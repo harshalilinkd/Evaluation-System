@@ -17,12 +17,6 @@ async function requireHr() {
   return { ok: true as const, session: auth.session };
 }
 
-async function requireMd() {
-  const auth = await checkRole(["MD"]);
-  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
-  return { ok: true as const, session: auth.session };
-}
-
 async function requireHrOrMd() {
   const auth = await checkRole(["HR_ADMIN", "MD"]);
   if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
@@ -155,7 +149,11 @@ export async function saveApproval(input: {
   approvedCtc: number;
   remarks?: string;
 }): Promise<CycleResult<{ hikePct: number | null }>> {
-  const auth = await requireMd();
+  /* -- HR OR THE MD (0056), at the owner's instruction. This is the second
+        pair of eyes on a pay decision going away — the column guard that
+        refused HR is relaxed in the same migration, and the audit row still
+        records who actually pressed it. -- */
+  const auth = await requireHrOrMd();
   if (!auth.ok) return auth;
 
   const parsed = approvalSchema.safeParse(input);
@@ -338,7 +336,8 @@ export async function approveAndClose(input: {
   remarks?: string;
   effectiveFrom: string;
 }): Promise<CycleResult<{ closed: true; effectiveFrom: string }>> {
-  const auth = await requireMd();
+  // HR or the MD (0056). See saveApproval.
+  const auth = await requireHrOrMd();
   if (!auth.ok) return auth;
 
   const approval = await saveApproval({
