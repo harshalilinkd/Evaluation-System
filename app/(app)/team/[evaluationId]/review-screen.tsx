@@ -49,6 +49,7 @@ import type { FormDefinition, FormQuestion } from "@/lib/forms/types";
 import type { EvaluationStatus } from "@/lib/evaluations/transitions";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
+import { describeSaveFailure } from "@/lib/forms/save-failure";
 
 export type ReviewMeta = {
   evaluationId: string;
@@ -126,13 +127,19 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
     let result: Awaited<ReturnType<typeof saveLeadDraft>>;
     try {
       result = await saveLeadDraft(meta.evaluationId, answersPatch, commentsPatch);
-    } catch {
+    } catch (cause) {
       pending.current = {
         answers: { ...answersPatch, ...pending.current.answers },
         comments: { ...commentsPatch, ...pending.current.comments },
       };
       inSync.current = false;
       setSaveState("error");
+      /* -- IT SAID NOTHING AT ALL. The patch was restored correctly and
+            no message was ever set, so a manager on a phone got a
+            four-word indicator in a header one swipe off the top of a
+            10,000px page — and went on rating a form nothing was
+            recording. §0.7: fail loudly. -- */
+      setActionError(describeSaveFailure(cause));
       return false;
     }
 
@@ -368,7 +375,7 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
   }
 
   return (
-    <div className="mx-auto w-full max-w-[860px] space-y-5">
+    <div className="mx-auto w-full max-w-[860px] space-y-5 pb-28 lg:pb-8">
       {/* ---------- Header ---------- */}
       <BackLink href="/team" label="My team" />
 
@@ -465,8 +472,9 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
       {/* One primary action (§13.3). The return-to-employee button that used to
           sit beside it is deleted: a lead cannot return a form they cannot
           read, and §8 gives returns to HR. */}
+      {/* ---------- Desktop: the action ends the form ---------- */}
       {!readOnly ? (
-        <div className="flex justify-end pb-8">
+        <div className="hidden justify-end pb-8 lg:flex">
           <Button className="min-h-11" onClick={askToSubmit} disabled={busy}>
             {busy ? (
               <Loader2 aria-hidden className="size-4 animate-spin" />
@@ -476,6 +484,54 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
             Submit review
           </Button>
         </div>
+      ) : null}
+
+      {/* ---------- Mobile: an action bar this screen never had ----------
+
+          THE MANAGER'S FORM HAD NO FIXED ELEMENT AND NO SAVE CONTROL AT ALL.
+          The employee's has both; this one was written separately and never got
+          them. On a phone that meant the autosave indicator sat in a header one
+          swipe off the top of a form roughly 10,000px tall, there was no way to
+          retry a save by hand, and a failure produced no words anywhere on the
+          page. Reported as "managers cannot save on mobile" — a UI fault, not a
+          transport one.
+
+          Offset by --bottom-nav-h so it clears the navigation, which is fixed at
+          bottom-0 and z-40: a bar at z-20 underneath it is invisible and
+          untappable, which is exactly the bug the employee's form already had. */}
+      {!readOnly ? (
+        <>
+          {actionError ? (
+            <div
+              role="alert"
+              className="fixed inset-x-0 bottom-[calc(var(--bottom-nav-h)+4rem)] z-20 border-t border-critical/40 bg-critical-tint px-4 py-3 lg:hidden"
+            >
+              <p className="text-body-sm font-medium text-critical">Not saved</p>
+              <p className="mt-0.5 text-body-sm text-ink">{actionError}</p>
+              <p className="mt-1 text-body-sm text-ink-muted">
+                Nothing you have entered is lost. Stay on this page and press Save draft.
+              </p>
+            </div>
+          ) : null}
+
+          <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
+            <Button
+              variant="ghost"
+              className="min-h-11 flex-1"
+              onClick={() => void flush()}
+              disabled={saveState === "saving"}
+            >
+              {saveState === "saving" ? (
+                <Loader2 aria-hidden className="size-4 animate-spin" />
+              ) : null}
+              Save draft
+            </Button>
+            <Button className="min-h-11 flex-1" onClick={askToSubmit} disabled={busy}>
+              <Send aria-hidden className="size-4" />
+              Submit
+            </Button>
+          </div>
+        </>
       ) : null}
 
       <SubmittedDialog

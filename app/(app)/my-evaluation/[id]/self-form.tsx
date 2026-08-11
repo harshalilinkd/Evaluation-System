@@ -37,6 +37,7 @@ import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
 import { formatDate, formatInr, formatTime } from "@/lib/utils/date";
+import { describeSaveFailure } from "@/lib/forms/save-failure";
 
 export type SelfFormMeta = {
   evaluateeName: string;
@@ -57,38 +58,6 @@ export type SelfFormMeta = {
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const AUTOSAVE_FLUSH_MS = 20_000;
 
-/**
- * What to tell somebody whose save was REJECTED BY THE TRANSPORT rather than
- * answered by the server.
- *
- * This used to print `cause.message` verbatim, on the reasoning that the
- * server's own words beat a paraphrase — which is right for OUR errors and
- * wrong for these. A rejected `saveSelfDraft()` promise never carries an
- * application message: every failure the action itself can produce comes back
- * as `{ ok: false, error }`, not as a throw. So the only thing that reaches
- * here is Next.js's internal Server Action transport error, and an employee
- * was being shown "An unexpected response was received from the server" —
- * true, unactionable, and indistinguishable from the app being broken.
- *
- * The three cases are genuinely different repairs, so they get different
- * sentences (§0.7, §13.4).
- */
-function describeSaveFailure(cause: unknown): string {
-  const message = cause instanceof Error ? cause.message : String(cause ?? "");
-
-  // Next's E394: the POST got a real HTTP response that was not RSC — an error
-  // page or a redirect. In this app that is overwhelmingly a lapsed session.
-  if (/unexpected response|Failed to find Server Action|text\/x-component/i.test(message)) {
-    return "Your sign-in may have expired while you were filling this in. Open the app in a new tab, sign in again, then come back here and press Save draft.";
-  }
-
-  // A genuine network failure: fetch rejects rather than resolving.
-  if (/fetch|network|load failed|connection/i.test(message)) {
-    return "The connection dropped before your answers reached us. Check your signal and press Save draft again.";
-  }
-
-  return "Your answers could not be saved just now. Press Save draft to try again.";
-}
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
