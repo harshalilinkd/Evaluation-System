@@ -4809,3 +4809,188 @@ changed. This is wording and shape.
 | UI3-4 | **The app opens LIGHT, and the System option goes with it** | `app/layout.tsx` omitted `data-theme` when nobody had chosen, handing the decision to `prefers-color-scheme` — so a first-time visitor on a dark machine got a dark app. It now writes `"light"` unless the cookie says otherwise. That removes System rather than leaving it broken: System was written as an ABSENCE — choosing it cleared the cookie so the media query decided — and that worked only while the server also stayed silent. With the server writing `"light"` the two disagree: the page arrives light and the client flips it to dark a frame later, on every navigation. A flash on every page is worse than not offering the choice. |
 | UI3-5 | The cost is stated rather than glossed | A laptop that switches at sunset no longer takes the app with it. Restoring System means reverting `app/layout.tsx` to omit the attribute and accepting dark-by-default on dark machines — one line either way. |
 | UI3-6 | No stylesheet change was needed | `globals.css` already guards its dark media block as `:root:not([data-theme="light"])`, so writing `"light"` disarms it, and `:root[data-theme="dark"]` still carries dark for somebody on a light OS. Verified against the running server: `/login` returns 200 and its HTML carries `data-theme="light"`. |
+
+---
+
+### FIX-19 — A joining salary the MD could not save, and the fourth silent write
+
+Migration `0069_record_joining_salary.sql`. Reported as "joining salary not
+getting saved why we are affecting previous functions please do the changes
+carefully".
+
+**The second half of that sentence is answered first, because it is a fair
+question and the answer is no.** `MoneyInput` (the annual↔monthly change made
+earlier this session) writes the ANNUAL figure into the field the dialog already
+had, as a string. `joiningSalarySchema` reads it with `z.coerce.number()`, and
+`"180000"` coerces to `180000` — proved directly rather than asserted. The
+screenshots show it too: the dialog rendered "₹15,000.00 a month · ₹1,80,000.00
+a year", which is the component producing exactly the right value. **The bug
+pre-dates that change and is unrelated to it.**
+
+**What it actually was.** `addJoiningSalary` is guarded by
+`checkRole(["HR_ADMIN", "MD"])`. The table policy `employment: hr updates`
+(0023) is `using (public.is_hr())`. The MD is not HR. So the MD passed the
+application guard, the UPDATE matched **zero rows**, and PostgREST reports zero
+rows as success — the action returned ok, the dialog closed, and nothing was
+written. The salary-history row beside it said "recorded by: test MD", which is
+the tell: the ledger insert was permitted and the record update was not.
+
+**This is the fourth appearance of one class**, after FIX-14's role write, the
+worker sheet's ratings and 0066's pay change. The distinction that decides which
+writes are dangerous, and which I had not stated plainly before:
+
+| | refused by RLS |
+|---|---|
+| INSERT | raises 42501 — **loud**, the caller reports it |
+| UPDATE | matches nothing — **silent**, indistinguishable from success |
+
+Only the second kind fails invisibly, which is why it keeps recurring in exactly
+one shape. 0066 fixed the sibling in this same file and I left this one, because
+I fixed the symptom that was reported rather than the class.
+
+| # | Decision | Why |
+|---|---|---|
+| F19-1 | One SECURITY DEFINER function, HR **or** the MD | §9 as amended gives the pay decision to both, and 0023 already lets both append the ledger — so a state where the MD may write the history and not the figure it implies is an inconsistency inside 0023, not a rule worth keeping. Same remedy as `apply_salary_to_record`, and for the same reason. |
+| F19-2 | **The immutability rule, the revision count and the `current_ctc` decision all moved INTO the function** | The action used to make those calls and pass the answers in. The function is granted to `authenticated`, so anything left in the payload is a rule the caller can choose to skip — P9D-3 found exactly that when a re-import duplicated every question because dedupe was a property of the payload. A joining salary that could be seeded over a later one is worse: it is the baseline every stored percentage was computed against. |
+| F19-3 | It raises a **sentence**, and the action passes it through | Four different refusals — not entitled, no employment record, already recorded, not a positive amount — with four different fixes. Replacing them with one generic failure is what sends somebody to me instead of to the thing they need to change (§0.7). |
+| F19-4 | The action's four pre-flight reads are **gone**, not kept alongside | It read the record, checked immutability, counted revisions and built a patch — then the function had to do all four again anyway, because §9 says client code is never the only guard. Two copies of a rule is how they drift, and the copy nobody exercises is the one that drifts first. Three round trips became one call, and the sentence somebody reads on a refusal now has exactly one author. |
+| F19-5 | Provenance is `auth.uid()`, not the function's owner | A definer function does not change `auth.uid()` (P21-7 found this from the other side), so the baseline still records the person who entered it — which is the one line in a pay ledger that would otherwise have nobody's name against it. |
+| F19-6 | **The sweep, rather than another single fix** | Every UPDATE policy gated on `is_hr()` alone was listed and matched against its caller's guard: `due_items` and `increment_settings` are `requireHr()` against `is_hr()` — consistent; `increment_reviews` looked like the same mismatch and is not, because 0030 gives it its own `increments: md updates` policy. `employment_records` was the only remaining disagreement in the system. |
+
+**Verification — 23 checks, 0 failed, on real Postgres**, with 0023's policy and
+the two role helpers reproduced verbatim from the migration text rather than
+retyped. FIX-12's lesson: a probe that reimplements the logic it is checking is
+not a check of that logic.
+
+**The bug is reproduced before it is fixed**, because a fix that passes without
+the failure having been demonstrated is a fix for something else. The MD's bare
+UPDATE is shown raising no error, moving zero rows and leaving the column null —
+the reported symptom, asserted as such — while HR's identical statement moves
+one. An INSERT refused by RLS is shown raising, which is the asymmetry above,
+demonstrated rather than described. Then: the MD records a joining salary and it
+is stored, `current_ctc` is seeded where there is no revision and **not**
+overwritten where there is, provenance names the MD, an already-recorded
+baseline is refused with the original untouched, and an employee and an
+anonymous caller invoking the function directly are both refused having written
+nothing.
+
+`supabase/whats-applied.sql` gained a row for 0069 — deliberately on the generic
+`function` detector, which is safe here because the name is new and there is no
+earlier body for a `LIKE` to match by accident. That was 0056's failure, and the
+row does not repeat it.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**Action required.** `0069_record_joining_salary.sql` is **not applied**. Until
+it is, the MD recording a joining salary still writes nothing — and now says so
+instead of claiming success, because the action no longer has a path that can
+silently do nothing. HR was unaffected throughout and remains so.
+
+**FIX-19 addendum — the diagnostic was reporting two correct states as failures,
+and one of the repairs it invited would have done real damage.**
+
+0069 applied cleanly and the joining salary now saves. The same output showed
+`0051` and `0055` as **false**, and neither is a gap:
+
+| Row | Why it read false |
+|---|---|
+| `0051_worker_supervisor_salary` | **0064 revoked it on purpose.** 0051 gave the supervisor the whole worker salary block; 0064 took the amounts back at the owner's instruction and left them the percentage. The policy is gone because it was meant to be. |
+| `0055_expectation_says_annual` | **0061 superseded it on purpose.** 0055 made the question say ANNUAL; 0061 made it say MONTHLY and added the ×12 conversion on save. The text no longer contains "annual CTC", so the detector missed. |
+
+**The second one was dangerous, not merely wrong.** Its wording — "employees
+answer monthly and the figure is out by twelve" — invited exactly the repair that
+would cause that: re-running 0055 puts the question back to asking for an annual
+figure while 0061's ×12 conversion stays in place. Every answer would then be
+multiplied by twelve against a question asking for the annual number. That is the
+733% incident, reintroduced by the tool meant to prevent it.
+
+Both rows now detect the **current correct state**, so `true` means right, and
+both carry a DO-NOT-RE-RUN note naming what re-running would undo.
+
+**And 0061–0068 had no rows at all.** Eight migrations from this session were
+invisible to the file the owner uses to answer "what is applied" — the FIX-15
+lesson repeating verbatim: *a diagnostic with holes is worse than none, because
+it is trusted*. Each now has a detector anchored to what its migration WROTE
+(0056's failure was a `LIKE` over tokens the file happened to contain): the ×12
+conversion for 0061, the question id for 0062, the trigger name for 0064, the
+`max(h.effective_from)` aggregate that tells 0068 apart from 0066.
+
+| # | Decision | Why |
+|---|---|---|
+| F19-7 | A superseded row detects the **replacement**, never the original | The alternative — deleting the row — loses the fact that the migration was deliberately reversed, and the next person re-derives it from the migration files. Same treatment 0018 already had. |
+| F19-8 | A question is detected by its **deterministic id**, not its text | 0017's `md5('linkd.q.' || key)` device. Question text is editable in the Form Builder, so a text detector goes false the first time HR rewords something — which is how the 0055 row broke. |
+| F19-9 | The file is now **run** as part of verification, not only read | It queries eighteen tables and every one must exist for the query to plan, so a stray column name makes the whole diagnostic error rather than report. It is checked against stubs for all of them, and asserted to return no NULL — a row that cannot answer is how 0058 sat on the outstanding list for three sessions (FIX-16). |
+
+**Verified: 52 rows, none NULL, all eleven new and corrected rows present.**
+
+---
+
+### FIX-20 — One column, two units; and two gates that disagreed
+
+Three defects. The first was reported; the other two were named at the end of
+FIX-19 and are fixed here rather than carried.
+
+#### A column of money comparing two different units
+
+Reported as "joining salry added as CTC format but i added 15000". The Salary
+history table read:
+
+```
+23-09-2024   ₹1,80,000.00            Joining salary   Baseline
+01-09-2025   ₹20,000.00 a month      Annual increment
+```
+
+**Both figures were correct.** ₹1,80,000 a year IS ₹15,000 a month, and the store
+is annual by design (0061 — monthly at the edges, annual in the core). What was
+wrong is that ONE COLUMN rendered two different units, so the baseline appeared
+to be nine times the rise above it.
+
+| # | Decision | Why |
+|---|---|---|
+| F20-1 | The baseline cell was the **only** `formatInr` left in the file, against six `moneyMonthly` | It was missed when the table moved to monthly, because it is the one row that is rendered rather than stored — it comes from `employment_records.joining_ctc`, not from `salary_history` (P19E-1), so it sits outside the `revisions.map` that was converted. |
+| F20-2 | The now-unused import is the **proof**, not a tidy-up | `formatInr` no longer appears anywhere in that file, so no cell in that table can be rendering an annual figure. Typecheck reports it, which makes the guarantee mechanical rather than a claim. |
+| F20-3 | **The employee's own outcome card was fixed too** | "Your new salary" rendered a bare annual figure with no unit at all — to the one person who now TYPES a monthly number (0061). Monthly leads and the annual figure follows as context, which is exactly what the self form already does (P34-7): the monthly figure is what they think in, the annual is what appears on their letter, and dropping either makes the two documents look like they disagree. |
+| F20-4 | Admin lists, the executive report and the print pack were **left alone**, deliberately | Their figures are either explicitly labelled ("a year") or are HR/MD instruments where annual CTC is the working unit. Converting them is a decision about what the company's internal documents say, not a bug — and it belongs in an instruction rather than absorbed into a repair. |
+
+#### The render gate and the save gate disagreed
+
+`getEvaluationForm` decided editability from `submitted_at` alone;
+`merge_evaluation_answers` (0033) also requires `status = 'OPEN'` and the layer
+not skipped. So a **withdrawn participant who still had their WhatsApp link**, or
+a layer HR had advanced past, got a fully editable form where every keystroke was
+refused. `/my-evaluation` filters `excluded_at` correctly, so the only way in is
+the direct link — which is exactly the link that was already sent.
+
+| # | Decision | Why |
+|---|---|---|
+| F20-5 | A **reason**, not a boolean | §13.4 forbids a dead end, and a form that silently will not save is the purest form of one. `lockedReason` carries the sentence, ordered so the most specific cause wins — "withdrawn" explains more than "moved on to review". |
+| F20-6 | A NEW field; `isSubmitted` is untouched | It drives the thank-you, the draft-restore suppression and four server-side re-checks. Overloading it to mean "not editable" would have changed all of those, and a submitted form is a different thing from a withdrawn one — the person should be told which. |
+| F20-7 | The field is **optional**, so the previews are unaffected | `preview.ts`, the builder and the question drawer all construct a `FormDefinition` by hand. Nothing is locked in a preview, and absence meaning "editable" is the right default there. |
+| F20-8 | This does **not** replace the server's check | The database still enforces it (§9 — client code is never the only guard). This is the render agreeing with a gate that was already there, which is the whole defect. |
+
+#### A token minted for a message with no link
+
+`evaluationClosed` under `NONE` disclosure renders no link and no button — the
+body says "your manager will discuss it with you". `deliver` minted an invite
+token anyway, and minting **revokes the previous token for that (evaluation,
+layer, channel)** as a side effect (§10). A credential issued for a message
+nobody receives, revoking one somebody might still hold.
+
+| # | Decision | Why |
+|---|---|---|
+| F20-9 | A third audience, `employee-no-link`, rather than a boolean flag beside `audience` | Two fields that must agree are two fields that will eventually disagree (P8P-5). One value states the whole intent. |
+| F20-10 | The link handed to `render` is `""`, not a placeholder URL | A template that used it after asking for this produces a visibly broken message rather than a quietly wrong one. Failing loudly is the point (§0.7). |
+| F20-11 | The disclosure is resolved **once** and used for both decisions | It was computed inside the render callback. Computing it again for the token decision would put the same §9 rule in two places — and the disagreement would be a body offering a link that was never minted. A test asserts it appears exactly once. |
+| F20-12 | A genuinely absent link is **still** a failure for everybody else | Written as two clauses rather than one `!link`, which also lets the type narrow instead of being asserted away. |
+
+**Verification — 22 checks, 0 failed.** Every absence check runs over
+comment-stripped source. One of my own assertions was wrong and was fixed, not
+loosened: "only the CLOSED case uses the linkless audience" counted
+`audience: .*employee-no-link` and matched the UNION TYPE DECLARATION alongside
+the call site, reporting 2. A call site assigns a value and never contains `|`;
+the declaration always does. **The substring trap (P31), and both halves are now
+asserted** — one call site, and the union declaring it once.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**No migration.** All three are application-level; nothing to apply.

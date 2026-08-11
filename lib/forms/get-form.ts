@@ -85,7 +85,15 @@ export async function getEvaluationForm(
     { data: response, error: responseError },
     sectionConfig,
   ] = await Promise.all([
-    supabase.from("evaluations").select("id, status, track").eq("id", evaluationId).maybeSingle(),
+    // Everything `merge_evaluation_answers` consults, so the render can agree
+    // with the save. One literal string, never a concatenation (P3-11).
+    supabase
+      .from("evaluations")
+      .select(
+        "id, status, track, excluded_at, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped",
+      )
+      .eq("id", evaluationId)
+      .maybeSingle(),
     supabase
       .from("evaluation_questions")
       // One literal string, not a concatenation: supabase-js infers the row type
@@ -170,6 +178,36 @@ export async function getEvaluationForm(
     section.label = labelIn(sectionConfig, section.section);
   }
 
+  /* -- WHY THE FORM IS LOCKED, mirroring the SAVE gate rather than guessing at
+        it.
+
+        `isSubmitted` alone decided whether the form rendered editable, while
+        `merge_evaluation_answers` (0033) also requires `status = 'OPEN'` and the
+        layer not skipped. So there were states — a withdrawn participant who
+        still had their WhatsApp link, or a layer HR advanced past — where the
+        form rendered fully editable and every keystroke was refused. Since
+        FIX-3 that refusal is at least honest, but the person has answered
+        thirty-one questions by the time they read it.
+
+        A REASON rather than a boolean, because §13.4 forbids a dead end: a form
+        that will not save has to say what happened. Ordered so the most
+        specific cause wins — "withdrawn" explains more than "closed".
+
+        This does NOT replace the server's check. It is the render agreeing with
+        a gate the database still enforces (§9). -- */
+  const lockedReason =
+    evaluation.excluded_at != null
+      ? "This appraisal was withdrawn, so it is no longer open for answers. Ask HR if you think that is wrong."
+      : layer === "SELF" && evaluation.self_skipped
+        ? "HR marked this side of the appraisal as not required, so it can no longer be edited."
+        : layer === "LEAD" && evaluation.lead_skipped
+          ? "HR marked this side of the appraisal as not required, so it can no longer be edited."
+          : response?.submitted_at != null
+            ? null // Submitted is its own state, already handled by `isSubmitted`.
+            : evaluation.status !== "OPEN"
+              ? "This appraisal has moved on to review, so it is no longer open for answers."
+              : null;
+
   return {
     ok: true,
     data: {
@@ -183,6 +221,7 @@ export async function getEvaluationForm(
       comments,
       isSubmitted: response?.submitted_at != null,
       submittedAt: response?.submitted_at ?? null,
+      lockedReason,
       hiddenQuestionIds,
     },
   };

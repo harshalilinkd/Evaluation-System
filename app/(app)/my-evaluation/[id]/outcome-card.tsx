@@ -10,6 +10,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 
+import { monthlyFromAnnual } from "@/lib/increment/calc";
 import type { EmployeeOutcome } from "@/lib/increment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 
@@ -31,8 +32,20 @@ export function OutcomeCard({ outcome }: { outcome: EmployeeOutcome }) {
       {outcome.newCtc !== undefined ? (
         <dl className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="rounded-control border border-rule bg-surface p-4">
+            {/* -- MONTHLY LEADS, the annual figure follows as context.
+                  0061 moved what the employee TYPES to a monthly figure, so a
+                  bare annual number under "Your new salary" is read against the
+                  wrong unit by the one person it matters most to. Same shape as
+                  the current-salary readout on the self form (P34-7): monthly is
+                  what they think in, annual is what appears on their letter, and
+                  dropping either makes the two look like they disagree. -- */}
             <dt className="type-label text-ink-muted">Your new salary</dt>
-            <dd className="tabular text-display-md text-ink">{formatInr(outcome.newCtc)}</dd>
+            <dd className="tabular text-display-md text-ink">
+              {formatInr(monthlyFromAnnual(outcome.newCtc ?? null))} a month
+            </dd>
+            <p className="tabular mt-1 text-body-sm text-ink-muted">
+              {formatInr(outcome.newCtc ?? null)} a year
+            </p>
           </div>
           {outcome.effectiveFrom ? (
             <div className="rounded-control border border-rule bg-surface p-4">

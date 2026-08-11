@@ -218,66 +218,36 @@ export async function addJoiningSalary(input: {
   const v = parsed.data;
   const supabase = await createClient();
 
-  const { data: record } = await supabase
-    .from("employment_records")
-    .select("current_ctc, joining_ctc")
-    .eq("profile_id", v.profileId)
-    .maybeSingle();
+  /* -- THROUGH `record_joining_salary` (0069), NOT A BARE UPDATE.
 
-  if (!record) {
-    return cycleError(
-      "NO_RECORD",
-      "This person has no employment record yet. Add their joining details first.",
-    );
-  }
+        `employment: hr updates` (0023) is `using (public.is_hr())`, and the
+        guard above admits the MD. So the MD passed the guard, the UPDATE matched
+        ZERO ROWS, and PostgREST reports zero rows as SUCCESS — the dialog closed
+        and nothing was written. That is what "joining salary not getting saved"
+        was, and it is the fourth appearance of this class after FIX-14, the
+        worker sheet and 0066.
 
-  /* -- Immutable once set.
-        "Once recorded, joining_salary remains static for audit purposes." A
-        baseline that can be edited is a baseline that can be moved after every
-        percentage in the ledger has been computed from it — which would leave
-        the stored hikes describing a figure that no longer exists. Correcting
-        one is a deliberate act, not a re-save. -- */
-  if (record.joining_ctc !== null && record.joining_ctc !== undefined) {
-    return cycleError(
-      "ALREADY_SET",
-      "A joining salary is already recorded. It is the baseline every later rise is measured against, so it does not change once set.",
-    );
-  }
+        Note the asymmetry that makes it so hard to spot: an INSERT refused by
+        RLS raises 42501 and the caller reports it. An UPDATE that matches
+        nothing cannot fail. Only the second kind is silent.
 
-  /* -- Does any REVISION exist? Legacy JOINING rows do not count — they are the
-        baseline recorded the old way, not a rise. -- */
-  const { count: revisions } = await supabase
-    .from("salary_history")
-    .select("id", { count: "exact", head: true })
-    .eq("profile_id", v.profileId)
-    .neq("reason", "JOINING");
-
-  /* -- Provenance travels with the figure (0044).
-        A history row carries who wrote it; a column has to be told. Without
-        this the baseline renders as the one line in a pay ledger with nobody's
-        name against it. -- */
-  const patch: {
-    joining_ctc: number;
-    joining_ctc_recorded_by: string;
-    joining_ctc_recorded_at: string;
-    current_ctc?: number;
-  } = {
-    joining_ctc: v.amount,
-    joining_ctc_recorded_by: auth.session.profile.id,
-    joining_ctc_recorded_at: new Date().toISOString(),
-  };
-  if ((revisions ?? 0) === 0 && record.current_ctc === null) {
-    patch.current_ctc = v.amount;
-  }
-
-  const { error } = await supabase
-    .from("employment_records")
-    .update(patch)
-    .eq("profile_id", v.profileId);
+        The immutability check, the "does a revision exist" count and the
+        `current_ctc` decision all moved INTO the function — it is granted to
+        `authenticated`, so any of them left out here would be a rule the caller
+        could choose to skip (P9D-3). -- */
+  const { data: outcome, error } = await supabase.rpc("record_joining_salary", {
+    p_profile_id: v.profileId,
+    p_amount: v.amount,
+  });
 
   if (error) {
-    return cycleError("SAVE_FAILED", `Could not record the joining salary: ${error.message}`);
+    // The function raises a sentence somebody can act on for each refusal —
+    // no employment record, already recorded, not entitled — so it is passed
+    // through rather than replaced with a generic failure (§0.7).
+    return cycleError("SAVE_FAILED", error.message);
   }
+
+  const seeded = (outcome as { seeded_current?: boolean } | null)?.seeded_current === true;
 
   // §12, and NO FIGURE in the diff (P19-10). A lead can read audit_log for
   // their own reports (0013), so a salary there would walk past §5.
@@ -285,7 +255,7 @@ export async function addJoiningSalary(input: {
     p_entity: "employment",
     p_entity_id: v.profileId,
     p_action: "salary.joining_recorded",
-    p_diff: { seeded_current: patch.current_ctc !== undefined } as Json,
+    p_diff: { seeded_current: seeded } as Json,
   });
 
   revalidatePath(`/admin/people/${v.profileId}/employment`);

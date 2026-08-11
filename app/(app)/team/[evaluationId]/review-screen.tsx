@@ -16,7 +16,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Loader2, MessageSquarePlus, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, Loader2, Lock, MessageSquarePlus, RotateCcw, Send } from "lucide-react";
 
 import { AutosaveIndicator, type AutosaveState } from "@/components/appraise/autosave-indicator";
 import { BackLink } from "@/components/appraise/back-link";
@@ -303,7 +303,11 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
 
   const answered = form.questions.filter((q) => !isBlank(values[q.questionId])).length;
   const total = form.questions.length;
-  const readOnly = submitted;
+  /* -- Locked EITHER because it was submitted, or for one of the reasons the
+        save gate carries and the render used to ignore — withdrawn, skipped, or
+        moved past OPEN. Without the second half this screen rendered fully
+        editable and refused every keystroke. -- */
+  const readOnly = submitted || form.lockedReason != null;
 
   async function doSubmit() {
     setBusy(true);
@@ -420,6 +424,17 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
           Your review was submitted
           {meta.leadSubmittedAt ? ` on ${formatDate(meta.leadSubmittedAt)}` : ""} and is now
           read-only. HR reviews it alongside {meta.employeeFirstName}&apos;s.
+        </p>
+      ) : null}
+
+      {/* §13.4: a form that will not save has to say so BEFORE somebody fills
+          it in. The render agreeing with the save gate — withdrawn, skipped, or
+          moved past OPEN. First, because it changes what every control below
+          it can do. */}
+      {form.lockedReason && !submitted ? (
+        <p className="mb-4 flex items-start gap-2 rounded-card border border-warning/40 bg-warning-tint px-4 py-3 text-body-sm text-ink">
+          <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>{form.lockedReason}</span>
         </p>
       ) : null}
 

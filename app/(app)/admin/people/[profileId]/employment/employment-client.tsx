@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { addJoiningSalary, addSalaryChange, saveEmployment } from "@/lib/employment/actions";
 import type { EmploymentDetail } from "@/lib/employment/queries";
-import { formatDate, formatInr } from "@/lib/utils/date";
+import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 
@@ -332,8 +332,16 @@ export function EmploymentClient({
                       {formatDate(detail.dateOfJoining)}
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
+                    {/* -- MONTHLY, like every row beneath it.
+                          This was the one cell in the table still rendering the
+                          stored ANNUAL figure: somebody entered ₹15,000 a month
+                          and the baseline read ₹1,80,000.00 while the rise below
+                          it read "₹20,000.00 a month". Both figures were right,
+                          and the column was silently comparing two different
+                          units — the one thing a column of money must never do.
+                          The STORE is unchanged and stays annual (0061). -- */}
                     <td className="tabular px-3 py-2.5 text-body-sm font-medium text-ink">
-                      {formatInr(r.joining_ctc)}
+                      {moneyMonthly(r.joining_ctc)}
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">—</td>

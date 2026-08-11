@@ -1472,6 +1472,14 @@ export type Database = {
         /** { figure_moved, clock_moved } — see 0066. */
         Returns: Json;
       };
+      record_joining_salary: {
+        Args: {
+          p_profile_id: string;
+          p_amount: number;
+        };
+        /** { seeded_current } — see 0069. */
+        Returns: Json;
+      };
       raise_app_notification: {
         Args: {
           p_profile_id: string;

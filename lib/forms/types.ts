@@ -152,6 +152,17 @@ export type FormDefinition = {
   isSubmitted: boolean;
   submittedAt: string | null;
   /**
+   * Set when the form cannot be saved for a reason OTHER than having been
+   * submitted — withdrawn, skipped by HR, or the record has moved past OPEN.
+   * The sentence is shown to the person, because a form that silently refuses
+   * every keystroke is the dead end §13.4 forbids.
+   *
+   * Mirrors the gate in `merge_evaluation_answers`; it does not replace it.
+   * OPTIONAL so the previews (`preview.ts`, the builder, the question drawer)
+   * are unaffected — nothing is locked in a preview.
+   */
+  lockedReason?: string | null;
+  /**
    * Questions hidden by an unmet condition. §6: hidden questions are neither
    * validated nor stored, so validation and scoring must skip these.
    */

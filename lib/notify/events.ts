@@ -86,8 +86,19 @@ async function deliver(opts: {
   email: string | null;
   /** Called per channel, because an employee's link is channel-scoped (§10). */
   render: (link: string) => RenderedMessage;
-  /** Employees get a token; staff with accounts get a plain URL. */
-  audience: "employee" | "staff";
+  /**
+   * Employees get a token; staff with accounts get a plain URL.
+   *
+   * `employee-no-link` is for the one template that decides FOR ITSELF whether
+   * to offer a link — `evaluationClosed` under NONE disclosure says "your
+   * manager will discuss it with you" and renders no CTA at all. Minting there
+   * issues a fresh credential nobody is sent AND revokes the previous token for
+   * that (evaluation, layer, channel) as a side effect nobody intended (§10).
+   * The link handed to `render` is an empty string, so a template that used it
+   * after asking for this would produce a visibly broken message rather than a
+   * quietly wrong one.
+   */
+  audience: "employee" | "employee-no-link" | "staff";
   staffPath?: string;
   context?: Record<string, string | number | null>;
 }): Promise<TransitionNotice> {
@@ -122,11 +133,17 @@ async function deliver(opts: {
 
   for (const { channel, recipient } of channels) {
     const link =
-      opts.audience === "employee"
-        ? await employeeLink(opts.evaluationId, channel)
-        : appUrl(opts.staffPath ?? "/dashboard");
+      opts.audience === "employee-no-link"
+        ? "" // Never rendered — see the note on `audience`.
+        : opts.audience === "employee"
+          ? await employeeLink(opts.evaluationId, channel)
+          : appUrl(opts.staffPath ?? "/dashboard");
 
-    if (!link) {
+    /* -- An empty link is INTENTIONAL for `employee-no-link` and a failure for
+          everybody else. Written as two clauses rather than one `!link` so the
+          absent case is stated separately — which is also what lets the type
+          narrow to a string below, instead of being asserted away. -- */
+    if (link == null || (link === "" && opts.audience !== "employee-no-link")) {
       notice.failed += 1;
       notice.problems.push("Could not create a link.");
       continue;
@@ -587,13 +604,21 @@ async function run({
           one changed (PW-7). -- */
     case "MD_REVIEWED->CLOSED":
     case "INTERVIEW_DONE->CLOSED": {
+      /* -- Resolved ONCE, here, and used for both the template's policy and the
+            decision about whether a token is needed. Computing it twice is how
+            the two come to disagree, and the disagreement would be a message
+            offering a link the body never shows — or worse, a body offering a
+            link that was never minted. -- */
+      const disclosure = cycle.disclosure === "FULL" ? "SCORE_AND_DECISION" : cycle.disclosure;
+
       return deliver({
         template: "evaluationClosed",
         evaluationId,
         profileId: employee.id,
         phone: employee.phone_e164,
         email: employee.email,
-        audience: "employee",
+        // NONE renders no link at all, so no token is minted for one.
+        audience: disclosure === "NONE" ? "employee-no-link" : "employee",
         render: (link) =>
           evaluationClosed({
             name: employee.full_name,
@@ -602,8 +627,9 @@ async function run({
                   a value cannot be dropped once a row carries it. 0022 migrated the
                   existing FULL rows to SCORE_AND_DECISION, so a stored FULL should
                   not exist — and if one ever does it reads as the NARROWER of the
-                  two rather than widening what an employee is told. -- */
-            disclosure: cycle.disclosure === "FULL" ? "SCORE_AND_DECISION" : cycle.disclosure,
+                  two rather than widening what an employee is told.
+                  Resolved ABOVE, so this and the token decision cannot drift. -- */
+            disclosure,
             // No figure. They still see their score — on their scorecard, behind
             // their login, which is where §9 discloses it. What the message must
             // not do is put it on a lock screen (P13-13, P20-16).

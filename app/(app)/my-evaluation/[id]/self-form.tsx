@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, RotateCcw, Send } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Lock, RotateCcw, Send } from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
@@ -78,7 +78,11 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
   // time they came back to look at it.
   const [thanked, setThanked] = React.useState(false);
 
-  const readOnly = submitted;
+  /* -- Locked EITHER because it was submitted, or for one of the reasons the
+        save gate carries and the render used to ignore — withdrawn, skipped, or
+        moved past OPEN. Without the second half this form rendered fully
+        editable and refused every keystroke. -- */
+  const readOnly = submitted || form.lockedReason != null;
   // This form collects no per-question comments, so the mirror's comment half
   // is always empty here. Kept in the shared shape rather than given a second
   // storage format — one reader, one writer, one thing to get right.
@@ -370,6 +374,18 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
 
   return (
     <div className="mx-auto w-full max-w-[780px] pb-28 lg:pb-8">
+      {/* ---------- Closed for a reason other than submitting ---------- */}
+      {/* §13.4: a form that will not save has to say so BEFORE somebody fills
+          it in. This is the render agreeing with the save gate — withdrawn,
+          skipped, or moved past OPEN — and it sits first because it changes
+          what every control below it can do. */}
+      {form.lockedReason && !submitted ? (
+        <p className="mb-4 flex items-start gap-2 rounded-card border border-warning/40 bg-warning-tint px-4 py-3 text-body-sm text-ink">
+          <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
+          <span>{form.lockedReason}</span>
+        </p>
+      ) : null}
+
       {/* ---------- Recovered draft ---------- */}
       {/* Only when the mirror genuinely held something the server did not. It
           is written on every keystroke, so announcing a restore on every reload

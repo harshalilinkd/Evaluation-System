@@ -81,6 +81,31 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it an evaluation with BOTH sides submitted sits at OPEN and never reaches HR.'),
   ('0023_employment',            'table',      'employment_records',
      'Employment and pay records. Without it the Employment tab and the increment calendar have nothing to read.'),
+  -- ---- The increment overhaul, 0061–0068. These had NO ROWS AT ALL until now,
+  -- which is the FIX-15 lesson repeating: a diagnostic with holes is worse than
+  -- none, because it is trusted. Each detects the thing its migration WROTE,
+  -- never a set of tokens the file happens to contain (0056's failure).
+  ('0061_expectation_monthly',   'monthly_x12','record_salary_expectation converts ×12',
+     'Without it a monthly answer is banked as though it were annual — a figure out by twelve, feeding a pay decision.'),
+  ('0062_manager_hike_percent',  'question_id','linkd.q.mgr.hike_percent',
+     'Without it the manager is never asked for a recommended hike percent, so a promotion recommendation arrives with no figure behind it.'),
+  ('0063_review_row_on_arrival', 'function',   'ensure_increment_review',
+     'Without it an increment evaluation reaching HR has no review row waiting, so the salary band has nothing to write into.'),
+  ('0064_supervisor_percent_only','trigger',   'worker_decisions_guard',
+     'Without it a supervisor can write the salary amounts on a worker sheet, not only the percentage. Pairs with the 0051 row above.'),
+  ('0065_signature_image',       'column',     'profiles.signature_image',
+     'Without it nobody can hold a signature image, so the printed sheet has only ruled lines where a signature was recorded.'),
+  ('0066_salary_change_moves_the_clock','function','apply_salary_to_record',
+     'Without it recording a pay change moves the money and NOT the increment clock — and the MD''s write silently does nothing at all.'),
+  ('0067_hike_percent_required', 'pct_required','the hike percent is required',
+     'Without it a manager can recommend a promotion and leave the percentage blank, which is the one number the recommendation exists to carry.'),
+  ('0068_ledger_owns_the_clock', 'clock_from_ledger','the clock is taken from the pay ledger',
+     'Without it a hand-typed last-increment date outranks a recorded rise, so somebody who WAS given a raise still shows the old date.'),
+  -- A NEW name, so the generic detector is safe here: there is no earlier
+  -- version of this function whose body a LIKE could match by accident. That
+  -- was 0056's failure, and this row deliberately does not repeat it.
+  ('0069_record_joining_salary', 'function',   'record_joining_salary',
+     'Without it the MD recording a joining salary writes NOTHING and is told it worked — the update matches zero rows, and zero rows is a success.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',
@@ -91,8 +116,21 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it the shop floor shows every worker as "Worker" with a dash — a supervisor cannot read the name of somebody they were assigned to rate.'),
   ('0054_supervisor_completes_worker_appraisal','function','complete_worker_appraisal',
      'Without it a supervisor''s rating never reaches HR: the appraisal stays OPEN for ever, because the update that should move it matches zero rows.'),
-  ('0055_expectation_says_annual','question_text','the salary question says ANNUAL',
-     'Without it the question asks for a salary "for the year ahead" — a period, not a unit — so employees answer monthly and the figure is out by twelve.'),
+  -- SUPERSEDED BY 0061, DELIBERATELY — AND THIS ROW WAS DANGEROUS.
+  --
+  -- 0055 made the question say ANNUAL. 0061 then made it say MONTHLY at the
+  -- owner's instruction ("the expected salary metric is shifting from annual CTC
+  -- to monthly"), converting ×12 on save so the stored column stays annual.
+  --
+  -- So the text no longer contains "annual CTC", this row reported FALSE, and
+  -- its wording invited exactly the wrong repair: re-running 0055 would undo
+  -- 0061's wording while leaving the ×12 conversion in place — every answer then
+  -- multiplied by twelve against a question asking for the annual figure. That
+  -- is the 733% incident, reintroduced by a diagnostic.
+  --
+  -- It now checks the CURRENT correct wording, so TRUE means right.
+  ('0055→0061_salary_question_wording','question_text','the salary question asks MONTHLY',
+     'The employee is asked for a MONTHLY figure and it is banked as annual. TRUE is correct — do NOT re-run 0055, which would put the question back to annual while the ×12 conversion stayed.'),
   ('0056_hr_may_close_increment','hr_close_inc','HR may approve and close an INCREMENT',
      'Without it HR pressing Approve and close is refused: "You are not permitted to move this evaluation from HR_APPROVED to MD_REVIEWED".'),
   ('0040_own_current_salary',    'view',       'v_my_current_salary',
@@ -111,8 +149,15 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it a worker cannot tick their own sheet on their supervisor''s device.'),
   ('0050_worker_form_fields',    'table',       'worker_evaluation_decisions',
      'Without it the worker form has no supervisor comment, no training tick and nowhere to record the salary block.'),
-  ('0051_worker_supervisor_salary','policy',     'worker_decisions_supervisor_read',
-     'Without it the supervisor cannot see the salary block while filling the sheet.'),
+  -- SUPERSEDED BY 0064, DELIBERATELY. 0051 gave the supervisor read and write on
+  -- the whole worker salary block; 0064 took the amounts back at the owner's
+  -- instruction ("supervisor will add only hike percent as they dont know the
+  -- salary of employees") and left them the percentage. So the policy 0051
+  -- created is GONE ON PURPOSE, and a row detecting its presence reported the
+  -- intended state as a failure. It now detects 0064's replacement, so TRUE
+  -- means correct. DO NOT re-run 0051 — it would hand the amounts back.
+  ('0051→0064_worker_salary_confined','view',   'v_worker_supervisor_decision',
+     'The supervisor sees the hike PERCENT and never an amount. TRUE is the correct state; 0051''s wider policy was revoked on purpose.'),
   ('0057_worker_submit',         'function',    'submit_worker_layer',
      'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".'),
   ('0058_worker_submit_backfill','worker_backfilled','no submitted sheet is stranded',
@@ -202,6 +247,32 @@ select
     when 'policy' then exists (
       select 1 from pg_policies
        where schemaname = 'public' and policyname = e.object_name)
+    when 'view' then exists (
+      select 1 from pg_views
+       where schemaname = 'public' and viewname = e.object_name)
+    when 'trigger' then exists (
+      select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid
+       join pg_namespace n on n.oid = c.relnamespace
+       where n.nspname = 'public' and t.tgname = e.object_name and not t.tgisinternal)
+    -- A question by its DETERMINISTIC id (0017's md5 device), not by its text.
+    -- Text is editable in the Form Builder; the id is not, so this cannot go
+    -- false because somebody reworded a question.
+    when 'question_id' then exists (
+      select 1 from public.questions where id = md5(e.object_name)::uuid)
+    when 'monthly_x12' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'record_salary_expectation'
+         and pg_get_functiondef(p.oid) like '%v_amount * 12%')
+    when 'pct_required' then exists (
+      select 1 from public.questions
+       where id = md5('linkd.q.mgr.hike_percent')::uuid and is_required)
+    -- 0068 replaced 0066's forward-only comparison with a MAX over the ledger.
+    -- Anchored to the aggregate it wrote, because both versions of the function
+    -- carry the same name and most of the same body.
+    when 'clock_from_ledger' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_salary_to_record'
+         and pg_get_functiondef(p.oid) ~ 'max\(h\.effective_from\)')
     when 'close_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
@@ -216,10 +287,15 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'record_salary_expectation'
          and pg_get_functiondef(p.oid) like '%evaluation_questions%')
+    -- 0061's wording, NOT 0055's. See the note on that row: checking for
+    -- "annual CTC" reported the current, correct state as a failure and invited
+    -- a repair that would have reintroduced the ×12 error. The id deliberately
+    -- still reads `..._annual` — 0061 kept it, because the STORED column is
+    -- annual; only what the employee types is monthly.
     when 'question_text' then exists (
       select 1 from public.questions
        where id = md5('linkd.q.salary_expectation_annual')::uuid
-         and text like '%annual CTC%')
+         and text ilike '%monthly salary%')
     -- A REGEX ANCHORED TO THE ARM, not a LIKE over the whole body.
     --
     -- This read `like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%'`,
