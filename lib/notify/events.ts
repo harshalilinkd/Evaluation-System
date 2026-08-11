@@ -233,7 +233,7 @@ async function run({
 
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, evaluatee_id, lead_id, cycle_id, returned_to")
+    .select("id, evaluatee_id, lead_id, cycle_id, returned_to, self_skipped, lead_skipped")
     .eq("id", evaluationId)
     .maybeSingle();
 
@@ -348,6 +348,7 @@ async function run({
             formReturned({
               name: employee.full_name,
               period: cycle.period_label,
+              audience: "SELF",
               reason: reason ?? "No reason was recorded.",
               link,
             }),
@@ -371,6 +372,9 @@ async function run({
             formReturned({
               name: lead.full_name,
               period: cycle.period_label,
+              audience: "LEAD",
+              // Their RATING came back, not a form of their own.
+              employeeName: employee.full_name,
               reason: reason ?? "No reason was recorded.",
               link,
             }),
@@ -418,6 +422,16 @@ async function run({
             reportReady({
               employeeName: employee.full_name,
               period: cycle.period_label,
+              /* -- READ FROM THE RECORD, not threaded through the caller.
+                    Two paths raise this message: 0038's trigger when both sides
+                    submit, and advanceWithoutOneSide when HR moves it past a side
+                    that never did. Only the row knows which — so a third path
+                    added later is right without its author knowing this exists. -- */
+              skipped: evaluation.self_skipped
+                ? "SELF"
+                : evaluation.lead_skipped
+                  ? "LEAD"
+                  : null,
               link,
             }),
           context: { cycle: cycle.name, employee: employee.full_name },
@@ -461,7 +475,9 @@ async function run({
           render: (link) =>
             formReturned({
               name: person.full_name,
-              period: `${employee.full_name} · ${cycle.period_label}`,
+              period: cycle.period_label,
+              audience: "HR",
+              employeeName: employee.full_name,
               reason: reason ?? "No reason was recorded.",
               link,
             }),
@@ -582,7 +598,12 @@ async function run({
           evaluationClosed({
             name: employee.full_name,
             period: cycle.period_label,
-            disclosure: cycle.disclosure,
+            /* -- FULL is retired (0022/PR-3) but the ENUM VALUE survives, because
+                  a value cannot be dropped once a row carries it. 0022 migrated the
+                  existing FULL rows to SCORE_AND_DECISION, so a stored FULL should
+                  not exist — and if one ever does it reads as the NARROWER of the
+                  two rather than widening what an employee is told. -- */
+            disclosure: cycle.disclosure === "FULL" ? "SCORE_AND_DECISION" : cycle.disclosure,
             // No figure. They still see their score — on their scorecard, behind
             // their login, which is where §9 discloses it. What the message must
             // not do is put it on a lock screen (P13-13, P20-16).

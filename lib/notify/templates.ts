@@ -78,6 +78,13 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   evaluationClosed: "Result available",
 };
 
+/* -- ONE VOICE, IN ONE PLACE.
+      Thirteen bodies were normalised by hand and the fourteenth was missed,
+      because its sign-off is interpolated inline rather than written as its own
+      literal — so a search for the string did not find it. A constant is what
+      stops a fifteenth template inventing a fifteenth voice. P11-16. -- */
+const SIGN_OFF = "— LinkD Prints";
+
 /* ---------- HTML shell ---------- */
 
 /**
@@ -251,7 +258,7 @@ export function selfEvaluationInvite(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Your performance evaluation is open",
       bodyHtml:
@@ -281,7 +288,7 @@ export function selfEvaluationReminder(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "A reminder about your evaluation",
       bodyHtml:
@@ -314,7 +321,7 @@ export function selfEvaluationOverdue(v: {
       `Hello ${v.name},\n\n` +
       `Your self-evaluation for ${v.period} was due on ${v.dueDate} and has not been submitted.\n\n` +
       `Please complete it as soon as you can:\n${v.link}\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Your evaluation is now overdue",
       bodyHtml:
@@ -362,7 +369,7 @@ export function leadReviewInvite(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "A review is open for you",
       bodyHtml:
@@ -393,14 +400,13 @@ export function mdReviewPending(v: {
       `${v.employeeName}'s evaluation for ${v.period} has been reviewed by HR ` +
       `and is ready for your approval by ${v.dueDate}. ` +
       `Open it here: ${v.link} ` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "A review is ready for you",
       bodyHtml:
         p("A performance review has been completed and is ready for your attention.") +
         details([
           ["Employee", v.employeeName],
-          ["Reviewed by", v.leadName],
           ["Period", v.period],
           ["Please review by", v.dueDate],
         ]) +
@@ -421,19 +427,32 @@ export function mdReviewPending(v: {
 export function reportReady(v: {
   employeeName: string;
   period: string;
+  /**
+   * Set when HR advanced the record PAST a side that never submitted.
+   *
+   * "Both sides are now in" was stated unconditionally — and one of the two
+   * paths that raises this message is `advanceWithoutOneSide`, whose entire
+   * precondition is that a side has NOT submitted and is being marked skipped.
+   * So the message asserted the opposite of what had happened, to the person
+   * about to open the report and find half of it missing. §0.7.
+   */
+  skipped?: "SELF" | "LEAD" | null;
   link: string;
 }): RenderedMessage {
+  const opening =
+    v.skipped === "SELF"
+      ? `${v.employeeName}'s evaluation for ${v.period} has been advanced to review without their self-evaluation. The report is ready.`
+      : v.skipped === "LEAD"
+        ? `${v.employeeName}'s evaluation for ${v.period} has been advanced to review without their manager's rating. The report is ready.`
+        : `Both sides of ${v.employeeName}'s evaluation for ${v.period} are now in, and the combined report is ready for your review.`;
+
   return {
     subject: `${v.employeeName}'s report is ready for your review`,
-    body:
-      `Both sides of ${v.employeeName}'s evaluation for ${v.period} are now in, ` +
-      `and the combined report is ready for your review. ` +
-      `Open it here: ${v.link} ` +
-      `— LinkD Prints`,
+    body: `${opening} Open it here: ${v.link} ` + SIGN_OFF,
     html: shell({
       heading: "A combined report is ready",
       bodyHtml:
-        p("Both sides of an evaluation have now been submitted, and the combined report is ready for your review.") +
+        p(opening) +
         details([["Employee", v.employeeName], ["Period", v.period]]) +
         signOff(),
       cta: { label: "Open the report", href: v.link },
@@ -452,22 +471,49 @@ export function formReturned(v: {
   name: string;
   period: string;
   reason: string;
+  /**
+   * WHOSE FORM CAME BACK. This goes to three different people and said the
+   * same thing to all of them.
+   *
+   * A manager read "Your self-evaluation has been returned" when what came
+   * back was their RATING OF SOMEBODY ELSE, and went looking for a form of
+   * their own that had not moved. HR read it too, with the employee's name
+   * smuggled into the period field to compensate.
+   */
+  audience?: "SELF" | "LEAD" | "HR";
+  /** Whose evaluation it is — needed by the two audiences it is not about. */
+  employeeName?: string;
   link: string;
 }): RenderedMessage {
+  const who = v.audience ?? "SELF";
+  const subject =
+    who === "LEAD"
+      ? `Your rating of ${v.employeeName ?? "your report"} is back with you`
+      : who === "HR"
+        ? `${v.employeeName ?? "A"}'s report has been sent back`
+        : `Your evaluation for ${v.period} is back with you`;
+
+  const opening =
+    who === "LEAD"
+      ? `Your rating of ${v.employeeName ?? "your report"} for ${v.period} has been returned for another look.`
+      : who === "HR"
+        ? `${v.employeeName ?? "A"}'s report for ${v.period} has been sent back by the MD.`
+        : `Your self-evaluation for ${v.period} has been returned for another look.`;
+
   return {
-    subject: `Your evaluation for ${v.period} has been sent back`,
+    subject,
     body:
-      `*Your evaluation has been sent back*\n\n` +
+      `*${subject}*\n\n` +
       `Hello ${v.name},\n\n` +
-      `Your self-evaluation for ${v.period} has been returned for another look.\n\n` +
+      `${opening}\n\n` +
       `What was asked for:\n"${v.reason}"\n\n` +
       `Your answers are still there — open your form, make the changes and submit it again:\n${v.link}\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
-      heading: "Your evaluation has been returned",
+      heading: subject,
       bodyHtml:
         p(`Dear ${v.name},`) +
-        p(`Your self-evaluation for ${v.period} has been returned to you for another look. The reason given was:`) +
+        p(`${opening} The reason given was:`) +
         `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:4px 0 8px 0;">
            <tr><td style="border-left:3px solid ${EMAIL.rule};padding:4px 0 4px 14px;">
              <p style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:${EMAIL.ink};font-style:italic;">${escapeHtml(v.reason)}</p>
@@ -506,7 +552,7 @@ export function evaluationFinalised(v: {
     body:
       `${v.employeeName}'s evaluation for ${v.period} has been finalised by management ` +
       `and is now on record. Open it here: ${v.link} ` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "An evaluation has been finalised",
       bodyHtml:
@@ -532,12 +578,17 @@ export function evaluationFinalised(v: {
 export function evaluationClosed(v: {
   name: string;
   period: string;
-  disclosure: "NONE" | "SCORE_ONLY" | "SCORE_AND_DECISION" | "FULL";
+  /* -- FULL is gone. 0022 retired it by CHECK because it contradicted §5's
+        blindness invariant, and 0021 had already deleted the RLS branch
+        honouring it — so it was an option promising something the database
+        refuses. A dead branch that WIDENS disclosure, in the one template that
+        speaks to the person being evaluated, is the worst place to leave one. -- */
+  disclosure: "NONE" | "SCORE_ONLY" | "SCORE_AND_DECISION";
   decision?: string | null;
   link: string;
 }): RenderedMessage {
   const showsScore = v.disclosure !== "NONE";
-  const showsDecision = v.disclosure === "SCORE_AND_DECISION" || v.disclosure === "FULL";
+  const showsDecision = v.disclosure === "SCORE_AND_DECISION";
 
   /* -- THE FIGURE IS NOT IN THE MESSAGE, though this person is entitled to it.
         §9 gives an employee their own final score, and they still get it — on
@@ -559,7 +610,7 @@ export function evaluationClosed(v: {
 
   return {
     subject: `Your evaluation for ${v.period} is complete`,
-    body: `Hello ${v.name}, ${lines.join(" ")} ${closing} — HR, LinkD Prints`,
+    body: `Hello ${v.name}, ${lines.join(" ")} ${closing} ${SIGN_OFF}`,
     html: shell({
       heading: "Your evaluation is complete",
       bodyHtml:
@@ -610,7 +661,7 @@ export function leadReviewReminder(v: {
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) is due on ${v.dueDate}.\n\n` +
       `Open your form:\n${v.link}\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "A reminder about your review",
       bodyHtml:
@@ -637,7 +688,7 @@ export function leadReviewOverdue(v: {
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) was due on ${v.dueDate} and has not been submitted.\n\n` +
       `Please complete it:\n${v.link}\n\n` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Your review is now overdue",
       bodyHtml:
@@ -701,7 +752,7 @@ export function hrDueDigest(v: {
 ${v.link}
 
 ` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Today's summary",
       bodyHtml:
@@ -741,7 +792,7 @@ export function incrementsOverdue(v: {
 ${v.link}
 
 ` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Increments past their date",
       bodyHtml:
@@ -796,7 +847,7 @@ export function evaluationsOverdue(v: {
 ${v.link}
 
 ` +
-      `— LinkD Prints`,
+      SIGN_OFF,
     html: shell({
       heading: "Forms are overdue",
       bodyHtml:
