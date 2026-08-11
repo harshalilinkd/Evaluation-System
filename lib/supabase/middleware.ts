@@ -6,6 +6,28 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isProtectedPath, ROUTES } from "@/lib/auth/landing";
 import type { Database } from "@/types/database";
 
+/* -- A REDIRECT THAT KEEPS THE REFRESHED SESSION.
+
+      `supabase.auth.getUser()` above may ROTATE the refresh token, and the
+      Supabase client writes the new pair onto `response` through the `setAll`
+      handler. Returning a brand-new `NextResponse.redirect(...)` throws that
+      response away — so the rotated token is never sent to the browser, the old
+      one is already spent, and the next request arrives with a token the auth
+      server has retired. The person is signed out at what looks like random.
+
+      This is the failure the file's own comment warns about ("people get signed
+      out at random") from a direction it did not cover: not logic BEFORE the
+      call, but a response discarded AFTER it.
+
+      So the cookies are copied onto the redirect. -- */
+function redirectKeepingSession(to: URL, from: NextResponse): NextResponse {
+  const redirect = NextResponse.redirect(to);
+  for (const cookie of from.cookies.getAll()) {
+    redirect.cookies.set(cookie);
+  }
+  return redirect;
+}
+
 /**
  * Refreshes the Supabase session cookie on every request and answers the one
  * question worth answering this early: is anybody signed in?
@@ -15,6 +37,7 @@ import type { Database } from "@/types/database";
  * page guards instead, where it shares a request-scoped cache with the page's
  * own queries.
  */
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -99,7 +122,7 @@ export async function updateSession(request: NextRequest) {
     redirectUrl.search = "";
     // Where they were headed, so sign-in can return them there. Relative only.
     redirectUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(redirectUrl);
+    return redirectKeepingSession(redirectUrl, response);
   }
 
   /* -- A signed-in visitor who WANDERS onto the login page is sent to the app.
@@ -133,7 +156,7 @@ export async function updateSession(request: NextRequest) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTES.dashboard;
     redirectUrl.search = "";
-    return NextResponse.redirect(redirectUrl);
+    return redirectKeepingSession(redirectUrl, response);
   }
 
   return response;

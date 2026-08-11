@@ -36,8 +36,14 @@ export async function GET(request: Request) {
 
   const landing =
     consumed.status === "OK"
-      ? // §10: the link grants this one evaluation and nothing else.
-        `/my-evaluation/${consumed.evaluationId}`
+      ? // §10: the link grants this one evaluation and nothing else — and
+        // it must open the form THAT PERSON fills. A LEAD token landed on
+        // the employee's self-evaluation, where the manager is not the
+        // evaluatee: the guard bounced them, and the token was already
+        // spent. One tap, a dead end, and a link that cannot be retried.
+        consumed.layer === "LEAD"
+        ? `/team/${consumed.evaluationId}`
+        : `/my-evaluation/${consumed.evaluationId}`
       : consumed.status === "WRONG_RECIPIENT"
         ? "/invite/wrong-recipient"
         : consumed.status === "EXPIRED"

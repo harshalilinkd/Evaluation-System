@@ -1567,7 +1567,7 @@ export type Database = {
       };
       consume_invite_token: {
         Args: { p_invite_id: string };
-        Returns: { status: string; evaluation_id: string | null }[];
+        Returns: { status: string; evaluation_id: string | null; layer: string | null }[];
       };
       current_profile_id: {
         Args: Record<PropertyKey, never>;

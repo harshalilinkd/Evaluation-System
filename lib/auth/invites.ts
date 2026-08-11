@@ -158,7 +158,8 @@ export async function verifyInviteToken(token: string): Promise<VerifyResult> {
 export type ConsumeFailure = "INVALID" | "EXPIRED" | "REVOKED" | "WRONG_RECIPIENT";
 
 export type ConsumeResult =
-  | { status: "OK"; evaluationId: string }
+  /** `layer` decides where the link LANDS — see the note in `consumeInviteToken`. */
+  | { status: "OK"; evaluationId: string; layer: "SELF" | "LEAD" | "MD" }
   | { status: ConsumeFailure };
 
 /**
@@ -179,7 +180,21 @@ export async function consumeInviteToken(inviteId: string): Promise<ConsumeResul
   if (!row) return { status: "INVALID" };
 
   if (row.status === "OK") {
-    return { status: "OK", evaluationId: row.evaluation_id as string };
+    /* -- THE LAYER, WHICH 0022 HAS RETURNED ALL ALONG AND NOTHING READ.
+          Its own comment gives the reason it was added: "a SELF token goes to
+          /my-evaluation, a LEAD token to /team". The TypeScript half was never
+          written, so every invite — the manager's included — landed on the
+          EMPLOYEE'S self-evaluation, was refused by the access guard, and left
+          the token spent. One tap, a dead end, and a link that cannot be
+          retried.
+
+          Defaulting to SELF is the safe direction: a token minted before 0022
+          carries no layer, and those were all employee invites. -- */
+    return {
+      status: "OK",
+      evaluationId: row.evaluation_id as string,
+      layer: (row.layer as "SELF" | "LEAD" | "MD" | null) ?? "SELF",
+    };
   }
   return { status: row.status as ConsumeFailure };
 }
