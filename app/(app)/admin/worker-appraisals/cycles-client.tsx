@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HardHat, Loader2, Plus } from "lucide-react";
+import { HardHat, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 
 import { DashboardCard } from "@/components/appraise/metric-widget";
 import { EmptyState } from "@/components/appraise/states";
@@ -21,7 +21,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createWorkerCycle, launchWorkerCycle } from "@/lib/worker/cycle-actions";
+import {
+  addWorkersToRound,
+  createWorkerCycle,
+  deleteWorkerRoundForever,
+  launchWorkerCycle,
+  moveWorkerRoundToBin,
+  restoreWorkerRound,
+} from "@/lib/worker/cycle-actions";
+import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
 
 export type WorkerCycleRow = {
@@ -57,14 +65,19 @@ const STATUS_WORD: Record<string, string> = {
 
 export function WorkerCyclesClient({
   cycles,
+  binned,
   workers,
   raters,
 }: {
   cycles: WorkerCycleRow[];
+  /** In the recycle bin. Hidden from every other screen; restorable from here. */
+  binned: WorkerCycleRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
 }) {
   const [open, setOpen] = React.useState(false);
+  const [binning, setBinning] = React.useState<WorkerCycleRow | null>(null);
+  const [showBin, setShowBin] = React.useState(false);
 
   return (
     <div className="space-y-6">
@@ -102,25 +115,79 @@ export function WorkerCyclesClient({
             /* The whole card opens the round. A card that looks like a record
                and does nothing when pressed reads as a broken link, which is
                exactly how this was reported. */
-            <Link
-              key={cycle.id}
-              href={`/admin/worker-appraisals/${cycle.id}`}
-              className="block rounded-card transition-colors hover:bg-surface-mute"
-            >
-              <DashboardCard title={cycle.name}>
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <p className="font-sans text-body-sm text-ink-muted">
-                    {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
-                  </p>
-                  <p className="tabular font-sans text-body-sm text-ink-muted">
-                    Supervisor due {formatDate(cycle.supervisor_due_on)}
-                  </p>
-                </div>
-              </DashboardCard>
-            </Link>
+            /* The bin control sits BESIDE the link, not inside it: a button
+               nested in an anchor is invalid markup and gives a screen reader
+               one control where there are two. */
+            <div key={cycle.id} className="relative">
+              <Link
+                href={`/admin/worker-appraisals/${cycle.id}`}
+                className="block rounded-card transition-colors hover:bg-surface-mute"
+              >
+                <DashboardCard title={cycle.name}>
+                  <div className="flex flex-wrap items-baseline justify-between gap-3 pr-12">
+                    <p className="font-sans text-body-sm text-ink-muted">
+                      {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
+                    </p>
+                    <p className="tabular font-sans text-body-sm text-ink-muted">
+                      Supervisor due {formatDate(cycle.supervisor_due_on)}
+                    </p>
+                  </div>
+                </DashboardCard>
+              </Link>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={`Move ${cycle.name} to the recycle bin`}
+                className="absolute right-3 top-3 z-10 min-h-11 text-ink-muted hover:text-critical"
+                onClick={() => setBinning(cycle)}
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </Button>
+            </div>
           ))}
         </div>
       )}
+
+      {/* ---------- The recycle bin ----------
+          Collapsed, because it is not the job — but present, because a round
+          that can be binned and never restored is a delete wearing a softer
+          word. §13.4. */}
+      {binned.length > 0 ? (
+        <section className="card-surface p-5">
+          <button
+            type="button"
+            onClick={() => setShowBin((v) => !v)}
+            aria-expanded={showBin}
+            className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
+          >
+            <span className="font-sans text-body font-medium text-ink">
+              Recycle bin · {binned.length} {binned.length === 1 ? "round" : "rounds"}
+            </span>
+            <span className="font-sans text-body-sm text-ink-muted">
+              {showBin ? "Hide" : "Show"}
+            </span>
+          </button>
+
+          {showBin ? (
+            <ul className="mt-3 divide-y divide-rule">
+              {binned.map((cycle) => (
+                <li key={cycle.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-sans text-body text-ink">{cycle.name}</p>
+                    <p className="font-sans text-body-sm text-ink-muted">
+                      {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
+                    </p>
+                  </div>
+                  <BinnedRoundActions cycle={cycle} />
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
+
+      <BinRoundDialog cycle={binning} onClose={() => setBinning(null)} />
 
       <StartRoundDialog open={open} onOpenChange={setOpen} workers={workers} raters={raters} />
     </div>
@@ -459,5 +526,285 @@ export function StartRoundDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ================================================== AddWorkersDialog ====== */
+
+/**
+ * Add somebody to a round that is already running.
+ *
+ * There was no way to do this: `launchWorkerCycle` refuses a non-DRAFT cycle,
+ * so a worker who joined after a round opened — or whom HR simply missed — had
+ * to wait for a whole new round, which is a different period and a different
+ * sheet.
+ *
+ * Deliberately simpler than `StartRoundDialog`: no dates and no name, because
+ * the round already has them, and the rater defaults to the worker's own
+ * Reports-to. A latecomer is a correction to a roster, not a new exercise to
+ * configure — and the server refuses anybody with no rater, by name, rather
+ * than letting the choice be made badly here (PR-9).
+ */
+export function AddWorkersDialog({
+  open,
+  onOpenChange,
+  cycleId,
+  available,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  cycleId: string;
+  /** Workers NOT already in this round — computed by the board. */
+  available: WorkerRow[];
+}) {
+  const router = useRouter();
+  const [chosen, setChosen] = React.useState<Set<string>>(new Set());
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  function toggle(id: string) {
+    setChosen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    const result = await addWorkersToRound(
+      cycleId,
+      [...chosen].map((id) => ({
+        workerId: id,
+        supervisorId: available.find((w) => w.id === id)?.supervisorId ?? null,
+      })),
+    );
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setChosen(new Set());
+    onOpenChange(false);
+    router.refresh();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add workers to this round</DialogTitle>
+          <DialogDescription>
+            {/* §5's snapshot rule, said where the decision is made rather than
+                left in the server's comments: they are appraised on the same
+                frozen sheet as everybody already in this round, so the round
+                stays one comparable exercise even if the form has been edited
+                since it opened. */}
+            They get the same sheet as everybody already in this round, and are
+            rated by whoever they report to.
+          </DialogDescription>
+        </DialogHeader>
+
+        {available.length === 0 ? (
+          <p className="py-6 text-center font-sans text-body-sm text-ink-muted">
+            Everybody on the shop floor is already in this round.
+          </p>
+        ) : (
+          <ul className="max-h-[50vh] space-y-1 overflow-y-auto py-1">
+            {available.map((w) => (
+              <li key={w.id}>
+                <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-2 py-2 hover:bg-surface-mute">
+                  <Checkbox checked={chosen.has(w.id)} onCheckedChange={() => toggle(w.id)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-sans text-body text-ink">
+                      {w.name}
+                      {w.employeeCode ? (
+                        <span className="tabular ml-2 text-body-sm text-ink-muted">
+                          {w.employeeCode}
+                        </span>
+                      ) : null}
+                    </span>
+                    {/* Named, and flagged when absent — the server refuses
+                        somebody with no rater, so saying so here saves a
+                        refusal somebody has to interpret (§13.4). */}
+                    <span
+                      className={cn(
+                        "block truncate font-sans text-body-sm",
+                        w.supervisorName ? "text-ink-muted" : "text-critical",
+                      )}
+                    >
+                      {w.supervisorName
+                        ? `Rated by ${w.supervisorName}`
+                        : "Nobody is set to rate them — set their Reports-to first"}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {error ? (
+          <p role="alert" className="font-sans text-body-sm text-critical">
+            {error}
+          </p>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="min-h-11">
+            Cancel
+          </Button>
+          <Button
+            onClick={() => void submit()}
+            disabled={busy || chosen.size === 0}
+            className="min-h-11"
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            Add {chosen.size > 0 ? chosen.size : ""}{" "}
+            {chosen.size === 1 ? "worker" : "workers"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ============================================ bin · restore · destroy ===== */
+
+/**
+ * Confirm before binning.
+ *
+ * It says what binning does and what it does NOT do, because the word "delete"
+ * on the button that opened this dialog is the thing somebody is afraid of.
+ */
+function BinRoundDialog({
+  cycle,
+  onClose,
+}: {
+  cycle: WorkerCycleRow | null;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  if (!cycle) return null;
+
+  async function bin() {
+    if (!cycle) return;
+    setBusy(true);
+    setError(null);
+    const result = await moveWorkerRoundToBin(cycle.id);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Move {cycle.name} to the recycle bin?</DialogTitle>
+          <DialogDescription>
+            It disappears from this list, from the shop floor and from every
+            supervisor&rsquo;s screen. Nothing inside it is deleted, and it can be
+            restored from the recycle bin below.
+          </DialogDescription>
+        </DialogHeader>
+
+        {error ? (
+          <p role="alert" className="font-sans text-body-sm text-critical">
+            {error}
+          </p>
+        ) : null}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} className="min-h-11">
+            Cancel
+          </Button>
+          <Button onClick={() => void bin()} disabled={busy} className="min-h-11">
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            Move to recycle bin
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Restore, or destroy for good.
+ *
+ * The second is offered without a confirmation dialog of its own because the
+ * SERVER refuses it for anything that was ever launched — the only rounds it
+ * can touch are drafts that were never opened to anybody, and it is already
+ * the second deliberate act after binning. Where it refuses, the reason is
+ * shown in full rather than paraphrased: it explains that the round holds the
+ * frozen sheet and the ticks of everyone in it (§5), which is the answer to
+ * "why can I not delete this".
+ */
+function BinnedRoundActions({ cycle }: { cycle: WorkerCycleRow }) {
+  const router = useRouter();
+  const [busy, setBusy] = React.useState<null | "restore" | "destroy">(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function run(which: "restore" | "destroy") {
+    setBusy(which);
+    setError(null);
+    const result =
+      which === "restore"
+        ? await restoreWorkerRound(cycle.id)
+        : await deleteWorkerRoundForever(cycle.id);
+    setBusy(null);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col items-end gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="secondary"
+          onClick={() => void run("restore")}
+          disabled={busy !== null}
+          className="min-h-11"
+        >
+          {busy === "restore" ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <RotateCcw className="size-4" aria-hidden />
+          )}
+          Restore
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => void run("destroy")}
+          disabled={busy !== null}
+          className="min-h-11 text-critical hover:text-critical"
+        >
+          {busy === "destroy" ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            <Trash2 className="size-4" aria-hidden />
+          )}
+          Delete for good
+        </Button>
+      </div>
+
+      {error ? (
+        <p role="alert" className="max-w-prose text-right font-sans text-body-sm text-critical">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

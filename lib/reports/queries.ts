@@ -68,10 +68,13 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
     .select(
       // `final_overall` is the score HR agreed with the MD at completion. It
       // was never selected, so nothing downstream could show it.
-      "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall, updated_at",
+      "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall, updated_at, evaluation_cycles!inner(deleted_at)",
     )
     .in("status", ["PENDING_HR_REVIEW", "HR_APPROVED", "MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"])
     .is("excluded_at", null)
+    // A binned cycle's records leave the queue with it. Without this, binning a
+    // cycle cleared it from every list except the one HR works from.
+    .is("evaluation_cycles.deleted_at", null)
     .eq("track", "STAFF");
 
   if (error) return cycleError("QUERY_FAILED", `Could not read the queue: ${error.message}`);

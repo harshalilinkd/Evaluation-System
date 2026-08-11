@@ -13,7 +13,15 @@ import { greetingFor } from "@/lib/utils/date";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Which open cycle the figures describe. The analytics are per-cycle (§11),
+  // so this switches rather than merges — see `Analytics.activeCycles`.
+  const { cycle: cycleParam } = await searchParams;
+  const cycleId = typeof cycleParam === "string" ? cycleParam : undefined;
   // §9: the guard is the first statement, so nothing renders before it.
   const { profile, roles } = await requireAuth();
 
@@ -41,7 +49,7 @@ export default async function Page() {
         employee has no business seeing who is due an increment (§5), so the
         query does not run rather than running and being hidden. -- */
   const [analytics, pulse, due, { data: mine }, { count: toRate }] = await Promise.all([
-    getAnalytics(profile.id, roles),
+    getAnalytics(profile.id, roles, cycleId),
 
     /* -- The operational half: what is in flight, what finished, what is
           coming, who scored well. HR and the MD only — every figure in it
@@ -68,8 +76,14 @@ export default async function Page() {
       .is("excluded_at", null)
       .is("self_submitted_at", null)
       .is("evaluation_cycles.deleted_at", null)
-      .limit(1)
-      .maybeSingle(),
+      /* -- ALL of them, ordered.
+            This was `.limit(1).maybeSingle()` with no ORDER BY, so with two
+            cycles open the dashboard surfaced whichever row Postgres happened
+            to return — non-deterministic between two loads of the same page —
+            and the other outstanding form was invisible here exactly as it was
+            on /my-evaluation. Soonest due first, so the hero names the one
+            that actually matters. -- */
+      .order("due_self_on", { ascending: true, nullsFirst: false }),
 
     /* -- A lead's own queue: how many of their reports they have still to rate.
           Counted from the LEAD layer only — reading the employee's side to
@@ -102,8 +116,12 @@ export default async function Page() {
       pulse={pulse?.ok ? pulse.data : null}
       firstName={profile.full_name.trim().split(/\s+/)[0] ?? "there"}
       greeting={greetingFor()}
-      myEvaluationId={mine?.id ?? null}
-      myDueOn={mine?.due_self_on ?? null}
+      /* The soonest, and how many there are. The hero names one — naming two
+         in a headline is not a headline — but a reader who owes two forms must
+         not be told they owe one. */
+      myEvaluationId={mine?.[0]?.id ?? null}
+      myDueOn={mine?.[0]?.due_self_on ?? null}
+      myOpenCount={mine?.length ?? 0}
       toRate={toRate ?? 0}
       due={
         due?.ok

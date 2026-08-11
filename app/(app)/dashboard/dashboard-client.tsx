@@ -147,6 +147,7 @@ export function DashboardClient({
   greeting,
   myEvaluationId,
   myDueOn,
+  myOpenCount,
   toRate,
   due,
 }: {
@@ -165,10 +166,12 @@ export function DashboardClient({
   greeting: string;
   myEvaluationId: string | null;
   myDueOn: string | null;
+  /** How many open self-evaluations this person has. Two cycles can run at once. */
+  myOpenCount: number;
   toRate: number;
   due: DueSummary | null;
 }) {
-  const { audience, activeCycle, progress } = analytics;
+  const { audience, activeCycle, activeCycles, progress } = analytics;
   const isAdmin = audience === "hr" || audience === "md";
 
   return (
@@ -209,18 +212,40 @@ export function DashboardClient({
           {myEvaluationId || toRate > 0 ? (
             <HeroCard
               label={`${greeting}, ${firstName}`}
-              value={myEvaluationId ? "Your evaluation is open" : `${toRate} to rate`}
+              value={
+                myEvaluationId
+                  ? myOpenCount > 1
+                    ? `${myOpenCount} evaluations are open for you`
+                    : "Your evaluation is open"
+                  : `${toRate} to rate`
+              }
+              /* The count is in the headline and the date belongs to the
+                 soonest, so the caption says "the first" rather than letting
+                 one deadline stand for two. */
               caption={
                 myEvaluationId
                   ? myDueOn
-                    ? `Due ${formatDate(myDueOn)}. It takes about ten minutes.`
+                    ? myOpenCount > 1
+                      ? `The first is due ${formatDate(myDueOn)}. Each takes about ten minutes.`
+                      : `Due ${formatDate(myDueOn)}. It takes about ten minutes.`
                     : "It takes about ten minutes."
                   : "Your team is waiting on your ratings."
               }
               action={
                 <Button asChild variant="secondary">
-                  <Link href={myEvaluationId ? `/my-evaluation/${myEvaluationId}` : "/team"}>
-                    {myEvaluationId ? "Fill it in" : "Open my team"}
+                  {/* With two open, the list is the right destination —
+                      dropping somebody straight into one of them is how the
+                      other stays unnoticed. */}
+                  <Link
+                    href={
+                      !myEvaluationId
+                        ? "/team"
+                        : myOpenCount > 1
+                          ? "/my-evaluation"
+                          : `/my-evaluation/${myEvaluationId}`
+                    }
+                  >
+                    {myEvaluationId ? (myOpenCount > 1 ? "See them" : "Fill it in") : "Open my team"}
                     <ArrowRight className="ml-2 size-4" aria-hidden />
                   </Link>
                 </Button>
@@ -328,11 +353,44 @@ export function DashboardClient({
                 : "No cycle is running at the moment."
             }
             action={
-              progress ? (
-                <span className="tabular text-body-sm text-ink-muted">
-                  {Number(progress.percent_complete ?? 0).toFixed(0)}% complete
-                </span>
-              ) : undefined
+              <div className="flex flex-wrap items-center gap-3">
+                {/* -- THE OTHER CYCLES, reachable.
+                      Every figure on this page is computed for ONE cycle, and
+                      it used to be the newest with nothing to say another
+                      existed — so a reader could not tell whether they were
+                      looking at the company or at half of it. The figures stay
+                      per-cycle deliberately: averaging an EVALUATION cycle with
+                      an INCREMENT one produces a number that describes neither
+                      exercise, and §11 keeps a score inside the cycle it was
+                      given in. So this switches rather than merges. -- */}
+                {activeCycles.length > 1 ? (
+                  <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Choose a cycle">
+                    {activeCycles.map((c) => {
+                      const current = c.id === activeCycle?.id;
+                      return (
+                        <Link
+                          key={c.id}
+                          href={`/dashboard?cycle=${c.id}`}
+                          aria-current={current ? "true" : undefined}
+                          className={cn(
+                            "rounded-pill px-3 py-1 font-sans text-body-sm transition-colors",
+                            current
+                              ? "bg-primary/10 font-medium text-primary"
+                              : "text-ink-muted hover:bg-surface-mute hover:text-ink",
+                          )}
+                        >
+                          {c.name}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {progress ? (
+                  <span className="tabular text-body-sm text-ink-muted">
+                    {Number(progress.percent_complete ?? 0).toFixed(0)}% complete
+                  </span>
+                ) : null}
+              </div>
             }
           >
             {!progress || Number(progress.total ?? 0) === 0 ? (

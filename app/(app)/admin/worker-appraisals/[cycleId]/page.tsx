@@ -98,6 +98,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
       cycle={cycle}
       rows={(rows ?? []).map((r) => ({
         id: r.id,
+        workerId: r.worker_id,
         workerName: nameOf.get(r.worker_id) ?? "—",
         supervisorName: r.supervisor_id ? (nameOf.get(r.supervisor_id) ?? "—") : "—",
         selfIn: Boolean(r.self_submitted_at) || r.self_skipped,

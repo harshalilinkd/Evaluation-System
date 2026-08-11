@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 
 import {
+  AddWorkersDialog,
   StartRoundDialog,
   type RaterRow,
   type WorkerRow,
@@ -28,6 +29,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 
 export type BoardRow = {
   id: string;
+  /** The profile, so the board can tell who is NOT yet in this round. */
+  workerId: string;
   workerName: string;
   supervisorName: string;
   selfIn: boolean;
@@ -89,6 +92,13 @@ export function WorkerBoard({
   raters: RaterRow[];
 }) {
   const [starting, setStarting] = React.useState(false);
+  const [adding, setAdding] = React.useState(false);
+
+  /* -- Who is NOT yet in this round. A latecomer, or somebody HR missed when
+        the round opened — until now there was no way to appraise either of them
+        in it, because the launch refuses a cycle that is already running. -- */
+  const inRound = new Set(rows.map((r) => r.workerId));
+  const available = workers.filter((w) => !inRound.has(w.id));
 
   /* Ready means the supervisor has submitted AND nobody has reviewed it — the
      only state on this screen HR can act on. Counting reviewed ones too meant
@@ -300,6 +310,15 @@ export function WorkerBoard({
                 Worker Appraisals in the sidebar IS that list, and it shows each
                 round with its status and dates. One way to change round, on the
                 screen built for it. -- */}
+          {/* Only while the round is open to changes, and only when there is
+              somebody to add — a control that can do nothing is a dead end. */}
+          {cycle.status === "ACTIVE" && available.length > 0 ? (
+            <Button variant="secondary" onClick={() => setAdding(true)} className="min-h-11">
+              <Plus className="size-4" aria-hidden />
+              Add workers
+            </Button>
+          ) : null}
+
           <Button onClick={() => setStarting(true)} className="min-h-11">
             <Plus className="size-4" aria-hidden />
             Start a round
@@ -406,6 +425,13 @@ export function WorkerBoard({
             }
           />
         }
+      />
+
+      <AddWorkersDialog
+        open={adding}
+        onOpenChange={setAdding}
+        cycleId={cycle.id}
+        available={available}
       />
 
       <StartRoundDialog

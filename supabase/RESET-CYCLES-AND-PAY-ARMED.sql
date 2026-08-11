@@ -14,7 +14,7 @@
 --     WORKER   appraisal rounds · appraisals · both sides' ticks · frozen sheets
 --     PAY      the entire salary history · increment reminders · every salary
 --              figure on the employment record
---     BOTH     the sent-message log · due items
+--     BOTH     the sent-message log · due items · the notification bells
 --
 --   KEEPS
 --     people and their logins · roles · departments · the staff question bank ·
@@ -39,6 +39,13 @@
 -- destroys evidence you may be required to keep.
 --
 -- TAKE A BACKUP FIRST: Supabase dashboard → Database → Backups.
+--
+-- BEFORE REACHING FOR THIS, note that the ordinary path now exists in the
+-- product: /admin/cycles and /admin/worker-appraisals both carry Move to
+-- recycle bin, Restore, and Delete for good. Those are audited, reversible up
+-- to the last step, and refuse to destroy a launched cycle — which is the
+-- §5 guarantee this file switches off. Use them unless you specifically need
+-- launched history gone.
 -- ============================================================================
 
 begin;
@@ -87,6 +94,15 @@ do $$ begin delete from public.due_items;          exception when undefined_tabl
 -- `notifications_log.evaluation_id` is ON DELETE SET NULL, so these would
 -- otherwise survive as orphans: messages about evaluations that no longer exist.
 delete from public.notifications_log;
+
+/* -- The in-app bells (0059).
+      `app_notifications.evaluation_id` is a PLAIN UUID with no foreign key —
+      deliberately, for the reason P3-2 gives: a reference that must outlive the
+      row it points at cannot be a constraint. The consequence here is that
+      NOTHING cascades these away. Left behind, every employee opens the app to
+      a bell saying "Your evaluation is open" linking to a form that no longer
+      exists, which is the most confusing possible end state for a reset. -- */
+do $$ begin delete from public.app_notifications; exception when undefined_table then null; end; $$;
 
 /* ============================================================================
    2 · Pay — BEFORE the evaluations, because it is what pins them
@@ -145,6 +161,10 @@ alter table public.evaluation_cycles enable trigger evaluation_cycles_guard_dele
 
 do $$
 begin
+  -- `worker_evaluation_decisions` (0050) cascades from `worker_evaluations`,
+  -- and is listed anyway for the reason section 1 gives: a table that ever
+  -- loses its cascade must not quietly survive a reset.
+  delete from public.worker_evaluation_decisions;
   delete from public.worker_evaluation_responses;
   delete from public.worker_evaluation_questions;
   delete from public.worker_evaluations;
@@ -184,6 +204,8 @@ select
   pg_temp.count_or_absent('worker_cycles')               as worker_rounds_left,
   pg_temp.count_or_absent('worker_evaluations')          as worker_appraisals_left,
   (select count(*) from public.notifications_log)        as messages_left,
+  pg_temp.count_or_absent('app_notifications')          as bells_left,
+  pg_temp.count_or_absent('worker_evaluation_decisions') as worker_decisions_left,
   '|'                                                    as kept,
   (select count(*) from public.profiles)                 as people,
   (select count(*) from public.departments)              as departments,

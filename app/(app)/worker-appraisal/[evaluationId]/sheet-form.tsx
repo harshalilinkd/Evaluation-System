@@ -109,18 +109,45 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         draft there would sit in the supervisor's session between hand-overs,
         readable by whoever holds the tablet. -- */
   const [dirty, setDirty] = React.useState(false);
-  const inFlight = React.useRef(false);
+  /* -- The PROMISE, not a boolean.
+        `if (inFlight.current) return true` claimed the server was up to date
+        when nothing had been sent — and Submit reads that return value to
+        decide whether it may go ahead. Holding the promise lets a second
+        caller wait for the first instead of being lied to. -- */
+  const inFlight = React.useRef<Promise<boolean> | null>(null);
 
   const persist = React.useCallback(async (): Promise<boolean> => {
-    if (readOnly || inFlight.current) return true;
-    inFlight.current = true;
+    if (readOnly) return true;
+
+    // Wait out a save already on the wire, then send the CURRENT state on top
+    // of it. Two sends is harmless — each carries the whole sheet.
+    const running = inFlight.current;
+    if (running) await running;
+
     setSaveState("saving");
 
+    /* -- CLEARED BEFORE THE SEND, and that is the fix for a lost tick.
+          It used to be cleared after the response came back, using the answers
+          captured when the request left. A tick made while that request was in
+          flight set `dirty` — and the completing save then cleared it, so the
+          debounce effect saw a clean form and never scheduled another send.
+          The tick stayed on screen and never reached the server.
+
+          Clearing at the moment the snapshot is taken inverts that: anything
+          typed after this line re-dirties the form and is picked up by the next
+          debounce. -- */
+    setDirty(false);
+
     /* -- The await is GUARDED. A rejected promise — a dropped connection, a
-          500 — would otherwise skip `inFlight.current = false` and every line
-          after it, leaving the flag true for the life of the page so nothing
-          was ever sent again. That is precisely what happened on the staff form
-          (FIX-12); `finally` is what makes the flag honest. -- */
+          500 — would otherwise skip the cleanup and every line after it,
+          leaving the ref set for the life of the page so nothing was ever sent
+          again. That is precisely what happened on the staff form (FIX-12);
+          `finally` is what makes it honest.
+
+          Wrapped in a promise the ref can HOLD, so a second caller joins this
+          write rather than starting a racing one — two whole-sheet writes
+          landing out of order would let a stale snapshot overwrite a newer. -- */
+    const run = (async (): Promise<boolean> => {
     try {
       const result = await saveWorkerSheet(sheet.evaluationId, answers, {
         overallComment: comment,
@@ -129,6 +156,8 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       if (!result.ok) {
         setSaveState("error");
         setError(result.error.message);
+        // Refused, so the form is still unsaved — see the note above.
+        setDirty(true);
         return false;
       }
 
@@ -150,8 +179,12 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
 
             Two writes, two tables, two policies — so two outcomes. A failure
             to record pay must never be reported as a failure to record the
-            appraisal, and must never block submitting one. -- */
-      setDirty(false);
+            appraisal, and must never block submitting one.
+
+            NOTE: `setDirty(false)` is deliberately NOT repeated here. It now
+            runs before the send, and clearing it again on the response would
+            re-create the lost-tick race — a tick made while this request was
+            in flight would be marked clean without ever having been sent. -- */
       setSaveState("saved");
       setSaved(new Date(result.data.savedAt));
       setError(null);
@@ -165,9 +198,18 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
     } catch {
       setSaveState("error");
       setError("The connection dropped before your ticks reached us. They are still on screen.");
+      // Put the flag back: this snapshot never landed, so the form IS dirty.
+      setDirty(true);
       return false;
+    }
+    })();
+
+    inFlight.current = run;
+    try {
+      return await run;
     } finally {
-      inFlight.current = false;
+      // Only if it is still ours: a later persist may already own the slot.
+      if (inFlight.current === run) inFlight.current = null;
     }
   }, [readOnly, sheet.evaluationId, sheet.salary, answers, comment, training, salary]);
 

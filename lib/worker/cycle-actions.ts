@@ -302,3 +302,343 @@ export async function launchWorkerCycle(
   revalidate(cycleId);
   return { ok: true, data: { opened } };
 }
+
+/* ====================================================== addWorkersToRound == */
+
+/**
+ * Add somebody to a round that is already running.
+ *
+ * There was no way to do this at all: `launchWorkerCycle` refuses any cycle
+ * that is not DRAFT, and nothing else inserted into `worker_evaluations`. So a
+ * worker who joined after a round opened, or who HR simply missed, could not be
+ * appraised in it — the only remedy was a whole new round, which is a different
+ * period and a different sheet.
+ *
+ * WHICH QUESTIONS THEY GET IS THE ONE REAL DECISION HERE, and it is §5's.
+ *
+ * The obvious implementation reads the live `worker_questions` bank, which is
+ * what `launchWorkerCycle` does — correct at launch, wrong here. HR may have
+ * edited the form since this round opened, and §5's snapshot rule exists so
+ * that editing the bank can never change what somebody was asked. A latecomer
+ * frozen against a newer sheet would be appraised on different questions from
+ * everybody beside them, and the round would no longer be one comparable
+ * exercise.
+ *
+ * So the sheet is copied from a PEER: the frozen rows of an evaluation already
+ * in this cycle. The bank is used only when the cycle somehow holds none, which
+ * cannot happen for a round that launched.
+ */
+export async function addWorkersToRound(
+  cycleId: string,
+  assignments: WorkerAssignment[],
+): Promise<WorkerResult<{ added: number }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+  if (assignments.length === 0) return fail("NO_PARTICIPANTS", "Choose at least one worker.");
+
+  const supervisorOf = new Map(assignments.map((a) => [a.workerId, a.supervisorId]));
+  const supabase = await createClient();
+
+  const { data: cycle } = await supabase
+    .from("worker_cycles")
+    .select("id, status")
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
+
+  // DRAFT belongs to launch, and a finished round is finished. Named rather
+  // than silently doing nothing (§13.4).
+  if (cycle.status === "DRAFT") {
+    return fail("NOT_LAUNCHED", "This round has not been launched yet — use Start a round instead.");
+  }
+  if (cycle.status !== "ACTIVE") {
+    return fail("NOT_ACTIVE", "This round is closed, so nobody can be added to it.");
+  }
+
+  /* -- The peer's frozen sheet. See the note above. -- */
+  const { data: peer } = await supabase
+    .from("worker_evaluations")
+    .select("id")
+    .eq("cycle_id", cycleId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  let sheet: Array<{
+    question_id: string;
+    text: string;
+    help_text: string | null;
+    sort_order: number;
+    is_required: boolean;
+    is_overall: boolean;
+  }> = [];
+
+  if (peer) {
+    const { data: frozen } = await supabase
+      .from("worker_evaluation_questions")
+      .select("question_id, text, help_text, sort_order, is_required, is_overall")
+      .eq("evaluation_id", peer.id)
+      .order("sort_order");
+    sheet = frozen ?? [];
+  }
+
+  if (sheet.length === 0) {
+    const { data: questions } = await supabase
+      .from("worker_questions")
+      .select("id, text, help_text, sort_order, is_required, is_overall")
+      .eq("is_active", true)
+      .order("sort_order");
+    sheet = (questions ?? []).map((q, index) => ({
+      question_id: q.id,
+      text: q.text,
+      help_text: q.help_text,
+      sort_order: (index + 1) * 10,
+      is_required: q.is_required,
+      is_overall: q.is_overall,
+    }));
+  }
+
+  if (sheet.length === 0) {
+    return fail("NO_QUESTIONS", "The worker form has no questions on it.");
+  }
+
+  /* -- Same eligibility rules as the launch, for the same reasons. §5's module
+        boundary is the `track` filter; the two refusals below are PR-8's. -- */
+  const { data: people } = await supabase
+    .from("profiles")
+    .select("id, full_name, department_id, track, is_active")
+    .in("id", assignments.map((a) => a.workerId))
+    .eq("track", "WORKER")
+    .eq("is_active", true);
+
+  const eligible = people ?? [];
+  if (eligible.length === 0) {
+    return fail("NO_ELIGIBLE", "None of those people are active shop-floor workers.");
+  }
+
+  const unsupervised = eligible.filter((p) => !supervisorOf.get(p.id));
+  if (unsupervised.length > 0) {
+    return fail(
+      "NO_SUPERVISOR",
+      `${unsupervised.map((p) => p.full_name).join(", ")} ${
+        unsupervised.length === 1 ? "has" : "have"
+      } nobody chosen to rate them.`,
+    );
+  }
+
+  const selfLed = eligible.filter((p) => supervisorOf.get(p.id) === p.id);
+  if (selfLed.length > 0) {
+    return fail(
+      "SELF_SUPERVISED",
+      `${selfLed.map((p) => p.full_name).join(", ")} supervises themselves, so they would fill and see both sides.`,
+    );
+  }
+
+  let added = 0;
+  let already = 0;
+  const failures: string[] = [];
+
+  for (const person of eligible) {
+    const { data: evaluation, error: evalError } = await supabase
+      .from("worker_evaluations")
+      .insert({
+        cycle_id: cycleId,
+        worker_id: person.id,
+        supervisor_id: supervisorOf.get(person.id) ?? null,
+        department_id: person.department_id,
+        status: "OPEN",
+      })
+      .select("id")
+      .single();
+
+    if (evalError || !evaluation) {
+      // 23505 is the (cycle_id, worker_id) unique — they are already in this
+      // round, which is not a fault. Everything else is (F15-16).
+      if ((evalError as { code?: string } | null)?.code === "23505") already += 1;
+      else if (evalError) failures.push(`${person.full_name}: ${evalError.message}`);
+      continue;
+    }
+
+    await supabase.from("worker_evaluation_questions").insert(
+      sheet.map((q) => ({ ...q, evaluation_id: evaluation.id })),
+    );
+
+    // One response row, and `self_skipped` — the same shape the launch writes,
+    // because a worker round collects the supervisor's side only.
+    await supabase
+      .from("worker_evaluation_responses")
+      .insert([{ evaluation_id: evaluation.id, layer: "SUPERVISOR" }]);
+
+    await supabase
+      .from("worker_evaluations")
+      .update({ self_skipped: true })
+      .eq("id", evaluation.id);
+
+    await supabase.rpc("log_admin_action", {
+      p_entity: "worker_evaluation",
+      p_entity_id: evaluation.id,
+      p_action: "worker_evaluation.added_to_round",
+      p_diff: { cycle_id: cycleId, added_after_launch: true } as Json,
+    });
+
+    added += 1;
+  }
+
+  if (added === 0) {
+    return fail(
+      already > 0 ? "ALREADY_IN" : "NONE_ADDED",
+      already > 0
+        ? "Everybody you chose is already in this round."
+        : failures[0] ?? "Nobody could be added to this round.",
+    );
+  }
+
+  revalidate(cycleId);
+  return { ok: true, data: { added } };
+}
+
+/* ================================================ bin · restore · destroy == */
+
+/*
+ * §7's ISOLATION RULE again: these mirror `moveCycleToBin`,
+ * `restoreCycleFromBin` and `deleteCycleForever` in `lib/cycles/actions.ts`
+ * rather than being shared with them. The two modules agree today and are free
+ * to diverge — binding them together would make a change to a staff cycle
+ * silently a change to a shop-floor round.
+ *
+ * `worker_cycles.deleted_at` has existed since 0047 and NOTHING has ever
+ * written it: there was no way to bin, restore or delete a worker round from
+ * the product at all. A column with no path to it is a promise the interface
+ * does not keep.
+ */
+
+export async function moveWorkerRoundToBin(
+  cycleId: string,
+  reason?: string,
+): Promise<WorkerResult<{ id: string }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  const { data: cycle } = await supabase
+    .from("worker_cycles")
+    .select("id, name, status, deleted_at")
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
+  if (cycle.deleted_at) return fail("ALREADY_BINNED", "That round is already in the recycle bin.");
+
+  const { error } = await supabase
+    .from("worker_cycles")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", cycleId);
+
+  if (error) return fail("QUERY_FAILED", error.message);
+
+  await supabase.rpc("log_admin_action", {
+    p_entity: "worker_cycle",
+    p_entity_id: cycleId,
+    p_action: "worker_cycle.binned",
+    p_diff: { name: cycle.name, status: cycle.status, reason: reason ?? null } as Json,
+  });
+
+  revalidate(cycleId);
+  return { ok: true, data: { id: cycleId } };
+}
+
+export async function restoreWorkerRound(cycleId: string): Promise<WorkerResult<{ id: string }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  const { data: cycle } = await supabase
+    .from("worker_cycles")
+    .select("id, name, deleted_at")
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
+  if (!cycle.deleted_at) return fail("NOT_BINNED", "That round is not in the recycle bin.");
+
+  const { error } = await supabase
+    .from("worker_cycles")
+    .update({ deleted_at: null })
+    .eq("id", cycleId);
+
+  if (error) return fail("QUERY_FAILED", error.message);
+
+  await supabase.rpc("log_admin_action", {
+    p_entity: "worker_cycle",
+    p_entity_id: cycleId,
+    p_action: "worker_cycle.restored",
+    p_diff: { name: cycle.name } as Json,
+  });
+
+  revalidate(cycleId);
+  return { ok: true, data: { id: cycleId } };
+}
+
+/**
+ * Destroy a round for good.
+ *
+ * TWO GATES, and they are the staff ones for the staff reasons.
+ *
+ * It must be binned first, so an irreversible act is never one click from an
+ * ordinary one. And it must be DRAFT: a launched round cascades to every frozen
+ * sheet and every tick in it (0047), and §5's snapshot rule is what makes an
+ * appraisal a record rather than a screenshot of a form that has since changed.
+ *
+ * A launched round therefore stays in the bin, where it is invisible and costs
+ * nothing. Clearing one out is an operator action with a database script behind
+ * it, deliberately outside the product — see supabase/RESET-CYCLES-AND-PAY-ARMED.sql.
+ */
+export async function deleteWorkerRoundForever(
+  cycleId: string,
+): Promise<WorkerResult<{ id: string }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  const { data: cycle } = await supabase
+    .from("worker_cycles")
+    .select("id, name, period_label, status, deleted_at")
+    .eq("id", cycleId)
+    .maybeSingle();
+
+  if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
+
+  if (!cycle.deleted_at) {
+    return fail(
+      "NOT_BINNED",
+      "Move it to the recycle bin first. Deleting for good is a second, separate step.",
+    );
+  }
+
+  if (cycle.status !== "DRAFT") {
+    return fail(
+      "LAUNCHED",
+      `${cycle.name} was launched, so it holds the frozen sheet and the ticks of everyone in it. Those cannot be destroyed — it stays in the recycle bin, where it takes up nothing and can be restored.`,
+    );
+  }
+
+  // Logged BEFORE the row goes: `audit_log.entity_id` carries no foreign key,
+  // so the record outlives what it describes and is the only remaining evidence
+  // that this round existed.
+  await supabase.rpc("log_admin_action", {
+    p_entity: "worker_cycle",
+    p_entity_id: cycleId,
+    p_action: "worker_cycle.deleted_forever",
+    p_diff: { name: cycle.name, period_label: cycle.period_label, status: cycle.status } as Json,
+  });
+
+  const { error } = await supabase.from("worker_cycles").delete().eq("id", cycleId);
+  if (error) return fail("DELETE_REFUSED", error.message);
+
+  revalidate(cycleId);
+  return { ok: true, data: { id: cycleId } };
+}

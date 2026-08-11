@@ -4490,3 +4490,94 @@ suites remain outside the repository (§18 STATUS).
 
 **Migrations.** 0060 is applied. `0058_worker_submit_backfill` is still
 outstanding and is a one-time repair for sheets submitted before 0057.
+
+---
+
+### FIX-16 — The three FIX-15 left open
+
+No migration. `lib/analytics/queries.ts`, `/dashboard`,
+`lib/worker/cycle-actions.ts`, the worker sheet, and the worker board.
+
+FIX-15 named three defects it had found and not fixed. This closes them.
+
+#### The dashboard described one cycle and did not say so
+
+| # | Decision | Why |
+|---|---|---|
+| F16-1 | **The figures stay PER-CYCLE. They are not merged** | The obvious reading of "it only shows one cycle" is to aggregate across all of them, and that would be wrong. Averaging an EVALUATION cycle together with an INCREMENT one produces a company score describing neither exercise — the same objection P16-4 makes about Job Specific Skills across departments, and §11 keeps a score inside the cycle it was given in. What was actually broken is that one cycle was shown with nothing to say another existed, so a reader could not tell whether they were looking at the company or at half of it. |
+| F16-2 | `getAnalytics` takes an optional `cycleId` and returns `activeCycles` | The newest still wins by default, which is what it always did. The difference is that the others are now reachable, from a switcher in the panel whose numbers change. An id that is not open falls back rather than rendering an empty dashboard. |
+| F16-3 | The cycle query gained `deleted_at is null` | It never had it. 0032's recycle bin is a `deleted_at`, not a status, so a binned cycle is still ACTIVE — and being the newest, a binned one could have been the cycle the whole dashboard described. |
+| F16-4 | **The own-work read was `.limit(1).maybeSingle()` with NO `ORDER BY`** | So with two cycles open the dashboard surfaced whichever row Postgres happened to return, non-deterministically between two loads of the same page, and the other outstanding form was invisible here exactly as it was on `/my-evaluation`. Now ordered by due date and returned whole. |
+| F16-5 | The hero names one and counts the rest | Two forms in a headline is not a headline. It says "2 evaluations are open for you", dates the soonest as "the first", and links to the LIST rather than into one of them — dropping somebody straight into one is how the other stays unnoticed. |
+
+#### A tick made during a save was lost
+
+| # | Decision | Why |
+|---|---|---|
+| F16-6 | **`setDirty(false)` moved to BEFORE the send** | It ran on the response, using the answers captured when the request left. The sequence: tick A saves; tick B arrives mid-flight and sets `dirty`; A's response clears it; the debounce effect sees a clean form and never schedules another send. B stayed on screen and never reached the server. Clearing at the moment the snapshot is taken inverts it — anything typed after that line re-dirties. |
+| F16-7 | The post-send clear had to go with it, and it was mine | FIX-15's salary fix had added a second `setDirty(false)` in the success branch. Left there it would have re-created the race the same edit was removing. A grep now shows exactly one clear, and it is the early one. |
+| F16-8 | `inFlight` holds the PROMISE, not a boolean | `if (inFlight.current) return true` told Submit the server was up to date when nothing had been sent — and Submit reads that value to decide whether it may go ahead. A second caller now joins the write in progress instead. Joining rather than starting a parallel send also matters: two whole-sheet writes landing out of order would let a stale snapshot overwrite a newer one. |
+| F16-9 | Every failure path re-dirties | A refused or dropped snapshot never landed, so the form IS dirty. Without this the early clear would lose the work it was introduced to protect. |
+
+#### Nobody could be added to a running round
+
+| # | Decision | Why |
+|---|---|---|
+| F16-10 | `addWorkersToRound`, because `launchWorkerCycle` cannot be widened | It refuses any cycle that is not DRAFT, and that guard is right: launching twice is a different operation from adding one person. A worker who joined after a round opened, or whom HR missed, previously had to wait for a whole new round — a different period and a different sheet. |
+| F16-11 | **The latecomer is frozen against a PEER's sheet, not the live bank** | The one real decision here, and it is §5's. `launchWorkerCycle` reads `worker_questions`, which is correct at launch and wrong afterwards: HR may have edited the form since, and the snapshot rule exists precisely so that editing the bank cannot change what somebody was asked. A latecomer frozen against a newer sheet would be appraised on different questions from everybody beside them, and the round would stop being one comparable exercise. The bank is the fallback only for a cycle holding no evaluations, which a launched round cannot be. |
+| F16-12 | Same eligibility rules, same refusals, restated rather than shared | Track, active, has a rater, does not rate themselves. §7 forbids refactoring across the module boundary and this is the same argument one level down: the launch and the addition are two operations that agree today, and binding them together would make a change to one silently a change to the other. |
+| F16-13 | 23505 means "already in this round" and is not a failure | F15-16's distinction, applied here from the start. Choosing somebody already in the round reports that plainly instead of an integrity error. |
+| F16-14 | The control appears only when it can do something | ACTIVE only, and only when somebody is actually outside the round. §13.4 — a button that can do nothing is a dead end. The dialog names each worker's rater and flags anybody who has none in `critical`, because the server refuses those by name and a refusal somebody has to interpret is worse than a warning they can act on. |
+
+**Verification.** Typecheck 0 errors, lint 0 errors, build clean. Nothing was
+run against live data.
+
+**Still open from FIX-15.** Nothing — all three are closed.
+
+**And 0058 was never outstanding.** It had been reported as such three times,
+including twice by me, because `whats-applied.sql` gave it the kind `'none'` —
+"repair, nothing to detect" — which returns null for ever beside a note reading
+"apply it once after 0057". A check that cannot answer, worded as though it had.
+Exactly the shape of the 0056 false positive, from the other direction: one
+reported a success it had not achieved, this reported a gap that was not there.
+
+The repair's EFFECT is perfectly detectable — 0058 sets the evaluation's
+timestamp from its response row, so afterwards no response marked submitted can
+have an evaluation that still says otherwise. That is now the check, and it is
+stronger than "did somebody run the file" because it also catches a row drifting
+back into that state later. No `'none'` rows remain in the file.
+
+---
+
+### FIX-17 — The recycle bin, made real in both modules
+
+No migration. `lib/worker/cycle-actions.ts`, `/admin/worker-appraisals`,
+`/my-evaluation`, `lib/reports/queries.ts`, and
+`supabase/RESET-CYCLES-AND-PAY-ARMED.sql`.
+
+Prompted by "I want to delete all the cycles data". The answer turned out to be
+that the product already had a recycle bin for staff and it did not work, and
+had none at all for workers.
+
+| # | Decision | Why |
+|---|---|---|
+| F17-1 | **Binning did not hide anything from the two audiences that matter** | `deleted_at` was honoured on the cycles list, the dashboard and `/team`, and NOT on `/my-evaluation` or the `/reports` queue. So binning every cycle would have cleared HR's admin screens while leaving employees with their forms open and HR with the records still in their review queue. The dashboard's own comment names the fault — "a recycle bin that only hides the folder is not a recycle bin" — and the leak was to the people least able to explain it. |
+| F17-2 | Filtered at SOURCE with `!inner`, not by dropping rows after the fact | `/my-evaluation` builds a cycle map and looks each evaluation up in it, so filtering only the cycles query would have left the CLOSED list rendering binned rows as "Cycle". An inner join removes them from the result rather than from the render. |
+| F17-3 | **`worker_cycles.deleted_at` has existed since 0047 and nothing had ever written it** | No bin, no restore, no delete — a column with no path to it is a promise the interface does not keep. Three actions now do, mirroring the staff trio rather than sharing it (§7: the two modules agree today and must stay free to diverge). |
+| F17-4 | `Delete for good` refuses anything ever LAUNCHED, in both modules | The staff gate, for the staff reason, applied to workers: a launched round cascades to every frozen sheet and every tick in it, and §5's snapshot rule is what makes an appraisal a record rather than a picture of a form that has since changed. A launched round stays in the bin, invisible and costing nothing. The reset script is the operator escape hatch, deliberately outside the product. |
+| F17-5 | Two deliberate acts, never one | Bin first, destroy second. Deleting straight from a list would put an irreversible thing one click from an ordinary one. Both steps are audited, and the destroy is logged BEFORE the row goes — `audit_log.entity_id` carries no foreign key, so the record outlives what it describes and is the only remaining evidence the round existed. |
+| F17-6 | The bin control sits BESIDE the card's link, not inside it | The round card is wrapped in a `<Link>`. A button nested in an anchor is invalid markup and hands a screen reader one control where there are two. Absolutely positioned as a sibling instead. |
+| F17-7 | The bin section is collapsed but present | A round that can be binned and never restored is a delete wearing a softer word (§13.4). |
+| F17-8 | **`app_notifications` was missing from the reset script, and it is the one that mattered** | Its `evaluation_id` is a plain uuid with no foreign key — deliberately, per P3-2, because a reference that must outlive the row it points at cannot be a constraint. The consequence is that NOTHING cascades those rows away. Run the reset without them and every employee opens the app to a bell reading "Your evaluation is open", linking to a form that no longer exists: the most confusing possible end state for a clean slate. |
+| F17-9 | `worker_evaluation_decisions` listed although it cascades | The script's own stated principle — "listed explicitly anyway, so a table that ever loses its cascade cannot quietly survive a reset". It was the one worker table not obeying it. |
+| F17-10 | The script now points at the product first | Bin, Restore and Delete for good are audited, reversible up to the last step, and refuse to destroy launched history. A script that switches off a §5 guarantee should not be the first thing somebody reaches for. |
+
+**Not changed, and worth naming.** `/scorecard` reads `v_employee_history`, a
+database view, so a binned cycle still appears in a person's own history. Left
+deliberately: a scorecard is somebody's record, and silently rewriting their
+history because an administrator binned a cycle is a different decision from
+clearing a queue. It needs a migration and an instruction, not an assumption.
+
+**Verification.** Typecheck 0 errors, lint 0 errors, build clean. The wiring was
+checked by reading the call sites, not by using the screens — nothing here has
+been clicked.

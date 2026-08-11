@@ -115,8 +115,8 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it the supervisor cannot see the salary block while filling the sheet.'),
   ('0057_worker_submit',         'function',    'submit_worker_layer',
      'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".'),
-  ('0058_worker_submit_backfill','none',        'repair — nothing to detect',
-     'Repairs sheets submitted BEFORE 0057: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0057.'),
+  ('0058_worker_submit_backfill','worker_backfilled','no submitted sheet is stranded',
+     'TRUE means nothing is stranded — either the repair ran or there was never anything to repair. It was listed as ''nothing to detect'', which returned null for ever and read as a permanent to-do; the repair''s own effect is perfectly detectable and this now checks it.'),
   ('0018_retire_old_departments','dept_retired','the five P1 placeholder departments',
      'Superseded by 0019 and harmless either way. Listed so the set below is complete.'),
   ('0019_departments_reconcile','dept_named',  'the ten real departments',
@@ -183,6 +183,21 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
          and pg_get_functiondef(p.oid) like '%INTERVIEW_DONE%is_md() or v_is_system%')
+    /* -- The EFFECT of the repair, not the fact of running it.
+          0058 sets the evaluation's timestamp from its response row, so once it
+          has run — or if it never had anything to do — there can be no response
+          marked submitted whose evaluation still says otherwise. That is a
+          stronger check than "did somebody run the file": it also catches a row
+          drifting back into that state later. -- */
+    when 'worker_backfilled' then
+      to_regclass('public.worker_evaluation_responses') is not null
+      and not exists (
+        select 1
+          from public.worker_evaluation_responses r
+          join public.worker_evaluations e on e.id = r.evaluation_id
+         where r.submitted_at is not null
+           and ((r.layer = 'SELF' and e.self_submitted_at is null)
+             or (r.layer = 'SUPERVISOR' and e.supervisor_submitted_at is null)))
     when 'none' then null
     when 'policy' then exists (
       select 1 from pg_policies

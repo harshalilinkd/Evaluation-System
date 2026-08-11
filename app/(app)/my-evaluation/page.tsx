@@ -77,15 +77,26 @@ export default async function Page({
 
           "Which of these may I see" and "which of these are MINE" are two
           different questions, and RLS only answers the first. -- */
+    /* -- `!inner` ON THE CYCLE, so a BINNED one is excluded.
+          0032 gave cycles a `deleted_at` and this page never filtered on it —
+          so binning a cycle removed it from HR's list, the dashboard and the
+          HOD's queue, and left it sitting on the employee's own screen. A
+          recycle bin that only hides the folder is not a recycle bin, and this
+          was the one place it leaked to the people least able to explain it.
+          The dashboard and /team already carried this filter; this did not. -- */
     supabase
       .from("evaluations")
-      .select("id, status, cycle_id, final_overall, self_submitted_at, excluded_at")
+      .select(
+        "id, status, cycle_id, final_overall, self_submitted_at, excluded_at, evaluation_cycles!inner(deleted_at)",
+      )
       .eq("evaluatee_id", session.profile.id)
       .is("excluded_at", null)
+      .is("evaluation_cycles.deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase
       .from("evaluation_cycles")
-      .select("id, name, period_label, self_due_on, disclosure"),
+      .select("id, name, period_label, self_due_on, disclosure")
+      .is("deleted_at", null),
   ]);
 
   const rows = evaluations ?? [];

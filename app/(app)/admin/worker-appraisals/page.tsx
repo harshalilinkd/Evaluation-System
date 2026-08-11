@@ -33,11 +33,21 @@ export default async function Page() {
         The board's picker stays gone, because removing it was an explicit
         instruction (§0.2). The list comes back, because that is what the board
         was told it could rely on. -- */
-  const { data: cycles } = await supabase
-    .from("worker_cycles")
-    .select("id, name, period_label, status, self_due_on, supervisor_due_on, md_due_on")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  /* -- Both lists. `worker_cycles.deleted_at` has existed since 0047 and
+        nothing ever wrote it, so there was no bin to read — and no way back for
+        a round once one existed. A bin with no view is a one-way door. -- */
+  const [{ data: cycles }, { data: binned }] = await Promise.all([
+    supabase
+      .from("worker_cycles")
+      .select("id, name, period_label, status, self_due_on, supervisor_due_on, md_due_on")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("worker_cycles")
+      .select("id, name, period_label, status, self_due_on, supervisor_due_on, md_due_on")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false }),
+  ]);
 
   /* -- The worker pool, for the Start a round dialog. Needed whether or not
         any round exists — starting the SECOND round needs it as much as the
@@ -60,6 +70,7 @@ export default async function Page() {
   return (
     <WorkerCyclesClient
       cycles={cycles ?? []}
+      binned={binned ?? []}
       workers={(workers ?? []).map((w) => ({
         id: w.id,
         name: w.full_name,

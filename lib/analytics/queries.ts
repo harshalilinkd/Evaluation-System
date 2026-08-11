@@ -44,6 +44,20 @@ export function audienceFor(roles: readonly AppRole[]): DashboardAudience {
 export type Analytics = {
   audience: DashboardAudience;
   activeCycle: { id: string; name: string; periodLabel: string } | null;
+  /**
+   * EVERY open cycle, so the screen can say which one it is showing.
+   *
+   * The figures below are per-cycle and stay that way. Averaging an EVALUATION
+   * cycle together with an INCREMENT one would produce a company score that
+   * describes neither exercise — the same objection P16-4 makes about Job
+   * Specific Skills across departments, and §11 keeps a score inside the cycle
+   * it was given in.
+   *
+   * What was wrong was not that one cycle is shown. It is that one was shown
+   * with nothing to say another existed, so a reader could not tell whether
+   * they were looking at the company or at half of it.
+   */
+  activeCycles: Array<{ id: string; name: string; periodLabel: string }>;
   progress: CycleProgress | null;
   departments: DepartmentScore[];
   /** Comparable sections only — Job Specific Skills is excluded by the view's flag. */
@@ -92,6 +106,8 @@ export type Analytics = {
 export async function getAnalytics(
   profileId: string,
   roles: readonly AppRole[],
+  /** Which open cycle to describe. Defaults to the most recent. */
+  cycleId?: string,
 ): Promise<CycleResult<Analytics>> {
   const supabase = await createClient();
   const audience = audienceFor(roles);
@@ -100,12 +116,24 @@ export async function getAnalytics(
     .from("evaluation_cycles")
     .select("id, name, period_label, self_due_on, lead_due_on")
     .eq("status", "ACTIVE")
-    .order("created_at", { ascending: false })
-    .limit(1);
+    // A binned cycle is still ACTIVE — 0032's recycle bin is a `deleted_at`.
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
 
   if (cycleReadError) return cycleError("QUERY_FAILED", cycleReadError.message);
 
-  const cycle = cycles?.[0] ?? null;
+  const allCycles = cycles ?? [];
+  const activeCycles = allCycles.map((c) => ({
+    id: c.id,
+    name: c.name,
+    periodLabel: c.period_label,
+  }));
+
+  /* -- The one being described. `cycleId` lets the reader switch; without it
+        the newest wins, which is what this always did — the difference is that
+        the others are now reachable rather than invisible. An id that is not
+        open falls back rather than rendering an empty dashboard. -- */
+  const cycle = (cycleId ? allCycles.find((c) => c.id === cycleId) : null) ?? allCycles[0] ?? null;
 
   if (!cycle) {
     // A fresh install is not a broken one. Every list comes back empty and the
@@ -115,6 +143,7 @@ export async function getAnalytics(
       data: {
         audience,
         activeCycle: null,
+        activeCycles,
         progress: null,
         departments: [],
         sections: [],
@@ -275,6 +304,7 @@ export async function getAnalytics(
     data: {
       audience,
       activeCycle: { id: cycle.id, name: cycle.name, periodLabel: cycle.period_label },
+      activeCycles,
       progress: progress.data ?? null,
       departments: departments.data ?? [],
       sections: sections.data ?? [],
