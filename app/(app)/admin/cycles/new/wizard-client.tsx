@@ -631,7 +631,7 @@ export function WizardClient({
                 whole two-sided design make sense, and somebody choosing a
                 disclosure policy is exactly who needs to read it. */}
             <p className="mt-3 rounded-card bg-accent px-4 py-3 text-body-sm text-accent-foreground">
-              The HOD&rsquo;s ratings and written comments are never shown to the employee, in any
+              The Manager&rsquo;s ratings and written comments are never shown to the employee, in any
               option. That is what makes the two-sided rating honest.
             </p>
           </fieldset>
@@ -647,7 +647,7 @@ export function WizardClient({
             [
               ["starts_on", "Cycle opens"],
               ["self_due_on", "Self-evaluation due"],
-              ["lead_due_on", "Lead review due"],
+              ["lead_due_on", "Manager review due"],
               /* "MD decision due" is gone. Since 0039 the MD is optional on an
                  evaluation cycle, so a deadline for a step that may never
                  happen is a date HR has to invent — and the summary read "The

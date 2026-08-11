@@ -14,7 +14,13 @@ export type Tier = "self" | "lead" | "final";
 
 export const TIER_LABELS: Record<Tier, string> = {
   self: "Self",
-  lead: "Lead",
+  /* -- Renamed from "Lead" to "Manager" at the owner's explicit instruction.
+        ONLY THE LABEL. The tier key stays `lead`, the token stays `--lead`, and
+        the `LEAD` value in `rating_layer` — which is stored on every response
+        row ever written and frozen into every closed appraisal — is untouched
+        (§0.2). §13.1's pink still means this layer and nothing else; what
+        changed is what a person reads, not what the database records. -- */
+  lead: "Manager",
   final: "Final",
 };
 

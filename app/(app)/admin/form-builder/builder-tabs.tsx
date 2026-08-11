@@ -41,7 +41,7 @@ const TABS = [
   {
     href: "/admin/form-builder/worker",
     label: "Worker Form",
-    hint: "The shop-floor tick sheet",
+    hint: "The Production Team tick sheet",
     icon: HardHat,
   },
 ] as const;

@@ -32,7 +32,7 @@ const AUDIENCES = [
   },
   {
     value: "LEAD" as const,
-    label: "Lead",
+    label: "Manager",
     heading: "What the lead fills in",
     blurb: "The lead's rating, with the employee's answers beside it once submitted.",
   },

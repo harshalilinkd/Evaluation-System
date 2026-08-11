@@ -61,7 +61,7 @@ const STATUS: Record<
   },
   // blue — the lead's tier
   LEAD_REVIEWED: {
-    internal: "Lead reviewed",
+    internal: "Manager reviewed",
     employee: "Under review",
     classes: "bg-lead-tint border-lead/40 text-lead",
   },

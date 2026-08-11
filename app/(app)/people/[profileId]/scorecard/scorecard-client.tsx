@@ -412,7 +412,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 </div>
                 <dl className="flex flex-wrap gap-x-6 gap-y-1 text-body-sm">
                   <Due label="Self due" value={card.current.selfDueOn} />
-                  <Due label="Lead review due" value={card.current.leadDueOn} />
+                  <Due label="Manager review due" value={card.current.leadDueOn} />
                   <Due label="Final due" value={card.current.mdDueOn} />
                 </dl>
               </div>
@@ -513,7 +513,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 columns={[
                   { header: "Cycle", cell: (r) => r.period },
                   { header: "Self", cell: (r) => formatScore(r.self), align: "right" },
-                  { header: "Lead", cell: (r) => formatScore(r.lead), align: "right" },
+                  { header: "Manager", cell: (r) => formatScore(r.lead), align: "right" },
                   { header: "Final", cell: (r) => formatScore(r.final), align: "right" },
                 ]}
               >
@@ -522,7 +522,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   xKey="period"
                   bars={[
                     { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
                   ]}
                   line={{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }}
                 />
@@ -553,7 +553,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                     columns={[
                       { header: "Section", cell: (s) => s.label },
                       { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
-                      { header: "Lead", cell: (s) => formatScore(s.lead), align: "right" },
+                      { header: "Manager", cell: (s) => formatScore(s.lead), align: "right" },
                       { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                     ]}
                   >
@@ -562,7 +562,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                       height={320}
                       series={[
                         { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                        { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                        { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
                         ...(radarHasFinal
                           ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
                           : []),
@@ -622,7 +622,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 columns={[
                   { header: "Section", cell: (s) => s.label },
                   { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
-                  { header: "Lead", cell: (s) => formatScore(s.lead), align: "right" },
+                  { header: "Manager", cell: (s) => formatScore(s.lead), align: "right" },
                   { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                 ]}
               >
@@ -631,7 +631,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   labelKey="label"
                   series={[
                     { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Lead", color: TIER_CHART_COLORS.lead },
+                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
                     ...(sectionBarsHaveFinal
                       ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
                       : []),
@@ -681,7 +681,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 columns={[
                   { header: "Section", cell: (g) => g.label },
                   { header: "Self", cell: (g) => formatScore(g.self), align: "right" },
-                  { header: "Lead", cell: (g) => formatScore(g.lead), align: "right" },
+                  { header: "Manager", cell: (g) => formatScore(g.lead), align: "right" },
                   { header: "Difference", cell: (g) => signed(g.delta), align: "right" },
                 ]}
               >
@@ -821,7 +821,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                       <th scope="col" className="type-label w-[168px] py-2 text-left font-bold text-ink">
                         Profile
                       </th>
-                      {["Self", "Lead", "Final"].map((h) => (
+                      {["Self", "Manager", "Final"].map((h) => (
                         <th
                           key={h}
                           scope="col"
@@ -906,7 +906,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
               <table className="w-full">
                 <thead>
                   <tr>
-                    {["Period", "Self", "Lead", "Final", "Promotion", "Increment %"].map((h) => (
+                    {["Period", "Self", "Manager", "Final", "Promotion", "Increment %"].map((h) => (
                       <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
                         {h}
                       </th>

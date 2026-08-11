@@ -32,7 +32,7 @@ export function SummarySheet({ pack, standalone = false }: { pack: BatchPack; st
             <th style={{ width: "10%" }}>Code</th>
             <th>Department</th>
             <th style={{ width: "7%" }}>Self</th>
-            <th style={{ width: "7%" }}>Lead</th>
+            <th style={{ width: "7%" }}>Manager</th>
             <th style={{ width: "7%" }}>Final</th>
             <th style={{ width: "14%" }}>Promotion</th>
             <th style={{ width: "8%" }}>Incr. %</th>

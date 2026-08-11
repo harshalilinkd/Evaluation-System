@@ -139,7 +139,7 @@ export async function sendEvaluationLink(
     return cycleError(
       "NOT_FOUND",
       layer === "LEAD"
-        ? "That evaluation has no HOD assigned, so there is nobody to send a rating link to."
+        ? "That evaluation has no Manager assigned, so there is nobody to send a rating link to."
         : "That evaluation no longer exists.",
     );
   }
@@ -273,7 +273,7 @@ export async function sendBulk(
   if (evaluationIds.length === 0) return cycleError("NOTHING_SELECTED", "Nobody is selected.");
   if (channels.length === 0) return cycleError("NO_CHANNEL", "Choose WhatsApp, email, or both.");
   if (layers.length === 0) {
-    return cycleError("NO_RECIPIENT", "Choose whether to send to the employee, the HOD, or both.");
+    return cycleError("NO_RECIPIENT", "Choose whether to send to the employee, the Manager, or both.");
   }
 
   const outcomes: SendOutcome[] = [];
@@ -397,7 +397,7 @@ function readableStatus(status: string): string {
     DRAFT: "Draft",
     CYCLE_ACTIVE: "Cycle active",
     SELF_SUBMITTED: "Self submitted",
-    LEAD_REVIEWED: "Lead reviewed",
+    LEAD_REVIEWED: "Manager reviewed",
     MD_FINALIZED: "MD finalized",
     CLOSED: "Closed",
   };

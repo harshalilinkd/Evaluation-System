@@ -88,7 +88,7 @@ export function SegmentedLegend({
 }) {
   const items = [
     { label: "Self submitted", value: self, dot: "bg-self" },
-    { label: "Lead reviewed", value: lead, dot: "bg-lead" },
+    { label: "Manager reviewed", value: lead, dot: "bg-lead" },
     { label: "MD finalised", value: final, dot: "bg-final" },
   ];
 

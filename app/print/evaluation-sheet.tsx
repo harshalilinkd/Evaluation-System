@@ -67,7 +67,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
             <td>Evaluation Period</td><td>{doc.meta.period}</td>
           </tr>
           <tr>
-            <td>Reporting Lead</td><td>{doc.meta.leadName ?? "—"}</td>
+            <td>Reporting Manager</td><td>{doc.meta.leadName ?? "—"}</td>
             <td>Date of Evaluation</td><td>{formatDate(doc.meta.evaluationDate)}</td>
           </tr>
         </tbody>
@@ -88,7 +88,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
           <h2>{SECTION_LABELS.KPI}</h2>
           <table className="print-table">
             <thead>
-              <tr><th style={{ width: "50%" }}>Measure</th><th>Employee</th><th>Lead</th></tr>
+              <tr><th style={{ width: "50%" }}>Measure</th><th>Employee</th><th>Manager</th></tr>
             </thead>
             <tbody>
               {doc.kpi.map((row) => (
@@ -113,7 +113,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
               <th style={{ width: "30%" }}>Criteria</th>
               <th style={{ width: "24%" }}>Description</th>
               <th style={{ width: "7%" }}>Self</th>
-              <th style={{ width: "7%" }}>Lead</th>
+              <th style={{ width: "7%" }}>Manager</th>
               <th style={{ width: "7%" }}>Final</th>
               <th>Remarks</th>
             </tr>
@@ -232,7 +232,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
           signature-ready. */}
       <div className="print-signatures">
         {[
-          { who: "Reporting Lead", name: doc.meta.leadName },
+          { who: "Reporting Manager", name: doc.meta.leadName },
           { who: "HR", name: null },
           { who: "Management", name: null },
         ].map((cell) => (

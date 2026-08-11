@@ -52,6 +52,7 @@ import { ROLE_LABELS } from "@/components/appraise/nav-config";
 import { cn } from "@/lib/utils";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import type { Enums } from "@/types/database";
+import { TRACK_FORM_LABELS, TRACK_LABELS } from "@/lib/forms/labels";
 
 export type PersonRow = {
   id: string;
@@ -367,7 +368,7 @@ function ImportDialog({
             ))}
           </ul>
           <p className="mt-3 font-sans text-body-sm text-ink-muted">
-            Dates are DD-MM-YYYY. Department is matched by name or code. Reports-to is the HOD&rsquo;s
+            Dates are DD-MM-YYYY. Department is matched by name or code. Reports-to is the Manager&rsquo;s
             email address, so import heads of department before their teams — or leave it blank and
             set it afterwards.
           </p>
@@ -650,7 +651,7 @@ function AddPersonDialog({
               <Field
                 id="track"
                 label="Which form do they fill?"
-                hint="Staff answer the 0-5 evaluation. Shop floor answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams."
+                hint={`${TRACK_LABELS.STAFF} answer the 0-5 evaluation. ${TRACK_LABELS.WORKER} answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams.`}
               >
                 <select
                   id="track"
@@ -658,8 +659,11 @@ function AddPersonDialog({
                   defaultValue="STAFF"
                   className={SELECT_CLASS}
                 >
-                  <option value="STAFF">Staff - 0 to 5 evaluation</option>
-                  <option value="WORKER">Shop floor - three-tick sheet</option>
+                  {/* The VALUES are the enum and never move (§0.2) — they are
+                      stored on every profile and frozen into every launched
+                      evaluation. Only the labels change. */}
+                  <option value="STAFF">{TRACK_FORM_LABELS.STAFF}</option>
+                  <option value="WORKER">{TRACK_FORM_LABELS.WORKER}</option>
                 </select>
               </Field>
 
@@ -1029,7 +1033,7 @@ function EditPersonDialog({
               <Field
                 id="e_track"
                 label="Which form do they fill?"
-                hint="Staff answer the 0-5 evaluation. Shop floor answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams."
+                hint={`${TRACK_LABELS.STAFF} answer the 0-5 evaluation. ${TRACK_LABELS.WORKER} answer the three-tick sheet. This is not their department, because both kinds of people work in the same teams.`}
               >
                 <select
                   id="e_track"
@@ -1037,8 +1041,11 @@ function EditPersonDialog({
                   defaultValue={person.track ?? "STAFF"}
                   className={SELECT_CLASS}
                 >
-                  <option value="STAFF">Staff - 0 to 5 evaluation</option>
-                  <option value="WORKER">Shop floor - three-tick sheet</option>
+                  {/* The VALUES are the enum and never move (§0.2) — they are
+                      stored on every profile and frozen into every launched
+                      evaluation. Only the labels change. */}
+                  <option value="STAFF">{TRACK_FORM_LABELS.STAFF}</option>
+                  <option value="WORKER">{TRACK_FORM_LABELS.WORKER}</option>
                 </select>
               </Field>
 

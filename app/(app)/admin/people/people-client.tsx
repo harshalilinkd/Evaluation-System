@@ -23,6 +23,7 @@ import {
 import { Input } from "@/components/ui/input";
 import type { Enums } from "@/types/database";
 import { cn } from "@/lib/utils";
+import { TRACK_LABELS } from "@/lib/forms/labels";
 
 export type PersonRow = {
   id: string;
@@ -203,7 +204,7 @@ export function PeopleClient({
       },
       {
         id: "lead",
-        header: "Lead",
+        header: "Manager",
         size: 84,
         meta: { align: "right" },
         cell: ({ row }) => <Score value={row.original.lead} className={TIER_CLASSES.lead.numeral} />,
@@ -279,7 +280,7 @@ export function PeopleClient({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Tally label="Staff" value={counts.total} />
+          <Tally label={TRACK_LABELS.STAFF} value={counts.total} />
           <Tally label="In progress" value={counts.open} tone="self" />
           <Tally label="With HR" value={counts.withHr} tone="warning" />
           <Tally label="Completed" value={counts.done} tone="final" />

@@ -65,9 +65,9 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   selfEvaluationInvite: "Self-evaluation invite",
   selfEvaluationReminder: "Reminder",
   selfEvaluationOverdue: "Overdue notice",
-  leadReviewInvite: "HOD rating invite",
-  leadReviewReminder: "HOD rating reminder",
-  leadReviewOverdue: "HOD rating overdue",
+  leadReviewInvite: "Manager rating invite",
+  leadReviewReminder: "Manager rating reminder",
+  leadReviewOverdue: "Manager rating overdue",
   hrDueDigest: "What is due (to HR)",
   incrementsOverdue: "Increments overdue (to HR)",
   evaluationsOverdue: "Forms overdue (to HR)",
@@ -758,7 +758,7 @@ export function evaluationsOverdue(v: {
   const total = v.employees + v.leads;
   const parts = [
     v.employees > 0 ? `${v.employees} employee${v.employees === 1 ? "" : "s"}` : null,
-    v.leads > 0 ? `${v.leads} HOD${v.leads === 1 ? "" : "s"}` : null,
+    v.leads > 0 ? `${v.leads} Manager${v.leads === 1 ? "" : "s"}` : null,
   ].filter(Boolean);
 
   return {

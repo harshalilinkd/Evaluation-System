@@ -403,7 +403,7 @@ export function WorkerBoard({
               looking for a button that should not exist. -- */}
         <p className="font-sans text-body-sm text-ink-muted">
           You do not fill the sheet. Each supervisor completes it from{" "}
-          <span className="font-medium text-ink">Shop floor</span> in their own menu, and it reaches
+          <span className="font-medium text-ink">Production Team</span> in their own menu, and it reaches
           you when they submit. The worker fills nothing.
         </p>
       </div>

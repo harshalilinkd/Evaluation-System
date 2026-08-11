@@ -33,7 +33,7 @@ const TYPE_CARDS: ReadonlyArray<{ value: ResponseType; name: string; hint: strin
 const WHO = [
   { value: "EMPLOYEE_AND_LEAD", label: "Both" },
   { value: "EMPLOYEE_ONLY", label: "Employee" },
-  { value: "LEAD_ONLY", label: "Lead" },
+  { value: "LEAD_ONLY", label: "Manager" },
 ] as const;
 
 export function EditorPane({

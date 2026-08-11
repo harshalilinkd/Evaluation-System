@@ -834,7 +834,7 @@ function RowMenu({
           disabled={disabled || !row.sendable || !configured.whatsapp}
           onSelect={() => onSendLead()}
         >
-          Send the HOD&rsquo;s rating link
+          Send the Manager&rsquo;s rating link
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
@@ -873,9 +873,9 @@ function ConfirmSendDialog({
 
   const who =
     recipients.length === 2
-      ? "the employee and their HOD"
+      ? "the employee and their Manager"
       : recipients[0] === "LEAD"
-        ? "the HOD only"
+        ? "the Manager only"
         : "the employee only";
 
   /* -- A CEILING, AND NOW LABELLED AS ONE.
@@ -928,7 +928,7 @@ function ConfirmSendDialog({
           {(
             [
               { value: "SELF" as const, label: "The employee", hint: "Their own self-evaluation." },
-              { value: "LEAD" as const, label: "Their HOD", hint: "The rating they fill in about the employee." },
+              { value: "LEAD" as const, label: "Their Manager", hint: "The rating they fill in about the employee." },
             ]
           ).map((option) => {
             const checked = recipients.includes(option.value);

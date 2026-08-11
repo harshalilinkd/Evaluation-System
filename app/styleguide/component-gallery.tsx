@@ -71,7 +71,7 @@ export function ComponentGallery() {
           <Row label="Self · amber — the employee filling in their own form">
             <RatingScale tier="self" value={self} onChange={setSelf} label="Delivery Efficiency" />
           </Row>
-          <Row label="Lead · blue — the HOD rating a report">
+          <Row label="Manager · blue — the Manager rating a report">
             <RatingScale tier="lead" value={lead} onChange={setLead} label="Delivery Efficiency" />
           </Row>
           <Row label="Final · emerald — the MD override, with the lead's score as a ghost">
@@ -116,7 +116,7 @@ export function ComponentGallery() {
         </div>
 
         <SectionCard title="Every state">
-          <Row label="Lead · answered">
+          <Row label="Manager · answered">
             <TickScale tier="lead" value={tick} onChange={setTick} label="Work Quality" />
           </Row>
           <Row label="Unanswered">
@@ -151,7 +151,7 @@ export function ComponentGallery() {
           <Row label="Full legend — the collision view">
             <TierLegend />
           </Row>
-          <Row label="Subset — the HOD review screen has no emerald on it">
+          <Row label="Subset — the Manager review screen has no emerald on it">
             <TierLegend tiers={["self", "lead"]} />
           </Row>
         </SectionCard>
@@ -213,7 +213,7 @@ export function ComponentGallery() {
           <Row label="Three tiers side by side — the collision summary">
             <div className="grid gap-4 sm:grid-cols-3">
               <ScoreStat label="Self" value={3.8} tier="self" caption="of 5" />
-              <ScoreStat label="Lead" value={4.25} tier="lead" caption="of 5" />
+              <ScoreStat label="Manager" value={4.25} tier="lead" caption="of 5" />
               <ScoreStat label="Final" value={4.1} tier="final" caption="of 5" />
             </div>
           </Row>
@@ -312,14 +312,14 @@ export function ComponentGallery() {
               xKey="period"
               series={[
                 { key: "submitted", label: "Self submitted", color: "cyan" },
-                { key: "reviewed", label: "Lead reviewed", color: "pink" },
+                { key: "reviewed", label: "Manager reviewed", color: "pink" },
               ]}
             />
             <ChartLegend
               className="pt-2"
               items={[
                 { label: "Self submitted", fill: CHART_COLORS.cyan },
-                { label: "Lead reviewed", fill: CHART_COLORS.pink },
+                { label: "Manager reviewed", fill: CHART_COLORS.pink },
               ]}
             />
           </DashboardCard>

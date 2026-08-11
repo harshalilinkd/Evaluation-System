@@ -3,7 +3,7 @@
 /** Theme and rail state. No dependency — CLAUDE.md §17 forbids one outside §2. */
 
 import * as React from "react";
-import { Monitor, Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
+import { Moon, PanelLeftClose, PanelLeftOpen, Sun } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 export const THEME_STORAGE_KEY = "appraise.theme";
 export const RAIL_STORAGE_KEY = "appraise.rail";
 
-export type ThemeChoice = "light" | "dark" | "system";
+export type ThemeChoice = "light" | "dark";
 
 /**
  * Runs before first paint, from a <script> in the document head.
@@ -51,14 +51,11 @@ export type ThemeChoice = "light" | "dark" | "system";
       and the warning is legitimate — a script rendered inside a component is a
       script that will not run on a client navigation.
 
-      Both of its jobs are now done without JavaScript:
-
-        · SYSTEM PREFERENCE is a `@media (prefers-color-scheme: dark)` block in
-          globals.css. The browser has always been able to answer that; it was
-          never asked.
-        · AN EXPLICIT CHOICE is a cookie, read on the server, so <html> arrives
-          carrying the right `data-theme` and `data-rail`. Nothing has to run
-          before the paint because the markup is already correct.
+      Its job is now done without JavaScript: the choice is a cookie, read on
+      the server, so <html> arrives carrying the right `data-theme` and
+      `data-rail`. Nothing has to run before the paint because the markup is
+      already correct — and with no cookie the server writes "light", which is
+      the default this product opens on.
 
       No flash either way, which is what the script was defending — and it is a
       stronger guarantee than the script gave, because it also holds with
@@ -78,9 +75,7 @@ function writeCookie(name: string, value: string) {
 
 
 function applyTheme(choice: ThemeChoice) {
-  const dark =
-    choice === "dark" ||
-    (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const dark = choice === "dark";
 
   const root = document.documentElement;
   root.setAttribute("data-theme", dark ? "dark" : "light");
@@ -92,20 +87,29 @@ function applyTheme(choice: ThemeChoice) {
   }
   /* -- The cookie is what the SERVER reads on the next request, so the next
         page arrives already correct instead of being corrected after paint.
-        "system" is written as an absence: with no cookie the media query
-        decides, which is exactly what "system" means. -- */
-  if (choice === "system") writeCookie(THEME_STORAGE_KEY, "");
-  else writeCookie(THEME_STORAGE_KEY, dark ? "dark" : "light");
+        Always written now: with only two choices there is no state that has to
+        be expressed as an absence. -- */
+  writeCookie(THEME_STORAGE_KEY, dark ? "dark" : "light");
 }
 
 /* ---------- Theme toggle ---------- */
 
+/* -- SYSTEM IS GONE, and that follows from light being the default.
+      "System" was written as an ABSENCE — choosing it cleared the cookie so the
+      `prefers-color-scheme` media query decided. That worked precisely because
+      the server also omitted `data-theme` and let the media query win.
+
+      Now that the server writes "light" when no choice is stored, the two
+      disagree: the document would arrive light and the client would flip it to
+      dark a frame later on every navigation, for anybody whose machine is dark.
+      A visible flash on every page is worse than not offering the option.
+
+      So the choice is Light or Dark, and one of them is always stored. Somebody
+      whose laptop switches at sunset no longer takes the app with it — that is
+      the cost of the instruction, and it is a real one. -- */
 const CHOICES: ReadonlyArray<{ value: ThemeChoice; label: string; icon: typeof Sun }> = [
   { value: "light", label: "Light", icon: Sun },
   { value: "dark", label: "Dark", icon: Moon },
-  // Not a nicety: somebody whose laptop switches at sunset expects this to
-  // follow, and a product that ignores the OS reads as unfinished.
-  { value: "system", label: "System", icon: Monitor },
 ];
 
 /**
@@ -134,14 +138,19 @@ function emit() {
   for (const listener of listeners) listener();
 }
 
+/* -- No stored choice reads as LIGHT, matching what the server rendered.
+      Returning "system" here would make the toggle show one thing while the
+      document shows another. -- */
 function readTheme(): ThemeChoice {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+    if (stored === "light" || stored === "dark") return stored;
+    // A "system" left over from before the option was removed reads as light,
+    // which is what the server rendered for it.
   } catch {
     /* private mode */
   }
-  return "system";
+  return "light";
 }
 
 function readRail(): boolean {
@@ -150,25 +159,16 @@ function readRail(): boolean {
 
 // The server has no localStorage and no DOM. These match the defaults on <html>
 // in app/layout.tsx, so the first client render agrees with the server HTML.
-const serverTheme = (): ThemeChoice => "system";
+const serverTheme = (): ThemeChoice => "light";
 const serverRail = () => false;
 
 export function ThemeToggle({ className }: { className?: string }) {
   const choice = React.useSyncExternalStore(subscribe, readTheme, serverTheme);
 
-  // Follow the OS while the choice is "system" — a laptop that switches at
-  // sunset should take the app with it, without a reload. setState is never
-  // called here; applyTheme writes to the DOM, which is the external system
-  // this effect exists to synchronise.
-  React.useEffect(() => {
-    if (choice !== "system") return;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyTheme("system");
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, [choice]);
-
-  const Active = CHOICES.find((c) => c.value === choice)?.icon ?? Monitor;
+  /* -- The OS-following effect is gone with the option it existed for. It
+        listened for `prefers-color-scheme` changes while the choice was
+        "system"; nothing sets that any more. -- */
+  const Active = CHOICES.find((c) => c.value === choice)?.icon ?? Sun;
 
   return (
     <DropdownMenu>

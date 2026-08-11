@@ -23,7 +23,7 @@ export function LeadPerformanceTable({ rows }: { rows: LeadVariance[] }) {
   if (rows.length === 0) {
     return (
       <p className="font-sans text-body-sm text-ink-muted">
-        No HOD has rated anybody in this cycle yet.
+        No Manager has rated anybody in this cycle yet.
       </p>
     );
   }
@@ -90,8 +90,8 @@ export function LeadPerformanceTable({ rows }: { rows: LeadVariance[] }) {
 
       <p className="mt-3 px-2 font-sans text-body-sm text-ink-muted">
         <span className="font-medium text-ink">Leans</span> is the average of lead minus self —
-        positive means the HOD rated above the person&rsquo;s own view.{" "}
-        <span className="font-medium text-ink">Distance</span> ignores direction, so a HOD who is
+        positive means the Manager rated above the person&rsquo;s own view.{" "}
+        <span className="font-medium text-ink">Distance</span> ignores direction, so a Manager who is
         far from their team both ways still shows as far. Neither is a verdict.
       </p>
     </div>

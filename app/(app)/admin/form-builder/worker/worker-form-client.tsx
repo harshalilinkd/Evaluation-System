@@ -80,8 +80,8 @@ export function WorkerFormClient({
       <div className="flex items-start gap-2 rounded-card border-l-2 border-l-accent bg-accent-tint/40 px-4 py-3 text-body-sm text-ink">
         <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
         <span>
-          <span className="font-medium">This is the shop-floor form, and it is not the staff one.</span>{" "}
-          Workers are appraised on a three-tick sheet — Excellent, Satisfactory, Needs Improvement —
+          <span className="font-medium">This is the Production Team form, and it is not the Backend Team one.</span>{" "}
+          The Production Team is appraised on a three-tick sheet — Excellent, Satisfactory, Needs Improvement —
           filled in by their supervisor. It shares nothing with the staff form: no 0-5 ratings, no
           Job Specific Skills, no department mapping. Changing one never changes the other.
         </span>

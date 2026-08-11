@@ -25,9 +25,9 @@ const RECIPIENT_CHOICES: Array<{
   detail: string;
   value: InviteRecipients;
 }> = [
-  { id: "both", label: "Both", detail: "The employee and their HOD", value: ["SELF", "LEAD"] },
-  { id: "self", label: "Employee only", detail: "The HOD can be sent theirs later", value: ["SELF"] },
-  { id: "lead", label: "HOD only", detail: "The employee can be sent theirs later", value: ["LEAD"] },
+  { id: "both", label: "Both", detail: "The employee and their Manager", value: ["SELF", "LEAD"] },
+  { id: "self", label: "Employee only", detail: "The Manager can be sent theirs later", value: ["SELF"] },
+  { id: "lead", label: "Manager only", detail: "The employee can be sent theirs later", value: ["LEAD"] },
 ];
 
 export function StepReview({

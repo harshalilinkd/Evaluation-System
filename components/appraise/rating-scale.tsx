@@ -208,7 +208,7 @@ export function RatingScale({
                 {option.word}
               </span>
 
-              {isGhost ? <span className="sr-only">Lead&rsquo;s rating</span> : null}
+              {isGhost ? <span className="sr-only">Manager&rsquo;s rating</span> : null}
             </button>
           );
         })}

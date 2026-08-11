@@ -67,23 +67,26 @@ export const NAV: readonly NavGroup[] = [
               "Nobody on your team has submitted yet" for ever, which is true of
               a list they will never have a row in and reads as a broken screen.
 
-              Their queue is Shop floor, below. A supervisor who is ALSO a HOD
+              Their queue is Production Team, below. A supervisor who is ALSO a HOD
               still sees this one, on the HOD role. -- */
         roles: ["HOD", "HR_ADMIN", "MD"],
       },
       /* -- SHOP FLOOR. It did not exist, and the worker board's own standing
-            note told supervisors to use it — "both from Shop floor in their own
+            note told supervisors to use it — "both from Production Team in their own
             menu" — so the instruction pointed at a menu item nobody had. A
             supervisor had no route to the worker module at all; they landed on
             the staff team screen and found it empty.
 
             `/worker-team` is where they hand a worker the sheet and where they
             rate them afterwards. HR and the MD are deliberately NOT here: their
-            way in is Worker Appraisals under Administration, which is the whole
+            way in is Production Appraisals under Administration, which is the whole
             round rather than one supervisor's people. -- */
       {
         href: "/worker-team",
-        label: "Shop floor",
+        // Renamed from "Shop floor" at the owner's explicit instruction, along
+        // with the track itself. The ROUTE and the `worker_` schema keep their
+        // names — they are stored values and code, not something anybody reads.
+        label: "Production Team",
         icon: "team",
         roles: ["SUPERVISOR"],
       },
@@ -137,7 +140,10 @@ export const NAV: readonly NavGroup[] = [
             scale and different people. -- */
       {
         href: "/admin/worker-appraisals",
-        label: "Worker Appraisals",
+        // "Worker Appraisals" → "Production Appraisals". Deliberately NOT
+        // "Production Team": that is the supervisor's own queue above, and two
+        // sidebar entries reading the same words is worse than either alone.
+        label: "Production Appraisals",
         icon: "cycles",
         roles: ["HR_ADMIN", "MD"],
       },
@@ -192,7 +198,10 @@ export function meaningfulRoles(roles: readonly AppRole[]): AppRole[] {
 export const ROLE_LABELS: Record<AppRole, string> = {
   HR_ADMIN: "HR Admin",
   MD: "MD",
-  HOD: "HOD",
+  // "HOD" and "Lead" were the same person under two names, and the product used
+  // both. One word now. The ROLE VALUE stays HOD — it is in `user_roles`, in
+  // every RLS policy and in `is_lead_of_evaluation`.
+  HOD: "Manager",
   SUPERVISOR: "Supervisor",
   EMPLOYEE: "Employee",
 };

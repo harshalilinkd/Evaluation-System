@@ -284,7 +284,7 @@ export function ExtendDatesDialog({
      lead's date on save — see the submit below. */
   const fields = [
     ["self_due_on", "Self-evaluation due", cycle.selfDueOn],
-    ["lead_due_on", "Lead review due", cycle.leadDueOn],
+    ["lead_due_on", "Manager review due", cycle.leadDueOn],
   ] as const;
 
   return (

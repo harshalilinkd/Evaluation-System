@@ -106,8 +106,8 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
   { key: "department", header: "department", hint: "matched by name or code" },
   { key: "phone", header: "phone", hint: "9876543210" },
   { key: "designation", header: "designation", hint: "Senior Designer" },
-  { key: "reports_to", header: "reports_to", hint: "their HOD's email" },
-  { key: "roles", header: "roles", hint: "HOD / HR_ADMIN / MD, separated by spaces" },
+  { key: "reports_to", header: "reports_to", hint: "their Manager's email" },
+  { key: "roles", header: "roles", hint: "Manager / HR_ADMIN / MD, separated by spaces" },
   { key: "date_of_joining", header: "date_of_joining", hint: "DD-MM-YYYY" },
   { key: "employment_type", header: "employment_type", hint: "PERMANENT / PROBATION / CONTRACT / TRAINEE" },
   { key: "last_increment_date", header: "last_increment_date", hint: "DD-MM-YYYY" },
@@ -128,7 +128,7 @@ export function importTemplate(): string {
     "Design",
     "9876543210",
     "Senior Designer",
-    "", // reports_to — blank on the example, since the HOD may not exist yet
+    "", // reports_to — blank on the example, since the Manager may not exist yet
     "",
     "01-04-2022",
     "PERMANENT",

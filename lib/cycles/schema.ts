@@ -49,7 +49,7 @@ export const DISCLOSURE_CHOICES: ReadonlyArray<{
   {
     value: "SCORE_ONLY",
     label: "Their own summary only",
-    hint: "Their own ratings and their own written answers, played back. Nothing from their HOD.",
+    hint: "Their own ratings and their own written answers, played back. Nothing from their Manager.",
   },
   {
     value: "SCORE_AND_DECISION",

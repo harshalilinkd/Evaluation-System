@@ -170,7 +170,7 @@ export default function StyleguidePage() {
               </span>
               <span className="inline-flex items-center gap-2 rounded-pill border border-lead/40 bg-lead-tint px-3 py-1">
                 <span className="h-2 w-2 rounded-pill bg-lead" aria-hidden />
-                <span className="type-label text-lead">Lead</span>
+                <span className="type-label text-lead">Manager</span>
               </span>
               <span className="inline-flex items-center gap-2 rounded-pill border border-final/40 bg-final-tint px-3 py-1">
                 <span className="h-2 w-2 rounded-pill bg-final" aria-hidden />
@@ -195,7 +195,7 @@ export default function StyleguidePage() {
           <div className="grid gap-6 card-surface p-6 sm:grid-cols-3">
             {[
               { label: "Self", value: "3.80", className: "text-self", tint: "bg-self-tint" },
-              { label: "Lead", value: "4.25", className: "text-lead", tint: "bg-lead-tint" },
+              { label: "Manager", value: "4.25", className: "text-lead", tint: "bg-lead-tint" },
               { label: "Final", value: "4.10", className: "text-final", tint: "bg-final-tint" },
             ].map((score) => (
               <div key={score.label} className={`rounded-control ${score.tint} p-4`}>

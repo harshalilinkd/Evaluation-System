@@ -10,7 +10,7 @@ import { requireAuth } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils/date";
 
-export const metadata: Metadata = { title: "Shop floor" };
+export const metadata: Metadata = { title: "Production Team" };
 
 export default async function Page() {
   const session = await requireAuth();
@@ -54,7 +54,7 @@ export default async function Page() {
   if (list.length === 0) {
     return (
       <EmptyState
-        title="Nothing on the shop floor right now"
+        title="Nothing for your team right now"
         body="When HR starts an appraisal round for your team, everybody in it appears here."
       />
     );
@@ -77,7 +77,7 @@ export default async function Page() {
       <header>
         <h1 className="flex items-center gap-2 text-display-sm font-semibold text-ink">
           <HardHat className="size-5 text-ink-muted" aria-hidden />
-          Shop floor
+          Production Team
         </h1>
         <p className="mt-1 font-sans text-body-sm text-ink-muted">
           {cycle?.name} · {cycle?.period_label}

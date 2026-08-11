@@ -184,7 +184,7 @@ export function CyclesClient({
       },
       {
         id: "lead",
-        header: "Lead in",
+        header: "Manager in",
         size: 84,
         meta: { align: "right" },
         cell: ({ row }) => <Count value={row.original.progress.lead} of={row.original.participants} />,
@@ -219,7 +219,7 @@ export function CyclesClient({
       },
       {
         accessorKey: "leadDueOn",
-        header: "Lead due",
+        header: "Manager due",
         size: 116,
         cell: ({ row }) => <GridCell value={dash(row.original.leadDueOn)} className="tabular" />,
       },

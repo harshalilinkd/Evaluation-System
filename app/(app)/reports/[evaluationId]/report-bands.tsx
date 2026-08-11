@@ -251,7 +251,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
         <figure className="relative px-6 py-5">
           <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-lead" />
           <figcaption>
-            <TierTag tier="lead">Lead average</TierTag>
+            <TierTag tier="lead">Manager average</TierTag>
           </figcaption>
           <p className="tabular mt-1 text-display-lg text-ink">{score(summary.leadOverall)}</p>
           <p className="font-sans text-body-sm text-ink-muted">
@@ -313,7 +313,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             {gapText(summary.overallGap)}
           </p>
           <p className="font-sans text-body-sm text-ink-muted">
-            Lead minus self.{" "}
+            Manager minus self.{" "}
             {summary.flaggedCount > 0
               ? `${summary.flaggedCount} question${summary.flaggedCount === 1 ? "" : "s"} flagged at ${summary.flagThreshold} or more.`
               : "Nothing flagged."}
@@ -334,7 +334,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   <TierTag tier="self">Self</TierTag>
                 </th>
                 <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
-                  <TierTag tier="lead">Lead</TierTag>
+                  <TierTag tier="lead">Manager</TierTag>
                 </th>
                 <th className="type-label px-6 py-3 text-right font-bold text-ink">Gap</th>
               </tr>
@@ -457,7 +457,7 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                       <TierTag tier="self">Self</TierTag>
                     </th>
                     <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
-                      <TierTag tier="lead">Lead</TierTag>
+                      <TierTag tier="lead">Manager</TierTag>
                     </th>
                     <th className="type-label px-5 py-3 text-right font-bold text-ink">Gap</th>
                   </tr>
@@ -656,7 +656,7 @@ export function MetaPanel({ report }: { report: EvaluationReport }) {
           </dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-ink-muted">Lead submitted</dt>
+          <dt className="text-ink-muted">Manager submitted</dt>
           <dd className="tabular text-ink">
             {meta.leadSkipped ? "Skipped" : meta.leadSubmittedAt ? formatDateTime(meta.leadSubmittedAt) : "—"}
           </dd>

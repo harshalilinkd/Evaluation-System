@@ -30,7 +30,7 @@ const NODES = [
   },
   {
     status: "LEAD_REVIEWED" as const,
-    internal: "Lead reviewed",
+    internal: "Manager reviewed",
     employee: "Under review",
     done: "bg-lead border-lead",
     ring: "ring-lead",

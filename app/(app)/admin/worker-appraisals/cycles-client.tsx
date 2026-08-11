@@ -89,7 +89,7 @@ export function WorkerCyclesClient({
               arrives expecting the staff cycle screen should learn that here
               rather than after starting a round. */}
           <p className="mt-1 max-w-prose font-sans text-body-sm text-ink-muted">
-            The shop-floor three-tick sheet. Separate from staff evaluations, and nothing is shared
+            The Production Team three-tick sheet. Separate from Backend Team evaluations, and nothing is shared
             between them. The worker and their supervisor tick the same sheet at the same time, and
             neither sees the other&rsquo;s answers.
           </p>
@@ -105,7 +105,7 @@ export function WorkerCyclesClient({
           title="No worker appraisals yet"
           body={
             workers.length === 0
-              ? "Nobody is on the shop-floor track. Set somebody's track to Worker in Settings, Users first."
+              ? "Nobody is on the Production Team yet. Set somebody's form to Production Team in Settings, Users first."
               : `${workers.length} ${workers.length === 1 ? "worker is" : "workers are"} ready to be appraised.`
           }
         />
@@ -331,7 +331,7 @@ export function StartRoundDialog({
                 id="wc_name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Shop floor Q3"
+                placeholder="Production Q3"
                 className="min-h-11"
               />
             </div>
@@ -402,8 +402,8 @@ export function StartRoundDialog({
               </p>
             ) : eligible.length === 0 ? (
               <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
-                Nobody is on the shop-floor track yet. Set somebody&rsquo;s form to{" "}
-                <span className="font-medium">Shop floor</span> in Settings, Users.
+                Nobody is on the Production Team yet. Set somebody&rsquo;s form to{" "}
+                <span className="font-medium">Production Team</span> in Settings, Users.
               </p>
             ) : (
               <div className="overflow-hidden rounded-card border border-rule">
@@ -415,7 +415,7 @@ export function StartRoundDialog({
                     }
                     aria-label={allChosen ? "Clear everyone" : "Choose everyone"}
                   />
-                  <span className="font-sans text-body-sm text-ink">Everyone on the shop floor</span>
+                  <span className="font-sans text-body-sm text-ink">Everyone on the Production Team</span>
                 </label>
 
                 <ul className="max-h-64 overflow-y-auto">
@@ -609,7 +609,7 @@ export function AddWorkersDialog({
 
         {available.length === 0 ? (
           <p className="py-6 text-center font-sans text-body-sm text-ink-muted">
-            Everybody on the shop floor is already in this round.
+            Everybody on the Production Team is already in this round.
           </p>
         ) : (
           <ul className="max-h-[50vh] space-y-1 overflow-y-auto py-1">
@@ -712,7 +712,7 @@ function BinRoundDialog({
         <DialogHeader>
           <DialogTitle>Move {cycle.name} to the recycle bin?</DialogTitle>
           <DialogDescription>
-            It disappears from this list, from the shop floor and from every
+            It disappears from this list, from the Production Team screens and from every
             supervisor&rsquo;s screen. Nothing inside it is deleted, and it can be
             restored from the recycle bin below.
           </DialogDescription>

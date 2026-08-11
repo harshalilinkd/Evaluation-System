@@ -357,7 +357,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
     blocking.push({
       code: "SELF_LED",
       message:
-        "Some people are recorded as their own HOD. Under blind rating nobody can rate themselves — assign a different rater.",
+        "Some people are recorded as their own Manager. Under blind rating nobody can rate themselves — assign a different rater.",
       subjects: selfLed.map((p) => p.name),
       href: `/admin/cycles/${cycleId}/edit`,
       hrefLabel: "Assign a rater",

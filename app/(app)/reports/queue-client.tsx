@@ -181,7 +181,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       },
       {
         id: "lead",
-        header: () => <TierHead tier="lead">Lead</TierHead>,
+        header: () => <TierHead tier="lead">Manager</TierHead>,
         size: 80,
         meta: { align: "right" },
         cell: ({ row }) => (
@@ -269,7 +269,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
                 >
                   <AlertTriangle className="size-3.5" aria-hidden />
                   <span className="sr-only">
-                    {row.original.selfSkipped ? "Self layer skipped." : "Lead layer skipped."}{" "}
+                    {row.original.selfSkipped ? "Self layer skipped." : "Manager layer skipped."}{" "}
                     {row.original.skipReason ?? ""}
                   </span>
                 </span>

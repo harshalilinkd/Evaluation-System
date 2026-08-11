@@ -138,7 +138,7 @@ export function GapChart({
                   active ? "opacity-100" : "opacity-0",
                 )}
               >
-                Self {row.self === null ? "—" : row.self.toFixed(2)} · Lead{" "}
+                Self {row.self === null ? "—" : row.self.toFixed(2)} · Manager{" "}
                 {row.lead === null ? "—" : row.lead.toFixed(2)}
               </p>
             </li>

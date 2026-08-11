@@ -627,7 +627,7 @@ function adminMetrics(analytics: Analytics): Metric[] {
       icon: <UserCheck className="size-4" />,
     },
     {
-      label: "HOD ratings in",
+      label: "Manager ratings in",
       value: leadIn,
       caption: `of ${total}`,
       share: share(leadIn),
@@ -891,12 +891,12 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                  a trend. This is the number somebody wanted anyway. */
               <PanelEmpty>
                 {timelineLast
-                  ? `${timelineLast.self} self-${timelineLast.self === 1 ? "evaluation" : "evaluations"} and ${timelineLast.lead} HOD ${timelineLast.lead === 1 ? "rating" : "ratings"} are in. The curve appears once submissions span several days.`
+                  ? `${timelineLast.self} self-${timelineLast.self === 1 ? "evaluation" : "evaluations"} and ${timelineLast.lead} Manager ${timelineLast.lead === 1 ? "rating" : "ratings"} are in. The curve appears once submissions span several days.`
                   : "The curve appears once submissions start arriving."}
               </PanelEmpty>
             ) : (
               <ChartFigure
-                caption="Cumulative self-evaluations and HOD ratings, by day"
+                caption="Cumulative self-evaluations and Manager ratings, by day"
                 rows={[...timeline].reverse()}
                 columns={[
                   { header: "Day", cell: (r) => formatDate(r.day) },
@@ -918,7 +918,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                   xKey="label"
                   series={[
                     { key: "self", label: "Self-evaluations", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "HOD ratings", color: TIER_CHART_COLORS.lead },
+                    { key: "lead", label: "Manager ratings", color: TIER_CHART_COLORS.lead },
                   ]}
                 />
               </ChartFigure>

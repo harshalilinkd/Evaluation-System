@@ -42,16 +42,27 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       /* -- READ FROM COOKIES ON THE SERVER, so the document arrives correct
             and nothing has to be corrected after paint.
 
-            `data-theme` is OMITTED when no choice is stored — that absence is
-            what lets the `prefers-color-scheme` block in globals.css decide,
-            which is precisely what "system" means. Writing "light" here would
-            override the media query and force every system-dark user light.
+            LIGHT IS THE DEFAULT, at the owner's instruction, and this reverses
+            what was here. `data-theme` used to be OMITTED with no stored
+            choice, so the `prefers-color-scheme` block in globals.css decided —
+            which is what "system" means, and it opened dark for anybody whose
+            machine is set that way.
+
+            The cost of the reversal, stated rather than glossed: somebody who
+            keeps their whole computer in dark mode now gets a light app until
+            they choose otherwise. That is the trade the instruction makes, and
+            the toggle is one press away — a stored choice still wins, in both
+            directions.
+
+            globals.css already supports it: the dark media block is guarded as
+            `:root:not([data-theme="light"])`, so writing "light" here excludes
+            it without any change to the stylesheet.
 
             `suppressHydrationWarning` is gone with the script that needed it:
             nothing rewrites these attributes before React sees them any more,
             so server and client agree by construction rather than by
             suppression. -- */
-      {...(theme === "dark" || theme === "light" ? { "data-theme": theme } : {})}
+      data-theme={theme === "dark" ? "dark" : "light"}
       data-rail={rail === "collapsed" ? "collapsed" : "open"}
     >
       {/* Background, ink, font and antialiasing are all set on `body` in

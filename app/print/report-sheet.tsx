@@ -69,7 +69,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <tr>
               <th>Section</th>
               <th>Self</th>
-              <th>Lead</th>
+              <th>Manager</th>
               <th>Gap</th>
             </tr>
           </thead>
@@ -126,7 +126,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <tr>
                 <th>Question</th>
                 <th>Self</th>
-                <th>Lead</th>
+                <th>Manager</th>
                 <th>Gap</th>
               </tr>
             </thead>
@@ -247,7 +247,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             </dd>
           </div>
           <div>
-            <dt>Lead submitted</dt>
+            <dt>Manager submitted</dt>
             <dd>
               {meta.leadSkipped
                 ? "Skipped"

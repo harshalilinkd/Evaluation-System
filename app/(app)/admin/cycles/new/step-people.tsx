@@ -299,7 +299,7 @@ export function StepPeople({
               <TableHead className="whitespace-nowrap">Last evaluated</TableHead>
               <TableHead className="whitespace-nowrap">Last increment</TableHead>
               <TableHead className="whitespace-nowrap">Next increment</TableHead>
-              <TableHead className="min-w-[11rem]">HOD who will rate them</TableHead>
+              <TableHead className="min-w-[11rem]">Manager who will rate them</TableHead>
               {/*
                 One column, not two. These were "Employee" and "HOD", each
                 holding nothing but a mail and a phone glyph — two headings
@@ -383,10 +383,10 @@ export function StepPeople({
                       value={row.leadId ?? ""}
                       onChange={(e) => patch(person.id, { leadId: e.target.value || null })}
                       disabled={!row.included}
-                      aria-label={`Lead for ${person.name}`}
+                      aria-label={`Manager for ${person.name}`}
                       className="h-11 w-full rounded-input border border-rule bg-surface px-2 text-body-sm text-ink disabled:opacity-50"
                     >
-                      <option value="">No HOD</option>
+                      <option value="">No Manager</option>
                       {/* The MD first, as the default alternative for somebody
                           with nobody above them — a department head still needs
                           a rater who is not themselves. */}
@@ -406,7 +406,7 @@ export function StepPeople({
                         ))}
                     </select>
                     {missingLead ? (
-                      <p className="mt-1 text-body-sm font-medium text-critical">Assign a HOD</p>
+                      <p className="mt-1 text-body-sm font-medium text-critical">Assign a Manager</p>
                     ) : selfRated ? (
                       <p className="mt-1 text-body-sm font-medium text-critical">
                         Needs a different rater — this person cannot rate themselves
@@ -442,7 +442,7 @@ export function StepPeople({
                           )}
                           {leadUnreachable ? (
                             <span className="text-[11px] font-medium text-critical">
-                              HOD unreachable
+                              Manager unreachable
                             </span>
                           ) : null}
                         </div>

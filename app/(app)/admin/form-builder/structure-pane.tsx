@@ -48,7 +48,7 @@ const TYPE_TAG: Record<string, string> = {
  */
 const WHO_TAG: Record<string, { short: string; title: string } | undefined> = {
   EMPLOYEE_ONLY: { short: "Employee", title: "Only the employee answers this" },
-  LEAD_ONLY: { short: "Lead", title: "Only the lead answers this" },
+  LEAD_ONLY: { short: "Manager", title: "Only the lead answers this" },
 };
 
 export function StructurePane({
@@ -487,7 +487,7 @@ export function StructurePane({
       >
         <div className="grid grid-cols-2 gap-2">
           <Stat icon={Users} label="Employee answers" value={estimate.employeeQuestions} />
-          <Stat icon={UserCog} label="Lead answers" value={estimate.leadQuestions} />
+          <Stat icon={UserCog} label="Manager answers" value={estimate.leadQuestions} />
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-white/20 pt-2">
           <span className="flex items-center gap-1.5 text-body-sm text-ink-invert/80">

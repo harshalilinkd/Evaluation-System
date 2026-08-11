@@ -312,7 +312,7 @@ export function BoardClient({
                     cap is the reason these are held, so the sentence says so
                     rather than looking like a failure. */}
                 {launchDispatch.queued > 0
-                  ? ` ${launchDispatch.queued} more ${launchDispatch.queued === 1 ? "goes" : "go"} out on tonight's sweep, so no HOD is buried at once.`
+                  ? ` ${launchDispatch.queued} more ${launchDispatch.queued === 1 ? "goes" : "go"} out on tonight's sweep, so no Manager is buried at once.`
                   : ""}
               </>
             ) : (
@@ -470,7 +470,7 @@ export function BoardClient({
             {(
               [
                 ["Self", board.cycle.selfDueOn],
-                ["Lead", board.cycle.leadDueOn],
+                ["Manager", board.cycle.leadDueOn],
                 // "MD" is gone: it now always equals the lead's date, so it was
                 // the same figure printed twice.
               ] as const

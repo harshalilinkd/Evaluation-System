@@ -992,7 +992,7 @@ export async function importUsers(
         name,
         ok: false,
         // Ordering is the usual cause, and it has a fix HR can act on.
-        error: `Nobody here has the email ${record.reports_to}. Import their HOD first, or leave this blank and set it afterwards.`,
+        error: `Nobody here has the email ${record.reports_to}. Import their Manager first, or leave this blank and set it afterwards.`,
       });
       return;
     }

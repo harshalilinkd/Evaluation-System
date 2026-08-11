@@ -540,7 +540,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
             </div>
             <p id="final_score_hint" className="font-sans text-body-sm text-ink-muted">
               Calculated as the mean of the employee&rsquo;s{" "}
-              {report.summary.selfOverall?.toFixed(2) ?? "—"} and their HOD&rsquo;s{" "}
+              {report.summary.selfOverall?.toFixed(2) ?? "—"} and their Manager&rsquo;s{" "}
               {report.summary.leadOverall?.toFixed(2) ?? "—"}. Confirm it, or change it to whatever
               you and the MD agreed. This is what the employee sees if the cycle discloses a score.
             </p>
