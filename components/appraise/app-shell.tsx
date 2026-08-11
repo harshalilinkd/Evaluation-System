@@ -8,12 +8,13 @@ import { Sidebar } from "@/components/appraise/sidebar";
 import { Topbar } from "@/components/appraise/topbar";
 import type { AppRole } from "@/components/appraise/nav-config";
 import type { Profile } from "@/lib/auth/roles";
+import { getMyNotifications } from "@/lib/notify/inapp";
 
 /**
  * A Server Component. It receives the already-fetched profile and roles rather
  * than fetching them, so the layout's guard and the shell share one query.
  */
-export function AppShell({
+export async function AppShell({
   profile,
   roles,
   children,
@@ -22,6 +23,17 @@ export function AppShell({
   roles: readonly AppRole[];
   children: ReactNode;
 }) {
+  /* -- The bell's first paint, read here rather than on mount --
+     One indexed single-table read (profile_id, created_at desc), scoped by RLS
+     to this person's own rows. It buys two things a client-side mount fetch
+     cannot: an accurate unread count in the first frame instead of a badge that
+     pops in a moment later, and no `setState` in an effect body — the React
+     compiler rule this codebase has now tripped over six times.
+
+     The deleted cycle selector is the cautionary case and this is not it: that
+     query filled a control nothing consumed. This one IS the control. */
+  const notifications = await getMyNotifications();
+
   return (
     <div className="flex min-h-dvh">
       <Sidebar roles={roles} />
@@ -31,6 +43,7 @@ export function AppShell({
           roles={roles}
           userName={profile.full_name}
           userEmail={profile.email}
+          notifications={notifications}
           onSignOut={signOut}
         />
 

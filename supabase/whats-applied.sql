@@ -116,7 +116,23 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0057_worker_submit',         'function',    'submit_worker_layer',
      'CRITICAL. Without it a submitted worker sheet is never RECORDED as submitted — the answers save and HR''s board stays on "Not yet".'),
   ('0058_worker_submit_backfill','none',        'repair — nothing to detect',
-     'Repairs sheets submitted BEFORE 0057: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0057.')
+     'Repairs sheets submitted BEFORE 0057: locked, yet showing as "Not yet". Re-running it is harmless. Apply it once after 0057.'),
+  ('0018_retire_old_departments','dept_retired','the five P1 placeholder departments',
+     'Superseded by 0019 and harmless either way. Listed so the set below is complete.'),
+  ('0019_departments_reconcile','dept_named',  'the ten real departments',
+     'Without it the department picker still offers fifteen, three of which cannot be launched because they have no Job Specific Skills questions.'),
+  ('0024_one_joining_date',     'one_doj',     'one joining date, on profiles',
+     'Without it there are TWO joining dates written by different screens. The scorecard and the printed pack read the one no form ever sets, so it is permanently blank.'),
+  ('0025_reassign_lead_blind',  'reassign_ok', 'reassign_evaluation_lead is blind-rating aware',
+     'CRITICAL. Without it HR cannot reassign a lead on ANY live evaluation: the guard names four retired statuses and every live row is at OPEN, so it refuses every one with a self-contradictory message.'),
+  ('0045_md_may_close_increment','md_close_inc','the MD may close an INCREMENT',
+     'Without it confirm_increment rolls back at its last step, so a confirmed increment is not saved at all.'),
+  ('0049_rating_distribution_settled','view',   'v_rating_distribution',
+     'Without it the dashboard rating-band panel is empty.'),
+  ('0059_app_notifications',    'table',        'app_notifications',
+     'The notification bell. Without it the bell is empty for everybody, and every authenticated page load asks for a table that is not there.'),
+  ('0060_hr_close_increment_really','hr_close_inc','HR may approve and close an INCREMENT — FOR REAL',
+     'Applies what 0056 reported it had applied. 0056''s guard matched the UNPATCHED function, so it skipped its own work and said "already widened". Same row as 0056 above: if that says false, 0056 never took effect and this is the migration that fixes it.')
 )
 select
   e.migration,
@@ -147,6 +163,26 @@ select
     -- A pure data repair creates no object, so there is nothing to look for.
     -- Reported rather than guessed at: a check that always says "missing" is
     -- worse than one that says it cannot tell.
+    when 'dept_retired' then not exists (
+      select 1 from public.departments where code in ('MIS','SALES','OPS','DESIGNS','ACCOUNTS') and is_active)
+    when 'dept_named' then exists (
+      select 1 from public.departments where name = 'Data Analyst' and is_active)
+    -- 0024 DROPS a column, so its evidence is an absence.
+    when 'one_doj' then not exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'employment_records'
+         and column_name = 'date_of_joining')
+    -- The retired statuses gone from the guard is what 0025 does.
+    when 'reassign_ok' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'reassign_evaluation_lead'
+         and pg_get_functiondef(p.oid) not like '%CYCLE_ACTIVE%')
+    -- One contiguous literal, deliberately: the loose multi-%% LIKE next door is
+    -- what made 0056 report a success it had not achieved. See 0060.
+    when 'md_close_inc' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
+         and pg_get_functiondef(p.oid) like '%INTERVIEW_DONE%is_md() or v_is_system%')
     when 'none' then null
     when 'policy' then exists (
       select 1 from pg_policies
@@ -169,10 +205,18 @@ select
       select 1 from public.questions
        where id = md5('linkd.q.salary_expectation_annual')::uuid
          and text like '%annual CTC%')
+    -- A REGEX ANCHORED TO THE ARM, not a LIKE over the whole body.
+    --
+    -- This read `like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%'`,
+    -- which asks only that the three fragments appear in that order ANYWHERE.
+    -- 0021 already put all three into unrelated arms of the same CASE, so the
+    -- pattern matched the UNPATCHED function and this row reported 0056 as
+    -- applied when it was not — the same flaw 0056's own guard had, which is
+    -- why the failure was invisible from every angle. See 0060.
     when 'hr_close_inc' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
-         and pg_get_functiondef(p.oid) like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%')
+         and pg_get_functiondef(p.oid) ~ 'when p_from_status = ''HR_APPROVED'' and p_to_status = ''MD_REVIEWED''\s+then\s+public\.is_hr\(\) or public\.is_md\(\)')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'

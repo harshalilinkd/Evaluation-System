@@ -5,6 +5,7 @@ import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
+import { raiseInAppNotification } from "@/lib/notify/inapp";
 import {
   evaluationClosed,
   selfEvaluationInvite,
@@ -95,6 +96,19 @@ async function deliver(opts: {
   if (opts.email) channels.push({ channel: "EMAIL", recipient: opts.email });
 
   if (channels.length === 0) {
+    // THE BELL STILL REACHES THEM, and this is the case that most justifies
+    // having one. Somebody with no phone number and no email address gets no
+    // outbound message at all, and this branch returns before
+    // `sendNotification` — where the raise normally happens — is ever called.
+    // They are signed in to the product; the bell is the one channel that does
+    // not need a contact detail to work. It is currently a hard blocker on a
+    // HOD (PR-9); this does not lift that, but it does mean the person is told.
+    await raiseInAppNotification({
+      profileId: opts.profileId,
+      template: opts.template,
+      evaluationId: opts.evaluationId,
+    });
+
     return {
       sent: 0,
       failed: 0,

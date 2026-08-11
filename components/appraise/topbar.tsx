@@ -4,8 +4,10 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, Menu, Search } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 
+import { NotificationBell } from "@/components/appraise/notification-bell";
+import type { NotificationFeed } from "@/lib/notify/inapp";
 import { RailToggle, ThemeToggle } from "@/components/appraise/theme";
 
 import { cn } from "@/lib/utils";
@@ -35,11 +37,14 @@ export function Topbar({
   roles,
   userName,
   userEmail,
+  notifications,
   onSignOut,
 }: {
   roles: readonly AppRole[];
   userName: string;
   userEmail: string;
+  /** Read server-side by the shell, so the badge is right in the first frame. */
+  notifications: NotificationFeed;
   /** A form action — sign-out must clear an httpOnly cookie server-side. */
   onSignOut: () => void;
 }) {
@@ -105,19 +110,17 @@ export function Topbar({
       <div className="flex items-center gap-1">
         <ThemeToggle />
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative min-h-11 rounded-input"
-          aria-label="Notifications"
-        >
-          <Bell className="size-5" aria-hidden />
-          {/* A coloured unread dot (§6). Static until the notification log lands. */}
-          <span
-            aria-hidden
-            className="absolute right-2 top-2 size-2 rounded-pill bg-accent-pink ring-2 ring-background"
-          />
-        </Button>
+        {/* -- Was a Button with a hardcoded dot and nothing behind it, marked
+              "static until the notification log lands". It has landed.
+
+              The dot it replaces was `bg-accent-pink`, which is #EC4899 — the
+              same value as `--lead`. §13.1 reserves that hue for the HOD layer
+              and says it is "never used decoratively for anything else", so the
+              placeholder was a quiet violation of the one rule the design
+              system calls sacred. The count is `--primary`, following P30-4:
+              the token carries the role, and "there is something here" is not a
+              tier. -- */}
+        <NotificationBell initial={notifications} />
 
         {/*
           THE CYCLE SELECTOR WAS HERE, AND IS DELETED.

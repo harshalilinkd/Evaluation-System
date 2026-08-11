@@ -125,17 +125,31 @@ export default async function Page({
     redirect(`/my-evaluation/${only.id}`);
   }
 
-  const current = open[0];
-  const currentCycle = current ? byCycle.get(current.cycle_id) : undefined;
+  /* -- EVERY open evaluation, not the first one.
+
+        This page used to read `const current = open[0]` and render a single
+        hero from it. With two cycles open at once — which the product has
+        supported since AMEND-2 gave a cycle a TYPE, and EVALUATION and
+        INCREMENT differ only in how they end — the second was fetched, passed
+        RLS, and was then dropped on the floor by the interface. There was no
+        link to it anywhere: the employee could not reach their own appraisal.
+
+        Reported from a real device: an Evaluation cycle and an Increment cycle
+        were both launched, and only the Increment appeared.
+
+        `open` is already ordered newest-first by the query above, so the most
+        recent sits at the top without a second sort. A row whose cycle cannot
+        be read is dropped rather than rendered as a card with no title —
+        that is the blank-hero case the old comment describes, now handled per
+        row instead of only for the first one. -- */
+  const openCards = open.flatMap((row) => {
+    const cycle = byCycle.get(row.cycle_id);
+    return cycle ? [{ row, cycle }] : [];
+  });
 
   /* -- One exit for every case with nothing to show, rather than falling
-        through to a heading with no content under it.
-
-        `current && !currentCycle` is the second way this page went blank: the
-        evaluation is readable but its cycle row is not, so the hero had nothing
-        to title itself with and rendered null. Rare, but it produced exactly
-        the same silent dead end. -- */
-  const hasSomethingToShow = (current && currentCycle) || past.length > 0;
+        through to a heading with no content under it. -- */
+  const hasSomethingToShow = openCards.length > 0 || past.length > 0;
 
   if (!hasSomethingToShow) {
     return (
@@ -158,30 +172,35 @@ export default async function Page({
     <div className="mx-auto w-full max-w-[780px] space-y-6">
       <h1 className="text-display-md text-ink">Your evaluations</h1>
 
-      {current && currentCycle ? (
+      {/* One card per open evaluation. With a single one this is exactly what
+          the page rendered before; with two it is the fix. The label stops
+          claiming there is one "current" cycle when there are two — a heading
+          that says Current cycle above two cards is worse than no heading. */}
+      {openCards.map(({ row, cycle }, index) => (
         <HeroCard
-          label="Current cycle"
-          value={currentCycle.name}
-          caption={`${currentCycle.period_label} · due ${formatDate(currentCycle.self_due_on)}`}
+          key={row.id}
+          label={openCards.length > 1 ? "Open for you" : "Current cycle"}
+          value={cycle.name}
+          caption={`${cycle.period_label} · due ${formatDate(cycle.self_due_on)}`}
           action={
             <Button asChild className="min-h-11">
-              <Link href={`/my-evaluation/${current.id}`}>
+              <Link href={`/my-evaluation/${row.id}`}>
                 {/* They can still edit only while the record is OPEN and their own
                     layer is unsubmitted — the button says which. */}
-                {current.status === "OPEN" && !current.self_submitted_at ? "Continue" : "View"}
+                {row.status === "OPEN" && !row.self_submitted_at ? "Continue" : "View"}
                 <ArrowRight className="size-4" aria-hidden />
               </Link>
             </Button>
           }
-          enterIndex={0}
+          enterIndex={index}
         >
           {/* §8 / §13: an employee never sees a raw status enum. StatusChip's
               employee vocabulary collapses the middle of the pipeline into
               "Under review" — whether the MD has finalised is not their
               business until the result is disclosed. */}
-          <StatusChip status={current.status} audience="employee" />
+          <StatusChip status={row.status} audience="employee" />
         </HeroCard>
-      ) : null}
+      ))}
 
       {past.length > 0 ? (
         <section className="card-surface p-5">

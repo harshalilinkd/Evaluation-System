@@ -4377,3 +4377,116 @@ EMPLOYEE` and made a correct result look wrong. And an assertion tested
 **Regression: p5 73/0, p8 42/0, p23 42/0.** p7 (5) and p19c (1) fail identically
 with this change stashed — they belong to the concurrent worker-appraisal,
 scorecard and salary-form work. Typecheck 0, lint 0, build clean.
+
+---
+
+### NOTIFY-1 — The bell made real, with a sound
+
+Migration `0059_app_notifications.sql`. `lib/notify/{inapp,inapp-actions}.ts`,
+`components/appraise/notification-bell.tsx`, and one call each in `dispatch.ts`
+and `events.ts`.
+
+**NEW SCHEMA, AT THE OWNER'S EXPLICIT INSTRUCTION** ("users should get
+notifications with sound"). §0.4 forbids inventing a table without one, so it is
+named here rather than absorbed.
+
+The bell has been chrome since UI-REFRESH — a hardcoded dot with no dropdown,
+carrying the comment "static until the notification log lands".
+
+| # | Decision | Why |
+|---|---|---|
+| N1-1 | **`app_notifications` is a new table, not a view over `notifications_log`** | That table is the OUTBOUND delivery record: one row per WhatsApp or email *attempt*, keyed by phone number or address, readable by administrators, and the evidence a send happened (P11-6). This is somebody's inbox — keyed by profile, readable by that person alone, carrying no delivery meaning. Reusing one for the other would either hand every employee the company's whole message log, or lose every event that raises no outbound message. |
+| N1-2 | **The raise hangs off `sendNotification`, not off screens** | PW-1's reasoning, one layer down. It is the single chokepoint every message passes through (§10), so every event that notifies anybody today — and every one added later — lights the bell without its author knowing this module exists. It also inherits the two rules that already live there: the pause switch (P17) and FIX-13's MD suppression. Both deliberately — a "pause" that still lit 47 bells is a brake that does not stop the vehicle, and one answer to "does the MD hear about this" is better than two. |
+| N1-3 | **One fixed sentence per template, with NOTHING interpolated** | The §5 decision of the phase. A notification body lands on a phone in a meeting and on a screen being shared — places with no access control of their own. So the risk is not the wrong recipient (that is decided upstream, and correctly) but the right one being told what four migrations exist to withhold: a score (§11), a salary figure, or the other side's state. With no expression in the string, none can appear — not "the wording was reviewed", but *there is nothing to review*. The cost is real and stated: the bell cannot name the cycle or the due date. The outbound messages, which reach somebody not already signed in, still do. |
+| N1-4 | **The destination is derived from the template, not passed in** | The template IS the audience: `selfEvaluationInvite` only ever goes to the evaluatee, `leadReviewInvite` only ever to their HOD. So `IN_APP_PATH` is a `Record<TemplateKey, …>`, and a new template without a destination is a compile error rather than a bell entry that goes nowhere. Fifteen call sites changed by zero lines. |
+| N1-5 | **`evaluationClosed` links to `/scorecard`, never to the report** | The report carries both sides together and §9 does not give the employee it. The one link on the one notification an employee receives at the end had to be checked rather than assumed. |
+| N1-6 | One entry per person per template per evaluation per **day** | A unique index, load-bearing twice. `deliver` calls `sendNotification` once per CHANNEL, so anybody reachable on both would otherwise collect two identical entries for one event; and a re-run of the nightly sweep must not stack a second copy of the same chase. It is the dedupe rule P17-4 and P22-17 already apply to outbound, keyed the same way, so the two agree. Dated rather than absolute, so tomorrow's reminder is a new entry. |
+| N1-7 | `created_on` is a **DEFAULT, not a generated column** | Caught by reading rather than by running, since no test database exists here. `generated always as (…) stored` requires an IMMUTABLE expression, and `at time zone` on a timestamptz is STABLE — the timezone database can change under it. Postgres refuses the table outright. A default carries no such requirement and is written once, which is the same guarantee for this purpose. |
+| N1-8 | Only `read_at` may change, enforced by a **trigger** | RLS is row-level: the UPDATE policy admits the row and with it every column, so without this somebody could rewrite the title and body of their own notification. Harmless in itself, but a feed whose contents the reader can edit is not a record of what they were told. Same column-split device as 0029 and 0030. |
+| N1-9 | No INSERT policy and no DELETE policy, for anyone | The write path is `raise_app_notification`, SECURITY DEFINER — the pattern of `queue_notification` (0010) and `launch_cycle` (0009). Absence is the enforcement (P5-9). Read is the dismissal: a bell that can be emptied is a record that can be made never to have existed. |
+| N1-10 | **Not readable by HR or the MD**, deliberately | There is no administrative use for reading somebody else's bell — `notifications_log` is where an administrator asks whether a message was delivered. And a feed an administrator can read is a feed that has to be reviewed for what it discloses about its owner. |
+| N1-11 | The chime is **synthesised, not a file** | §2 pins the dependencies and §17 forbids adding to them, but the better reason is that a binary in `public/` is a request on every page load for something most sessions never play. Two sine tones with an envelope — the envelope because an oscillator switched on and off clicks at both ends, and the click is the part that sounds cheap. Quiet, and 280ms: this fires while somebody is mid-sentence in a salary interview, so it has to read as a tap on the shoulder. DESIGN.md §5's "motion confirms, never performs", applied to volume. |
+| N1-12 | It chimes for what is **NEW since the last poll**, never for what is unread | Somebody who leaves a notification unread must not be chimed at every 45 seconds for the rest of the day. That is how a sound stops being a signal and becomes a reason to mute the tab. |
+| N1-13 | Sound is a setting, on by default, read through `useSyncExternalStore` | The owner asked for sound, so silence is the opt-in. The value lives in localStorage and is read the way this codebase settled on for browser state (UI2-11, PC-7, F4-5) — a copy in component state would give the trigger and the menu item each their own stale version. Toggling it on plays the chime, because that *is* the setting. |
+| N1-14 | **The first paint is fed from the server** | `AppShell` reads the feed and passes it down. Two things follow: the badge is right in the first frame instead of popping in after the first poll, and there is no `setState` in an effect body — the React compiler rule this log has now recorded seven times. The deleted cycle selector is the cautionary case and this is not it: that query filled a control nothing consumed; this one IS the control. |
+| N1-15 | The bell still reaches somebody with **no phone and no email** | The case that most justifies having one. `deliver` returns before `sendNotification` when there is no channel, so the raise is called in that branch too — safe to call twice because N1-6's index makes it idempotent. It does not lift PR-9's launch block on a contactless HOD, but it does mean the person is told. |
+| N1-16 | **The placeholder dot was a §13.1 violation** | It was `bg-accent-pink`, which is #EC4899 — the same value as `--lead`. §13.1 reserves that hue for the HOD layer and says it is "never used decoratively for anything else". The count is `--primary`, following P30-4: the token carries the role, and "there is something here" is not a tier. |
+| N1-17 | Unread carries a dot, the title's weight, an `sr-only` word, and the count in the button's accessible name | §13.8 — never colour alone, and a bell announcing "Notifications" with four waiting is announcing half the control. |
+
+**Two lint rules caught real mistakes, both already in this log.** `setState` in
+an effect body — fixed by N1-14, which is the better design anyway — and a ref
+assigned during render (F6-3). The second was a mirror of the mute setting;
+removing it left the store as the single source, which is what UI2-11 says it
+should have been.
+
+**Not verified against a database.** The suites live outside the repository
+(§18 STATUS) and no PGlite is installed here, so 0059 was reviewed rather than
+executed. That is how N1-7 was found, and it is not a substitute for running it.
+Typecheck 0 errors, lint 0 errors, build clean.
+
+**Apply order.** `0059` is unapplied and depends on nothing later than 0001.
+Until it is applied the bell is empty for everybody — `getMyNotifications`
+returns an empty feed on error rather than taking the page down, so nothing
+breaks, but nothing arrives either. `supabase/whats-applied.sql` gained a row.
+
+**Not in this phase.** Nothing prunes the table, so it grows one row per person
+per event for ever; a retention sweep belongs with the cron work. And the feed
+is polled every 45 seconds rather than pushed — Supabase Realtime would need
+replication enabled on the table, which is a dashboard setting rather than a
+migration, and four migrations are already waiting to be applied.
+
+---
+
+### FIX-15 — Five bugs found on real phones, and the diagnostic that was lying
+
+Migration `0060_hr_close_increment_really.sql`. Repairs across
+`my-evaluation`, `team`, `worker-appraisal`, `admin/worker-appraisals`,
+`lib/supabase/middleware.ts`, `lib/worker/{form,cycle-actions}.ts` and
+`supabase/whats-applied.sql`.
+
+**Every one of these was found by the owner using the product on a handset.**
+None was found by a suite. That is the fourth time this log has had to record
+it, and it is the reason §13.2 puts the phone first rather than second.
+
+Diagnosed by twelve parallel agents — six tracing one failure path each, six
+adversarially trying to refute what the first six claimed — then one synthesis
+pass. The refutation half earned its place: it corrected the deployed line
+number for the `data-grid` defect and killed a confident claim that 0057 was
+unapplied, which the owner's own database contradicted.
+
+| # | Decision | Why |
+|---|---|---|
+| F15-1 | **The mobile Submit button was rendered the whole time, underneath the navigation** | The form's action bar is `fixed bottom-0 z-20`; `BottomNav` is `fixed bottom-0 z-40`. No ancestor creates a stacking context, so the two compete in the root one and the nav wins outright. An employee could answer all thirty-one questions and had no way to submit. It survived review because it only reproduces below `lg`, where the nav exists at all. |
+| F15-2 | Offset by `--bottom-nav-h`, **not raised to `z-50`** | Raising it fixes the button by burying the navigation, and somebody who cannot leave a form is no better off than somebody who cannot submit one. Both bars now sit above the nav and both remain usable. |
+| F15-3 | The error banner is why this read as ONE fault | It sits at `bottom-16`, which clears the 57px nav, so the screen showed a save failure and no button. Two independent bugs wearing one appearance. It now offsets from the bar, which offsets from the nav. |
+| F15-4 | **"An unexpected response was received from the server" is not our text** | It is Next.js's internal Server Action transport error, thrown when the POST gets a real HTTP response that is not `text/x-component`. It was being printed verbatim into an employee's save banner as though it were the server's own explanation. Every failure the action itself can produce comes back as `{ ok: false, error }` — so a THROWN error is always transport, and never carries a sentence anybody can act on. |
+| F15-5 | Two things produced it, and both are guarded now | `getUser()` in the middleware is an unguarded network call on every autosave — a 4G blip made it a 500, which is an HTML page. And a session lapsing mid-form made it a 307 to `/login`, which is also an HTML page. Filling in thirty-one questions takes long enough for both. |
+| F15-6 | **A Server Action is never redirected from middleware** | Detected by the `next-action` header. The request is let through and the action's own `getCurrentProfile()` answers with the typed failure it already carried — "Please sign in again." §0.7: fail loudly, not incomprehensibly. |
+| F15-7 | Failing open on a network error is safe here, and is not a hole | §9 requires every page and every action to re-check the role and the guard itself, and they all do. Middleware is the first of three layers, never the only one, so a blip degrades to "the guards downstream decide" rather than to a 500 nobody can read. |
+| F15-8 | **`open[0]` and `.limit(1)` are the same bug in two places** | `/my-evaluation` took the first open evaluation as "current" and dropped the rest with no list, no count and no link. `getTeamQueue` hard-selected one ACTIVE cycle and filtered every downstream query by it, so a second cycle's ratings were excluded at the DATABASE level, not merely unrendered. Both were correct when written and stopped being correct at AMEND-2, which gave a cycle a TYPE: EVALUATION and INCREMENT run concurrently. |
+| F15-9 | The old comment named the reason it was wrong | "A lead reviews one cycle at a time, and showing two at once would put the same person on screen twice with different deadlines." The same person appearing twice with two deadlines is not a display fault — it is two ratings that are genuinely both owed. |
+| F15-10 | The lead's due date moved **into** the row loop | It was hoisted out when there could only be one cycle. With two, one shared deadline marks rows overdue against the wrong cycle's date — and 0022 gave each evaluation its own dates precisely because deadlines vary within a cycle. |
+| F15-11 | `.maybeSingle()` on the lead's own evaluation would have **errored**, not merely picked wrongly | PostgREST refuses a single-row request matching more than one row, so the "finish your own form" banner would have vanished entirely the moment a second cycle launched. |
+| F15-12 | The `/team` empty state was a blindness leak **and** simply wrong | "Nobody on your team has submitted yet" is a statement about the employees' side, which §5 withholds from the lead — and rows appear from launch regardless, so the state actually means "you have no reports in this cycle". |
+| F15-13 | **The worker module was stuck on one round by two changes that each delegated to the other** | The list page redirected into the newest cycle because "the board carries the round switcher"; the board then removed its picker, at the owner's instruction, because "Worker Appraisals in the sidebar IS that list". Neither did it. The picker stays gone (§0.2 — its removal was instructed); the list came back, because that is what the board was told it could rely on. |
+| F15-14 | **A PostgREST `.update()` matching zero rows is not an error** | It succeeds, having done nothing. So when RLS refused the supervisor's write, `saveWorkerSheet` returned `ok: true` and the sheet printed "saved HH:MM" over ticks that were never stored. That is the worst shape a save bug can take: the screen states the opposite of what happened, so nobody reports it until the appraisal is opened later and is empty. `.select()` makes the update report what it touched. |
+| F15-15 | A salary refusal made **Submit a permanent no-op** | The ticks saved, then the salary call returned `false`, so `setDirty(false)` never ran and `if (dirty && !(await persist())) return;` killed the button for the life of the page. It fires easily: the server refuses a new figure below the old one, so typing the new salary first is enough — and §5 puts the salary block on every supervisor's sheet whether or not they may write it. Two writes, two tables, two policies, so two outcomes. |
+| F15-16 | The launch reported success having opened **nobody** | Every per-person insert failure fell into a `continue` meant for duplicates, the cycle was marked ACTIVE and `opened: 0` was returned to a caller that never read it. Only 23505 is genuinely a re-run; everything else is now collected, and a round that opened nobody stays DRAFT so it can be launched again rather than becoming a dead end (§13.4). |
+| F15-17 | **0056 was a no-op on every database it ran on, and said so cheerfully** | Its guard was `like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%'`, and `LIKE` asks only that the fragments appear IN ORDER SOMEWHERE. 0021 had already put all three into three unrelated arms of the same CASE. So it matched the UNPATCHED function, skipped its own work, and printed "§8 arm already widened". Its own verification used the same pattern and passed. `whats-applied.sql` used the same pattern and reported it applied. **Three checks, one flaw, shared — so the failure was invisible from every angle anybody would think to look from.** |
+| F15-18 | 0060 anchors to the ARM, not the body | A regex requiring the predicate immediately after that specific `when`. The lesson generalises: a detector for "was this patch applied" must match the thing the patch WROTE, not a set of tokens the file happens to contain. |
+| F15-19 | **Completing 0056 removes the second pair of eyes on a pay decision** | AMEND-2 restored the HR/MD split for exactly that reason, and 0056's own header says so in capitals. It was completed at the owner's explicit instruction, given twice. Reverting is `transitions.ts` back to `actors: ["MD"]`, not a migration. |
+| F15-20 | `whats-applied.sql` gained six migrations it had never asked about | 0018, 0019, 0024, 0025, 0045, 0049. **0025 is the one that matters**: without it HR cannot reassign a lead on ANY live evaluation, and the file had no row for it, so the failure had no way to surface. A diagnostic with holes is worse than none, because it is trusted. |
+
+**Not fixed, and named so they are not lost.** The dashboard's analytics are
+still computed against a single ACTIVE cycle — the same root cause as F15-8, on
+a screen this phase did not reach. The worker sheet can drop a tick made while a
+save is in flight. And there is no way to add a worker to a round that is already
+running: `launchWorkerCycle` refuses a non-DRAFT cycle and nothing else inserts
+into `worker_evaluations`.
+
+**Verification.** Typecheck 0 errors, lint 0 errors, build clean. Nothing was run
+against live data — every one of these was found by using the product, and the
+suites remain outside the repository (§18 STATUS).
+
+**Migrations.** 0060 is applied. `0058_worker_submit_backfill` is still
+outstanding and is a one-time repair for sheets submitted before 0057.

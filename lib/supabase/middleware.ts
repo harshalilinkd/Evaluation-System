@@ -47,13 +47,53 @@ export async function updateSession(request: NextRequest) {
   // getUser revalidates the JWT with the auth server. There must be no other
   // logic between createServerClient and this call, or the refresh can be
   // skipped and people get signed out at random.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  //
+  /* -- WRAPPED, because an unhandled throw here is a 500 and a 500 is an HTML
+        page. That matters far more than it looks.
+
+        This is a network call to Supabase Auth on EVERY request, including
+        every autosave POST. On a phone on 4G it is the single most likely
+        thing in the chain to fail — and when it threw, Next returned an error
+        page, the Server Action POST received `text/html` instead of
+        `text/x-component`, and the client threw Next's internal transport
+        error E394: "An unexpected response was received from the server."
+        That string was then printed verbatim into the employee's save banner.
+
+        Failing open is safe here and is not a hole: §9 requires every page and
+        every server action to re-check the role and the state-machine guard
+        itself, and they all do — `requireAuth()` redirects, `getCurrentProfile()`
+        returns null and the action answers with a typed NOT_AUTHENTICATED.
+        Middleware is the first of three layers, never the only one, so a
+        network blip degrades to "the guards downstream decide" rather than to
+        a 500 nobody can read. -- */
+  let user = null;
+  try {
+    ({
+      data: { user },
+    } = await supabase.auth.getUser());
+  } catch {
+    // Leave `user` null and fall through. A genuinely signed-out visitor is
+    // still stopped by the guard on the page they asked for.
+    return response;
+  }
 
   const { pathname } = request.nextUrl;
 
-  if (!user && isProtectedPath(pathname)) {
+  /* -- A SERVER ACTION IS NEVER REDIRECTED FROM HERE.
+
+        A 307 to /login answers a Server Action POST with an HTML page, which
+        the client cannot parse — E394 again, and the second way a phone
+        produced that banner: filling in thirty-one questions takes long enough
+        that a session can lapse midway, and the autosave that discovers it got
+        a redirect rather than an answer.
+
+        Let it through instead. The action's own `getCurrentProfile()` returns
+        null and it replies with the typed failure it already carries — "Please
+        sign in again." — which reaches the banner as a sentence somebody can
+        act on. §0.7: fail loudly, not incomprehensibly. -- */
+  const isServerAction = request.headers.has("next-action");
+
+  if (!user && isProtectedPath(pathname) && !isServerAction) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTES.login;
     redirectUrl.search = "";

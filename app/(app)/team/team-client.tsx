@@ -63,7 +63,28 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
   // gating the queue on it would stop the work the screen exists for.
   // AMEND-3's rename: this was never true, so a lead was never reminded that
   // their OWN appraisal was open (P13-12's banner).
-  const ownOpen = queue.ownEvaluation?.status === "OPEN";
+  // Every open one, not the first. A HOD with two cycles running owes two
+  // self-evaluations, and a banner naming one leaves the other unprompted.
+  const ownOpen = queue.ownEvaluations.filter((e) => e.status === "OPEN");
+
+  /* -- The subtitle when there is more than one cycle. Naming one of them and
+        its date would state a deadline that is wrong for half the list, so it
+        says how many and quotes the SOONEST — which is the one that matters. */
+  const soonestDue = queue.cycles
+    .map((c) => c.leadDueOn)
+    .filter((d): d is string => Boolean(d))
+    .sort()[0];
+
+  const onlyCycle = queue.cycles.length === 1 ? queue.cycles[0] : undefined;
+
+  const subtitle =
+    queue.cycles.length === 0
+      ? "No cycle is running at the moment."
+      : onlyCycle
+        ? onlyCycle.periodLabel
+          ? `${onlyCycle.periodLabel} · your review is due ${formatDate(onlyCycle.leadDueOn)}`
+          : "Your reviews are open."
+        : `${queue.cycles.length} cycles open · your soonest review is due ${formatDate(soonestDue ?? null)}`;
 
   /* -- The greeting, three tiles and a filter row cost ~430px before the first
         report. The greeting and the due date are one line now, the three counts
@@ -72,11 +93,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
     <TableScreen>
       <ScreenHeader
         title={`Hello ${firstName}`}
-        subtitle={
-          queue.periodLabel
-            ? `${queue.periodLabel} · your review is due ${formatDate(queue.leadDueOn)}`
-            : "No cycle is running at the moment."
-        }
+        subtitle={subtitle}
       />
 
       {/* AMEND-3: all three count the LEAD's OWN side. The old middle one
@@ -141,27 +158,39 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
       <ScreenBody className="space-y-3 p-4 lg:p-5">
         {/* Content, not chrome — so it stays, and it scrolls with the list
             rather than being pinned above it. */}
-        {ownOpen && queue.ownEvaluation ? (
-          <section className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-self-tint px-4 py-3">
+        {ownOpen.map((own) => (
+          <section
+            key={own.id}
+            className="flex flex-wrap items-center justify-between gap-4 rounded-card bg-self-tint px-4 py-3"
+          >
             <p className="text-body text-ink">
-              Your own self-evaluation is still open — please finish it before{" "}
-              {formatDate(queue.ownEvaluation.selfDueOn)}.
+              {/* Named once there are two, because "your own self-evaluation"
+                  twice over is two banners a reader cannot tell apart. */}
+              Your own self-evaluation
+              {ownOpen.length > 1 ? ` for ${own.cycleName}` : ""} is still open — please finish it
+              before {formatDate(own.selfDueOn)}.
             </p>
             {/* P6-8: a lead's own appraisal lives at /my-evaluation and is
                 reached from here as a link, never opened as a review here. */}
             <Button asChild className="min-h-11">
-              <Link href={`/my-evaluation/${queue.ownEvaluation.id}`}>
+              <Link href={`/my-evaluation/${own.id}`}>
                 Continue
                 <ArrowRight className="size-4" aria-hidden />
               </Link>
             </Button>
           </section>
-        ) : null}
+        ))}
 
         {queue.rows.length === 0 ? (
           <EmptyState
-            title="Nobody on your team has submitted yet"
-            body="You will get a WhatsApp message as each one comes in."
+            /* Was "Nobody on your team has submitted yet" — which is a
+               statement about the EMPLOYEES' side, and under blind parallel
+               rating (§5) the lead is told nothing about it. It was also simply
+               wrong: rows appear here from launch, whether or not anybody has
+               submitted, so this state means "you have no reports in this
+               cycle", not "they have not started". */
+            title="Nobody is assigned to you this cycle"
+            body="When HR launches a cycle with people reporting to you, their ratings appear here."
           />
         ) : rows.length === 0 ? (
           <EmptyState
@@ -171,7 +200,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
         ) : (
           <ul className="space-y-2">
             {rows.map((row) => (
-              <TeamCard key={row.evaluationId} row={row} />
+              <TeamCard key={row.evaluationId} row={row} showCycle={queue.cycles.length > 1} />
             ))}
           </ul>
         )}
@@ -188,7 +217,7 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
  * either a horizontal scroll or eight-point type. §13.2 makes the phone the
  * first case, not the fallback.
  */
-function TeamCard({ row }: { row: TeamRow }) {
+function TeamCard({ row, showCycle }: { row: TeamRow; showCycle: boolean }) {
   const initials = row.name
     .split(" ")
     .slice(0, 2)
@@ -214,6 +243,18 @@ function TeamCard({ row }: { row: TeamRow }) {
         <p className="text-body-sm text-ink-muted">
           {[row.designation, row.departmentName].filter(Boolean).join(" · ") || "—"}
         </p>
+        {/* Which cycle this rating is for. Only when two are running: on a
+            single-cycle queue it would be the same badge on every row, and a
+            badge that never varies is one people stop reading. Without it, a
+            person who appears twice is two identical rows. */}
+        {showCycle ? (
+          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-body-sm text-ink-muted">
+            <span className="type-label rounded-pill bg-surface-mute px-2 py-0.5 text-ink">
+              {row.cycleName}
+            </span>
+            {row.periodLabel ? <span>{row.periodLabel}</span> : null}
+          </p>
+        ) : null}
         {row.isSelfLed ? (
           // P13 edge case. Neutral, not a warning: a department head with nobody
           // above them is a fact about the org chart, not a mistake they made.

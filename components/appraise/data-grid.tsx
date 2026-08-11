@@ -35,7 +35,48 @@ declare module "@tanstack/react-table" {
     align?: "center" | "right";
     /** Frozen from `lg` up. Only leading columns can freeze. */
     frozen?: boolean;
+    /**
+     * What to call this column in an accessible name, when `header` is a render
+     * function rather than a string. Optional — `columnLabel` derives a decent
+     * one from the column id without it.
+     */
+    label?: string;
   }
+}
+
+/**
+ * A readable name for a column, for the resize handle's accessible name.
+ *
+ * IT MUST NEVER STRINGIFY `header`, and that is the whole point of this
+ * function. `header` is `string | ((ctx) => ReactNode)`, and for the tier
+ * columns it is the second — so `String(header)` returned the FUNCTION SOURCE,
+ * which under Turbopack carries mangled module paths that differ between the
+ * server bundle and the client one. React compared the two and reported a
+ * hydration mismatch on every grid with a rendered header, with an aria-label
+ * reading `Resize the ()=>(0, __TURBOPACK__imported__module__$5b$proj… column`
+ * — unusable to a screen reader, and a genuine mismatch rather than a warning
+ * to suppress.
+ *
+ * The order is: an explicit `meta.label`, else the header when it is genuinely
+ * a string, else the column id turned into words. Every existing caller is
+ * covered by the last two, so none had to change.
+ */
+export function columnLabel(column: {
+  id: string;
+  columnDef: { header?: unknown; meta?: { label?: string } };
+}): string {
+  const explicit = column.columnDef.meta?.label;
+  if (explicit) return explicit;
+
+  const header = column.columnDef.header;
+  if (typeof header === "string" && header.trim()) return header.trim();
+
+  // `selfOverall` / `self_overall` → "Self overall". Not perfect prose, but it
+  // is stable across builds, which is the property that was actually missing.
+  return column.id
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
 }
 
 const ALIGN_CLASS = { center: "text-center", right: "text-right" } as const;
@@ -336,7 +377,7 @@ export function DataGrid<TData>({
                         {header.column.getCanResize() ? (
                           <button
                             type="button"
-                            aria-label={`Resize the ${String(header.column.columnDef.header)} column`}
+                            aria-label={`Resize the ${columnLabel(header.column)} column`}
                             onMouseDown={header.getResizeHandler()}
                             onTouchStart={header.getResizeHandler()}
                             // Double-click resets, as it does in a spreadsheet.

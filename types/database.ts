@@ -822,6 +822,38 @@ export type Database = {
         Relationships: [];
       };
 
+      app_notifications: {
+        Row: {
+          id: string;
+          profile_id: string;
+          template: string;
+          title: string;
+          body: string;
+          href: string | null;
+          evaluation_id: string | null;
+          read_at: string | null;
+          created_at: string;
+          created_on: string;
+        };
+        // No client insert policy exists (0059) — the write path is
+        // `raise_app_notification`. The type is here because `gen types` emits
+        // it, not because anything may use it.
+        Insert: {
+          id?: string;
+          profile_id: string;
+          template: string;
+          title: string;
+          body: string;
+          href?: string | null;
+          evaluation_id?: string | null;
+          read_at?: string | null;
+          created_at?: string;
+        };
+        // Only `read_at` may change — 0059 has a trigger that refuses the rest.
+        Update: { read_at?: string | null };
+        Relationships: [];
+      };
+
       notifications_log: {
         Row: {
           id: string;
@@ -1426,6 +1458,18 @@ export type Database = {
       };
       // 0010 / P11. The only write path into notifications_log — there is no
       // insert or update policy on that table for anyone.
+      raise_app_notification: {
+        Args: {
+          p_profile_id: string;
+          p_template: string;
+          p_title: string;
+          p_body: string;
+          p_href?: string | null;
+          p_evaluation_id?: string | null;
+        };
+        /** Null when the dedupe index absorbed it — see 0059. */
+        Returns: string | null;
+      };
       queue_notification: {
         Args: {
           p_channel: string;

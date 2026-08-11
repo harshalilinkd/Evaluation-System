@@ -240,8 +240,19 @@ export async function saveWorkerSheet(
 
   /* -- RLS is the real gate. `worker_responses_write` admits this row only if
         the caller owns this layer and the record is OPEN, so a forged
-        `evaluationId` writes nothing rather than being caught here. -- */
-  const { error } = await supabase
+        `evaluationId` writes nothing rather than being caught here.
+
+        WHICH IS ALSO HOW A REAL SAVE FAILED SILENTLY. A PostgREST `.update()`
+        that matches ZERO rows is not an error — it succeeds, having done
+        nothing. So when a policy refused the write, or the layer row was
+        missing, or the record had moved on, this returned `ok: true` and the
+        sheet printed "saved HH:MM" over answers that were never stored. That
+        is the reported "worker appraisal not saving", and it is the worst shape
+        a save bug can take: the screen states the opposite of what happened,
+        so nobody reports it until the appraisal is opened later and is empty.
+
+        `.select()` makes the update report what it touched. §0.7. -- */
+  const { data: written, error } = await supabase
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
@@ -253,9 +264,17 @@ export async function saveWorkerSheet(
         : {}),
     })
     .eq("evaluation_id", evaluationId)
-    .eq("layer", sheet.data.layer);
+    .eq("layer", sheet.data.layer)
+    .select("evaluation_id");
 
   if (error) return fail("SAVE_FAILED", error.message);
+
+  if (!written || written.length === 0) {
+    return fail(
+      "NOT_WRITTEN",
+      "Your ticks were not saved — this sheet is not open to you for changes. Reload the page; if it happens again, ask HR to check who is assigned to rate this worker.",
+    );
+  }
 
   return { ok: true, data: { savedAt: new Date().toISOString() } };
 }

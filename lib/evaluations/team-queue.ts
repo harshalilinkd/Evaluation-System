@@ -32,32 +32,60 @@ export type TeamRow = {
   isOverdue: boolean;
   /** P13 edge case: a department head with nobody above them. */
   isSelfLed: boolean;
+  /** Which cycle this rating belongs to. Named on the row once there are two. */
+  cycleId: string;
+  cycleName: string;
+  periodLabel: string | null;
+};
+
+export type TeamCycle = {
+  id: string;
+  name: string;
+  periodLabel: string | null;
+  leadDueOn: string | null;
 };
 
 export type TeamQueue = {
-  cycleId: string | null;
-  cycleName: string | null;
-  periodLabel: string | null;
-  leadDueOn: string | null;
+  /**
+   * EVERY active cycle, not one.
+   *
+   * This used to be four singular fields fed by a `.limit(1)` on the cycle
+   * query, with a comment reasoning that "a lead reviews one cycle at a time,
+   * and showing two at once would put the same person on screen twice with
+   * different deadlines". That was true when it was written and stopped being
+   * true at AMEND-2, which gave a cycle a TYPE — EVALUATION and INCREMENT run
+   * concurrently and differ only in how they end. The same person appearing
+   * twice with two deadlines is not a display fault; it is two ratings that are
+   * genuinely both owed.
+   *
+   * Reported from a real device: an Evaluation cycle and an Increment cycle
+   * were both launched and the HOD could only see one of them.
+   */
+  cycles: TeamCycle[];
   rows: TeamRow[];
   /** Counted over the LEAD side only, for the same reason as `leadState`. */
   counts: { notStarted: number; inProgress: number; submitted: number };
-  /** The lead's OWN evaluation, for the reminder banner. Never openable from here. */
-  ownEvaluation: {
+  /**
+   * The lead's OWN evaluations, for the reminder banner. Never openable from
+   * here (P6-8 / P13-12) — the banner links to /my-evaluation.
+   *
+   * Plural for the same reason as `cycles`: a HOD with two cycles open owes two
+   * self-evaluations, and a banner naming one of them leaves the other with no
+   * prompt anywhere.
+   */
+  ownEvaluations: Array<{
     id: string;
     status: EvaluationStatus;
     selfDueOn: string | null;
-  } | null;
+    cycleName: string;
+  }>;
 };
 
 const EMPTY: TeamQueue = {
-  cycleId: null,
-  cycleName: null,
-  periodLabel: null,
-  leadDueOn: null,
+  cycles: [],
   rows: [],
   counts: { notStarted: 0, inProgress: 0, submitted: 0 },
-  ownEvaluation: null,
+  ownEvaluations: [],
 };
 
 /** Whole days from now until `date`, Asia/Kolkata-agnostic — dates are date-only. */
@@ -82,12 +110,12 @@ function daysUntil(date: string | null): number | null {
 export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
   const supabase = await createClient();
 
-  /* -- Which cycle -- */
+  /* -- Which cycles -- */
   //
-  // The most recent ACTIVE cycle. A lead reviews one cycle at a time, and
-  // showing two at once would put the same person on screen twice with
-  // different deadlines.
-  const { data: cycle } = await supabase
+  // ALL of them. The `.limit(1).maybeSingle()` that used to be here is the bug
+  // described on `TeamQueue.cycles`: it made every rating in every cycle but
+  // the newest unreachable for the lead who owed it.
+  const { data: cycleRows } = await supabase
     .from("evaluation_cycles")
     .select("id, name, period_label, self_due_on, lead_due_on")
     .eq("status", "ACTIVE")
@@ -95,51 +123,64 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     // not a status. Without this the queue could open on a cycle HR had
     // already thrown away, and every count on the screen would describe it.
     .is("deleted_at", null)
-    .order("starts_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("starts_on", { ascending: false });
 
-  if (!cycle) return EMPTY;
+  const activeCycles = cycleRows ?? [];
+  if (activeCycles.length === 0) return EMPTY;
 
-  /* -- The lead's own evaluation, for the banner -- */
+  const cycleIds = activeCycles.map((c) => c.id);
+  const byCycleId = new Map(activeCycles.map((c) => [c.id, c]));
+
+  const cycles: TeamCycle[] = activeCycles.map((c) => ({
+    id: c.id,
+    name: c.name,
+    periodLabel: c.period_label,
+    leadDueOn: c.lead_due_on,
+  }));
+
+  /* -- The lead's own evaluations, for the banner -- */
   //
-  // Read here rather than linked from the table: §9 scopes it by the evaluatee
-  // policy, not the lead policy, and P6-8 already established that a lead's own
-  // appraisal lives at /my-evaluation. The banner links there; nothing on this
-  // screen ever opens it as a review.
-  const { data: own } = await supabase
+  // Read here rather than linked from the table: §9 scopes them by the
+  // evaluatee policy, not the lead policy, and P6-8 already established that a
+  // lead's own appraisal lives at /my-evaluation. The banner links there;
+  // nothing on this screen ever opens one as a review.
+  //
+  // `.in(...)` rather than `.maybeSingle()`: with two cycles open that call
+  // does not merely return the wrong one, it ERRORS — PostgREST refuses a
+  // single-row request that matches more than one row — so the banner would
+  // have vanished entirely the moment a second cycle launched.
+  const { data: ownRows } = await supabase
     .from("evaluations")
-    .select("id, status")
-    .eq("cycle_id", cycle.id)
+    .select("id, status, cycle_id")
+    .in("cycle_id", cycleIds)
     .eq("evaluatee_id", profileId)
-    .is("excluded_at", null)
-    .maybeSingle();
+    .is("excluded_at", null);
 
-  /* -- The reports -- */
+  /* -- The reports, across every active cycle -- */
   const { data: evaluations } = await supabase
     .from("evaluations")
     // `self_submitted_at` is NOT selected. Fetching it and then not rendering
     // it would leave the leak one careless line away; not fetching it means the
     // signal is not in the process at all.
-    .select("id, evaluatee_id, status, lead_submitted_at, department_id")
-    .eq("cycle_id", cycle.id)
+    .select("id, evaluatee_id, status, lead_submitted_at, department_id, cycle_id")
+    .in("cycle_id", cycleIds)
     .eq("lead_id", profileId)
     // §P10-6: a withdrawal is not a status. An excluded row is not work the
     // organisation is still asking for, so it leaves the queue entirely.
     .is("excluded_at", null);
 
+  /* -- Built once, used by both the empty return and the full one. A HOD with
+        no reports still needs their own banner. -- */
+  const ownEvaluations = (ownRows ?? []).flatMap((row) => {
+    const c = byCycleId.get(row.cycle_id);
+    return c
+      ? [{ id: row.id, status: row.status, selfDueOn: c.self_due_on, cycleName: c.name }]
+      : [];
+  });
+
   const rowsRaw = evaluations ?? [];
   if (rowsRaw.length === 0) {
-    return {
-      ...EMPTY,
-      cycleId: cycle.id,
-      cycleName: cycle.name,
-      periodLabel: cycle.period_label,
-      leadDueOn: cycle.lead_due_on,
-      ownEvaluation: own
-        ? { id: own.id, status: own.status, selfDueOn: cycle.self_due_on }
-        : null,
-    };
+    return { ...EMPTY, cycles, ownEvaluations };
   }
 
   const employeeIds = rowsRaw.map((r) => r.evaluatee_id);
@@ -183,10 +224,16 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
   const byPerson = new Map((people ?? []).map((p) => [p.id, p]));
   const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));
 
-  const daysToLeadDue = daysUntil(cycle.lead_due_on);
-
   const rows: TeamRow[] = rowsRaw.map((row) => {
     const person = byPerson.get(row.evaluatee_id);
+
+    /* -- Per ROW, not per queue. This was hoisted out of the loop when there
+          could only be one cycle; with two, a single shared deadline would mark
+          rows overdue against the wrong cycle's date — and 0022 gave each
+          evaluation its own due dates precisely because a rolling cycle gives
+          two people in one cycle different deadlines. -- */
+    const rowCycle = byCycleId.get(row.cycle_id);
+    const daysToLeadDue = daysUntil(rowCycle?.lead_due_on ?? null);
 
     /* -- The lead's own three states, derived from their own timestamp and
           their own draft. Nothing here consults the record's status beyond
@@ -226,30 +273,35 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
       daysToLeadDue,
       isOverdue,
       isSelfLed: row.evaluatee_id === profileId,
+      cycleId: row.cycle_id,
+      cycleName: rowCycle?.name ?? "Cycle",
+      periodLabel: rowCycle?.period_label ?? null,
     };
   });
 
-  // AMEND-3: sort by DUE DATE. Every row in a cycle shares one lead due date,
-  // so this settles to name order within it — which is the point. The old sort
+  // AMEND-3: sort by DUE DATE. Rows within one cycle share a lead due date, so
+  // this settles to name order within it — which is the point. The old sort
   // ranked by how long each report had been waiting since THEY submitted, and
   // that ordering was itself a readout of the other side.
+  //
+  // Across cycles the due date still leads, so the most urgent work is at the
+  // top whichever cycle it belongs to. Name breaks the tie before the cycle
+  // does: somebody scanning for a person should find both of their rows
+  // together rather than at opposite ends of the list.
   rows.sort((a, b) => {
     const aDue = a.daysToLeadDue ?? Number.MAX_SAFE_INTEGER;
     const bDue = b.daysToLeadDue ?? Number.MAX_SAFE_INTEGER;
-    return aDue - bDue || a.name.localeCompare(b.name);
+    return aDue - bDue || a.name.localeCompare(b.name) || a.cycleName.localeCompare(b.cycleName);
   });
 
   return {
-    cycleId: cycle.id,
-    cycleName: cycle.name,
-    periodLabel: cycle.period_label,
-    leadDueOn: cycle.lead_due_on,
+    cycles,
     rows,
     counts: {
       notStarted: rows.filter((r) => r.leadState === "not_started").length,
       inProgress: rows.filter((r) => r.leadState === "in_progress").length,
       submitted: rows.filter((r) => r.leadState === "submitted").length,
     },
-    ownEvaluation: own ? { id: own.id, status: own.status, selfDueOn: cycle.self_due_on } : null,
+    ownEvaluations,
   };
 }

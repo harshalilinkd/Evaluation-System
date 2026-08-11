@@ -191,6 +191,10 @@ export async function launchWorkerCycle(
   }
 
   let opened = 0;
+  // Told apart, because they mean opposite things: a duplicate is an
+  // idempotent re-run, anything else is a launch that did not happen.
+  let duplicates = 0;
+  const failures: string[] = [];
 
   for (const person of eligible) {
     const { data: evaluation, error: evalError } = await supabase
@@ -205,9 +209,27 @@ export async function launchWorkerCycle(
       .select("id")
       .single();
 
-    // A duplicate means this person was opened by an earlier run. Skip rather
-    // than fail: the launch is idempotent by design.
-    if (evalError || !evaluation) continue;
+    /* -- A duplicate means this person was opened by an earlier run. Skip
+          rather than fail: the launch is idempotent by design.
+
+          EVERY OTHER FAILURE USED TO BE SKIPPED TOO, and that is a different
+          thing entirely. A policy refusal, a missing department, a constraint
+          — all of them fell into this `continue`, the loop finished, the cycle
+          was marked ACTIVE and the action returned success. A launch that
+          opened NOBODY reported that it had worked, and HR was left with a
+          live round containing no workers and no explanation.
+
+          23505 is the unique violation, and it is the only one that is
+          genuinely a re-run rather than a fault. -- */
+    if (evalError || !evaluation) {
+      const code = (evalError as { code?: string } | null)?.code;
+      if (code === "23505") {
+        duplicates += 1;
+      } else if (evalError) {
+        failures.push(`${person.full_name}: ${evalError.message}`);
+      }
+      continue;
+    }
 
     await supabase.from("worker_evaluation_questions").insert(
       questions.map((q, index) => ({
@@ -250,6 +272,22 @@ export async function launchWorkerCycle(
     });
 
     opened += 1;
+  }
+
+  /* -- Refuse to open a round that opened nobody.
+
+        The cycle stays DRAFT so HR can fix the cause and launch again, rather
+        than being left with an ACTIVE round holding no workers — which cannot
+        be launched a second time (`ALREADY_LAUNCHED`) and so is a dead end
+        (§13.4). `duplicates` is what keeps a genuine interrupted re-run
+        working: it opened nobody NEW and that is correct. -- */
+  if (opened === 0 && duplicates === 0) {
+    return fail(
+      "NONE_OPENED",
+      failures.length > 0
+        ? `Nobody was opened for this round. ${failures[0]}`
+        : "Nobody was opened for this round. Check that the people you chose are active shop-floor workers.",
+    );
   }
 
   await supabase.from("worker_cycles").update({ status: "ACTIVE" }).eq("id", cycleId);

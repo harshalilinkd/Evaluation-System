@@ -37,6 +37,11 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   const [busy, setBusy] = React.useState(false);
   const [saved, setSaved] = React.useState<Date | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  /* -- Its own state, not `error`. A refused pay figure and a refused
+        appraisal are different failures with different fixes, and sharing one
+        slot is what let the salary message stand in front of a sheet that had
+        actually saved. -- */
+  const [salaryError, setSalaryError] = React.useState<string | null>(null);
   const [thanked, setThanked] = React.useState(false);
   const [comment, setComment] = React.useState(sheet.overallComment);
   const [training, setTraining] = React.useState<boolean | null>(sheet.trainingRequired);
@@ -127,23 +132,35 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         return false;
       }
 
-      /* -- The salary block rides the same save as a SECOND call, not a merged
-            one: a different table with different policies, and one call whose
-            failure could mean either "your ticks did not save" or "you may not
-            record salary" would be two problems wearing one message. -- */
-      if (sheet.salary) {
-        const salaryResult = await saveWorkerSalary(sheet.evaluationId, salary);
-        if (!salaryResult.ok) {
-          setSaveState("error");
-          setError(salaryResult.error.message);
-          return false;
-        }
-      }
+      /* -- THE TICKS ARE SAVED AT THIS POINT, so that is recorded FIRST and
+            unconditionally.
 
+            This used to sit after the salary call, and a salary refusal
+            returned `false` — so `setDirty(false)` never ran, `dirty` stayed
+            true for the life of the page, and Submit (`if (dirty &&
+            !(await persist())) return;`) became a permanent no-op. The
+            supervisor had a complete sheet, correctly saved, and a Submit
+            button that did nothing, for ever, with a message about salary.
+
+            It fires easily: `saveWorkerSalary` refuses a new figure below the
+            old one, so typing the new salary before correcting the old one is
+            enough. And §5 puts the salary block on every SUPERVISOR sheet
+            whether or not that supervisor may write it, so a policy refusal
+            reaches this branch on every autosave.
+
+            Two writes, two tables, two policies — so two outcomes. A failure
+            to record pay must never be reported as a failure to record the
+            appraisal, and must never block submitting one. -- */
       setDirty(false);
       setSaveState("saved");
       setSaved(new Date(result.data.savedAt));
       setError(null);
+
+      if (sheet.salary) {
+        const salaryResult = await saveWorkerSalary(sheet.evaluationId, salary);
+        setSalaryError(salaryResult.ok ? null : salaryResult.error.message);
+      }
+
       return true;
     } catch {
       setSaveState("error");
@@ -477,8 +494,27 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         </p>
       ) : null}
 
+      {/* Named, so it cannot be read as "the appraisal did not save" — and it
+          says plainly that the ticks are safe, because the commonest way to
+          reach this is a salary typo on a sheet that is otherwise complete. */}
+      {salaryError ? (
+        <p
+          role="alert"
+          className="rounded-card bg-warning-tint px-4 py-3 font-sans text-body-sm text-ink"
+        >
+          <span className="font-medium">The salary block was not saved.</span> {salaryError} Your
+          ticks are saved and you can still submit the appraisal.
+        </p>
+      ) : null}
+
+      {/* Offset by the nav's height, for the same reason as the employee's
+          form: `BottomNav` is fixed at `bottom-0` and `z-40`, so a bar at
+          `bottom-0 z-20` is covered by it and Save draft / Submit cannot be
+          reached on a phone. A supervisor fills this ON the shop floor, on a
+          handset — this bar being hidden is indistinguishable from the form
+          refusing to save. */}
       {!readOnly ? (
-        <div className="glass fixed inset-x-0 bottom-0 z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:static lg:h-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
+        <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:static lg:h-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
           <Button
             variant="ghost"
             className="min-h-11 flex-1 lg:flex-none"

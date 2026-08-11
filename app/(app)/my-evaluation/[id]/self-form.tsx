@@ -56,6 +56,39 @@ export type SelfFormMeta = {
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const AUTOSAVE_FLUSH_MS = 20_000;
 
+/**
+ * What to tell somebody whose save was REJECTED BY THE TRANSPORT rather than
+ * answered by the server.
+ *
+ * This used to print `cause.message` verbatim, on the reasoning that the
+ * server's own words beat a paraphrase — which is right for OUR errors and
+ * wrong for these. A rejected `saveSelfDraft()` promise never carries an
+ * application message: every failure the action itself can produce comes back
+ * as `{ ok: false, error }`, not as a throw. So the only thing that reaches
+ * here is Next.js's internal Server Action transport error, and an employee
+ * was being shown "An unexpected response was received from the server" —
+ * true, unactionable, and indistinguishable from the app being broken.
+ *
+ * The three cases are genuinely different repairs, so they get different
+ * sentences (§0.7, §13.4).
+ */
+function describeSaveFailure(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause ?? "");
+
+  // Next's E394: the POST got a real HTTP response that was not RSC — an error
+  // page or a redirect. In this app that is overwhelmingly a lapsed session.
+  if (/unexpected response|Failed to find Server Action|text\/x-component/i.test(message)) {
+    return "Your sign-in may have expired while you were filling this in. Open the app in a new tab, sign in again, then come back here and press Save draft.";
+  }
+
+  // A genuine network failure: fetch rejects rather than resolving.
+  if (/fetch|network|load failed|connection/i.test(message)) {
+    return "The connection dropped before your answers reached us. Check your signal and press Save draft again.";
+  }
+
+  return "Your answers could not be saved just now. Press Save draft to try again.";
+}
+
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormMeta }) {
@@ -145,11 +178,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       inSync.current = false;
       setSaveState("error");
       setFailures((n) => n + 1);
-      setSaveError(
-        cause instanceof Error && cause.message
-          ? cause.message
-          : "The connection dropped before your answers reached us.",
-      );
+      setSaveError(describeSaveFailure(cause));
       return false;
     } finally {
       inFlight.current = false;
@@ -683,7 +712,10 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
         {saveError ? (
           <div
             role="alert"
-            className="fixed inset-x-0 bottom-16 z-20 border-t border-critical/40 bg-critical-tint px-4 py-3 lg:hidden"
+            /* Above the action bar, which is itself above the nav. `bottom-16`
+               used to clear the 64px bar alone — which is why this banner was
+               the ONE thing still visible when the bar underneath it was not. */
+            className="fixed inset-x-0 bottom-[calc(var(--bottom-nav-h)+4rem)] z-20 border-t border-critical/40 bg-critical-tint px-4 py-3 lg:hidden"
           >
             <p className="text-body-sm font-medium text-critical">Not saved</p>
             <p className="mt-0.5 text-body-sm text-ink">{saveError}</p>
@@ -693,7 +725,24 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           </div>
         ) : null}
 
-        <div className="glass fixed inset-x-0 bottom-0 z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
+        {/* -- THE SUBMIT BUTTON WAS UNREACHABLE ON EVERY PHONE. --
+
+            This bar was `bottom-0 z-20`. `BottomNav` is also fixed at
+            `bottom-0` and is `z-40`, so it sat on top and covered this
+            completely: an employee filling in their appraisal on a phone —
+            which §13.2 makes the FIRST case, not the fallback — could fill
+            every question and had no way to submit.
+
+            It hid in review because it only reproduces below `lg`, where the
+            nav exists, and because the error banner above it is offset far
+            enough to clear the nav and stayed visible. So the screen showed a
+            save failure and no button, which reads as one fault and was two.
+
+            Offset by the nav's own height rather than raised above it in the
+            stacking order: `z-50` would fix the button by burying the
+            navigation, and somebody who cannot leave a form is no better off
+            than somebody who cannot submit one. */}
+        <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
           <Button
             variant="ghost"
             className="min-h-11 flex-1"

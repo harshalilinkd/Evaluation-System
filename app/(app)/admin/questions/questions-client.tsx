@@ -43,6 +43,7 @@ import {
   type DepartmentOption,
   type QuestionRecord,
 } from "@/app/(app)/admin/questions/question-drawer";
+import { columnLabel } from "@/components/appraise/data-grid";
 import { EmptyState } from "@/components/appraise/states";
 import { QuestionImportDialog } from "@/app/(app)/admin/questions/question-import-dialog";
 import {
@@ -800,7 +801,7 @@ export function QuestionsClient({
                         {header.column.getCanResize() ? (
                           <button
                             type="button"
-                            aria-label={`Resize the ${String(header.column.columnDef.header)} column`}
+                            aria-label={`Resize the ${columnLabel(header.column)} column`}
                             onMouseDown={header.getResizeHandler()}
                             onTouchStart={header.getResizeHandler()}
                             // Double-click resets, as it does in a spreadsheet.

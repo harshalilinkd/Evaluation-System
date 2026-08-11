@@ -4,6 +4,7 @@ import "server-only";
 
 import { sendEmail } from "@/lib/notify/email";
 import { sendWhatsApp } from "@/lib/notify/maytapi";
+import { raiseInAppNotification } from "@/lib/notify/inapp";
 import { normaliseToE164, type PhoneFailure } from "@/lib/notify/phone";
 import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
@@ -242,6 +243,32 @@ export async function sendNotification(
         "Not sent: the MD is only messaged when a report is approved and passed up to them.",
     };
   }
+
+  /* -- 1b. The bell -- */
+  //
+  // Placed HERE, and the position is the whole design. Above it sits the MD
+  // suppression; below it sits the QUEUED row and then the pause check. So an
+  // in-app notification inherits FIX-13's rule (the MD hears about one thing,
+  // on every channel including this one) and is raised for a message that is
+  // then paused — because a paused send is still an attempt somebody made, and
+  // the bell is where they find out it is sitting there (P17-7's reasoning).
+  //
+  // This is the chokepoint every outbound message passes through (§10), so
+  // every event that notifies anybody today — and every one added later —
+  // lights the bell without its author knowing this module exists. `deliver`
+  // calls once per CHANNEL; 0059's unique index collapses the pair onto one row.
+  //
+  // Awaited but never fatal: it cannot throw, and its result is not consulted.
+  // A notification row that could not be written is not a delivery failure, and
+  // reporting it as one would put a red row on HR's screen no retry can clear.
+  await raiseInAppNotification(
+    {
+      profileId: input.profileId,
+      template: input.template,
+      evaluationId: input.evaluationId,
+    },
+    supabase,
+  );
 
   /* -- 2. QUEUED, before anything is attempted -- */
   const { data: queuedId, error: queueError } = await supabase.rpc("queue_notification", {
