@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveHikeBands } from "@/lib/increment/actions";
 import { cn } from "@/lib/utils";
+import { SignatureCard } from "@/components/appraise/signature-card";
 
 /**
  * The quick-set increment percentages.
@@ -20,7 +21,14 @@ import { cn } from "@/lib/utils";
  * so changing the three buttons HR presses on every salary review meant an
  * UPDATE against `increment_settings`. This is that editor.
  */
-export function GeneralTab({ hikeBands }: { hikeBands: number[] }) {
+export function GeneralTab({
+  hikeBands,
+  signature,
+}: {
+  hikeBands: number[];
+  /** The SIGNED-IN person's own, never anybody else's. */
+  signature: string | null;
+}) {
   const router = useRouter();
   const [bands, setBands] = React.useState<string[]>(
     hikeBands.length > 0 ? hikeBands.map(String) : ["5", "10", "15"],
@@ -45,6 +53,10 @@ export function GeneralTab({ hikeBands }: { hikeBands: number[] }) {
 
   return (
     <div className="space-y-8">
+      {/* First, because it is the one thing on this tab that belongs to the
+          person reading it rather than to the company. */}
+      <SignatureCard initial={signature} />
+
       <SectionCard
         title="Increment quick-set bands"
         description="The percentages offered as buttons on a salary review. They are a starting point, never a limit — HR can always type any figure."

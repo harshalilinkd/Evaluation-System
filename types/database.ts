@@ -593,6 +593,8 @@ export type Database = {
           department_id: string | null;
           designation: string | null;
           date_of_joining: string | null;
+          /** 0065: a data URI, shown on sheets this person has signed. */
+          signature_image: string | null;
           track: Database["public"]["Enums"]["track_type"];
           reports_to: string | null;
           is_active: boolean;
@@ -608,6 +610,7 @@ export type Database = {
           department_id?: string | null;
           designation?: string | null;
           date_of_joining?: string | null;
+          signature_image?: string | null;
           track?: Database["public"]["Enums"]["track_type"];
           reports_to?: string | null;
           is_active?: boolean;
@@ -623,6 +626,7 @@ export type Database = {
           department_id?: string | null;
           designation?: string | null;
           date_of_joining?: string | null;
+          signature_image?: string | null;
           track?: Database["public"]["Enums"]["track_type"];
           reports_to?: string | null;
           is_active?: boolean;

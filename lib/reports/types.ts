@@ -108,10 +108,13 @@ export type ReportReview = {
   hrRecommendation: string | null;
   hrReviewedAt: string | null;
   hrReviewedByName: string | null;
+  /** A data URI (0065), or null for a ruled line. */
+  hrSignature: string | null;
   mdRemarks: string | null;
   mdOutcome: string | null;
   mdReviewedAt: string | null;
   mdReviewedByName: string | null;
+  mdSignature: string | null;
 };
 
 /**

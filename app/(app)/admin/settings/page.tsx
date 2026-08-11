@@ -60,6 +60,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     .maybeSingle();
   const hikeBands = (incrementSettings?.hike_bands ?? [5, 10, 15]).map(Number);
 
+  /* -- The signer's own signature. Read here rather than in the tab so the tab
+        stays a client component with no query in it — and `.eq("id", …)` on
+        their own row means an HR administrator opening Settings sees theirs,
+        never somebody else's (§9). -- */
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("signature_image")
+    .eq("id", profile.id)
+    .maybeSingle();
+
   const [
     { data: profiles },
     { data: departments },
@@ -198,7 +208,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </TabsList>
 
       <TabsContent value="general">
-        <GeneralTab hikeBands={hikeBands} />
+        <GeneralTab hikeBands={hikeBands} signature={me?.signature_image ?? null} />
       </TabsContent>
 
       <TabsContent value="users">

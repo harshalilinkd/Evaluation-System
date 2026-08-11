@@ -616,3 +616,25 @@
   font-size: 8pt;
   color: #666666;
 }
+
+/* ---------- The signature mark ----------
+   Sits INSIDE `.rule`, which already reserves 14mm and draws the line, so the
+   image lands on the line rather than above or through it. Bottom-aligned
+   because a signature rests on a line; `max-height` keeps a tall scan from
+   pushing the block down the page and breaking the pagination §7a fixes. */
+.print-signature .rule {
+  position: relative;
+}
+
+.print-signature .mark {
+  position: absolute;
+  bottom: 0.6mm;
+  left: 0;
+  max-height: 12mm;
+  max-width: 90%;
+  object-fit: contain;
+  /* Print engines drop background graphics by default but honour <img>. A
+     signature that vanishes on paper is worse than one that was never added. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}

@@ -278,10 +278,16 @@ export async function buildEvaluationReport(
     (v): v is string => Boolean(v),
   );
   const { data: reviewers } = reviewerIds.length
-    ? await supabase.from("profiles").select("id, full_name").in("id", reviewerIds)
+    // The signature rides along with the name, in the query already fetching
+    // it (0065). One read, not two.
+    ? await supabase.from("profiles").select("id, full_name, signature_image").in("id", reviewerIds)
     : { data: [] };
   const reviewerName = (id: string | null | undefined) =>
     id ? ((reviewers ?? []).find((p) => p.id === id)?.full_name ?? null) : null;
+
+  /** Their signature image, or null where they have not uploaded one. */
+  const reviewerSignature = (id: string | null | undefined) =>
+    id ? ((reviewers ?? []).find((p) => p.id === id)?.signature_image ?? null) : null;
 
   const report: EvaluationReport = {
     evaluationId,
@@ -328,10 +334,12 @@ export async function buildEvaluationReport(
       hrRecommendation: review?.hr_recommendation ?? null,
       hrReviewedAt: review?.hr_reviewed_at ?? null,
       hrReviewedByName: reviewerName(review?.hr_reviewed_by),
+      hrSignature: reviewerSignature(review?.hr_reviewed_by),
       mdRemarks: review?.md_remarks ?? null,
       mdOutcome: review?.md_outcome ?? null,
       mdReviewedAt: review?.md_reviewed_at ?? null,
       mdReviewedByName: reviewerName(review?.md_reviewed_by),
+      mdSignature: reviewerSignature(review?.md_reviewed_by),
     },
   };
 

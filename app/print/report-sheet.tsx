@@ -288,12 +288,19 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             so none of that CSS applied and the "signature line" was not even
             drawing a line. */}
         {[
-          { who: "Manager", name: null as string | null, when: null as string | null, verb: null as string | null },
+          {
+            who: "Manager",
+            name: null as string | null,
+            when: null as string | null,
+            verb: null as string | null,
+            mark: null as string | null,
+          },
           {
             who: "HR",
             name: review?.hrReviewedByName ?? null,
             when: review?.hrReviewedAt ?? null,
             verb: "Reviewed",
+            mark: review?.hrSignature ?? null,
           },
           {
             who: "Managing Director",
@@ -302,10 +309,27 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             // The outcome, not just the name: "reviewed" and "approved" are
             // different acts and a signed sheet must not blur them.
             verb: review?.mdOutcome === "APPROVED" ? "Approved" : "Reviewed",
+            mark: review?.mdSignature ?? null,
           },
         ].map((cell) => (
           <div key={cell.who} className="print-signature">
-            <div className="rule" />
+            {/* -- THE MARK SITS ON THE RULE, not instead of it.
+                  A signature floating with no line under it reads as a graphic
+                  somebody dropped in; on the line it reads as signed. Where
+                  there is no image the rule is empty and the sheet is signed by
+                  hand exactly as before — the same document either way, so an
+                  unsigned record cannot be made to look signed by printing it.
+
+                  A data URI, so the page needs no network at print time: a
+                  printed sheet lays out before any fetch would return, and the
+                  batch pack renders up to 47 of these server-side. -- */}
+            <div className="rule">
+              {cell.mark && cell.name ? (
+                // eslint-disable-next-line @next/next/no-img-element -- inline
+                // data; the optimiser has nothing to fetch.
+                <img src={cell.mark} alt="" className="mark" />
+              ) : null}
+            </div>
             <p className="who">{cell.who}</p>
             {/* Signed where the database says so, ruled where it does not — the
                 same document either way, so a half-finished record cannot be
