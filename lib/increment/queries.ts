@@ -7,6 +7,16 @@ import { median, monthsSince } from "@/lib/increment/calc";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 
+/* -- The two question ids from 0062 and 0017, derived the same way the
+      migrations derive them: md5('linkd.q.' || key). Written out rather than
+      computed at runtime, because there is no `key` column to look them up by
+      — P2-3 keeps the seed keys in the migration and out of the schema. These
+      are md5('linkd.q.mgr.hike_percent') and md5('linkd.q.mgr.promotion'),
+      formatted 8-4-4-4-12, which is exactly what `md5(...)::uuid` yields in
+      Postgres: the cast reinterprets the digest and sets no version bits. -- */
+const MANAGER_HIKE_QUESTION_ID = "3ac71f32-a17a-3ec1-b745-a4c7656a05c8";
+const MANAGER_PROMOTION_QUESTION_ID = "9c7ed575-296f-0f06-7566-5784eae0e25d";
+
 export type IncrementReview = Tables<"increment_reviews">;
 
 export type PastIncrement = {
@@ -35,6 +45,22 @@ export type SalaryBand = {
   departmentSampleSize: number;
   /** Configurable quick-set percentages. */
   hikeBands: number[];
+
+  /**
+   * What the manager recommended, from their own answer layer (0062).
+   *
+   * Read here rather than copied onto `increment_reviews`: the value belongs to
+   * the rater who wrote it, and duplicating it into the salary table would make
+   * two records of one opinion that can disagree the moment a return unlocks
+   * the manager's layer and they change their mind.
+   *
+   * Null covers three different things and the screen must say which: no
+   * manager answer yet, a manager who left it blank, or a promotion answer that
+   * never revealed the field.
+   */
+  managerHikePct: number | null;
+  /** Their promotion answer, so a blank percentage can be explained. */
+  managerPromotion: string | null;
 };
 
 /**
@@ -68,6 +94,34 @@ export async function getSalaryBand(
       supabase.from("increment_reviews").select("*").eq("evaluation_id", evaluationId).maybeSingle(),
       supabase.from("increment_settings").select("hike_bands").eq("id", true).maybeSingle(),
     ]);
+
+  /* -- THE MANAGER'S RECOMMENDATION, out of their own layer.
+        §5 as amended by 0062: a rater RECORDS a percentage, and only HR and the
+        MD read it back. This read runs on HR's or the MD's session, so RLS is
+        what permits it — the manager can never reach this function.
+
+        Both values come from the LEAD answers blob keyed by question id, which
+        is why neither needed a column. -- */
+  const { data: leadAnswers } = await supabase
+    .from("evaluation_responses")
+    .select("answers")
+    .eq("evaluation_id", evaluationId)
+    .eq("layer", "LEAD")
+    .maybeSingle();
+
+  const leadBlob = (leadAnswers?.answers ?? {}) as Record<string, unknown>;
+  const rawHike = leadBlob[MANAGER_HIKE_QUESTION_ID];
+  const parsedHike = rawHike === null || rawHike === undefined || rawHike === "" ? null : Number(rawHike);
+  // A non-numeric or out-of-range answer scores as absent rather than being
+  // clamped — P4-10's rule, and the figure here feeds a pay proposal.
+  const managerHikePct =
+    parsedHike !== null && Number.isFinite(parsedHike) && parsedHike >= 0 && parsedHike <= 100
+      ? parsedHike
+      : null;
+
+  const rawPromotion = leadBlob[MANAGER_PROMOTION_QUESTION_ID];
+  const managerPromotion =
+    typeof rawPromotion === "string" && rawPromotion.trim() !== "" ? rawPromotion : null;
 
   /* -- This person's own last three. Context that stops a number being set in a
         vacuum, and HR-and-MD-only data (§5). -- */
@@ -129,6 +183,8 @@ export async function getSalaryBand(
       departmentMedianPct,
       departmentSampleSize,
       hikeBands: (settings?.hike_bands ?? [5, 10, 15]).map(Number),
+      managerHikePct,
+      managerPromotion,
     },
   };
 }

@@ -146,6 +146,42 @@ export function SalaryBand({
         />
       </div>
 
+      {/* ---------- What the manager recommended ----------
+          Beside joining and current salary, because that is the order somebody
+          reads the decision in: what they joined on, what they are on, and what
+          the person who manages them thinks it should become.
+
+          Three different absences, said apart. "No recommendation" reads as a
+          manager who declined to give one; the real cases are that they have
+          not submitted, that they answered No to promotion so the field was
+          never shown, or that they saw it and left it blank. Collapsing those
+          into one dash would have HR chasing a manager who has already
+          answered. */}
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <Figure
+          label="Manager's recommended hike"
+          value={data.managerHikePct === null ? "—" : `${data.managerHikePct}%`}
+          hint={
+            data.managerHikePct !== null
+              ? "From their evaluation form. A recommendation — you decide the figure."
+              : data.managerPromotion === null
+                ? "Their review is not in yet."
+                : data.managerPromotion === "NO"
+                  ? "They did not recommend a promotion, so they were not asked for a percentage."
+                  : "They were asked and left it blank."
+          }
+        />
+        <Figure
+          label="Manager's proposed salary"
+          value={money(newCtcFromPct(currentCtc, data.managerHikePct))}
+          hint={
+            data.managerHikePct !== null && currentCtc !== null
+              ? `${money(currentCtc)} plus ${data.managerHikePct}% — ${money(monthlyFromAnnual(newCtcFromPct(currentCtc, data.managerHikePct)))} a month.`
+              : "Needs both a current salary and a recommended percentage."
+          }
+        />
+      </div>
+
       {/* -- BOTH, FOR HR. It was an if/else: HR got the proposal and the MD got
             the approval, so the close button — which lives in the approval —
             was on a panel HR never rendered. 0056 gave HR the permission and
@@ -258,11 +294,34 @@ function HrProposal({
   const router = useRouter();
   const review = data.review;
 
-  const [ctcText, setCtcText] = React.useState(review?.hr_proposed_ctc ? String(review.hr_proposed_ctc) : "");
+  /* -- HR NO LONGER TYPES A FIGURE FROM NOTHING.
+        The manager's recommended percentage (0062) seeds both fields, so the
+        proposal arrives computed and HR reviews it rather than composing it.
+
+        SEEDED, NOT LOCKED, and that is the owner's decision recorded: the
+        percentage ADVISES. HR and the MD remain free to propose anything, so
+        the fields stay editable — a recommendation that could not be departed
+        from would be a decision, and §9 does not give it to the manager.
+
+        A figure HR has already saved wins over the recommendation. Otherwise
+        reopening the screen would quietly discard their considered number and
+        put the manager's back. -- */
+  const managerPct = data.managerHikePct;
+  const managerProposed = newCtcFromPct(data.currentCtc, managerPct);
+
+  const [ctcText, setCtcText] = React.useState(
+    review?.hr_proposed_ctc
+      ? String(review.hr_proposed_ctc)
+      : managerProposed !== null
+        ? String(managerProposed)
+        : "",
+  );
   const [pctInput, setPctInput] = React.useState(
     review?.hr_proposed_hike_pct !== null && review?.hr_proposed_hike_pct !== undefined
       ? String(review.hr_proposed_hike_pct)
-      : "",
+      : managerPct !== null
+        ? String(managerPct)
+        : "",
   );
   const [justification, setJustification] = React.useState(review?.hr_justification ?? "");
   const [busy, setBusy] = React.useState(false);
