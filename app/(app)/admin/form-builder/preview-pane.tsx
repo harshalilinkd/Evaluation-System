@@ -8,6 +8,7 @@ import { Eye, Monitor, Smartphone } from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { ScaleLegend } from "@/components/appraise/rating-scale";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
 
@@ -179,16 +180,24 @@ export function PreviewPane({
                    responsive rules key on `sm`, which is the viewport — and the
                    viewport here is a 1600px monitor, so a 340px frame was
                    getting the desktop layout: six rating cells across ~45px
-                   each, "dissatisfied" breaking mid-word, and the hover-only
-                   readout instead of the legend a phone actually shows. The
-                   frame said phone and the form inside it did not. */
-                <FormRenderer
-                  form={form}
-                  readOnly
-                  values={{}}
-                  highlightQuestionId={focusQuestionId}
-                  compact={phone}
-                />
+                   each, "dissatisfied" breaking mid-word, and a hover-only
+                   readout on a surface that has no hover. The frame said phone
+                   and the form inside it did not. */
+                <>
+                  {/* §6's wording sits at the TOP of the form, once — the
+                      placement the employee's screen uses. The preview drew it
+                      under every question instead, which is why this pane did
+                      not look like the form it was previewing. */}
+                  <ScaleLegend form={form} className="mb-4" />
+
+                  <FormRenderer
+                    form={form}
+                    readOnly
+                    values={{}}
+                    highlightQuestionId={focusQuestionId}
+                    compact={phone}
+                  />
+                </>
               )}
             </div>
           </div>

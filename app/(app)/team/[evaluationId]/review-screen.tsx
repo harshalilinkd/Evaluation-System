@@ -22,6 +22,7 @@ import { AutosaveIndicator, type AutosaveState } from "@/components/appraise/aut
 import { BackLink } from "@/components/appraise/back-link";
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -446,6 +447,17 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
       ) : null}
 
       {/* ---------- The form ---------- */}
+
+      {/* -- §6's wording, and it was MISSING here entirely.
+            When the legend moved from under every question to once at the top,
+            only the employee's form was given the new `ScaleLegend`. This
+            screen was left with the hover-only readout — which does not exist
+            on a phone, so a HOD rating their team on a handset had no way to
+            read what any number meant. §6 calls the wording fixed and §13.2
+            puts the phone first; between them the wording has to be reachable
+            without a pointer. -- */}
+      <ScaleLegend form={form} className="mb-4" />
+
       {/* The SAME renderer the employee gets, in the lead tier. No `pair`, no
           `referenceValues`, no `referenceLayer` — there is no second column to
           feed them, and passing an empty one would leave the shape of a thing

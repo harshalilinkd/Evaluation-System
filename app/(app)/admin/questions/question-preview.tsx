@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { dependencySentence, type ResponseType } from "@/lib/questions/labels";
 import type { FormDefinition, FormQuestion, QuestionSection } from "@/lib/forms/types";
 
@@ -93,6 +94,10 @@ export function QuestionPreview({
 
       {/* Interactive on purpose — HR should be able to click a rating and see
           how it behaves before they save it. */}
+      {/* §6's wording, once at the top — the placement the real form uses.
+          Rendered only when there is a 0-5 question to explain. */}
+      <ScaleLegend form={form} className="mb-4" />
+
       <FormRenderer form={form} compact={compact} />
     </div>
   );

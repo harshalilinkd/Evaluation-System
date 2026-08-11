@@ -605,7 +605,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       </section>
 
       {/* §6's wording, once — not under all 33 questions. See ScaleLegend. */}
-      <ScaleLegend className="mb-4" />
+      <ScaleLegend form={form} className="mb-4" />
 
       {/* ---------- The form ---------- */}
       <FormRenderer

@@ -229,42 +229,19 @@ export function RatingScale({
         {shown ? shown.full : "Not yet rated"}
       </p>
 
-      {/* -- The legend is now shown ONCE per form, not once per question.
-            P7-5 made it permanent on mobile because there is no hover there and
-            the wording would otherwise be unreachable. That was right about the
-            wording and wrong about the placement: six lines under each of 33
-            questions is 198 lines of the same six sentences, and it pushed the
-            actual questions most of a screen apart.
+      {/* -- THE PER-QUESTION LEGEND IS GONE, and nothing here replaces it.
+            It used to print §6's six sentences under every rating question,
+            which is 198 lines of the same six sentences on a 33-question form.
+            `ScaleLegend` now prints them once at the top, and every cell still
+            carries its own number and short label.
 
-            §6's wording is not lost — `ScaleLegend` prints it verbatim at the
-            top of the form, and every cell still carries its own number and
-            short label. What is gone is the repetition.
-
-            `compact` still shows it inline: the builder preview renders one
-            question in a narrow pane with no form around it to carry a
-            legend. -- */}
-      <dl className={cn("space-y-0.5", compact ? "block" : "hidden")}>
-        {SCALE_0_5_LABELS.map((option) => (
-          <div key={option.value} className="flex gap-2">
-            <dt
-              className={cn(
-                "tabular text-body-sm",
-                value === option.value ? tierClasses.numeral : "text-ink-muted",
-              )}
-            >
-              {option.value}
-            </dt>
-            <dd
-              className={cn(
-                "font-sans text-body-sm",
-                value === option.value ? "text-ink" : "text-ink-muted",
-              )}
-            >
-              {option.full}
-            </dd>
-          </div>
-        ))}
-      </dl>
+            It survived behind `compact` on the reasoning that a preview pane
+            has "no form around it to carry a legend" — which stopped being true
+            the moment the previews started rendering one. The consequence was
+            visible and was reported: the builder preview did not look like the
+            form it was previewing. `compact` now means one thing only — render
+            as if the viewport were narrow — and WHERE the wording goes is the
+            caller's decision, made the same way on every screen. -- */}
 
       {error ? (
         <p id={errorId} role="alert" className="font-sans text-body-sm text-critical">
@@ -297,7 +274,19 @@ export function RatingScale({
  * `open` on `sm` and up would need JavaScript, which is not worth it for a
  * block a laptop has room for anyway.
  */
-export function ScaleLegend({ className }: { className?: string }) {
+export function ScaleLegend({
+  form,
+  className,
+}: {
+  /* -- The legend takes the FORM and decides for itself whether it is needed.
+        Five screens render this now, and "remember to check whether there is a
+        0-5 question first" is a rule four of them would eventually get wrong in
+        different directions. One rule, in the component that owns it. -- */
+  form: { questions: ReadonlyArray<{ responseType: string }> };
+  className?: string;
+}) {
+  if (!form.questions.some((q) => q.responseType === "SCALE_0_5")) return null;
+
   return (
     <details className={cn("card-surface px-4 py-3", className)}>
       <summary className="cursor-pointer list-none text-body-sm font-medium text-ink marker:hidden">

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { ErrorState, TableSkeleton } from "@/components/appraise/states";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import { loadDepartmentPreview, type PreviewResult } from "@/app/(app)/admin/departments/[id]/preview-action";
@@ -95,6 +96,10 @@ function PreviewBody({
 
   return (
     <div className="p-6">
+      {/* §6's wording, once at the top — the placement the real form uses.
+          Rendered only when there is a 0-5 question to explain. */}
+      <ScaleLegend form={result.data} className="mb-4" />
+
       <FormRenderer
         form={result.data}
         readOnly
