@@ -342,3 +342,88 @@ export async function saveWorkerSalaryAsHr(
   revalidatePath(`/admin/worker-appraisals`);
   return { ok: true, data: { ok: true } };
 }
+
+/* ==================================================== the activity trail == */
+
+export type WorkerActivity = {
+  at: string;
+  who: string;
+  what: string;
+  detail: string | null;
+};
+
+/**
+ * What has happened to this appraisal, in words.
+ *
+ * The owner's requirement is explicit: "all actions, especially when a file is
+ * bounced back to HR and modified, must be recorded in an activity log (e.g.
+ * explicitly mentioning 'HR changed the new salary')."
+ *
+ * The rows were already being written — 0064 logs every salary change by
+ * trigger, and every transition writes its own (§12) — and NOTHING RENDERED
+ * THEM. A trail nobody can read is a trail that does not exist for the purpose
+ * it was asked for.
+ *
+ * §5 note: no amount appears here, and none is available to. 0064's trigger
+ * records WHICH figures moved and the percentage either side, never the rupee
+ * values (P19-10) — audit diffs are read in places salary must not reach.
+ */
+export async function getWorkerActivity(evaluationId: string): Promise<WorkerActivity[]> {
+  const auth = await checkRole(["HR_ADMIN", "MD"]);
+  if (!auth.ok) return [];
+
+  const supabase = await createClient();
+
+  const { data: rows } = await supabase
+    .from("audit_log")
+    .select("created_at, actor_id, action, from_status, to_status, reason, diff")
+    .eq("entity", "worker_evaluation")
+    .eq("entity_id", evaluationId)
+    .order("created_at", { ascending: false });
+
+  if (!rows || rows.length === 0) return [];
+
+  const actorIds = [...new Set(rows.map((r) => r.actor_id).filter((v): v is string => Boolean(v)))];
+  const { data: people } = actorIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", actorIds)
+    : { data: [] };
+  const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
+
+  return rows.map((r) => {
+    const diff = (r.diff ?? {}) as Record<string, unknown>;
+    const changed = typeof diff.changed === "string" ? diff.changed : "";
+
+    /* -- Said the way somebody reading it would say it. "worker_salary.changed"
+          is what the database calls the event; "changed the new salary" is what
+          happened, which is what the owner asked to see. -- */
+    let what: string;
+    let detail: string | null = r.reason ?? null;
+
+    if (r.action === "worker_salary.changed") {
+      const parts = [
+        changed.includes("new_ctc") ? "the new salary" : null,
+        changed.includes("old_ctc") ? "the current salary" : null,
+        changed.includes("increment_pct") ? "the percentage" : null,
+      ].filter(Boolean) as string[];
+      what = parts.length > 0 ? `changed ${parts.join(" and ")}` : "changed the salary block";
+      if (diff.pct_from !== diff.pct_to && diff.pct_to !== null && diff.pct_to !== undefined) {
+        detail = `${diff.pct_from ?? "—"}% → ${diff.pct_to}%`;
+      }
+    } else if (r.action === "worker_evaluation.returned_to_hr") {
+      what = "sent it back to HR";
+    } else if (r.from_status && r.to_status) {
+      what = `moved it from ${String(r.from_status).toLowerCase().replace(/_/g, " ")} to ${String(r.to_status).toLowerCase().replace(/_/g, " ")}`;
+    } else {
+      what = String(r.action).replace(/^worker_[a-z_]*\./, "").replace(/_/g, " ");
+    }
+
+    return {
+      at: r.created_at,
+      // A null actor is the system — the trigger that raises a status when both
+      // sides are in has no person behind it and must not borrow one.
+      who: r.actor_id ? (nameOf.get(r.actor_id) ?? "Somebody") : "The system",
+      what,
+      detail,
+    };
+  });
+}

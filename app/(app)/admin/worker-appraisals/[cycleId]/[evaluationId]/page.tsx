@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { WorkerReviewClient } from "@/app/(app)/admin/worker-appraisals/[cycleId]/[evaluationId]/review-client";
 import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
-import { getWorkerReview } from "@/lib/worker/review";
+import { getWorkerActivity, getWorkerReview } from "@/lib/worker/review";
 
 export const metadata: Metadata = { title: "Worker appraisal" };
 
@@ -25,5 +25,5 @@ export default async function Page({
     return <ErrorState title="Not available" body={review.error.message} />;
   }
 
-  return <WorkerReviewClient isMd={roles.includes("MD")} review={review.data} cycleId={cycleId} />;
+  return <WorkerReviewClient activity={await getWorkerActivity(evaluationId)} isMd={roles.includes("MD")} review={review.data} cycleId={cycleId} />;
 }

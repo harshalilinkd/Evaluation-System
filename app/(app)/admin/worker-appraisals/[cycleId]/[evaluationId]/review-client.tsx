@@ -14,6 +14,8 @@ import { reviewWorkerAppraisal, type WorkerReview } from "@/lib/worker/review";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 import { saveWorkerSalaryAsHr } from "@/lib/worker/review";
+import type { WorkerActivity } from "@/lib/worker/review";
+import { formatDateTime } from "@/lib/utils/date";
 
 const TICK_WORD: Record<string, string> = {
   EXCELLENT: "Excellent",
@@ -39,9 +41,12 @@ export function WorkerReviewClient({
   review,
   cycleId,
   isMd,
+  activity,
 }: {
   review: WorkerReview;
   cycleId: string;
+  /** What has happened to this appraisal, newest first. */
+  activity: WorkerActivity[];
   /** Decides which single ending this person is offered. The SERVER decides
       whether they may take it — a screen is not a guard (§9). */
   isMd: boolean;
@@ -253,6 +258,35 @@ export function WorkerReviewClient({
           </div>
         </div>
       ) : null}
+      {/* ---------- What has happened ----------
+          The rows were already being written — 0064 logs every salary change
+          by trigger, and every transition writes its own (§12) — and NOTHING
+          RENDERED THEM. A trail nobody can read is not a trail, for the purpose
+          it was asked for.
+
+          Newest first, because the question somebody opens this with is "what
+          changed since I last looked", not "how did it begin". */}
+      {activity.length > 0 ? (
+        <div className="card-surface space-y-3 p-5">
+          <p className="font-sans text-body-lg text-ink">Activity</p>
+          <ol className="divide-y divide-rule">
+            {activity.map((a, i) => (
+              <li key={`${a.at}-${i}`} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-2.5">
+                <span className="font-sans text-body-sm text-ink">
+                  <span className="font-medium">{a.who}</span> {a.what}
+                </span>
+                {a.detail ? (
+                  <span className="font-sans text-body-sm text-ink-muted">— {a.detail}</span>
+                ) : null}
+                <span className="tabular ml-auto font-sans text-body-sm text-ink-muted">
+                  {formatDateTime(a.at)}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
+
     </div>
   );
 }
