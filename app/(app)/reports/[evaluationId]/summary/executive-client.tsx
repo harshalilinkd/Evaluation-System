@@ -14,11 +14,11 @@ import {
 } from "@/app/(app)/reports/[evaluationId]/summary/narrative-map";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
-import { monthlyFromAnnual } from "@/lib/increment/calc";
 import type { SalaryBand } from "@/lib/increment/queries";
 import type { NarrativeBlock, EvaluationReport } from "@/lib/reports/types";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { moneyMonthly } from "@/components/appraise/money-input";
 
 const score = (v: number | null) => (v === null ? "—" : v.toFixed(2));
 const signed = (v: number | null) => {
@@ -235,14 +235,17 @@ export function ExecutiveSummary({
               {/* One unified compensation card */}
               <Card title="Where they stand today">
                 <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  <Fact label="Joining CTC" value={formatInr(salary.joiningCtc)} />
+                  {/* Monthly, like every other salary in the product. This is the
+                      screen the MD approves from, so it is the last place that should
+                      still speak a different unit from the one HR typed it in. */}
+                  <Fact label="Joining salary" value={moneyMonthly(salary.joiningCtc)} />
                   <Fact
-                    label="Current CTC"
-                    value={formatInr(salary.currentCtc)}
+                    label="Current salary"
+                    value={moneyMonthly(salary.currentCtc)}
                     caption={
-                      monthlyFromAnnual(salary.currentCtc) === null
+                      salary.currentCtc === null
                         ? undefined
-                        : `${formatInr(monthlyFromAnnual(salary.currentCtc))} / month`
+                        : `${formatInr(salary.currentCtc)} a year`
                     }
                     strong
                   />

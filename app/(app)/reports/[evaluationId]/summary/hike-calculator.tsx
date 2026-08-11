@@ -274,8 +274,22 @@ export function HikeCalculator({
             from grey to black does not already say. The state change lives in
             the type, not in the container. -- */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-card bg-surface-mute p-4 sm:grid-cols-4">
-        <Out label="New CTC" value={formatInr(target ?? 0)} strong live={live} />
-        <Out label="Hike amount" value={formatInr(amount ?? 0)} live={live} />
+        {/* The figure that is PAID, in the unit everybody now types and reads.
+              The annual equivalent rides underneath — it is what the letter
+              says, not what the decision is made in. */}
+          <Out
+            label="New salary"
+            value={formatInr(monthlyNew ?? 0)}
+            caption={target === null ? undefined : `${formatInr(target)} a year`}
+            strong
+            live={live}
+          />
+        <Out
+            label="Rise"
+            value={formatInr(monthlyFromAnnual(amount) ?? 0)}
+            caption={amount === null ? undefined : `${formatInr(amount)} a year`}
+            live={live}
+          />
         <Out
           label="New monthly"
           value={formatInr(monthlyNew ?? 0)}

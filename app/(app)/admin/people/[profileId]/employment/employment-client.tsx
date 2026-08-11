@@ -30,6 +30,7 @@ import { addJoiningSalary, addSalaryChange, saveEmployment } from "@/lib/employm
 import type { EmploymentDetail } from "@/lib/employment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 
 const EMPLOYMENT_TYPES = [
   { value: "PERMANENT", label: "Permanent" },
@@ -270,7 +271,7 @@ export function EmploymentClient({
         }
       >
         <div className="grid gap-4 sm:grid-cols-3">
-          <Readout label="Current CTC" value={formatInr(r?.current_ctc ?? null)} emphasis />
+          <Readout label="Current salary" value={moneyMonthly(r?.current_ctc ?? null)} emphasis />
           <Readout label="Effective from" value={formatDate(r?.salary_effective_from ?? null)} />
 
           {/* -- The joining figure was an em dash with nothing to click, and no
@@ -280,7 +281,7 @@ export function EmploymentClient({
                 of being filled is the difference between a gap and a dead
                 end (§13.4). -- */}
           <div>
-            <Readout label="Joining CTC" value={formatInr(r?.joining_ctc ?? null)} />
+            <Readout label="Joining salary" value={moneyMonthly(r?.joining_ctc ?? null)} />
             {r && r.joining_ctc == null ? (
               <Button
                 variant="ghost"
@@ -356,13 +357,13 @@ export function EmploymentClient({
                       {formatDate(row.effective_from)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-body-sm text-ink-muted">
-                      {formatInr(row.previous_ctc)}
+                      {moneyMonthly(row.previous_ctc)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-body-sm font-medium text-ink">
-                      {formatInr(row.new_ctc)}
+                      {moneyMonthly(row.new_ctc)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-body-sm text-ink">
-                      {formatInr(row.hike_amount)}
+                      {moneyMonthly(row.hike_amount)}
                     </td>
                     <td className="tabular px-3 py-2.5 text-body-sm text-ink">
                       {row.hike_pct === null ? "—" : `${row.hike_pct}%`}
@@ -568,17 +569,19 @@ function SalaryDialog({
             <Field label="Effective from" required>
               <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
             </Field>
-            <Field label="New CTC (annual)" required>
-              <Input
-                type="number"
-                min={1}
-                value={newCtc}
-                onChange={(e) => setNewCtc(e.target.value)}
-                placeholder="600000"
+            {/* MONTHLY, like every other salary field. `MoneyInput` takes and
+                returns the ANNUAL figure, so `newCtc` still holds what it
+                always held and the action is untouched — the unit crosses in
+                one component rather than at a dozen call sites. */}
+            <Field label="New salary (monthly)" required>
+              <MoneyInput
+                value={newCtc === "" ? null : Number(newCtc)}
+                onValueChange={(annual) => setNewCtc(annual === null ? "" : String(annual))}
+                placeholder="50,000"
               />
               {preview ? (
                 <p className="tabular mt-1.5 text-body-sm text-ink-muted">
-                  {formatInr(currentCtc)} → {formatInr(parsed)} · hike {formatInr(preview.hike)}
+                  {moneyMonthly(currentCtc)} → {moneyMonthly(parsed)} · hike {moneyMonthly(preview.hike)}
                   {preview.pct === null ? "" : ` · ${preview.pct}%`}
                 </p>
               ) : null}
@@ -703,18 +706,16 @@ function JoiningSalaryDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="joining_amount">
-                Joining salary (annual) <span className="text-critical">*</span>
+                Joining salary (monthly) <span className="text-critical">*</span>
               </Label>
-              <Input
+              <MoneyInput
                 id="joining_amount"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="numeric"
-                placeholder="180000"
-                className="min-h-11 tabular"
+                value={amount === "" ? null : Number(amount)}
+                onValueChange={(annual) => setAmount(annual === null ? "" : String(annual))}
+                placeholder="15,000"
               />
               <p className="text-body-sm text-ink-muted">
-                ₹ and commas are fine. Recorded once and left alone afterwards, because
+                Recorded once and left alone afterwards, because
                 every later percentage is worked out from it.
               </p>
             </div>

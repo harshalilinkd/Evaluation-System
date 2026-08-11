@@ -103,10 +103,37 @@ export function expectationGap(
   };
 }
 
-/** A monthly figure from an annual CTC, for the "per month" line. */
+/**
+ * THE TWO SIDES OF THE UNIT BOUNDARY.
+ *
+ * Every salary in this system is STORED annual and, at the owner's instruction,
+ * READ AND TYPED monthly. These are the only two functions that cross that
+ * line, and nothing else in the codebase may divide or multiply by twelve.
+ *
+ * Why storage stays annual is in 0061's header, and it is not a preference:
+ * `salary_history_is_append_only()` refuses UPDATE and DELETE for every caller
+ * including a migration, so the stored rows CANNOT be rescaled — the guard the
+ * pay record's evidentiary value rests on would have to be dropped first.
+ *
+ * The pair must round in a way that survives a round trip. `annualFromMonthly`
+ * multiplies exactly; `monthlyFromAnnual` rounds. So monthly → annual → monthly
+ * returns the original for every whole-rupee monthly figure, which is what
+ * somebody typing 50,000 and reopening the form has every right to expect.
+ * Annual → monthly → annual does NOT, and must not be relied on: ₹100,000 a
+ * year is ₹8,333 a month is ₹99,996 a year. That asymmetry is why an input
+ * takes the monthly figure as the source of truth and never re-derives it.
+ */
+
+/** A monthly figure from an annual CTC, for display. */
 export function monthlyFromAnnual(ctc: number | null): number | null {
   if (ctc === null || !Number.isFinite(ctc)) return null;
   return Math.round(ctc / 12);
+}
+
+/** The annual figure to STORE, from the monthly figure somebody typed. */
+export function annualFromMonthly(monthly: number | null): number | null {
+  if (monthly === null || !Number.isFinite(monthly)) return null;
+  return Math.round(monthly * 12);
 }
 
 /**

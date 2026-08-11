@@ -40,6 +40,7 @@ import { approveAndClose, confirmIncrement, saveProposal } from "@/lib/increment
 import type { SalaryBand as SalaryBandData } from "@/lib/increment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 
 function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -130,11 +131,11 @@ export function SalaryBand({
 
       {/* ---------- Row 1 ---------- */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure label="Joining CTC" value={money(data.joiningCtc)} />
+        <Figure label="Joining salary" value={moneyMonthly(data.joiningCtc)} />
         <Figure
-          label="Current CTC"
-          value={money(currentCtc)}
-          hint={`${money(monthlyFromAnnual(currentCtc))} a month`}
+          label="Current salary"
+          value={moneyMonthly(currentCtc)}
+          hint={`${money(currentCtc)} a year`}
         />
         <Figure
           label="Months since last increment"
@@ -484,13 +485,11 @@ function HrProposal({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new_ctc" className="type-label text-ink-muted">New CTC</Label>
-            <Input
+            <Label htmlFor="new_ctc" className="type-label text-ink-muted">New salary</Label>
+            <MoneyInput
               id="new_ctc"
-              value={ctcText}
-              onChange={(e) => onCtcChange(e.target.value)}
-              inputMode="numeric"
-              className="min-h-11 tabular"
+              value={ctcText === "" ? null : Number(ctcText)}
+              onValueChange={(annual) => onCtcChange(annual === null ? "" : String(annual))}
             />
           </div>
         </div>
@@ -726,14 +725,12 @@ function MdApproval({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="approved_ctc" className="type-label text-ink-muted">Approved CTC</Label>
-            <Input
+            <Label htmlFor="approved_ctc" className="type-label text-ink-muted">Approved salary</Label>
+            <MoneyInput
               id="approved_ctc"
-              value={ctcText}
-              onChange={(e) => setCtcText(e.target.value)}
-              inputMode="numeric"
+              value={ctcText === "" ? null : Number(ctcText)}
+              onValueChange={(annual) => setCtcText(annual === null ? "" : String(annual))}
               disabled={settled}
-              className="min-h-11 tabular"
             />
             <p className="font-sans text-body-sm text-ink-muted">
               Defaults to HR&rsquo;s proposal. {pctText(pct)} on the current salary.
@@ -936,9 +933,12 @@ function InterviewCard({
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="final_ctc" className="type-label text-ink-muted">Final CTC</Label>
-          <Input id="final_ctc" value={finalText} onChange={(e) => setFinalText(e.target.value)}
-            inputMode="numeric" className="min-h-11 tabular" />
+          <Label htmlFor="final_ctc" className="type-label text-ink-muted">Final salary</Label>
+          <MoneyInput
+            id="final_ctc"
+            value={finalText === "" ? null : Number(finalText)}
+            onValueChange={(annual) => setFinalText(annual === null ? "" : String(annual))}
+          />
           <p className="font-sans text-body-sm text-ink-muted">{pctText(finalPct)} on the current salary.</p>
         </div>
         <div className="space-y-2">
