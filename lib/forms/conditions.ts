@@ -20,14 +20,32 @@ export type ConditionRow = {
  * as "true", "True" or "TRUE".
  *
  * A MULTI_SELECT parent matches when the value appears anywhere in its array.
+ *
+ * SEVERAL ACCEPTABLE VALUES, separated by `|`.
+ *
+ * The column held exactly one value, and that made "show this when Promotion is
+ * Yes OR Can be considered" — the manager's hike percent — inexpressible as
+ * data. The alternatives were worse: a second column to keep in step with the
+ * first, or a bespoke branch in the renderer, which is the one component P9-1
+ * keeps single because every form in the product draws through it.
+ *
+ * `|` rather than a comma, because an option label may legitimately contain a
+ * comma ("Yes, with training") and none of them contains a pipe. A value with
+ * no pipe behaves exactly as before, so every existing condition — including
+ * the ones already frozen into launched snapshots (§5) — is untouched.
  */
 export function matchesDependency(answer: unknown, dependsValue: string): boolean {
   if (answer === null || answer === undefined) return false;
 
-  const target = dependsValue.trim().toLowerCase();
+  const targets = dependsValue
+    .split("|")
+    .map((v) => v.trim().toLowerCase())
+    .filter((v) => v.length > 0);
+
+  if (targets.length === 0) return false;
 
   if (Array.isArray(answer)) {
-    return answer.some((entry) => String(entry).trim().toLowerCase() === target);
+    return answer.some((entry) => targets.includes(String(entry).trim().toLowerCase()));
   }
 
   // An object answer has no sensible scalar comparison; treat as unmatched
@@ -37,7 +55,7 @@ export function matchesDependency(answer: unknown, dependsValue: string): boolea
   // An empty string is a real answer to a text question but can never satisfy a
   // condition, and String(false) === "false" matches a "false" condition, which
   // is intended.
-  return String(answer).trim().toLowerCase() === target;
+  return targets.includes(String(answer).trim().toLowerCase());
 }
 
 /**
