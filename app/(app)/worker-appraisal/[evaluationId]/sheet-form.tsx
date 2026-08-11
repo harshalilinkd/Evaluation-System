@@ -50,22 +50,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   /* -- The salary block. Present only when the server sent one, which happens
         only for a supervisor or an administrator (0051) — a worker's sheet has
         `salary: null` and this state is never used. -- */
-  /* -- One helper, so the two inputs cannot disagree about the arithmetic.
-        Null rather than Infinity on a zero old salary: `numeric` cannot store
-        Infinity and no screen can render it as anything a person should read
-        (P21-3 hit the same edge). -- */
-  const withPct = (next: {
-    salaryChanged: boolean;
-    oldCtc: number | null;
-    incrementPct: number | null;
-    newCtc: number | null;
-  }) => ({
-    ...next,
-    incrementPct:
-      next.oldCtc && next.newCtc && next.oldCtc > 0
-        ? Math.round(((next.newCtc - next.oldCtc) / next.oldCtc) * 10000) / 100
-        : null,
-  });
+  /* -- `withPct` is GONE with the two amounts it derived from. The percentage
+        is no longer a consequence of an old and a new salary the supervisor
+        typed — it is the only thing they enter, and HR turns it into money
+        against a figure the supervisor is not shown (0064). -- */
 
   const [salary, setSalary] = React.useState(
     sheet.salary ?? { salaryChanged: false, oldCtc: null, incrementPct: null, newCtc: null },
@@ -470,58 +458,49 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
             </div>
           </fieldset>
 
-          {/* Only when there is a change to describe. Three figures under a
-              "Same" tick are three fields that must be left blank. */}
+          {/* -- THE PERCENTAGE IS THE INPUT NOW, AND THE AMOUNTS ARE GONE.
+
+                A supervisor does not know what the people they rate are paid,
+                and 0064 makes that structural: their read of the salary block
+                is revoked, a column guard refuses any write to an amount, and
+                what they read back comes from a view that carries no figure at
+                all. Leaving the fields on screen and disabling them would still
+                have told them a salary exists and roughly where it sits.
+
+                Worth knowing what was actually lost: the old salary they used
+                to type was never auto-filled. That read runs on the
+                supervisor's session and `employment_records` admits only HR and
+                the MD, so it has never once returned a row — the figure was
+                recalled from memory and checked against nothing.
+
+                The percentage used to be DERIVED from the two amounts and shown
+                read-only. It is now the one thing they enter, so it is a real
+                field: HR turns it into money against a salary the supervisor
+                cannot see. -- */}
           {salary.salaryChanged ? (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="w_old">Old salary</Label>
-                <Input
-                  id="w_old"
-                  inputMode="numeric"
-                  disabled={readOnly}
-                  value={salary.oldCtc ?? ""}
-                  onChange={(e) => {
-                    setSalary((s) => withPct({ ...s, oldCtc: e.target.value === "" ? null : Number(e.target.value) }));
-                    setDirty(true);
-                  }}
-                  className="min-h-11 tabular"
-                />
-              </div>
-              {/* -- DERIVED, not typed.
-                    A percentage somebody enters by hand is a third version of
-                    the truth beside the two figures it comes from, and it is
-                    the one nobody recomputes when a salary is corrected. Shown
-                    read-only so it is plainly a consequence rather than a
-                    field left blank. -- */}
-              <div className="space-y-1.5">
-                <Label htmlFor="w_pct">Increment %</Label>
-                <Input
-                  id="w_pct"
-                  readOnly
-                  tabIndex={-1}
-                  aria-live="polite"
-                  value={
-                    salary.incrementPct === null ? "" : `${salary.incrementPct.toFixed(2)}%`
-                  }
-                  placeholder="Worked out for you"
-                  className="min-h-11 tabular bg-surface-mute text-ink-muted"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="w_new">New salary</Label>
-                <Input
-                  id="w_new"
-                  inputMode="numeric"
-                  disabled={readOnly}
-                  value={salary.newCtc ?? ""}
-                  onChange={(e) => {
-                    setSalary((s) => withPct({ ...s, newCtc: e.target.value === "" ? null : Number(e.target.value) }));
-                    setDirty(true);
-                  }}
-                  className="min-h-11 tabular"
-                />
-              </div>
+            <div className="space-y-1.5 sm:max-w-xs">
+              <Label htmlFor="w_pct">Recommended increment %</Label>
+              <Input
+                id="w_pct"
+                inputMode="decimal"
+                disabled={readOnly}
+                value={salary.incrementPct ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value === "" ? null : Number(e.target.value);
+                  // Out of range reads as absent rather than being clamped: this
+                  // figure becomes somebody's pay, and a silently corrected 500
+                  // is worse than a blank (P4-10).
+                  const pct = raw !== null && Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : null;
+                  setSalary((s) => ({ ...s, incrementPct: pct, oldCtc: null, newCtc: null }));
+                  setDirty(true);
+                }}
+                placeholder="e.g. 10"
+                className="min-h-11 tabular"
+              />
+              <p className="font-sans text-body-sm text-ink-muted">
+                Your recommendation. HR works out the amount — you are not shown
+                anybody&rsquo;s salary and do not need it to answer this.
+              </p>
             </div>
           ) : null}
         </div>
