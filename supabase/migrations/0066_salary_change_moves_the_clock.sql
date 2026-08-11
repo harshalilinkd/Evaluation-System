@@ -140,7 +140,7 @@ begin
            h.profile_id, h.new_ctc, h.effective_from
       from public.salary_history h
      where h.reason <> 'JOINING'
-     order by h.profile_id, h.effective_from desc, h.created_at desc
+     order by h.profile_id, h.effective_from desc, h.recorded_at desc
   )
   update public.employment_records e
      set current_ctc = n.new_ctc,
@@ -181,7 +181,8 @@ select
      from public.employment_records e
      join (select distinct on (profile_id) profile_id, new_ctc, effective_from
              from public.salary_history where reason <> 'JOINING'
-            order by profile_id, effective_from desc) n on n.profile_id = e.profile_id
+            order by profile_id, effective_from desc, recorded_at desc) n
+       on n.profile_id = e.profile_id
     where e.current_ctc is distinct from n.new_ctc)                    as figure_behind,
   (select count(*)
      from public.employment_records e
