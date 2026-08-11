@@ -11,6 +11,7 @@ import { getEvaluationForm } from "@/lib/forms/get-form";
 import { validateAnswers } from "@/lib/forms/zod-generator";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
+import { notifyIfNowWithHr } from "@/lib/notify/events";
 
 export type LeadResult<T> =
   | { ok: true; data: T }
@@ -172,6 +173,19 @@ export async function submitLeadReview(
   );
 
   if (!moved.ok) return fail(moved.error.code, moved.error.message);
+
+  /* -- ASK THE DATABASE WHAT IT DECIDED.
+        0038's trigger moves the record to PENDING_HR_REVIEW when both sides are
+        in, inside this same transaction — and a Postgres trigger cannot call
+        the notification code. So `transition()` above only ever reports
+        OPEN->OPEN, and the message telling HR a report is ready was never
+        raised by anything. Looking afterwards is the only way to know, because
+        this side does not know whether it was the one that completed the pair.
+
+        Not awaited for its result and unable to throw: the submission is
+        committed by now, and a provider outage must not turn it into a reported
+        failure (PW-2). -- */
+  await notifyIfNowWithHr(evaluationId);
 
   const supabase = await createClient();
   const { data: evaluation } = await supabase

@@ -44,7 +44,18 @@ function totals(d: DigestOutcome) {
 }
 
 /** Nobody is chased about the same thing twice inside this window. */
-const DEDUPE_HOURS = 24;
+/* -- 20, NOT 24, AND THE FOUR HOURS ARE THE POINT.
+      P17-4 dedupes on `notifications_log` so two runs in one day cannot each
+      think they are the first. But this job runs every 24 hours, and a window
+      of exactly 24 puts the previous run's message ON the boundary — seconds of
+      drift decide whether today's reminder is suppressed as a duplicate.
+      Roughly every other one vanished, and the due-day nudge could disappear
+      entirely.
+
+      20 leaves four hours of slack for a job that never runs twice in that span
+      anyway, so the guard still does its work and can no longer swallow a real
+      message. -- */
+const DEDUPE_HOURS = 20;
 
 type Holder = {
   profileId: string;
@@ -110,7 +121,27 @@ export async function GET(request: Request) {
      Both run BEFORE the per-person reminders' early returns: a day with no
      evaluation to chase is still a day HR may have an increment due. */
   await supabase.rpc("compute_due_items", { p_on: today });
-  const digests = await sendDueDigests(supabase, now);
+  /* -- GUARDED, because it can throw and take the whole job with it.
+        `sendDueDigests` builds links through `absoluteUrl()`, which REFUSES to
+        produce one when NEXT_PUBLIC_APP_URL is unset or points at localhost
+        (P30) — deliberately, so a dead link is never sent. This route had no
+        try/catch, so that refusal propagated out of the handler and every
+        per-person reminder below was never reached. One misconfigured
+        environment variable silenced the entire nightly chase, which is exactly
+        the "HR is not told on time" report.
+
+        Failing loudly is right. Failing loudly should not also mean failing
+        silently for everything else. -- */
+  let digests: DigestOutcome;
+  try {
+    digests = await sendDueDigests(supabase, now);
+  } catch (cause) {
+    digests = {
+      sent: 0,
+      failed: 1,
+      skipped: [cause instanceof Error ? cause.message : "The due digests could not be sent."],
+    };
+  }
 
   /* ---------- Who is holding what ---------- */
   const { data: cycles } = await supabase

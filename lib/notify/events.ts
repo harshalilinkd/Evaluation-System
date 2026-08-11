@@ -596,3 +596,52 @@ async function run({
       return NOTHING;
   }
 }
+
+/* ============================================ the trigger's move, announced = */
+
+/**
+ * Raise `reportReady` when the DATABASE has just moved a record to HR.
+ *
+ * THIS EXISTS BECAUSE A POSTGRES TRIGGER CANNOT CALL TYPESCRIPT.
+ *
+ * §8's "both sides in → PENDING_HR_REVIEW" is made by 0038's trigger, inside
+ * the same transaction as the submission. So both submit actions call
+ * `transition(id, "OPEN", …)` and `notifyTransition` is handed `OPEN->OPEN`,
+ * which returns at the allowlist before any case runs. The
+ * `case "OPEN->PENDING_HR_REVIEW"` that raises this message is correct, tested,
+ * and was unreachable — so HR has never once been told a report was ready, and
+ * the in-app bell was silent for the same reason.
+ *
+ * The fix is not to move the transition back into TypeScript: F11-1 put it in a
+ * trigger precisely because no caller can then forget it, and that reasoning
+ * still holds. It is to LOOK, after the write, at what the database decided —
+ * which is the only place that knows.
+ *
+ * Called by both submit actions, because either side can be the one that
+ * completes the pair, and neither knows whether it was.
+ *
+ * Never throws and never blocks: the submission is committed and audited by the
+ * time this runs (PW-2).
+ */
+export async function notifyIfNowWithHr(evaluationId: string): Promise<TransitionNotice> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("evaluations")
+      .select("status")
+      .eq("id", evaluationId)
+      .maybeSingle();
+
+    // Not the pair completing — the other side is still outstanding, and under
+    // blind rating neither person is told anything about that (§5).
+    if (data?.status !== "PENDING_HR_REVIEW") return NOTHING;
+
+    return await notifyTransition({
+      evaluationId,
+      from: "OPEN",
+      to: "PENDING_HR_REVIEW",
+    });
+  } catch {
+    return NOTHING;
+  }
+}
