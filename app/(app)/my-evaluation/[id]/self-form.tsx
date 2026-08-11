@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { monthlyFromAnnual } from "@/lib/increment/calc";
 import { saveSelfDraft, submitSelfEvaluation } from "@/lib/evaluations/self-actions";
 import {
   clearDraft,
@@ -609,14 +610,26 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               anybody else's, and not on an ordinary evaluation. */}
         {meta.isIncrement ? (
           <div className="mt-4 border-t border-rule pt-4">
+            {/* -- SHOWN PER MONTH, because that is what the form now ASKS FOR.
+                  0061 moved the expectation question to a monthly figure. This
+                  block sat directly above it showing the ANNUAL package — so
+                  the page would have anchored somebody on one unit and then
+                  asked them for the other, which is the 733% incident built
+                  into the layout rather than left to chance.
+
+                  The annual figure stays underneath as context: it is what
+                  appears on their letter, and dropping it entirely would make
+                  the two documents look like they disagree. -- */}
             <dt className="type-label text-ink-muted">Current salary</dt>
             <dd className="tabular mt-0.5 text-display-sm text-ink">
-              {formatInr(meta.currentCtc)}
+              {meta.currentCtc === null
+                ? formatInr(null)
+                : `${formatInr(monthlyFromAnnual(meta.currentCtc))} a month`}
             </dd>
             <p className="mt-1 text-body-sm text-ink-muted">
               {meta.currentCtc === null
                 ? "Not on record. HR can add it — it does not stop you filling this in."
-                : "From your employment record, so it cannot be edited here. Your expectation is asked further down."}
+                : `${formatInr(meta.currentCtc)} a year. From your employment record, so it cannot be edited here. Your expectation is asked further down, per month.`}
             </p>
           </div>
         ) : null}

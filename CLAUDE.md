@@ -4581,3 +4581,49 @@ clearing a queue. It needs a migration and an instruction, not an assumption.
 **Verification.** Typecheck 0 errors, lint 0 errors, build clean. The wiring was
 checked by reading the call sites, not by using the screens — nothing here has
 been clicked.
+
+---
+
+### P34 — The increment overhaul, phases 1 and 5
+
+Migration `0061_expectation_monthly.sql`. The employee's salary question moves to
+MONTHLY, and the MD's signature — which the system has been recording all along —
+reaches the printed sheet.
+
+Planned across six areas by twelve agents, each traced then adversarially
+reviewed. Two findings changed the design mid-build and are recorded below.
+
+#### Monthly at the edges, annual in the core
+
+| # | Decision | Why |
+|---|---|---|
+| P34-1 | **No stored figure is rescaled** | There are FIVE independent salary stores and not one records a unit — sixty migrations contain no `salary_unit`, no `is_monthly`, no CHECK on ('ANNUAL','MONTHLY'). The unit lives in comments and variable names, so it is not data and cannot be migrated, only reinterpreted. |
+| P34-2 | A divide-by-twelve is **blocked, not merely risky** | `salary_history_is_append_only()` raises unconditionally on UPDATE and DELETE for every caller including a superuser and a migration — P19-3 built it that way precisely so no caller could rewrite what somebody was paid. Rescaling would mean dropping the one guard the pay record's evidentiary value rests on, and then rewriting the employee's own submitted answer inside `evaluation_responses.answers` as well, because the raw number they typed is banked there too. |
+| P34-3 | The conversion is ONE line, in the one place the value crosses the boundary | `record_salary_expectation` multiplies by twelve on the way in. Every comparison downstream stays annual-against-annual, so `calc.ts` is untouched — nine of its ten functions are scale-invariant anyway, which is what makes this cheap. |
+| P34-4 | **0052's `!~* 'month'` filter had to go, and removing it is the point** | That clause was added to keep an annual column away from a question asking per month. Correct then; exactly backwards once the question asks per month by design — it would have excluded the only question the function is looking for, and the report would have read "Not stated", which is the bug 0052 was written to fix. |
+| P34-5 | The retired 0022 question stays excluded, by id | It asked monthly and was never converted, so multiplying its answers by twelve would invent a raise. |
+| P34-6 | A zero or negative expectation banks as **null**, not as a salary | §11's rule that missing is not zero, applied to money. |
+| P34-7 | **The trap was in the layout, not the wording** | Found by the review, after the migration was written: `self-form.tsx` renders the employee's own ANNUAL current salary directly above the expectation question (0040). Asking for a monthly figure while showing an annual one builds the 733% incident into the page rather than leaving it to chance. That figure is now shown per month, with the annual underneath as context — it is what appears on their letter, and dropping it would make the two documents look like they disagree. |
+| P34-8 | The unit change is **audited** | An answer of "30000" means ₹30,000 a year before this migration and ₹3,60,000 after it. Anybody reconciling a figure across that boundary needs to find the row that says so (§12). |
+
+#### The signature that was already being recorded
+
+| # | Decision | Why |
+|---|---|---|
+| P34-9 | **Nothing was built. It was being thrown away** | `md_reviewed_by`, `md_reviewed_at` and `md_outcome` are written on approval and protected by 0029's column-level trigger, so HR physically cannot write the MD's half — it is not a claim the sheet makes, it is a record the database enforced. It was computed in `build.ts`, typed on `ReportReview`, passed into `ReportSheet`, and then the signature section rendered three blank ruled lines over the top of it. A signed record was printing as though nobody had signed it. |
+| P34-10 | The old block was not even drawing a line | It emitted a bare `<span>` and `<p>`, while `print.css` styles `.rule`, `.who`, `.name` and `.date`. None of that CSS applied. The last two classes existed for exactly this feature and had never been used. |
+| P34-11 | Signed where the database says so, ruled where it does not | The same document either way, so a half-finished record cannot be made to look finished by printing it. |
+| P34-12 | The outcome is printed, not just the name | "Reviewed" and "Approved" are different acts and a signed sheet must not blur them. |
+| P34-13 | **No PDF library, again** | P15's decision stands. Server-side generation needs headless Chromium (hostile to Vercel's limits, and needs a second authenticated path into a route P20-13 deliberately made 403), a JS library that cannot read the 618-line print stylesheet and so becomes a SECOND renderer of a signed document (P9-1), or a third-party service that would send salary and both blind rating layers off-site — a §5 decision, not an engineering one. The browser already exports this sheet and sets the filename. |
+
+**Not built yet.** Phases 2, 3 and 4 of the plan: the manager's hike percent, HR
+ceasing to propose, and the production supervisor's percent-only sheet. Two
+blockers are known and unsolved, both found by the review:
+
+- `depends_value` holds ONE value and `matchesDependency` has no OR, so "show
+  when Promotion is Yes **or** Can be considered" is not expressible today.
+- A hidden question's answer is **stripped on save** (§6), so a manager who
+  flips Promotion to No and back silently loses the percent they typed.
+
+**Verification.** Typecheck 0 errors, lint 0 errors, build clean. 0061 is
+written and NOT applied.
