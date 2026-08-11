@@ -1926,66 +1926,76 @@ lint 0 errors (3 pre-existing warnings), build clean.
 
 ---
 
-### STATUS — where the build stands (as of P30)
+### STATUS — where the build stands (as of UI-3)
 
 **This section supersedes every earlier "Still to do" list in §18**, including
-the version written at P23, which predated everything from P24 onward. The phase
-entries above are the record of what each phase did and are never edited; this
-is the single current answer to "what is left". **Rewrite this section when it
-drifts, rather than adding a second list somewhere else.**
+the version written at P30, which predated the worker appraisal, the joining
+salary baseline, the schedule and the increment overhaul. The phase entries
+above are the record of what each phase did and are never edited; this is the
+single current answer to "what is left". **Rewrite this section when it drifts,
+rather than adding a second list somewhere else.**
 
 #### Deployed
 
 The app is on Vercel from `github.com/harshalilinkd/Evaluation-System` (private),
-functions pinned to `bom1` because Supabase is `ap-south-1` — they were on
-opposite sides of the world, which was the whole of the "deployed app is slow"
-report.
+functions pinned to `bom1` because Supabase is `ap-south-1`.
 
 #### Must happen before anybody is appraised for real
 
-1. **`NEXT_PUBLIC_APP_URL` is still `http://localhost:3000` on the deployment.**
-   Every invite link on both channels is therefore a bare path that opens
-   nothing. `absoluteUrl()` now refuses to build one (P30) rather than sending
-   it, so this fails loudly instead of silently — but it is still the single
-   thing standing between the system and working end to end. Set it and
-   **redeploy**: `NEXT_PUBLIC_*` is baked in at build time.
-2. **Email needs its credentials.** AMEND-4 added SMTP so it can send from a
-   Gmail account; `SMTP_USER`, `SMTP_PASSWORD` (a 16-character App Password)
-   and a matching `MAIL_FROM` are not set yet. WhatsApp works without this.
-3. **Migrations 0038 and 0039 may be unapplied.** 0020–0037 were confirmed by
-   the owner. Without 0038 an evaluation with both sides submitted sits at OPEN
-   and never reaches HR. `supabase/whats-applied.sql` answers this in one paste.
+1. **Check which migrations are applied.** The chain now runs to **0068**, and
+   several were written in sessions that could not reach the database. Paste
+   `supabase/whats-applied.sql` — it reports, per migration, whether the object
+   it creates exists, and leads with the evaluation status histogram, which is
+   the fastest answer to "which version of the product is this database
+   running" (F9-1). Do not infer this from §18: FIX-15 found a migration that
+   reported itself applied and had done nothing, and FIX-16 found one reported
+   outstanding that had never needed applying.
+2. **Email needs its credentials, if it is wanted.** AMEND-4 added SMTP so mail
+   can leave a Gmail account; `SMTP_USER`, `SMTP_PASSWORD` (a 16-character App
+   Password) and a matching `MAIL_FROM` must be set together, and P32's
+   connection check on Settings › Messages answers whether they work.
+   **WhatsApp works without any of this.**
+
+**`NEXT_PUBLIC_APP_URL` is no longer required** (P10-B). `resolveAppUrl()` falls
+back to `VERCEL_PROJECT_PRODUCTION_URL`, so a Vercel deployment builds correct
+links with nothing set. Setting it explicitly still wins, and is the only way to
+get working links from a tunnel or a custom domain that is not the project's own.
 
 #### Built and working
 
-Everything in §18 above, and since P23: the worker appraisal form in the Form
-Builder (P24) · editable section names and order (P25) · the thank-you dialog
-(P26) · the redesigned print pack and the company mark (P27) · the invite-link
-and email preflight (P28) · corrected dashboard encodings with table views
-(P29) · one link builder that cannot emit a broken URL (P30) · SMTP email
-(AMEND-4) · the cycle type on screen · the cycle activity trail · bulk question
-import with the 116 job-specific questions prepared.
+Everything in §18 above. Since P30, the largest additions are the **worker
+appraisal end to end** (WORKER-1 — rounds, the supervisor's sheet, HR's review,
+the MD hand-off and the print pack), the **joining salary baseline** that cannot
+inflate a hike (P19-E), the **company's real due schedule** (P22-B), the
+**in-app notification bell with sound** (NOTIFY-1), the **scorecard as a real
+dashboard** (P33), and the **increment overhaul** (P34 and the work following
+it).
 
-Repairs since P23 worth knowing about, because each was invisible until it bit:
-autosave gated on retired statuses (FIX-2), a save/submit contract that lost
-work (FIX-3), a draft mirror that destroyed the draft (FIX-4/6), `INSERT …
-RETURNING` needing a SELECT policy so only the HOD could submit (FIX-10), and
-§8's both-sides-in transition that nobody had the standing to make (FIX-11).
+Repairs since P30 worth knowing about, because each was invisible until it bit:
+a submit button rendered underneath the mobile navigation, a Server Action
+transport error printed to employees as though it were an explanation, two
+screens that showed one cycle when two were open, a supervisor's save that
+reported success having written nothing, a migration whose own verification
+shared the flaw it was verifying (FIX-15), a save/submit race that dropped the
+last tick (FIX-16), a recycle bin that hid cycles from administrators and not
+from employees (FIX-17), and an edit that demoted HR to EMPLOYEE (FIX-14).
 
 #### Genuinely outstanding
 
 | Area | What is missing |
 |---|---|
-| **A real end-to-end run** | Still the highest-value thing left. Nothing has been driven from launch to close against live data. Every fix since P23 was found by the owner using the product, not by the suites. |
-| **The test suites** | Live in a scratch directory outside the repository and are largely gone. Every claim in §18 up to P23 rests on them. New work since is covered by one-off scripts, also outside the repo. |
-| **Worker module (§7)** | The FORM exists (P24). The appraisal does not: no `worker_evaluations`, no worker cycle, no supervisor screen, no worker print pack. §8's worker transition table still describes something that does not run. |
+| **A real end-to-end run** | Still the highest-value thing left. Nothing has been driven from launch to close against live data. Every fix since P23 was found by the owner using the product, not by the suites — four phases have now had to record that. |
+| **The test suites** | Live in a scratch directory outside the repository and are largely gone. Every claim in §18 up to P23 rests on them; everything since is covered by one-off scripts, also outside the repo. |
+| **Worker analytics** | The appraisal exists (WORKER-1); none of P16's six views covers the `worker_` tables, so a worker's history exists only on their own sheets and appears on no dashboard. |
+| **Worker self-rating** | Deliberately absent, at the owner's instruction — recorded here so it is not mistaken for an oversight. 0048's hand-over function remains if it is ever wanted. |
 | **Section names are half-dynamic** | Every rendered FORM uses HR's names (P25). Screens that call `sectionLabel()` for their own chrome — the question-bank filter, the departments mapping screen, the scorecard section profile, the cycle wizard — still show the shipped defaults. |
-| **Palette** | The validator reports two real failures nobody has acted on: light-mode green↔cyan below the normal-vision floor, and dark-mode green and amber outside the lightness band (P29). Both are §2 token changes. |
+| **Palette** | Three real failures nobody has acted on: light-mode green↔cyan below the normal-vision floor, dark-mode green and amber outside the lightness band (P29), and the three tier hues all sitting light against the dark surface (P33). All are §2 token changes and need an explicit instruction, since §13.1 reserves those hues. |
 | **Exports** | CSV exists for department scores, the employee and employment imports, and the question bank. P16 asked for it on every table. |
 | **Performance** | P16's "under one second with 500 evaluations" is indexed for and has never been measured. |
 | **CSV import: update** | The employee import creates people but cannot amend them; re-uploading a corrected file fails on the duplicate email. The employment and question imports do update. |
 | **`?increment_for=`** | `/admin/increments` links to `/admin/cycles/new?increment_for={id}` and the wizard ignores the parameter. |
 | **On-demand due sweep** | `compute_due_items` runs only from the nightly cron, so somebody entered today does not appear on `/admin/due` until tomorrow. |
+| **Notification retention** | `app_notifications` (0059) grows one row per person per event for ever. Nothing prunes it. |
 
 #### Standing risks
 
@@ -1997,6 +2007,13 @@ RETURNING` needing a SELECT policy so only the HOD could submit (FIX-10), and
   rather than failing the message, and ties company mail to a personal account.
   `send.linkdprints.com` via Resend remains the better answer and is a settings
   change, not a code change.
+- **The supervisor can read and write worker pay** (0051, W1-3). A deliberate
+  amendment to §5's salary confinement, confined to the worker module. Reverting
+  it means dropping 0051's two policies.
+- **HR can approve and close an increment without the MD** (0056/0060, F15-19).
+  Instructed twice, and it removes the second pair of eyes AMEND-2 restored on a
+  pay decision. Reverting is `transitions.ts` back to `actors: ["MD"]`, not a
+  migration.
 
 ### AMEND-2 — Two cycle types, blind parallel rating, and HR/MD split again
 
@@ -4627,3 +4644,168 @@ blockers are known and unsolved, both found by the review:
 
 **Verification.** Typecheck 0 errors, lint 0 errors, build clean. 0061 is
 written and NOT applied.
+
+---
+
+### WORKER-1 — The worker appraisal, end to end
+
+Migrations `0047_worker_appraisal.sql`, `0048_worker_handover.sql`,
+`0050_worker_form_fields.sql`, `0051_worker_supervisor_salary.sql`,
+`0053_supervisor_reads_their_workers.sql`,
+`0054_supervisor_completes_worker_appraisal.sql`, `0057_worker_submit.sql`,
+`0058_worker_submit_backfill.sql`. `lib/worker/{cycle-actions,form,raters,review}.ts`,
+`/admin/worker-appraisals/**`, `/worker-appraisal/[evaluationId]/**`,
+`/worker-team`, `app/print/worker-sheet.tsx` and `/print/worker/[evaluationId]`.
+
+**§7's worker module had existed on paper since P0 and only its FORM had been
+built.** P24 delivered the eight qualities and a screen to edit them, and said
+so plainly: "There is no worker appraisal: no `worker_evaluations`, no worker
+cycle, no supervisor screen, no worker print pack." Reported as "we had built
+the evaluation form for workers, but in the evaluation cycle there is no way to
+start one for them" — which was exactly right.
+
+**NEW SCHEMA THROUGHOUT, AT THE OWNER'S EXPLICIT INSTRUCTION.** §0.4 forbids
+inventing a table; the request was to build the module §7 describes.
+
+**A REVERSAL MID-BUILD, ALSO INSTRUCTED.** The self layer was built first —
+§8's worker table has `CYCLE_ACTIVE → SELF_SUBMITTED`, and P3's own finding
+flagged that a WORKER-track person has no self form because every worker
+question is `LEAD_ONLY`. The owner resolved it the other way: **"don't involve
+workers, only the supervisor will fill the form and HR will review."** The self
+layer is retired rather than deleted — 0048's hand-over function remains, and
+the enum value stays for the reason A3-4 gives — and the flow is supervisor →
+HR → MD.
+
+| # | Decision | Why |
+|---|---|---|
+| W1-1 | **Four tables and three enums of its own, sharing nothing with the staff module** | §5: "WORKER data lives exclusively in the `worker_` tables", and §7's isolation rule forbids refactoring one module's function to serve the other. 0008's `questions_core_track_staff` CHECK had already made half of it structural (P8P-4). No foreign key crosses into the staff schema, so the two cannot be joined by accident. |
+| W1-2 | **Salary is its own table; the comment and the training tick are not** | The load-bearing decision of the phase, and it follows from one fact: **RLS grants a ROW, not a column.** A policy admitting the supervisor to `worker_evaluations` would admit every column on it, so a salary figure there would be readable by anybody who may read the appraisal. `worker_evaluation_decisions` (0050) is a separate row with its own policies. `overall_comment` and `training_required` are not salary and belong beside the ticks they qualify, so they sit on the response row where the layer's own policies already govern them. P5-4 and P19-2 made this call twice before; this is the third. |
+| W1-3 | **0051 amends §5's salary confinement, and the migration says so in capitals** | §5 confines salary to HR and the MD, and a supervisor is this module's HOD. The paper form puts Old Salary, Increment % and New Salary directly above the Supervisor Signature, and the owner instructed that the supervisor fills them. The cost is stated rather than glossed: a supervisor can now read and write the pay of every worker reporting to them. Confined to the worker module — no staff policy is touched — and recorded here so it reads as a decision rather than as a leak. |
+| W1-4 | **`submit_worker_layer` is SECURITY DEFINER, because `worker_evaluations` is HR-only for UPDATE** | Submitting has to move the status and stamp a timestamp on a row the supervisor may read and not write. The alternative — widening the UPDATE policy — would also let a supervisor rewrite the worker, the rater and the cycle. One narrow audited function instead of a policy: the pattern of `launch_cycle` (P10-4) and `log_admin_action` (P8-5). |
+| W1-5 | **A PostgREST update matching zero rows is reported as SUCCESS, and that is how the submit failed silently** | The most expensive bug in the module. `saveWorkerSheet` issued an `.update()` that RLS refused, got no error back, and printed "saved HH:MM" over ticks that were never stored. A save bug that states the opposite of what happened is the worst shape one can take: nobody reports it until the sheet is opened later and is empty. `.select()` makes the update report what it touched. Recorded in full at FIX-15. |
+| W1-6 | The hand-over is its own function, and is never recorded as the worker's own | §17: "never record a fill-on-behalf submission as though the worker submitted it themselves." `submit_worker_self_handover` (0048) exists precisely so that distinction survives in the data rather than in whoever remembers it. It outlived the self layer for that reason. |
+| W1-7 | **Who rates a worker is chosen at launch, not inherited in silence** | The first version read `reports_to`, which on this data resolved to the MD — so the board read "Worker: test · Rated by: test MD", and the MD reviews nobody. `raters.ts` lists the people who hold SUPERVISOR and the choice is made in the launch dialog. A rater inherited from a field nobody set is a rater nobody chose. |
+| W1-8 | The increment is computed from the two salaries, and the old salary is prefilled | Asked for directly, and it is P21-2's rule applied to this form: a percent worked out in an `onChange` is a percent nobody can reproduce. The old salary comes from the employment record where there is one, so the supervisor is not retyping a figure the system already holds. |
+| W1-9 | **The KPI cards say In progress · Ready for you · Closed** | They had been named after statuses, so HR read four words to work out whether anything needed them. Reported as "very confusing". The three cards are the three things that can be true of a sheet from the reader's point of view, which is what a count on a board is for. |
+| W1-10 | The print pack is its own sheet, not the staff one with fields hidden | §7 again. The worker document is a tick sheet with a salary block and three signatures; the staff sheet is seven ratings columns and a grading scale. Sharing one template would mean a branch on track inside a signed document. New classes in `print.css` rather than new colours — P15-10 holds: nothing on paper carries a tier. |
+| W1-11 | "Send to MD" sits beside "Mark reviewed", not inside it | Two different acts. §8's worker table gives `SUPERVISOR_REVIEWED → MD_FINALIZED` to the MD, and HR reading a sheet is not the MD finalising it. One button doing both would make the second pair of eyes optional by accident. |
+
+**Verification.** Typecheck 0, lint 0, build clean. The module was driven by the
+owner against live data throughout, which is how every fault above was found —
+none came from a suite. FIX-15, FIX-16 and FIX-17 record the repairs that
+followed.
+
+**Not built.** Workers do not sign in to rate themselves, by instruction. There
+is no worker analytics: none of P16's six views covers the worker tables, so a
+worker's history exists only on their own sheets.
+
+---
+
+### P19-E — The joining salary as a baseline that cannot invent a hike
+
+Migrations `0043_joining_salary_baseline.sql`, `0044_joining_ctc_provenance.sql`.
+
+Reported as "it's calculating wrong — I previously added the current salary, and
+now I'm adding the joining salary, and it's considering the joining salary as a
+new salary and calculating a hike." A **620% hike** on somebody's record, from
+two figures that were each correct.
+
+**The cause.** `addSalaryChange` looked the previous figure up as
+`employment_records.current_ctc` — today's salary — **regardless of the effective
+date of the row being written**. Backdating a joining figure therefore compared
+it against a later, larger current salary and recorded the difference as a rise.
+
+| # | Decision | Why |
+|---|---|---|
+| P19E-1 | **The joining salary is a COLUMN, not a `salary_history` row** | It is not a change; it is the point changes are measured from. As a history row it is permanently one `order by effective_from` away from being read as a revision — which is exactly what happened. `employment_records.joining_ctc` is the baseline, rendered as row 1 of the ledger so nothing is hidden, and it cannot be the "previous figure" for a hike because the lookup excludes it. |
+| P19E-2 | The previous figure is **the preceding row by effective date**, not today's salary | `.neq("reason", "JOINING").lt("effective_from", …).order(… desc).limit(1)`, falling back to `joining_ctc`. A backdated correction is now compared against what was true before it, which is the only comparison that means anything. P19C-4 already forbade accepting a previous figure from the caller; this fixes deriving the wrong one. |
+| P19E-3 | 0043 backfills **two** shapes, because two existed | An old `JOINING` row in `salary_history`, and — the one easy to miss — a person created with only a joining salary, whose figure went straight into `current_ctc` with nothing in `joining_ctc`. Both resolve to the same model, guarded so a re-run changes nothing. |
+| P19E-4 | The `JOINING` history rows are **left in place**, not deleted | `salary_history` is append-only by trigger for every caller including a migration (P19-3), and that guarantee is worth more than a tidy table. They are excluded from the lookup instead — the same outcome without switching off the one control the pay ledger's evidentiary value rests on. |
+| P19E-5 | **0044 adds `joining_ctc_recorded_by` and `joining_ctc_recorded_at`** | Reported as "recorded by is empty". A baseline figure with no provenance is a number somebody has to take on trust, sitting on the record a whole increment calendar is computed from. §12's reasoning, applied to a column rather than a row. |
+| P19E-6 | The manual increment-amount field was removed from the create form | It was a third place to state what the two salaries already say. Two inputs that must agree are two inputs that will eventually disagree (P8P-5) — and here the disagreement would be about pay. |
+
+**Also fixed here.** The Users tab's compensation fields were not rendering at
+all ("in settings › users › edit, joining salary / current CTC / last increment
+amount are not showing"), and the dialog's sticky footer sat inside the scroll
+region, so the submit bar was occluded by its own content — the same fault
+FIX-15 later found on a phone, in a different dialog.
+
+---
+
+### P22-B — The schedule that decides when a cycle is due
+
+Migration `0042_pre_increment_evaluation.sql`.
+
+The owner set out the company's actual schedule. **New joiners:** an evaluation
+at 1 month and at 6 months, an increment at 1 year. **Tenured staff:** an
+evaluation 6 months before the increment date, and the increment on the date.
+HR is told a month ahead, and a week ahead for new joiners.
+
+P22 already computed MONTH_1, MONTH_6 and INCREMENT. Two things were missing:
+the pre-increment evaluation, and a notice period that varies.
+
+| # | Decision | Why |
+|---|---|---|
+| P22B-1 | **`PRE_INCREMENT` goes into BOTH CHECK constraints together** | `due_items.milestone_type` and the evaluation's own tag are separate constraints over the same vocabulary. Moving one alone would let the item be created and then refuse the evaluation it exists to produce — a milestone that can be raised and never confirmed, failing at the click rather than at the migration. |
+| P22B-2 | The notice period is **a function of the milestone**, not a constant | `milestone_notice_days()` — 7 for MONTH_1 and MONTH_6, 30 for everything else. A new joiner's first evaluation is about six weeks from their start date, so a 30-day notice would fire before they had joined. Asked for as "a week for new joiners", and it is right for a reason beyond preference: the notice has to fit inside the interval it precedes. |
+| P22B-3 | **No PRE_INCREMENT where a MONTH_6 already falls on that date** | Somebody who joined six months before their increment date would otherwise be asked for two evaluations on one day, and HR would have to work out that they are the same exercise. The MONTH_6 wins because it is the more specific fact about that person. |
+| P22B-4 | HR's chase rides the existing digest | Asked for as "for all overdue tasks and increments HR should get a message on WhatsApp so nothing is missed". One message listing everybody (P22-14), through `sendNotification` — so the pause switch, the rate limit, the `notifications_log` row and §10's no-token constraint all apply without being restated. A second sender would have to be given each of them again. |
+
+**The sweep still runs only from the nightly cron.** Somebody entered today does
+not appear on `/admin/due` until tomorrow morning. That was true at P22 and is
+still true; `CRON_SECRET` is now set, so the job does run.
+
+---
+
+### FIX-18 — What a real WhatsApp link found
+
+Migration `0041_read_my_lead.sql`. Five faults, all reported after invite links
+were sent to real employees and a real HOD — the first time the product had been
+used the way it is meant to be used.
+
+| # | Decision | Why |
+|---|---|---|
+| F18-1 | **A saved draft came back empty, and the save had been failing in silence** | `flush()` returned a boolean saying whether the server had accepted the patch, and the caller discarded it; the server's error was never stored, so nothing rendered. Somebody filled a whole form, saw "saved", closed it and lost the lot. FIX-3 fixed this exact class on the two rating forms and the lesson had not reached this path. §13.6 is unambiguous, and a save indicator that can lie is worse than none at all. |
+| F18-2 | **"Evaluated by" was blank because 0005 admits the wrong direction** | The profiles read policy admits rows where `reports_to = auth.uid()` — the people who report to YOU. It has never admitted the person you report TO. So every employee-facing screen naming their lead resolved to nothing, and it read as missing data rather than as a policy. `is_my_lead()` (0041) is SECURITY DEFINER and scoped to that one relationship: the evaluatee may read the profile of their own lead, and nobody else's. |
+| F18-3 | It is a name, and deliberately not a rating | A lead's identity is not their answers. §5's blindness is about the LEAD layer; naming the person who will rate you discloses nothing about what they said, and an employee already knows who their manager is. |
+| F18-4 | **Binned cycles were counted by everything except the screen that bins them** | The HOD's dashboard count was wrong because `deleted_at` (0032) was honoured on the cycles list and nowhere else. The same root cause FIX-17 then chased through `/my-evaluation` and the `/reports` queue. A recycle bin that only hides the folder is not a recycle bin. |
+| F18-5 | The mobile fix removed CHROME, never content | Reported as "the entire mobile screen gets captured by KPI cards and search and filter". Helper text was trimmed and the counts and filters compressed; no question and no answer was hidden. §13.2 puts the phone first, and the thing to cut is what sits above the work. |
+| F18-6 | The details section is a definition list arranged in pairs | P12-14 already forbids inputs there — these come from the profile and the evaluation record, and an editable field lets somebody type a name that disagrees with the record it is drawn from. What was wrong was the geometry, not the model. |
+
+---
+
+### P10-B — Who gets the link, and an app URL that is no longer required
+
+`resolveAppUrl()` in `lib/notify/preflight.ts`; the recipient choice and
+select-all in the cycle wizard; `lib/cycles/{actions,activity}.ts` stop
+recording a change nobody made.
+
+| # | Decision | Why |
+|---|---|---|
+| P10B-1 | **`NEXT_PUBLIC_APP_URL` is now a fallback, not a requirement** | Asked as "can't we run the app without that key, on both localhost and the deployed app". Yes — Vercel already publishes the answer. `resolveAppUrl()` prefers the explicit variable, then `VERCEL_PROJECT_PRODUCTION_URL`, then `VERCEL_URL`, and returns undefined rather than guessing when none exists, so P28's refusal still fires and P30's builder still cannot emit a bare path. |
+| P10B-2 | **The stable variable is preferred over `VERCEL_URL`** | `VERCEL_URL` is the per-deployment address. An invite built from it works, and stops working the next time anybody deploys — the worst kind of expiry, because it is silent and the message has already been sent. `VERCEL_PROJECT_PRODUCTION_URL` is the project's own domain and does not move. |
+| P10B-3 | HR chooses **Employee · HOD · both** on the review step, and Launch is gated behind it | Asked for directly. It belongs on review rather than in a settings screen because it is a decision about THIS cycle: a mid-year check where only the HOD rates is a different exercise from a full appraisal, and it is decided at the moment of launching one. |
+| P10B-4 | Select all / clear all, in the header of the first column | Reported as "very annoying — all employees get selected, and if HR wants to send to 2 candidates she has to unselect everyone every time". A default of everybody is right for the common case and wrong for the exception; the fix is a control for the exception, not a different default. |
+| P10B-5 | **The activity trail stopped recording changes nobody made** | `updateCycle`'s SELECT omitted `period_label`, `variance_threshold` and `disclosure`, so `current[key]` was undefined for all three and every autosave audited them as "changed". The log filled with identical entries for a cycle nobody had touched. It now reads every column the patch can carry, computes a real before/after diff, and **skips the write entirely when nothing changed** — §12 wants a record of what happened, and a row for a non-event is not one. |
+| P10B-6 | Consecutive identical entries are **folded, not dropped** | `collapseRuns()` renders one row carrying a count and the time of the first. Deleting them would lose the fact that something recurred, which is occasionally the point. Asked for as "meaningful and professional", and a log somebody has to scroll past is neither. |
+| P10B-7 | "Start increment" defaults to an **Increment** cycle | Asked for. The link comes from the increment calendar, so the type is already known — asking again is a question with one right answer, and a wrong default there produces a cycle that ends at MD_REVIEWED instead of at a pay decision. |
+
+---
+
+### UI-3 — Every message reframed, and the app opens light
+
+`lib/notify/templates.ts` rewritten template by template; `app/layout.tsx` and
+`components/appraise/theme.tsx`.
+
+**All fourteen templates, reframed** — asked for as "professional, polite,
+elegant and structured". No template was added or removed and no recipient
+changed. This is wording and shape.
+
+| # | Decision | Why |
+|---|---|---|
+| UI3-1 | **`details(rows)` and `signOff()` are helpers, so the shape cannot drift** | Fourteen templates each composing their own facts is fourteen chances for one to put the date somewhere else or sign off differently. A labelled two-column block for the facts, and one sign-off — `— HR, LinkD Prints` — used by every message. P11-16's correction of the company name is not reintroduced. |
+| UI3-2 | `shell({ personal })` makes the "do not forward" line conditional | It is right on an invite carrying a token scoped to one person (§10) and wrong on a digest addressed to HR about twelve people. A line that appears where it does not apply teaches people to stop reading the lines that do. |
+| UI3-3 | **No message gained a figure** | The rewrite touched every string in the file, which is exactly the moment a score or a salary gets added for helpfulness. §5 and §11 confine both to screens behind a login, and P13-13 stands: a rating in a WhatsApp message is a rating disclosed on a channel with no access control around it. |
+| UI3-4 | **The app opens LIGHT, and the System option goes with it** | `app/layout.tsx` omitted `data-theme` when nobody had chosen, handing the decision to `prefers-color-scheme` — so a first-time visitor on a dark machine got a dark app. It now writes `"light"` unless the cookie says otherwise. That removes System rather than leaving it broken: System was written as an ABSENCE — choosing it cleared the cookie so the media query decided — and that worked only while the server also stayed silent. With the server writing `"light"` the two disagree: the page arrives light and the client flips it to dark a frame later, on every navigation. A flash on every page is worse than not offering the choice. |
+| UI3-5 | The cost is stated rather than glossed | A laptop that switches at sunset no longer takes the app with it. Restoring System means reverting `app/layout.tsx` to omit the attribute and accepting dark-by-default on dark machines — one line either way. |
+| UI3-6 | No stylesheet change was needed | `globals.css` already guards its dark media block as `:root:not([data-theme="light"])`, so writing `"light"` disarms it, and `:root[data-theme="dark"]` still carries dark for somebody on a light OS. Verified against the running server: `/login` returns 200 and its HTML carries `data-theme="light"`. |
