@@ -1462,6 +1462,16 @@ export type Database = {
       };
       // 0010 / P11. The only write path into notifications_log — there is no
       // insert or update policy on that table for anyone.
+      apply_salary_to_record: {
+        Args: {
+          p_profile_id: string;
+          p_new_ctc: number;
+          p_effective_from: string;
+          p_reason: string;
+        };
+        /** { figure_moved, clock_moved } — see 0066. */
+        Returns: Json;
+      };
       raise_app_notification: {
         Args: {
           p_profile_id: string;

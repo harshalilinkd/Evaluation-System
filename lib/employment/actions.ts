@@ -398,23 +398,40 @@ export async function addSalaryChange(
     return cycleError("SAVE_FAILED", `Could not record the salary change: ${error?.message ?? ""}`);
   }
 
-  /* -- The record follows the history, not the other way round.
-        A CORRECTION dated before the current effective-from is fixing the past
-        and must not move today's figure — so the update is conditional. -- */
-  const { data: latest } = await supabase
-    .from("employment_records")
-    .select("salary_effective_from")
-    .eq("profile_id", v.profileId)
-    .maybeSingle();
+  /* -- The record follows the history, through 0066's function.
 
-  const supersedes =
-    !latest?.salary_effective_from || v.effectiveFrom >= latest.salary_effective_from;
+        THIS USED TO BE A BARE `.update()` HERE, and it had two faults.
 
-  if (supersedes) {
-    await supabase
-      .from("employment_records")
-      .update({ current_ctc: v.newCtc, salary_effective_from: v.effectiveFrom })
-      .eq("profile_id", v.profileId);
+        It never touched `last_increment_date`, so recording an annual
+        increment moved the pay and left the increment cycle where it was —
+        and `next_increment_date` is derived from that column, so the calendar
+        and the nightly sweep went on chasing the old date. That is the bug
+        this was reported as.
+
+        And `employment: hr updates` (0023) is `using (is_hr())`, so for the MD
+        the update matched ZERO ROWS — which PostgREST reports as success. The
+        ledger gained a row, the record kept a null figure, and the screen said
+        it had worked. Third appearance of that class (FIX-14, the worker
+        sheet); a write that cannot fail is not a write.
+
+        One function now moves both, or neither. The result is READ, so a
+        refusal is a refusal rather than a silence. -- */
+  const { error: applyError } = await supabase.rpc("apply_salary_to_record", {
+    p_profile_id: v.profileId,
+    p_new_ctc: v.newCtc,
+    p_effective_from: v.effectiveFrom,
+    p_reason: v.reason,
+  });
+
+  if (applyError) {
+    /* -- The ledger row is already in and cannot be taken out — salary_history
+          is append-only by trigger for every caller (P19-3). So this reports
+          precisely what happened rather than pretending nothing did: the entry
+          stands, the record did not follow it. -- */
+    return cycleError(
+      "RECORD_NOT_UPDATED",
+      `The pay entry was recorded, but their employment record could not be updated: ${applyError.message}`,
+    );
   }
 
   // §12, and NO FIGURES in the diff. audit_log is readable by a lead for their
