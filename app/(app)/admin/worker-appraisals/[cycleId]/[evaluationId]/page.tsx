@@ -16,7 +16,7 @@ export default async function Page({
 }) {
   // §9: the guard is the first statement. `getWorkerReview` re-checks it,
   // because a page guard protects a page and not an action.
-  await requireRole(["HR_ADMIN", "MD"]);
+  const { roles } = await requireRole(["HR_ADMIN", "MD"]);
 
   const { cycleId, evaluationId } = await params;
   const review = await getWorkerReview(evaluationId);
@@ -25,5 +25,5 @@ export default async function Page({
     return <ErrorState title="Not available" body={review.error.message} />;
   }
 
-  return <WorkerReviewClient review={review.data} cycleId={cycleId} />;
+  return <WorkerReviewClient isMd={roles.includes("MD")} review={review.data} cycleId={cycleId} />;
 }

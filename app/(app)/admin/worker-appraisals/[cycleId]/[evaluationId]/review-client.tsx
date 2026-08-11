@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { reviewWorkerAppraisal, type WorkerReview } from "@/lib/worker/review";
-import { formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
+import { saveWorkerSalaryAsHr } from "@/lib/worker/review";
 
 const TICK_WORD: Record<string, string> = {
   EXCELLENT: "Excellent",
@@ -37,9 +38,13 @@ function Tick({ value }: { value: string | null }) {
 export function WorkerReviewClient({
   review,
   cycleId,
+  isMd,
 }: {
   review: WorkerReview;
   cycleId: string;
+  /** Decides which single ending this person is offered. The SERVER decides
+      whether they may take it — a screen is not a guard (§9). */
+  isMd: boolean;
 }) {
   const router = useRouter();
   const [remarks, setRemarks] = React.useState("");
@@ -171,35 +176,23 @@ export function WorkerReviewClient({
         </div>
       </div>
 
-      {/* ---------- Salary ---------- */}
+      {/* ---------- Salary ----------
+          HR PRICES THE SUPERVISOR'S RECOMMENDATION. The supervisor records a
+          percentage and is shown no amount at all (0064); this is where it
+          becomes money, against a salary they could not see.
+      
+          The current figure is pre-filled from the employment record — the
+          auto-fill the supervisor was never able to do, because that table
+          admits only HR and the MD, so their copy of the query has always
+          returned nothing. Where there is no record, HR types it and the panel
+          says which of the two it is rather than showing an unexplained blank. */}
       {review.salary ? (
-        <div className="card-surface space-y-3 p-5">
-          <p className="font-sans text-body-lg text-ink">Salary</p>
-          {review.salary.salaryChanged ? (
-            <dl className="grid gap-4 sm:grid-cols-3">
-              <div>
-                <dt className="type-label text-ink-muted">Old</dt>
-                <dd className="tabular font-sans text-body text-ink">
-                  {formatInr(review.salary.oldCtc)}
-                </dd>
-              </div>
-              <div>
-                <dt className="type-label text-ink-muted">Increment</dt>
-                <dd className="tabular font-sans text-body text-ink">
-                  {review.salary.incrementPct === null ? "—" : `${review.salary.incrementPct}%`}
-                </dd>
-              </div>
-              <div>
-                <dt className="type-label text-ink-muted">New</dt>
-                <dd className="tabular font-sans text-body text-ink">
-                  {formatInr(review.salary.newCtc)}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="font-sans text-body-sm text-ink-muted">No change proposed.</p>
-          )}
-        </div>
+        <WorkerSalaryPanel
+          evaluationId={review.evaluationId}
+          salary={review.salary}
+          currentCtcOnRecord={review.currentCtcOnRecord}
+          readOnly={closed || review.status === "REVIEWED"}
+        />
       ) : null}
 
       {/* ---------- Finish ---------- */}
@@ -236,24 +229,188 @@ export function WorkerReviewClient({
                 : "Closing is final. Send it to management instead if the MD should sign it."}
             </p>
             <div className="flex flex-wrap gap-2">
+              {/* -- ONE BUTTON EACH, and neither sees the other's.
+                    Management's approval is required to close now, so HR's
+                    only move is to send it up and the MD's only move is to
+                    close. Offering HR a Close that the server refuses is the
+                    dead end §13.4 is about. -- */}
               {!withMd ? (
-                <Button
-                  variant="outline"
-                  onClick={() => void finish("SEND_TO_MD")}
-                  disabled={busy}
-                  className="min-h-11"
-                >
-                  Send to MD
+                <Button onClick={() => void finish("SEND_TO_MD")} disabled={busy} className="min-h-11">
+                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                  Send to management
                 </Button>
-              ) : null}
-              <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
-                {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                {withMd ? "Sign off and close" : "Approve and close"}
-              </Button>
+              ) : isMd ? (
+                <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
+                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                  Approve and close
+                </Button>
+              ) : (
+                <p className="font-sans text-body-sm text-ink-muted">
+                  With management. They approve and close it.
+                </p>
+              )}
             </div>
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/* ============================================== HR prices the recommendation = */
+
+/**
+ * The supervisor recommended a percentage. This is where it becomes money.
+ *
+ * They are shown no amount at all (0064), so the two figures here — what the
+ * worker is on, and what they go to — are HR's alone. The current salary is
+ * pre-filled from the employment record, which is the auto-fill the supervisor
+ * could never do: that table admits only HR and the MD, so their copy of the
+ * query has always returned nothing and the old salary they used to type was
+ * recalled from memory.
+ *
+ * Monthly, like every salary in the product. `MoneyInput` owns the unit
+ * boundary and hands back the annual figure to store.
+ */
+function WorkerSalaryPanel({
+  evaluationId,
+  salary,
+  currentCtcOnRecord,
+  readOnly,
+}: {
+  evaluationId: string;
+  salary: { salaryChanged: boolean; oldCtc: number | null; incrementPct: number | null; newCtc: number | null };
+  currentCtcOnRecord: number | null;
+  readOnly: boolean;
+}) {
+  const router = useRouter();
+
+  // Whatever HR has already saved wins over the record, so reopening the screen
+  // cannot quietly replace a figure they corrected by hand.
+  const [oldCtc, setOldCtc] = React.useState<number | null>(salary.oldCtc ?? currentCtcOnRecord);
+  const [newCtc, setNewCtc] = React.useState<number | null>(salary.newCtc);
+  const [busy, setBusy] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const pct = salary.incrementPct;
+
+  /* -- The figure the supervisor's percentage comes to, computed rather than
+        typed. HR may still override it — the percentage advises, which is the
+        owner's decision for the staff module and holds here for the same
+        reason: the person recommending it cannot see the salary it applies
+        to. -- */
+  const suggested = oldCtc !== null && pct !== null ? Math.round(oldCtc * (1 + pct / 100)) : null;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const result = await saveWorkerSalaryAsHr(evaluationId, { oldCtc, newCtc });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setSaved(true);
+    router.refresh();
+  }
+
+  if (!salary.salaryChanged) {
+    return (
+      <div className="card-surface space-y-2 p-5">
+        <p className="font-sans text-body-lg text-ink">Salary</p>
+        <p className="font-sans text-body-sm text-ink-muted">
+          The supervisor recorded no change, so there is nothing to price.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card-surface space-y-4 p-5">
+      <div>
+        <p className="font-sans text-body-lg text-ink">Salary</p>
+        <p className="font-sans text-body-sm text-ink-muted">
+          The supervisor recommends the percentage. You set the figures — they are
+          not shown any salary.
+        </p>
+      </div>
+
+      <dl className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <dt className="type-label text-ink-muted">Supervisor&rsquo;s recommendation</dt>
+          <dd className="tabular font-sans text-display-sm text-ink">
+            {pct === null ? "—" : `${pct}%`}
+          </dd>
+        </div>
+        <div>
+          <dt className="type-label text-ink-muted">Which comes to</dt>
+          <dd className="tabular font-sans text-display-sm text-ink">{moneyMonthly(suggested)}</dd>
+          <dd className="font-sans text-body-sm text-ink-muted">
+            {suggested === null
+              ? "Needs a current salary and a percentage."
+              : "You can set a different figure below."}
+          </dd>
+        </div>
+      </dl>
+
+      {readOnly ? (
+        <dl className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <dt className="type-label text-ink-muted">Current</dt>
+            <dd className="tabular font-sans text-body text-ink">{moneyMonthly(oldCtc)}</dd>
+          </div>
+          <div>
+            <dt className="type-label text-ink-muted">New</dt>
+            <dd className="tabular font-sans text-body text-ink">{moneyMonthly(newCtc)}</dd>
+          </div>
+        </dl>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="w_old_hr">Current salary</Label>
+              <MoneyInput
+                id="w_old_hr"
+                value={oldCtc}
+                onValueChange={setOldCtc}
+              />
+              {/* Which of the two it is, said plainly. A blank box with no
+                  explanation reads as a missing feature rather than a missing
+                  record (§13.4). */}
+              <p className="font-sans text-body-sm text-ink-muted">
+                {currentCtcOnRecord === null
+                  ? "Not on their employment record — type it here."
+                  : "From their employment record."}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="w_new_hr">New salary</Label>
+              <MoneyInput id="w_new_hr" value={newCtc} onValueChange={setNewCtc} />
+              {suggested !== null && newCtc !== suggested ? (
+                <button
+                  type="button"
+                  onClick={() => setNewCtc(suggested)}
+                  className="font-sans text-body-sm text-primary underline underline-offset-2"
+                >
+                  Use the supervisor&rsquo;s {pct}% — {moneyMonthly(suggested)}
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {error ? (
+            <p role="alert" className="font-sans text-body-sm text-critical">
+              {error}
+            </p>
+          ) : null}
+
+          <Button onClick={() => void save()} disabled={busy} variant="secondary" className="min-h-11">
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            {saved ? "Saved" : "Save salary"}
+          </Button>
+        </>
+      )}
     </div>
   );
 }

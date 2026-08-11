@@ -39,6 +39,18 @@ export type WorkerReview = {
     incrementPct: number | null;
     newCtc: number | null;
   } | null;
+  /**
+   * What the employment record says they are on, for HR to start from.
+   *
+   * Read on HR's or the MD's session, so RLS is what permits it — this is the
+   * auto-fill the SUPERVISOR was never able to do (0023 admits only HR and the
+   * MD, so their copy of this query has always returned nothing, and the old
+   * salary they used to type was recalled from memory).
+   *
+   * Null means there is no employment record. HR types the figure instead, and
+   * the screen says which of the two it is rather than showing a blank box.
+   */
+  currentCtcOnRecord: number | null;
 };
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -94,6 +106,16 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
         .maybeSingle(),
     ]);
 
+  /* -- The salary on record. Separate from the batch above because it is keyed
+        by the WORKER's profile rather than by the evaluation, and it is only
+        readable at all because this function runs on HR's or the MD's
+        session. -- */
+  const { data: employment } = await supabase
+    .from("employment_records")
+    .select("current_ctc")
+    .eq("profile_id", evaluation.worker_id)
+    .maybeSingle();
+
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
   const worker = byId.get(evaluation.worker_id);
 
@@ -122,6 +144,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
       supervisorComment: supervisorRow?.overall_comment ?? "",
       trainingRequired: supervisorRow?.training_required ?? null,
       overallTick: evaluation.overall_tick,
+      currentCtcOnRecord: employment?.current_ctc ?? null,
       salary: decisions
         ? {
             salaryChanged: decisions.salary_changed,
@@ -173,13 +196,17 @@ export async function reviewWorkerAppraisal(
         ready, but a screen is not a guard (§9) and this action is reachable
         from any signed-in administrator's session. -- */
   /* -- WHERE IT MAY BE ACTED ON FROM.
-        PENDING_REVIEW is HR's to close or pass on. REVIEWED is with the MD, who
-        may close it — so an MD arriving at one HR has already sent is not told
-        it is finished when it is waiting for them. -- */
-  const allowed =
-    outcome === "CLOSE"
-      ? ["PENDING_REVIEW", "REVIEWED"]
-      : ["PENDING_REVIEW"];
+
+        MANAGEMENT'S APPROVAL IS NOW REQUIRED TO CLOSE, at the owner's explicit
+        instruction. CLOSE used to be reachable from PENDING_REVIEW as well, so
+        HR could finish an appraisal alone and the MD never saw it. That was the
+        right shape while a sheet with no pay change was HR's to finish; it is
+        the wrong one now that every production appraisal carries a salary
+        decision the supervisor recommended and HR priced (0064).
+
+        So: PENDING_REVIEW is HR's, and their only move is to send it up.
+        REVIEWED is management's, and closing is theirs alone. -- */
+  const allowed = outcome === "CLOSE" ? ["REVIEWED"] : ["PENDING_REVIEW"];
 
   if (!allowed.includes(evaluation.status)) {
     return {
@@ -191,7 +218,26 @@ export async function reviewWorkerAppraisal(
             ? "The supervisor has not submitted it yet."
             : evaluation.status === "CLOSED"
               ? "This appraisal is closed."
-              : "This appraisal is already with management.",
+              : outcome === "CLOSE"
+                // The case this rule creates, said plainly rather than as a
+                // bare refusal: HR pressing Close on a sheet that has not been
+                // sent up needs to know what to do instead (§13.4).
+                ? "Send it to management first — an appraisal is closed by them, not by HR."
+                : "This appraisal is already with management.",
+      },
+    };
+  }
+
+  /* -- And the ROLE, not only the status. §9: a screen is not a guard, and this
+        action is reachable from any administrator's session — so without this
+        HR could close a REVIEWED appraisal and the second pair of eyes would be
+        a convention rather than a control. -- */
+  if (outcome === "CLOSE" && !auth.session.roles.includes("MD")) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_PERMITTED",
+        message: "Only management can approve and close a production appraisal.",
       },
     };
   }
@@ -240,5 +286,59 @@ export async function reviewWorkerAppraisal(
   });
 
   revalidatePath("/admin/worker-appraisals");
+  return { ok: true, data: { ok: true } };
+}
+
+/* ==================================================== HR prices the sheet == */
+
+/**
+ * HR records what the worker is on and what they go to.
+ *
+ * The supervisor recommended a percentage and is shown no amount at all
+ * (0064), so both figures here are HR's. `old_ctc` is seeded on their screen
+ * from `employment_records` — the auto-fill the supervisor could never do,
+ * because that table admits only HR and the MD.
+ *
+ * NOT A CLOSE, and not a send. This only records the figures; moving the
+ * appraisal on stays `reviewWorkerAppraisal`, so a saved salary and a decision
+ * are two separate acts rather than one button that quietly does both.
+ *
+ * 0064's trigger logs every change to either figure, before and after — which
+ * is what answers "what did HR change after it came back" rather than only
+ * "HR touched this".
+ */
+export async function saveWorkerSalaryAsHr(
+  evaluationId: string,
+  figures: { oldCtc: number | null; newCtc: number | null },
+): Promise<Result<{ ok: true }>> {
+  const auth = await checkRole(["HR_ADMIN", "MD"]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const { oldCtc, newCtc } = figures;
+
+  /* -- A rise that lowers pay is either a typo or a decision that should not be
+        recorded under that label (P14-13). The table's own CHECK refuses it
+        too; this is the sentence somebody can act on rather than a constraint
+        violation. -- */
+  if (oldCtc !== null && newCtc !== null && newCtc < oldCtc) {
+    return {
+      ok: false,
+      error: {
+        code: "BELOW_CURRENT",
+        message: "The new salary is below the current one. Check both figures.",
+      },
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("worker_evaluation_decisions").upsert(
+    { evaluation_id: evaluationId, old_ctc: oldCtc, new_ctc: newCtc },
+    { onConflict: "evaluation_id" },
+  );
+
+  if (error) return { ok: false, error: { code: "SAVE_FAILED", message: error.message } };
+
+  revalidatePath(`/admin/worker-appraisals`);
   return { ok: true, data: { ok: true } };
 }
