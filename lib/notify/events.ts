@@ -18,7 +18,7 @@ import {
   type TemplateKey,
 } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatScore } from "@/lib/utils/date";
+import { formatDate } from "@/lib/utils/date";
 
 /**
  * WHY THIS HANGS OFF transition() AND NOWHERE ELSE
@@ -233,7 +233,7 @@ async function run({
 
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, evaluatee_id, lead_id, cycle_id, lead_overall, returned_to")
+    .select("id, evaluatee_id, lead_id, cycle_id, returned_to")
     .eq("id", evaluationId)
     .maybeSingle();
 
@@ -550,9 +550,10 @@ async function run({
             evaluationFinalised({
               employeeName: employee.full_name,
               period: cycle.period_label,
-              // §11 as amended: there is no final score. The LEAD average is
-              // the headline figure, labelled as such.
-              finalScore: formatScore(evaluation.lead_overall),
+              // No figure is passed, because the template no longer takes one. A
+              // rating in a message is a rating on a channel with no access control
+              // around it (P13-13, P20-16); the link is how somebody entitled to it
+              // reads it.
               link,
             }),
           context: { cycle: cycle.name, employee: employee.full_name },
@@ -582,7 +583,9 @@ async function run({
             name: employee.full_name,
             period: cycle.period_label,
             disclosure: cycle.disclosure,
-            finalScore: formatScore(evaluation.lead_overall),
+            // No figure. They still see their score — on their scorecard, behind
+            // their login, which is where §9 discloses it. What the message must
+            // not do is put it on a lock screen (P13-13, P20-16).
             link,
           }),
         context: { cycle: cycle.name },

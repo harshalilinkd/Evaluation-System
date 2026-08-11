@@ -251,7 +251,7 @@ export function selfEvaluationInvite(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Your performance evaluation is open",
       bodyHtml:
@@ -281,7 +281,7 @@ export function selfEvaluationReminder(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "A reminder about your evaluation",
       bodyHtml:
@@ -314,7 +314,7 @@ export function selfEvaluationOverdue(v: {
       `Hello ${v.name},\n\n` +
       `Your self-evaluation for ${v.period} was due on ${v.dueDate} and has not been submitted.\n\n` +
       `Please complete it as soon as you can:\n${v.link}\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Your evaluation is now overdue",
       bodyHtml:
@@ -362,7 +362,7 @@ export function leadReviewInvite(v: {
       `Due by: ${v.dueDate}\n\n` +
       `Open your form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "A review is open for you",
       bodyHtml:
@@ -390,10 +390,10 @@ export function mdReviewPending(v: {
   return {
     subject: `${v.employeeName}'s evaluation is ready for management review`,
     body:
-      `${v.leadName} has completed their review of ${v.employeeName} for ${v.period}. ` +
-      `It is ready for management review by ${v.dueDate}. ` +
+      `${v.employeeName}'s evaluation for ${v.period} has been reviewed by HR ` +
+      `and is ready for your approval by ${v.dueDate}. ` +
       `Open it here: ${v.link} ` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "A review is ready for you",
       bodyHtml:
@@ -429,7 +429,7 @@ export function reportReady(v: {
       `Both sides of ${v.employeeName}'s evaluation for ${v.period} are now in, ` +
       `and the combined report is ready for your review. ` +
       `Open it here: ${v.link} ` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "A combined report is ready",
       bodyHtml:
@@ -462,7 +462,7 @@ export function formReturned(v: {
       `Your self-evaluation for ${v.period} has been returned for another look.\n\n` +
       `What was asked for:\n"${v.reason}"\n\n` +
       `Your answers are still there — open your form, make the changes and submit it again:\n${v.link}\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Your evaluation has been returned",
       bodyHtml:
@@ -478,19 +478,35 @@ export function formReturned(v: {
   };
 }
 
+/**
+ * NO SCORE. NOT REWORDED — REMOVED, AND THE PARAMETER WITH IT.
+ *
+ * This carried "Final score: 3.15" in the body and again in the email table.
+ * §11 confines a score to HR and the MD, and P13-13 and P20-16 both state the
+ * rule this broke: a rating in a message is a rating on a channel with no
+ * access control around it. It sits on a lock screen, in a chat backup, and on
+ * whatever device the recipient happens to be holding — HR included. Being
+ * entitled to READ a number is not the same as it being safe to BROADCAST.
+ *
+ * The message says the record is complete and links to it. Anybody entitled to
+ * the figure opens the report; the message carries none.
+ *
+ * `finalScore` is deleted from the parameters rather than left unused, because
+ * an unused field on a message template is an invitation to interpolate it
+ * again — the same reasoning P22 used when it deleted `leadReviewPending`
+ * outright rather than leaving it unwired.
+ */
 export function evaluationFinalised(v: {
   employeeName: string;
   period: string;
-  finalScore: string;
   link: string;
 }): RenderedMessage {
   return {
     subject: `${v.employeeName}'s evaluation has been finalised`,
     body:
-      `${v.employeeName}'s evaluation for ${v.period} has been finalised by the MD. ` +
-      `Final score: ${v.finalScore}. ` +
-      `Open it here: ${v.link} ` +
-      `— Appraise`,
+      `${v.employeeName}'s evaluation for ${v.period} has been finalised by management ` +
+      `and is now on record. Open it here: ${v.link} ` +
+      `— LinkD Prints`,
     html: shell({
       heading: "An evaluation has been finalised",
       bodyHtml:
@@ -498,7 +514,6 @@ export function evaluationFinalised(v: {
         details([
           ["Employee", v.employeeName],
           ["Period", v.period],
-          ["Final score", String(v.finalScore)],
         ]) +
         signOff(),
       cta: { label: "Open the record", href: v.link },
@@ -518,19 +533,28 @@ export function evaluationClosed(v: {
   name: string;
   period: string;
   disclosure: "NONE" | "SCORE_ONLY" | "SCORE_AND_DECISION" | "FULL";
-  finalScore?: string | null;
   decision?: string | null;
   link: string;
 }): RenderedMessage {
   const showsScore = v.disclosure !== "NONE";
   const showsDecision = v.disclosure === "SCORE_AND_DECISION" || v.disclosure === "FULL";
 
+  /* -- THE FIGURE IS NOT IN THE MESSAGE, though this person is entitled to it.
+        §9 gives an employee their own final score, and they still get it — on
+        their scorecard, behind their login. What changed is the CHANNEL: a
+        score in a WhatsApp message sits on a lock screen, in a chat backup and
+        on whatever handset is nearest, where a colleague reads it over a
+        shoulder. Being entitled to READ a number is not the same as it being
+        safe to BROADCAST one (P13-13, P20-16).
+
+        `showsScore` still decides whether there is anything to look at, and so
+        whether a link is offered at all — that logic is the disclosure policy
+        and is unchanged. Only the number has gone. -- */
   const lines: string[] = [`your evaluation for ${v.period} is complete.`];
-  if (showsScore && v.finalScore) lines.push(`Your final score is ${v.finalScore}.`);
   if (showsDecision && v.decision) lines.push(v.decision);
 
   const closing = showsScore
-    ? `You can see the result here: ${v.link}`
+    ? `Your result is on your scorecard: ${v.link}`
     : `Your manager will discuss it with you.`;
 
   return {
@@ -586,7 +610,7 @@ export function leadReviewReminder(v: {
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) is due on ${v.dueDate}.\n\n` +
       `Open your form:\n${v.link}\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "A reminder about your review",
       bodyHtml:
@@ -613,7 +637,7 @@ export function leadReviewOverdue(v: {
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) was due on ${v.dueDate} and has not been submitted.\n\n` +
       `Please complete it:\n${v.link}\n\n` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Your review is now overdue",
       bodyHtml:
@@ -677,7 +701,7 @@ export function hrDueDigest(v: {
 ${v.link}
 
 ` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Today's summary",
       bodyHtml:
@@ -717,7 +741,7 @@ export function incrementsOverdue(v: {
 ${v.link}
 
 ` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Increments past their date",
       bodyHtml:
@@ -772,7 +796,7 @@ export function evaluationsOverdue(v: {
 ${v.link}
 
 ` +
-      `— HR, LinkD Prints`,
+      `— LinkD Prints`,
     html: shell({
       heading: "Forms are overdue",
       bodyHtml:
