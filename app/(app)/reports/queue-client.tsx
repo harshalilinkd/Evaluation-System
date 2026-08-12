@@ -302,12 +302,12 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
               modal nobody opens is a feature that is not there. -- */
         cell: ({ row }) => (
           <div className="flex justify-center gap-1.5">
-            <Button asChild size="sm" className="h-8">
+            <Button asChild size="sm" className="min-h-11 lg:h-8">
               <Link href={`/reports/${row.original.evaluationId}/summary`} title="Executive summary — scores and salary on one screen">
                 Summary
               </Link>
             </Button>
-            <Button asChild variant="outline" size="sm" className="h-8">
+            <Button asChild variant="outline" size="sm" className="min-h-11 lg:h-8">
               <Link href={`/reports/${row.original.evaluationId}`} title="The full report and audit trail">
                 {isHr ? "Open" : "Read"}
               </Link>

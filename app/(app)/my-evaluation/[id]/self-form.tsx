@@ -10,6 +10,7 @@ import { AlertTriangle, Check, Loader2, Lock, RotateCcw, Send } from "lucide-rea
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -622,6 +623,17 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
 
       {/* §6's wording, once — not under all 33 questions. See ScaleLegend. */}
       <ScaleLegend form={form} className="mb-4" />
+
+      {/* -- Jump between sections. Phones only, and only when there is more than
+            one section to jump between. Twenty screenfuls of form with no way
+            back is the half of "not mobile friendly" the save fixes did not
+            touch. -- */}
+      <FormSectionNav
+        form={form}
+        layer="SELF"
+        values={values}
+        hiddenQuestionIds={hiddenQuestionIds}
+      />
 
       {/* ---------- The form ---------- */}
       <FormRenderer

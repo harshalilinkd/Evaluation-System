@@ -185,7 +185,7 @@ export function IncrementsClient({
         size: 150,
         enableResizing: false,
         cell: ({ row }) => (
-          <Button asChild variant="outline" size="sm" className="h-8 whitespace-nowrap">
+          <Button asChild variant="outline" size="sm" className="min-h-11 whitespace-nowrap lg:h-8">
             <Link href={`/admin/cycles/new?increment_for=${row.original.profileId}`}>
               Start increment
             </Link>

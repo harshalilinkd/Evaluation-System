@@ -470,6 +470,27 @@ export function StartRoundDialog({
                           </select>
                         </label>
 
+                        {/* -- WHY there is no default, per row.
+                              The global case — nobody holds Supervisor at all —
+                              is explained above. This is the other one: the
+                              worker's Reports-to is set to somebody who does not
+                              hold the access level, so the seeded value was
+                              dropped and the select fell back to blank. Without
+                              this the row says "Nobody chosen" and nothing else,
+                              which is the dead end §13.4 forbids — and the fix
+                              is a role grant, not a different pick here. -- */}
+                        {!raterId && w.supervisorId && !raters.some((r) => r.id === w.supervisorId) ? (
+                          <span className="w-full font-sans text-body-sm text-ink-muted">
+                            {w.supervisorName ?? "Their manager"} is their Reports-to but does not hold
+                            the Supervisor access level, so they are not offered here. Grant it in
+                            Settings, Users — or pick somebody else.
+                          </span>
+                        ) : !raterId && !w.supervisorId ? (
+                          <span className="w-full font-sans text-body-sm text-ink-muted">
+                            No Reports-to is set for {w.name}, so there is nobody to default to.
+                          </span>
+                        ) : null}
+
                         {included && !raterId ? (
                           <span className="w-full font-sans text-body-sm text-critical">
                             Choose who rates {w.name} before starting.

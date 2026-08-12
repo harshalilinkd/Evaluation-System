@@ -157,7 +157,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             // §13.4: the reason sits beside the disabled control, not in a
             // tooltip — each of these has a different fix.
             <span className="flex items-center gap-2">
-              <Button size="sm" className="h-8" disabled>
+              <Button size="sm" className="min-h-11 lg:h-8" disabled>
                 Create and send
               </Button>
               <span
@@ -171,7 +171,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             <span className="flex items-center gap-1.5">
               <Button
                 size="sm"
-                className="h-8"
+                className="min-h-11 lg:h-8"
                 disabled={busyId === row.original.id}
                 onClick={() => onCreate(row.original)}
               >
@@ -180,7 +180,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-8"
+                className="min-h-11 lg:h-8"
                 disabled={busyId === row.original.id}
                 onClick={() => {
                   setSkipping(row.original);

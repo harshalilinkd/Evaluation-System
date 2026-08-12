@@ -113,7 +113,7 @@ export function ReportTopBar({ report }: { report: EvaluationReport }) {
               this there was no way back to it except the queue. -- */}
         <Link
           href={`/reports/${report.evaluationId}/summary`}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-rule px-2.5 text-body-sm font-medium text-ink transition-colors duration-hover hover:bg-surface-mute"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-control border border-rule px-2.5 text-body-sm font-medium text-ink transition-colors duration-hover hover:bg-surface-mute lg:min-h-9"
         >
           <LayoutDashboard className="size-4" aria-hidden />
           <span className="hidden sm:inline">Executive summary</span>

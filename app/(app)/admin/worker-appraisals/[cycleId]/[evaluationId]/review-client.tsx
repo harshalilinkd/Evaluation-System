@@ -127,8 +127,13 @@ export function WorkerReviewClient({
             there is nothing to compare and no second opinion to set beside it.
             The two-column layout this replaced was drawn for a blind two-sided
             round, which is not what this module does. */}
-      <div className="overflow-hidden rounded-card border border-rule">
-        <table className="w-full">
+      {/* -- `overflow-hidden` CLIPPED it, which is worse than overflowing: the
+            supervisor's tick column was cut off with no way to reach it. Two
+            columns — a quality name and a tick — need about 22rem before the
+            text starts wrapping to one word a line, so below that the table
+            scrolls inside the card and the page does not. -- */}
+      <div className="overflow-x-auto rounded-card border border-rule">
+        <table className="w-full min-w-[22rem]">
           <thead>
             <tr className="border-b border-rule bg-surface-mute">
               <th scope="col" className="type-label px-4 py-2.5 text-left text-ink">

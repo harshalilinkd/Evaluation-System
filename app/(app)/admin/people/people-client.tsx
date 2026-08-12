@@ -145,7 +145,7 @@ export function PeopleClient({
               {row.original.fullName}
             </span>
             {!row.original.isActive ? (
-              <span className="shrink-0 rounded-pill bg-surface-mute px-1.5 py-0.5 text-[10px] font-medium text-ink-muted">
+              <span className="shrink-0 rounded-pill bg-surface-mute px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
                 Inactive
               </span>
             ) : null}
@@ -230,7 +230,7 @@ export function PeopleClient({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 text-ink-muted hover:text-ink"
+                className="min-h-11 min-w-11 text-ink-muted hover:text-ink lg:size-8"
                 aria-label={`Actions for ${row.original.fullName}`}
               >
                 <MoreHorizontal className="size-4" aria-hidden />

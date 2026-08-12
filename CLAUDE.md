@@ -5149,3 +5149,73 @@ Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
 refused by RLS raises; an UPDATE that matches nothing succeeds. Every
 `.update()`/`.upsert()` whose match could legitimately find no row needs
 `.select()` and a length check — the guard is not the detection.
+
+---
+
+### FIX-23 — A mobile audit of every cycle screen, and the twenty-swipe form
+
+No migration. A new `components/appraise/form-section-nav.tsx`, plus targeted
+edits across nine screens.
+
+#### The audit
+
+Asked for directly: "do one audit for all cycles for users who will work this app
+on mobile devices". **54 screens** — every route somebody walks through during a
+cycle, staff and production, employee through to close.
+
+It checks the failure modes THIS codebase has actually shipped, not a generic
+checklist. Each rule is a bug that reached a real phone:
+
+| Rule | Where it came from |
+|---|---|
+| a fixed action bar underneath the bottom navigation | FIX-15 |
+| a table with no scroll container, widening the page | FIX-21 |
+| a control reachable only on hover | P31-8 |
+| type below the 11px floor this codebase set itself | P31-6 |
+| a tap target under 44px | §13.8 |
+| a `w-full` control in a row with no `min-w-0` | F13-4 |
+
+**18 findings. All fixed. The audit now returns 0.**
+
+| # | Decision | Why |
+|---|---|---|
+| F23-1 | **The first version reported 78 false positives, and that was the important result** | It searched backwards from every `size-4` for a nearby `<Button` and matched the ICON INSIDE one. A 16px glyph centred in a 44px button is exactly right; what matters is the height of the thing you press. Rescoped to the interactive element's OWN opening tag — 78 findings became 15, all real. A check that cries wolf is the one nobody reads twice (FIX-15's lesson about a diagnostic that misreports). |
+| F23-2 | The distribute progress bar was the FIX-15 bug **inverted** | `fixed bottom-0 z-50` — above the nav rather than below it, so a bulk send buried the navigation for the minute it runs. Both bars now stack above it. |
+| F23-3 | The worker review table was `overflow-hidden`, which is worse than overflowing | It CLIPPED the supervisor's tick column with no way to reach it. Scrolls now, with a `min-w` so the two columns do not compress to one word a line. |
+| F23-4 | Small controls are 44px on touch and stay compact where there is a mouse | `min-h-11 lg:h-8`. §13.8 is about fingers; a dense admin table on a laptop is not the case it was written for. |
+
+#### The twenty-swipe form
+
+The half of "not mobile friendly" the save fixes did not touch. Thirty-one
+questions is about twenty screenfuls and twenty-five swipes from the first
+question to Submit — so somebody who wants to check one answer near the top has
+no way back but their thumb, and somebody returning to a half-finished form has
+no way to find where they stopped.
+
+| # | Decision | Why |
+|---|---|---|
+| F23-5 | **A jump, not paging** | Splitting into steps would mean a partial validation per step, a "current step" to keep in sync with autosave, and a person who cannot see the whole document before signing it. This moves the viewport and changes nothing else: every question stays mounted, every answer stays in one form, the submit path is untouched. |
+| F23-6 | It needed **no change to the renderer** | Sections have carried `id="sec-…"` since NAV-2, added so the builder's preview could be pointed at one. The anchor was already there for a different reason. |
+| F23-7 | Counts are per LAYER | `LAYER_ANSWERED_BY[layer]`, so a manager sees their own workload rather than the employee's. The same component serves both forms and cannot report the other side's progress — §5 by construction, not by remembering. |
+| F23-8 | An IntersectionObserver, not a scroll handler | A scroll handler runs on every frame of a flick and measures the DOM each time — exactly the work a mid-range phone cannot spare with a form this size mounted. |
+| F23-9 | It lists only sections the renderer actually DRAWS | `form-renderer` drops a section whose every question is hidden, so listing it would offer a jump to somewhere that does not exist. |
+| F23-10 | Finished is a tick, a count and a `sr-only` word — never colour | §13.8, on a control whose whole job is telling you where you have got to. |
+
+#### And the rater, explained per row
+
+A worker whose Reports-to does not hold the SUPERVISOR access level fell through
+to "Nobody chosen" with no explanation. The GLOBAL case — nobody holds it at all
+— was already explained; this is the other one, and the fix is a role grant
+rather than a different pick on this screen (§13.4).
+
+**Verification — the audit at 0 findings across 54 screens, plus 15 checks on the
+navigator.** Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
+clean.
+
+**A test of mine was wrong twice in one sitting, and the second time is worth
+recording.** `new RegExp(`…[\s\S]{0,160}…`)` — inside a TEMPLATE LITERAL, `\s`
+is not an escape JavaScript recognises, so the class silently collapsed to
+`[sS]` and the assertion was testing my own quoting rather than the file. §18 has
+recorded this family three times now — the comment trap, the substring trap, and
+this. The standing remedy is the same: **prefer a plain `indexOf`/`slice` over a
+regex you had to escape through another language.**

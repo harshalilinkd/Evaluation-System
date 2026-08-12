@@ -237,7 +237,7 @@ export function CyclesClient({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-8 text-ink-muted hover:text-ink"
+                className="min-h-11 min-w-11 text-ink-muted hover:text-ink lg:size-8"
                 aria-label={`Actions for ${row.original.name}`}
               >
                 <MoreHorizontal className="size-4" aria-hidden />

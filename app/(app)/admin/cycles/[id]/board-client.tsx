@@ -391,7 +391,7 @@ export function BoardClient({
                   only one on the row that is: nothing else on a draft matters
                   until it is launched. -- */}
             {board.cycle.status === "DRAFT" ? (
-              <Button asChild size="sm" className="min-h-9">
+              <Button asChild size="sm" className="min-h-11 lg:min-h-9">
                 <Link href={`/admin/cycles/${board.cycle.id}/edit?step=4`}>
                   <Rocket className="size-4" aria-hidden />
                   Review and launch
@@ -404,14 +404,14 @@ export function BoardClient({
                   disabled — the draft case was reachable all along and landed on
                   a screen that could send nothing. Not rendered at all now. -- */}
             {board.cycle.status === "DRAFT" ? null : (
-              <Button asChild variant="outline" size="sm" className="min-h-9">
+              <Button asChild variant="outline" size="sm" className="min-h-11 lg:min-h-9">
                 <Link href={`/admin/cycles/${board.cycle.id}/distribute`}>
                   <Send className="size-4" aria-hidden />
                   Send links
                 </Link>
               </Button>
             )}
-            <Button asChild variant="outline" size="sm" className="min-h-9">
+            <Button asChild variant="outline" size="sm" className="min-h-11 lg:min-h-9">
               <Link href={`/print/cycle/${board.cycle.id}`} target="_blank" rel="noopener">
                 <Printer className="size-4" aria-hidden />
                 Print pack
@@ -420,7 +420,7 @@ export function BoardClient({
             <Button
               variant="outline"
               size="sm"
-              className="min-h-9"
+              className="min-h-11 lg:min-h-9"
               onClick={() => setExtend(true)}
               disabled={board.cycle.status === "CLOSED"}
             >
@@ -430,7 +430,7 @@ export function BoardClient({
             <Button
               variant="outline"
               size="sm"
-              className="min-h-9"
+              className="min-h-11 lg:min-h-9"
               onClick={() => void onArchive()}
               disabled={busy || board.cycle.status === "CLOSED"}
             >
@@ -551,7 +551,7 @@ export function BoardClient({
             type="button"
             variant={overdueOnly ? "default" : "outline"}
             size="sm"
-            className="h-9"
+            className="min-h-11 lg:h-9"
             aria-pressed={overdueOnly}
             onClick={() => setOverdueOnly((v) => !v)}
           >

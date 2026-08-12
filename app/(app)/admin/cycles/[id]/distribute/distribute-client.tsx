@@ -670,7 +670,16 @@ export function DistributeClient({
 
         {/* ---------- Progress ---------- */}
         {progress ? (
-          <div className="fixed inset-x-0 bottom-0 z-50 bg-ink px-6 py-4" role="status" aria-live="polite">
+          /* -- ABOVE the bottom navigation, not on top of it.
+                At `bottom-0 z-50` this sat over the nav — the inverse of the bug
+                FIX-15 fixed, where the bar lost. Burying the navigation during a
+                bulk send is worse than it looks: the run takes a minute, and a
+                person who wants to leave has nothing to press. -- */
+          <div
+            className="fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-30 bg-ink px-6 py-4 lg:bottom-0"
+            role="status"
+            aria-live="polite"
+          >
             <div className="mx-auto flex max-w-3xl items-center gap-4">
               <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-ink-invert" />
               <p className="tabular shrink-0 text-body-sm text-ink-invert">

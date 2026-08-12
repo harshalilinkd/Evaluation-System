@@ -22,6 +22,7 @@ import { AutosaveIndicator, type AutosaveState } from "@/components/appraise/aut
 import { BackLink } from "@/components/appraise/back-link";
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
@@ -493,6 +494,15 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
           `referenceValues`, no `referenceLayer` — there is no second column to
           feed them, and passing an empty one would leave the shape of a thing
           that is meant to be gone. */}
+      {/* Jump between sections. Phones only — the manager rates the same
+          thirty-one questions the employee answers, on the same screen size. */}
+      <FormSectionNav
+        form={form}
+        layer="LEAD"
+        values={values}
+        hiddenQuestionIds={hiddenQuestionIds}
+      />
+
       <FormRenderer
         form={form}
         values={values}
