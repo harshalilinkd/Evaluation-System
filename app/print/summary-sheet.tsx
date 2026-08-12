@@ -13,7 +13,6 @@ export function SummarySheet({ pack, standalone = false }: { pack: BatchPack; st
               standing rather than a broken glyph on a signed document. */}
           {/* eslint-disable-next-line @next/next/no-img-element -- rendered to paper; the optimiser has no part to play. */}
           <img src="/logo.png" alt="" className="print-logo" />
-          <span className="print-brand-sub">Performance Evaluation</span>
         </div>
         <h1 className="print-title">Evaluation Summary</h1>
         <span className="print-period">

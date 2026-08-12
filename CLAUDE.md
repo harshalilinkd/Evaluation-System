@@ -5868,3 +5868,57 @@ when it was present. It now scans EVERY css chunk. Picking one build artefact by
 name is the same shape of mistake as pinning an assertion to a variable name.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-38 — The mark centres without a transform, and "Returned · Never" says what it means
+
+No migration. `app/print/print.css` and all four print sheets.
+
+#### The MD's signature was not centred, and the CSS said it was
+
+`left: 50%` + `transform: translateX(-50%)` is the usual centring idiom and it is
+the wrong one on paper. **A transform is among the first things a print engine
+drops or rasterises oddly — and when it is dropped, the element stays at the 50%
+offset.** So the mark landed with its LEFT edge at the middle of the cell rather
+than its centre, which is exactly where it was reported sitting.
+
+| # | Decision | Why |
+|---|---|---|
+| F38-1 | Pinned on both edges, centred by auto margins | Plain box layout: an `<img>` with an intrinsic width keeps that width and centres between `left: 0` and `right: 0`. Nothing to lose in translation. |
+| F38-2 | Applied to BOTH sheets' marks in one pass | The report sheet and the worker sheet each have their own rule; fixing one and leaving the other is the mistake this log has recorded three times (the joining salary, the two "asked for" cards, the two heading selectors). |
+| F38-3 | The positioning context was already right and was checked rather than assumed | `.print-signature .rule` and `.print-sig-line` both carry `position: relative`. Without it the mark would resolve against the PAGE — a different bug with the same symptom, and worth ruling out before changing anything. |
+
+#### "Performance Evaluation", removed from all four sheets
+
+It sat directly beneath "Performance Evaluation Report" and said the same thing
+twice. P27's addendum added it when the wordmark was dropped; with a centred mark
+over a centred title there is nothing left for it to caption.
+
+**One consequence, stated because it removes a fallback.** `alt` is empty so a
+broken image renders as NOTHING rather than a broken glyph on a signed document
+(P27) — and the caption was what still named the company if `public/logo.png`
+were missing. Nothing does now. **That file is load-bearing.**
+
+#### "Returned · Never"
+
+A fair question, and the answer was in neither the label nor the value. It counts
+the times HR sent the form BACK to be redone — §8's return transitions.
+
+| Was | Now |
+|---|---|
+| `Returned` · `Never` | `Sent back for changes` · `Not once` |
+| `Returned` · `3 time(s)` | `Sent back for changes` · `3 times` |
+
+"Returned" alone does not say returned by whom or to where, and `3 time(s)` is a
+programmer counting rather than a document reading. On a sheet somebody signs, an
+unexplained word costs more than a longer one.
+
+**Verification — 11 checks on this change plus the 11 print checks, 0 failed.**
+
+**Both of my new checks failed on the first run, and both were the comment trap:**
+"no transform is relied on" matched the sentence explaining why the transform was
+removed, and "time(s)" matched the sentence explaining why that wording went. The
+suite now strips comments at the top of the file so every check inherits it,
+rather than each one remembering. §18 has recorded this repeatedly; putting the
+helper first is the structural fix rather than another correction.

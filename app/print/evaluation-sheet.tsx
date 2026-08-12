@@ -34,7 +34,6 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
           */}
           {/* eslint-disable-next-line @next/next/no-img-element -- next/image cannot be used in a print route: it needs the optimiser at runtime, and this sheet is rendered to paper. */}
           <img src="/logo.png" alt="" className="print-logo" />
-          <span className="print-brand-sub">Performance Evaluation</span>
         </div>
 
         <h1 className="print-title">

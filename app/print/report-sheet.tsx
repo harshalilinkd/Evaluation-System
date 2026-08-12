@@ -60,14 +60,21 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             employee details, where it is one fact among several rather than a
             second heading.
 
-            Empty alt on the mark: a broken decorative image renders as nothing,
-            so a missing file leaves the caption standing rather than putting a
-            broken glyph on a signed document. -- */}
+            THE "PERFORMANCE EVALUATION" CAPTION IS GONE, at the owner's
+            instruction — it sat directly under "Performance Evaluation Report"
+            and said the same thing twice. P27's addendum had added it when the
+            wordmark was removed; with a centred mark over a centred title there
+            is nothing left for it to caption.
+
+            Worth stating because it removes a fallback: `alt` is empty so a
+            broken image renders as NOTHING rather than a broken glyph on a
+            signed document (P27), and the caption used to be what still named
+            the company if `public/logo.png` were missing. Nothing does now, so
+            that file is load-bearing. -- */}
       <header className="print-header print-header-stacked">
         {/* eslint-disable-next-line @next/next/no-img-element -- rendered to paper; the optimiser has no part to play. */}
         <img src="/logo.png" alt="" className="print-logo" />
         <h1 className="print-title">Performance Evaluation Report</h1>
-        <span className="print-brand-sub">Performance Evaluation</span>
       </header>
 
       {/* ---------- Band 1 ---------- */}
@@ -290,9 +297,22 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                   : "—"}
             </dd>
           </div>
+          {/* -- SAID IN WORDS, because "Returned · Never" was a fair question.
+                It counts the times HR sent this form BACK to be redone — §8's
+                return transitions — and neither the label nor the value said so.
+                "Returned" alone does not say returned by whom or to where, and
+                "3 time(s)" is a programmer counting rather than a document
+                reading. On a sheet somebody signs, an unexplained word is worse
+                than a longer one. -- */}
           <div>
-            <dt>Returned</dt>
-            <dd>{meta.returns.length === 0 ? "Never" : `${meta.returns.length} time(s)`}</dd>
+            <dt>Sent back for changes</dt>
+            <dd>
+              {meta.returns.length === 0
+                ? "Not once"
+                : meta.returns.length === 1
+                  ? "Once"
+                  : `${meta.returns.length} times`}
+            </dd>
           </div>
         </dl>
       </section>

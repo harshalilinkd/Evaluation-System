@@ -724,8 +724,22 @@ dl.print-meta dd {
     to the left edge, so a wide mark and a narrow one started in the same place
     and ended in different ones — the three cells never lined up with each other.
   */
-  left: 50%;
-  transform: translateX(-50%);
+  /*
+    CENTRED BY AUTO MARGINS, not by a transform.
+
+    `left: 50%` + `translateX(-50%)` is the usual idiom and it is the wrong one
+    HERE: a transform is among the first things a print engine drops or
+    rasterises oddly, and when it is dropped the element stays at the 50% offset
+    — so the mark lands with its LEFT edge at the middle of the cell rather than
+    its centre, which is exactly where it was reported sitting.
+
+    Pinning both edges and letting the margins resolve is plain box layout: an
+    <img> with an intrinsic width keeps that width and centres between them. No
+    transform to lose.
+  */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   /*
     ONE HEIGHT FOR EVERY SIGNATURE, whatever was uploaded. `max-height` only ever
     shrinks, so a small scan rendered small and a large one rendered at the cap —
@@ -825,8 +839,22 @@ dl.print-meta dd {
 .print-sig-line .mark {
   position: absolute;
   bottom: 0.6mm;
-  left: 50%;
-  transform: translateX(-50%);
+  /*
+    CENTRED BY AUTO MARGINS, not by a transform.
+
+    `left: 50%` + `translateX(-50%)` is the usual idiom and it is the wrong one
+    HERE: a transform is among the first things a print engine drops or
+    rasterises oddly, and when it is dropped the element stays at the 50% offset
+    — so the mark lands with its LEFT edge at the middle of the cell rather than
+    its centre, which is exactly where it was reported sitting.
+
+    Pinning both edges and letting the margins resolve is plain box layout: an
+    <img> with an intrinsic width keeps that width and centres between them. No
+    transform to lose.
+  */
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   height: 11mm;
   width: auto;
   max-width: 92%;

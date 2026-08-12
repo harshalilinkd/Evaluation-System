@@ -33,7 +33,6 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
         <div className="print-brand">
           {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size mark at the top of a page bound for paper; next/image would defer the one element that should paint first. */}
           <img src="/logo.png" alt="" className="print-logo" />
-          <span className="print-brand-sub">Worker Performance Appraisal</span>
         </div>
         <span className="print-period">
           {review.cycleName} · {review.periodLabel}
