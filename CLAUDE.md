@@ -5794,3 +5794,33 @@ reaches the worker sheet. The new rules were confirmed present in the BUILT
 stylesheet, not just the source (UI-5).
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-36 — What management approved, beside what was proposed
+
+No migration. `salary-band.tsx` — `md_approved_ctc` and `md_approved_hike_pct`
+have existed on `increment_reviews` since 0030; nothing on this row read them.
+
+Asked for directly: a third card next to "Manager proposed", blank until the MD
+approves and closes with their figure.
+
+The row now reads as the three steps the money actually goes through:
+
+```
+WHAT TEST ASKED FOR      MANAGER PROPOSED         MANAGEMENT APPROVED
+₹30,000.00 a month       ₹26,250.00 a month       ₹28,000.00 a month
+₹3,60,000.00 a year      ₹3,15,000.00 · 5.00%     ₹3,36,000.00 · 12.00%
+```
+
+| # | Decision | Why |
+|---|---|---|
+| F36-1 | The difference between the second and third card **is** the decision | AMEND-2 restored HR/MD as separate roles for exactly this — a second pair of eyes on a pay decision. It was visible in the workflow and nowhere on the sheet; now the two figures sit side by side and the gap between them is the thing the MD was brought in to produce. |
+| F36-2 | **Blank until it is true, and the manager's figure never stands in** | `md_approved_ctc` is written only when the MD sets one. Defaulting the card to the proposal — which would have looked tidier — would display an approval nobody gave, on the one number a salary is paid from. |
+| F36-3 | Two absences, told apart | "Waiting on management" when a proposal exists; "nothing to approve yet — the manager's proposal has to be saved first" when it does not. §13.4, and the same rule FIX-30 needed on the card beside it: an empty card has to say why it is empty. |
+| F36-4 | Three columns, not two plus one | Two-up would have paired the ask with the proposal and orphaned the approval on a row of its own, which reads as an afterthought rather than as the last step. One column on a phone, unchanged (§13.2). |
+| F36-5 | Monthly leads, annual beneath | 0061, and it matches every other figure on the panel — a card in a different unit from its two neighbours is the confusion FIX-20 and FIX-29 were both reported for. |
+
+**Verification — 11 checks, 0 failed**; mobile audit still 0 findings across 55
+screens. Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
+clean.

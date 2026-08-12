@@ -738,7 +738,11 @@ function MdApproval({
 
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Three cards now, so three columns: asked for · proposed · approved.
+          Two-up would have paired the ask with the proposal and orphaned the
+          approval on a row of its own, which reads as an afterthought rather
+          than as the last step. Still one column on a phone (§13.2). */}
+      <div className="grid gap-4 md:grid-cols-3">
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
           {review?.employee_expectation_ctc ? (
@@ -804,6 +808,49 @@ function MdApproval({
               {review.hr_justification}
             </p>
           ) : null}
+        </article>
+
+        {/* -- WHAT MANAGEMENT APPROVED, beside what was proposed.
+
+              Asked for directly, and the three cards now read as the three steps
+              the money actually goes through: what the employee asked for, what
+              their manager proposed, and what management settled on. The
+              difference between the second and the third IS the decision the MD
+              was brought in to make — AMEND-2's second pair of eyes, made
+              visible on the sheet rather than only in the workflow.
+
+              BLANK UNTIL IT IS TRUE. `md_approved_ctc` is written only when the
+              MD sets a figure, so until then this is a dash and a sentence
+              saying what is being waited for — never the manager's figure
+              standing in, which would show an approval nobody gave. §13.4, and
+              the same rule the card beside it needed. -- */}
+        <article className="card-surface p-4">
+          <h3 className="type-label text-ink-muted">Management approved</h3>
+          {review?.md_approved_ctc ? (
+            <>
+              <p className="mt-1 tabular text-display-md text-ink">
+                {moneyMonthly(review.md_approved_ctc)}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {money(review.md_approved_ctc)} a year ·{" "}
+                {pctText(review.md_approved_hike_pct ?? null)}
+              </p>
+              {review.md_remarks ? (
+                <p className="mt-2 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
+                  {review.md_remarks}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <p className="mt-1 tabular text-display-md text-ink-muted">—</p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {review?.hr_proposed_ctc
+                  ? "Waiting on management. It fills in when they approve and close."
+                  : "Nothing to approve yet — the manager's proposal has to be saved first."}
+              </p>
+            </>
+          )}
         </article>
       </div>
 
