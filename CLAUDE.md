@@ -6135,3 +6135,51 @@ assertions rather than as checks on one file: each reads the detailed report or
 the printed sheet, then the summary, and fails if the two disagree. That is what
 stops this recurring — five separate drifts is a pattern, not five accidents.
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-43 — A second round is not an overwrite, and the board now says so
+
+No migration. `board.tsx`, its page, and the list page.
+
+Reported as a new production appraisal overwriting the first, and as being
+unable to give one worker several appraisals.
+
+**Nothing overwrites anything, and the constraint is the proof.** 0047 has
+`unique (cycle_id, worker_id)` — one appraisal per worker **per round**, and
+nothing at all about how many rounds a worker may be in. Both write paths are
+plain `insert`s: `launchWorkerCycle` and `addWorkersToRound`. There is no upsert
+on that table anywhere.
+
+**But every screen conspired to make it look otherwise.** Starting a round pushes
+straight to the new board, and that board is identical whichever round it shows —
+same title, same columns, one row per worker. The only thing that changes is a
+small grey line. The round picker was removed at the owner's instruction and is
+not coming back, so from there the previous round is unreachable; and since
+FIX-40 the sidebar redirects into the single round rather than listing rounds.
+So the first appraisal was still there and there was no way to see it, which is
+indistinguishable from it having been replaced.
+
+| # | Decision | Why |
+|---|---|---|
+| F43-1 | **The row names how many earlier appraisals the worker has** | This is the actual answer to the report — a count on the person, proving the earlier rounds exist. Linked to their scorecard rather than restated here: the history belongs to the person, and duplicating it on every board is a second place for it to drift. |
+| F43-2 | Counted against **live** rounds, excluding this one and withdrawn rows | A link to a binned round is a link to something nobody can open, and counting a withdrawn participant would offer an appraisal nobody is waiting on (P10-6). |
+| F43-3 | **"Round 2 of 3 · See all rounds"**, and it is a link, not a picker | §0.2 — removing the picker was an explicit instruction and stands. A link is not a picker: it does not choose, it escapes. Without one this board is a dead end (§13.4), and FIX-40's redirect means the list is not always one click away either. |
+| F43-4 | Only when there is more than one round | A "Round 1 of 1" line is chrome that says nothing. |
+| F43-5 | **`?all=1` opts out of the redirect** | Otherwise "See all rounds" bounces straight back into the round it came from — the redirect exists so one round does not need a page of one card, and it must never be the reason somebody cannot reach the list. |
+
+**Verification — 20 checks, 0 failed.** The constraint is lifted from 0047's text
+rather than retyped and exercised on real Postgres: one worker is appraised in
+round 1, **again in round 2**, refused a second time in round 1, and all three
+rows are proved to survive. The "earlier appraisals" count is proved to exclude
+the current round, withdrawn rows and binned rounds. Source-level: the header
+shows the position only when there is more than one round, the picker is proved
+**not** reinstated, and `?all=1` is proved to bypass the redirect while the
+ordinary case still fires.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**Noted, not mine.** `people/[profileId]/scorecard/scorecard-client.tsx` was
+being edited in parallel during this phase — §5 work hiding the lead tier on
+somebody's own card — and passed through a non-compiling state mid-write. It had
+settled by the end. Recorded so §18 accounts for every change in the tree.

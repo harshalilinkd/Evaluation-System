@@ -50,6 +50,8 @@ export type BoardRow = {
   incrementPct: number | null;
   currentCtc: number | null;
   lastIncrementDate: string | null;
+  /** How many OTHER rounds this worker has been appraised in. */
+  earlierAppraisals: number;
   nextIncrementDate: string | null;
 };
 
@@ -79,6 +81,8 @@ export function WorkerBoard({
   rows,
   workers,
   raters,
+  roundIndex,
+  roundCount,
 }: {
   cycle: {
     id: string;
@@ -90,6 +94,9 @@ export function WorkerBoard({
   rows: BoardRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
+  /** Where this round sits in the run, oldest first, and how many there are. */
+  roundIndex: number;
+  roundCount: number;
 }) {
   const [starting, setStarting] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
@@ -140,7 +147,30 @@ export function WorkerBoard({
         accessorKey: "workerName",
         header: "Worker",
         size: 200,
-        cell: ({ row }) => <GridCell value={row.original.workerName} />,
+        /* -- THE EARLIER APPRAISALS, NAMED ON THE ROW.
+              This is the answer to "a new entry overwrites the first": it does
+              not, and here is the count to prove it. A worker may be in as many
+              rounds as there are rounds — one appraisal per round, which is what
+              `unique (cycle_id, worker_id)` says — but until now the only place
+              that was visible was a round the board could not reach.
+
+              Linked to their scorecard rather than restated here: the history
+              belongs to the person, and duplicating it on every board is a
+              second place for it to drift (N1-13's reasoning). -- */
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <GridCell value={row.original.workerName} />
+            {row.original.earlierAppraisals > 0 ? (
+              <Link
+                href={`/scorecard?person=${row.original.workerId}`}
+                className="block truncate text-body-sm text-ink-muted underline underline-offset-2 hover:text-primary"
+              >
+                {row.original.earlierAppraisals} earlier{" "}
+                {row.original.earlierAppraisals === 1 ? "appraisal" : "appraisals"}
+              </Link>
+            ) : null}
+          </div>
+        ),
       },
       {
         accessorKey: "supervisorName",
@@ -298,6 +328,28 @@ export function WorkerBoard({
             {cycle.name} · {cycle.period_label} · supervisor due{" "}
             {formatDate(cycle.supervisor_due_on)}
           </p>
+          {/* -- WHICH ROUND THIS IS, AND THE WAY TO THE OTHERS.
+                Reported as a new round "overwriting" the first. Nothing is
+                overwritten — `unique (cycle_id, worker_id)` puts one appraisal
+                per worker per round and says nothing about how many rounds a
+                worker may be in — but the screen gave every reason to think so.
+                Starting a round lands here, and this board looks identical
+                whichever round it is showing: same title, same columns, one row
+                per worker. Only the small line above changes.
+
+                The round picker is gone by instruction (§0.2) and is not coming
+                back; a link is not a picker. Without one this screen is a dead
+                end (§13.4) — and it is reached by a redirect from the sidebar
+                when there is only one round, so the list is not always one click
+                away either. -- */}
+          {roundCount > 1 ? (
+            <p className="mt-0.5 text-body-sm text-ink-muted">
+              Round {roundIndex} of {roundCount} for this team ·{" "}
+              <Link href="/admin/worker-appraisals?all=1" className="text-primary underline underline-offset-2">
+                See all rounds
+              </Link>
+            </p>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

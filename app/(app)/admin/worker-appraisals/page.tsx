@@ -10,7 +10,11 @@ import { listWorkerRaters } from "@/lib/worker/raters";
 
 export const metadata: Metadata = { title: "Worker appraisals" };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: Promise<{ all?: string }>;
+}) {
   // §9: the guard is the first statement.
   await requireRole(["HR_ADMIN", "MD"]);
 
@@ -70,8 +74,11 @@ export default async function Page() {
         the bin to Settings › Recycle bin at the owner's instruction precisely so
         it stops competing with live rounds for this screen. Holding the list
         open for it puts a deleted round between the menu item and the job. -- */
+  /* -- `?all=1` OPTS OUT, or the board's "See all rounds" link is a circle.
+        The redirect exists so one round does not need a page of one card; it
+        must never be the reason somebody cannot get to the list. -- */
   const live = cycles ?? [];
-  if (live.length === 1) {
+  if (live.length === 1 && (await searchParams)?.all !== "1") {
     redirect(`/admin/worker-appraisals/${live[0]!.id}`);
   }
 
