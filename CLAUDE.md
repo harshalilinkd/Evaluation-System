@@ -6066,3 +6066,46 @@ neither sees the other's answers" is blind parallel rating — the STAFF flow
 (WORKER-1), so the sentence promised a second side that does not exist. It now
 reads: the supervisor ticks the sheet, HR prices the increment, and management
 approves it — which is the flow that runs.
+
+---
+
+### FIX-41 — An 8% rise reached the MD with no amount on it
+
+No migration. `lib/worker/review.ts` and the review screen.
+
+Reported as the "which comes to" figure being invisible to the MD, and the
+salary details vanishing from HR's screen after the close. Both are one fact:
+**no figure was ever recorded.** The activity trail is what settles it — 0064's
+`log_worker_salary_change` trigger logs every salary change, and there is no
+such row. HR opened the appraisal at 13:35 and pressed **Send to management** at
+13:53, the same minute the supervisor submitted. The MD approved at 13:54.
+
+So an 8% recommendation went up, was approved and was closed **with no current
+salary, no new salary and no amount anybody had written down.** Nothing was
+lost; nothing was ever entered.
+
+**And the screen invited it.** The card said "Needs a current salary and a
+percentage" — accurately — with the Send button live beside it. §13.4 is about
+dead ends; this is the opposite failure and a worse one: a control that is
+available when the thing it does should not be possible.
+
+| # | Decision | Why |
+|---|---|---|
+| F41-1 | **The hand-up is refused when a recommended change is unpriced** | The supervisor is shown no amount at all (0064) and the MD approves an amount. If HR skips the middle step there is nothing for the second pair of eyes to be a second pair of eyes ON — which is the entire point of AMEND-2's split. Refused in the action, because the screen is not a guard (§9). |
+| F41-2 | Scoped to a sheet that recommends a change | Where the supervisor recorded none there is nothing to price, and blocking that would strand every appraisal that is simply a performance record. |
+| F41-3 | The button is **disabled with the reason beside it**, before the press | A refusal HR discovers by pressing is a refusal they read as a fault. Both halves say the same sentence, so the form cannot accept what the server then rejects — P13-6's two-copies-of-a-threshold problem, avoided by writing the rule once in each place with identical wording. |
+| F41-4 | An unpriced stage row reads as a **gap**, not a neutral blank | It can now only exist on a sheet handed up before this guard, and whoever reads one needs to know the approval has no amount behind it rather than assume the figure failed to load. "No figure was recorded before this went up." |
+| F41-5 | **The panel's wording follows the audience** | It said "You set the figures" to everybody, including the MD, who does not — they approve what HR set. An instruction somebody cannot act on is worse than none. |
+| F41-6 | …and where it cannot be priced, the MD is told to **send it back** | Not to type a figure. The MD setting the amount themselves is HR proposing and the MD approving collapsed into one person, which is the control AMEND-2 restored. 0070 gave them the return; this is the sentence that points at it. |
+
+**Verification — 59 source checks, 0 failed** (up from 46), over comment-stripped
+source. The guard is proved to sit before the status moves, to read the figures
+it is judging, to fire only where a change is recommended, and to carry a
+sentence naming the fix; the client's rule is proved to mirror it clause for
+clause; and the three audience-dependent sentences are each proved present.
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**The already-closed appraisal cannot be repriced.** §8 has no path back from
+CLOSED and §17 forbids reopening one — a closed record is evidence. The test
+round can be binned and run again; a real one would be corrected on the worker's
+employment record, where the pay ledger lives.

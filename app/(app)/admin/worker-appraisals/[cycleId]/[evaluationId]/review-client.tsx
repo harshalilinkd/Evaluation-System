@@ -76,6 +76,17 @@ export function WorkerReviewClient({
   const withMd = review.status === "REVIEWED";
   const done = closed;
 
+  /* -- Whether this sheet is ready to go up. Mirrors the server's own rule
+        rather than approximating it: a sheet recommending no change has nothing
+        to price, and one that does needs both figures. Two copies of a
+        threshold is how a form starts accepting what the server then rejects
+        (P13-6), so the wording of the refusal is the same on both sides. -- */
+  const recommendsAChange =
+    review.salary?.salaryChanged === true || review.salary?.incrementPct != null;
+  const priced =
+    !recommendsAChange ||
+    (review.salary?.oldCtc != null && review.salary?.newCtc != null);
+
   async function finish(outcome: "CLOSE" | "SEND_TO_MD") {
     setBusy(true);
     setError(null);
@@ -307,10 +318,28 @@ export function WorkerReviewClient({
                     Still with HR. It reaches you when they send it up.
                   </p>
                 ) : (
-                  <Button onClick={() => void finish("SEND_TO_MD")} disabled={busy} className="min-h-11">
-                    {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                    Send to management
-                  </Button>
+                  /* -- SAID BEFORE THE PRESS, not as an error after it.
+                        The server refuses an unpriced hand-up, and a button that
+                        is going to be refused should say so beside itself rather
+                        than looking available (§13.4). This is the reported bug
+                        from the other end: HR sent an 8% recommendation up with
+                        no figures, and the MD approved an amount nobody had
+                        written down. -- */
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => void finish("SEND_TO_MD")}
+                      disabled={busy || !priced}
+                      className="min-h-11"
+                    >
+                      {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                      Send to management
+                    </Button>
+                    {!priced ? (
+                      <p className="font-sans text-body-sm text-critical">
+                        Set the current and new salary above first — management approves an amount.
+                      </p>
+                    ) : null}
+                  </div>
                 )
               ) : isMd ? (
                 <>
@@ -606,9 +635,13 @@ function WorkerSalaryPanel({
     <div className="card-surface space-y-4 p-5">
       <div>
         <p className="font-sans text-body-lg text-ink">Salary</p>
+        {/* -- Whose screen this is. It read "You set the figures" to everybody,
+              including the MD, who does not — they approve what HR set, and an
+              instruction somebody cannot act on is worse than none (§13.4). -- */}
         <p className="font-sans text-body-sm text-ink-muted">
-          The supervisor recommends the percentage. You set the figures — they are
-          not shown any salary.
+          {readOnly
+            ? "The supervisor recommends the percentage and HR sets the figures. The supervisor is never shown an amount."
+            : "The supervisor recommends the percentage. You set the figures — they are not shown any salary."}
         </p>
       </div>
 
@@ -622,10 +655,17 @@ function WorkerSalaryPanel({
         <div>
           <dt className="type-label text-ink-muted">Which comes to</dt>
           <dd className="tabular font-sans text-display-sm text-ink">{moneyMonthly(suggested)}</dd>
+          {/* -- Three audiences, three sentences. "Needs a current salary" is an
+                instruction, and the MD cannot act on it — they send it back to
+                HR instead, which is what the wording now says. -- */}
           <dd className="font-sans text-body-sm text-ink-muted">
-            {suggested === null
-              ? "Needs a current salary and a percentage."
-              : "You can set a different figure below."}
+            {suggested !== null
+              ? readOnly
+                ? "What the supervisor's percentage comes to."
+                : "You can set a different figure below."
+              : readOnly
+                ? "HR did not record a current salary, so the percentage cannot be priced. Send it back to have it added."
+                : "Needs a current salary and a percentage."}
           </dd>
         </div>
       </dl>
@@ -647,12 +687,17 @@ function WorkerSalaryPanel({
             step="HR priced it"
             who={null}
             at={null}
-            value={
-              oldCtc === null && newCtc === null
-                ? "Not priced"
-                : `${moneyMonthly(oldCtc)} → ${moneyMonthly(newCtc)}`
+            value={rise === null ? "Not priced" : `${moneyMonthly(oldCtc)} → ${moneyMonthly(newCtc)}`}
+            /* -- An unpriced row is a GAP, not a neutral blank. It can only
+                  exist on a sheet handed up before the guard above was added,
+                  and whoever reads it needs to know the approval has no amount
+                  behind it rather than assume the figure failed to load. -- */
+            note={
+              rise === null
+                ? "No figure was recorded before this went up"
+                : `A rise of ${moneyMonthly(rise)} a month`
             }
-            note={rise === null ? null : `A rise of ${moneyMonthly(rise)} a month`}
+            pending={rise === null}
           />
           <SalaryStage
             step="Management approved"

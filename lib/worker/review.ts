@@ -308,6 +308,44 @@ export async function reviewWorkerAppraisal(
     };
   }
 
+  /* -- AN UNPRICED RECOMMENDATION DOES NOT GO UP. This is the reported bug.
+
+        The supervisor recommends a PERCENTAGE and is shown no amount at all
+        (0064). HR turns it into money. Nothing was stopping HR skipping that
+        step: the screen said "Needs a current salary and a percentage" and the
+        Send button sat live beside it, so an 8% recommendation reached the MD
+        with no figures on it — and the MD approved a pay rise whose amount
+        nobody had ever written down. The card then read "HR priced it — Not
+        priced" on every screen afterwards, which is what was reported as the
+        figures having vanished. They had never been entered.
+
+        Scoped to a sheet that actually recommends a change. Where the
+        supervisor recorded none there is nothing to price and the hand-up is
+        fine. -- */
+  if (outcome === "SEND_TO_MD") {
+    const { data: pricing } = await supabase
+      .from("worker_evaluation_decisions")
+      .select("salary_changed, increment_pct, old_ctc, new_ctc")
+      .eq("evaluation_id", evaluationId)
+      .maybeSingle();
+
+    const recommendsAChange =
+      pricing?.salary_changed === true || pricing?.increment_pct !== null;
+    const priced = pricing?.old_ctc !== null && pricing?.new_ctc !== null;
+
+    if (pricing && recommendsAChange && !priced) {
+      return {
+        ok: false,
+        error: {
+          code: "NOT_PRICED",
+          message:
+            "Set the current and new salary before sending this up. Management approves an amount, " +
+            "and the supervisor is never shown one — so if you skip this there is no figure for them to approve.",
+        },
+      };
+    }
+  }
+
   /* -- THE MD'S CLOSE GOES THROUGH 0070, AND IT HAD TO.
 
         `worker_evaluations` carries one write policy — `worker_evaluations_hr_write`
