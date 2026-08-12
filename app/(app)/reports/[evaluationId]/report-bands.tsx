@@ -67,6 +67,22 @@ function gapText(value: number | null): string {
   return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
 }
 
+/**
+ * The mean of the two sides.
+ *
+ * ADDED AT THE OWNER'S EXPLICIT INSTRUCTION — a deliberate amendment to §11,
+ * which said "there is no final score column" on the reasoning that averaging a
+ * self-rating with a manager's produces a number describing neither. That
+ * reasoning was put to the owner and they chose the column. Recorded in §18.
+ *
+ * The screen and the printed sheet carry the same four columns deliberately: a
+ * report whose printout has a column the screen does not is two documents.
+ */
+function average(self: number | null, lead: number | null): string {
+  if (self === null || lead === null) return "—";
+  return ((self + lead) / 2).toFixed(2);
+}
+
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
 }
@@ -336,6 +352,11 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                 <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
                   <TierTag tier="lead">Manager</TierTag>
                 </th>
+                {/* Added at the owner's instruction — a deliberate amendment to
+                    §11, recorded in §18. Plain ink and no tier dot: it belongs
+                    to neither side, which is precisely why §11 did not want
+                    it. */}
+                <th className="type-label px-4 py-3 text-right font-bold text-ink">Average</th>
                 <th className="type-label px-6 py-3 text-right font-bold text-ink">Gap</th>
               </tr>
             </thead>
@@ -361,6 +382,13 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                       )}
                     >
                       {score(s.lead)}
+                    </td>
+                    {/* Both or nothing: Manager Review has no self score, and
+                        printing the manager's figure there as an "average" would
+                        say both sides agreed on a section only one of them
+                        answered. */}
+                    <td className="tabular px-4 py-3 text-right text-body font-semibold text-ink">
+                      {average(s.self, s.lead)}
                     </td>
                     <td
                       className={cn(

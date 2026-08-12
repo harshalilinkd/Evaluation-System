@@ -19,6 +19,26 @@ function gapText(value: number | null): string {
   return value > 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
 }
 
+/**
+ * The mean of the two sides.
+ *
+ * ADDED AT THE OWNER'S EXPLICIT INSTRUCTION, and it is a deliberate amendment to
+ * §11 rather than an oversight — that section said "there is no final score
+ * column", on the reasoning that averaging a self-rating with a manager's
+ * produces a number describing neither. The concern was put to the owner with
+ * that reasoning and they chose the column. Recorded in §18.
+ *
+ * BOTH OR NOTHING. Where either side is absent this is an em dash, never the one
+ * figure that exists — Manager Review has no self column at all, and printing
+ * the manager's 3.00 there as an "average" would state that both sides agreed on
+ * a section only one of them answered. §11's own rule that missing is not zero,
+ * applied to a column §11 did not want.
+ */
+function average(self: number | null, lead: number | null): string {
+  if (self === null || lead === null) return "—";
+  return ((self + lead) / 2).toFixed(2);
+}
+
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
 }
@@ -70,6 +90,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <th>Section</th>
               <th>Self</th>
               <th>Manager</th>
+              <th>Average</th>
               <th>Gap</th>
             </tr>
           </thead>
@@ -79,6 +100,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 <td>{s.label}</td>
                 <td className="print-num">{score(s.self)}</td>
                 <td className="print-num">{score(s.lead)}</td>
+                <td className="print-num">{average(s.self, s.lead)}</td>
                 <td className="print-num">{gapText(s.gap)}</td>
               </tr>
             ))}
@@ -86,6 +108,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <td>Overall</td>
               <td className="print-num">{score(summary.selfOverall)}</td>
               <td className="print-num">{score(summary.leadOverall)}</td>
+              <td className="print-num">{average(summary.selfOverall, summary.leadOverall)}</td>
               <td className="print-num">{gapText(summary.overallGap)}</td>
             </tr>
           </tbody>
@@ -290,7 +313,18 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
         {[
           {
             who: "Manager",
-            name: null as string | null,
+            /* -- NAMED, so the line says whose it is.
+                  It was blank, which left whoever handed the sheet round to
+                  work out which of three lines the manager should sign.
+
+                  This does NOT make an unsigned line look signed, and that
+                  distinction is the reason it is safe: `when` stays null, so the
+                  row below still reads "Date: ____________" rather than
+                  "Reviewed 12-08-2026". A printed name over a blank rule and an
+                  empty date is a nameplate — which is what a signature block on
+                  paper has always been. P34-11's rule holds: signed where the
+                  database says so, ruled where it does not. -- */
+            name: header.leadName ?? null,
             when: null as string | null,
             verb: null as string | null,
             mark: null as string | null,

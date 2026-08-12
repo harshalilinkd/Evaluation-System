@@ -303,6 +303,20 @@ dl.print-meta > div {
   border-bottom: 0.4pt solid #dcdcdc;
 }
 
+/*
+  NO TRAILING RULE.
+
+  The last row drew a line under itself, and the block that follows draws its own
+  above — so the Record block and the signature panel were separated by TWO
+  parallel rules with a gap between them, which is what read as the bottom of the
+  sheet being out of alignment. The table form has had this since P27 via
+  `tr:last-child`; the grid needs the last ROW, which at three columns is the
+  last three children.
+*/
+dl.print-meta > div:nth-last-child(-n + 3) {
+  border-bottom: none;
+}
+
 dl.print-meta dt {
   margin: 0 0 0.6mm;
   font-size: 6.8pt;

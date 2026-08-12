@@ -403,9 +403,16 @@ they surface as a retry-able row in HR's distribution screen.
 - Gap = Lead average minus Self average, per question and overall. It is a
   reporting figure only. It is visible to HR and the MD, and to nobody else.
 - Flag a question when the absolute gap is at or above the cycle's threshold.
-- There is no final score column and no override. The report carries both
-  numbers and the gap. If a single headline figure is needed, use the Lead
-  average and label it as such.
+- There is **no override**: a question score is written by the layer that owns it
+  and is never rewritten. The report carries both numbers and the gap.
+- **AMENDED (AMEND-5).** The report may show an **Average** column — the mean of
+  the Self and Manager figures, per section and overall. This clause previously
+  forbade it, on the reasoning that averaging a self-rating with a manager's
+  produces a number describing neither. That reasoning was put to the owner and
+  they chose the column; it is a display figure only, computed on read, stored
+  nowhere, and shown as an em dash wherever either side is missing. Where a
+  single headline figure is needed, the Lead average remains the one to use, and
+  it must still be labelled as such.
 - Worker track: overall = the Supervisor's "Overall Performance" tick, not a mean.
 
 ---
@@ -5683,6 +5690,51 @@ black, white or a neutral grey** (parsed out of the file with the `@media screen
 blocks removed by brace-matching, then tested for saturation), no tier token
 reaches the sheet, the grading scale still comes from `SCALE_0_5_LABELS` rather
 than retyped, A4 and the 18mm margins hold, and `break-inside: avoid` still
+guards the blocks and the signature panel.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### AMEND-5 / FIX-34 — An Average column, the signature block aligned, and the manager named
+
+`app/print/print.css`, `app/print/report-sheet.tsx`,
+`app/(app)/reports/[evaluationId]/report-bands.tsx`, and **§11 is amended
+above**.
+
+#### The amendment, first, because it is the substance
+
+§11 said: *"There is no final score column and no override. The report carries
+both numbers and the gap."*
+
+The owner asked for an average of Self and Manager beside them. That is the
+clause's own prohibition, so §0.9 applied — **stop and ask** — and the reasoning
+was put to them plainly: averaging a self-rating with a manager's produces a
+number describing neither, which is why the rule existed. They chose the column.
+
+§11 now permits it, and the prohibition it keeps is the one that was doing the
+real work: **no override.** A question score is still written by the layer that
+owns it and never rewritten by anybody.
+
+| # | Decision | Why |
+|---|---|---|
+| A5-1 | Computed on READ, stored nowhere | §11's remaining rules are about what is written. An average that existed as a column would be a third figure to keep in step with two others, and the first thing to disagree after a return and resubmission. |
+| A5-2 | **Both or nothing** — an em dash wherever either side is missing | Manager Review has no self score at all. Printing the manager's 3.00 there as an "average" would state that both sides agreed on a section only one of them answered. §11's own "missing is not zero", applied to a column §11 did not want. |
+| A5-3 | The screen and the printed sheet gained it together | A report whose printout carries a column the screen does not is two documents. |
+| A5-4 | Plain ink, no tier | Self is cyan and Manager is pink because those say WHO. An average belongs to neither — which is precisely the objection §11 raised, now stated in the design rather than by absence. |
+
+#### And the two that needed no amendment
+
+| # | Decision | Why |
+|---|---|---|
+| F34-1 | **The manager's signature line is named** | It was blank, leaving whoever passed the sheet round to work out which of three lines was theirs. It does NOT make an unsigned line look signed, and that is what makes it safe: `when` stays null, so the row beneath still reads "Date: ____________" rather than "Reviewed 12-08-2026". A printed name over a blank rule and an empty date is a nameplate, which is what a paper signature block has always been. P34-11 holds — signed where the database says so, ruled where it does not. |
+| F34-2 | The bottom of the sheet was **two parallel rules**, not a misalignment | The identity grid drew a line under its last row and the signature panel drew its own above — separated by a 12mm gap, which is what read as the block being out of true. The table form has had `tr:last-child` since P27; the grid needed the last ROW, which at three columns is the last three children. |
+
+**Verification — 11 print checks, 0 failed**, and the compiled stylesheet
+inspected directly again: `nth-last-child(-n+3)` survives minification. §7a
+re-checked in full — every colour reaching paper is still black, white or a
+neutral grey, no tier token reaches the sheet, the grading scale still comes from
+`SCALE_0_5_LABELS`, A4 and the 18mm margins hold, and `break-inside: avoid` still
 guards the blocks and the signature panel.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
