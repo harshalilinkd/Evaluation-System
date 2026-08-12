@@ -262,7 +262,7 @@ export async function reviewWorkerAppraisal(
   }
 
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { data: moved, error } = await supabase
     .from("worker_evaluations")
     .update(
       outcome === "SEND_TO_MD"
@@ -272,9 +272,26 @@ export async function reviewWorkerAppraisal(
     .eq("id", evaluationId)
     // Matched on the status we read, so two people acting at once cannot both
     // succeed — the second affects no rows rather than overwriting the first.
-    .eq("status", evaluation.status);
+    .eq("status", evaluation.status)
+    /* -- AND THAT OUTCOME IS NOW DETECTED. The guard above was correct and
+          nothing looked at it: a zero-row update is a SUCCESS in PostgREST, so
+          the second person was told their close had worked while the appraisal
+          sat exactly where it was. The comment described the protection; this is
+          what makes it reach the person it protects. -- */
+    .select("id, status");
 
   if (error) return { ok: false, error: { code: "SAVE_FAILED", message: error.message } };
+
+  if (!moved || moved.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: "ALREADY_MOVED",
+        message:
+          "Somebody else moved this appraisal on while you were reading it. Reload the page to see where it stands now.",
+      },
+    };
+  }
 
   await supabase.rpc("log_admin_action", {
     p_entity: "worker_evaluation",
@@ -285,7 +302,8 @@ export async function reviewWorkerAppraisal(
     p_diff: { remarks_recorded: remarks.trim() !== "" } as Json,
   });
 
-  revalidatePath("/admin/worker-appraisals");
+  // The subtree, not just the list: the detail page is where this is read back.
+  revalidatePath("/admin/worker-appraisals", "layout");
   return { ok: true, data: { ok: true } };
 }
 
@@ -332,14 +350,41 @@ export async function saveWorkerSalaryAsHr(
 
   const supabase = await createClient();
 
-  const { error } = await supabase.from("worker_evaluation_decisions").upsert(
-    { evaluation_id: evaluationId, old_ctc: oldCtc, new_ctc: newCtc },
-    { onConflict: "evaluation_id" },
-  );
+  /* -- `.select()`, so the write REPORTS WHAT IT TOUCHED.
+        A PostgREST write that matches no row is not an error — it succeeds
+        having done nothing, and the screen then says "Saved" over figures that
+        were never stored. That is the exact shape of FIX-14, the worker sheet's
+        own ratings (F15-14), 0066 and 0069, and it is the reported symptom here:
+        HR types two figures, presses save, and the values are gone on the next
+        screen that reads them. -- */
+  const { data: written, error } = await supabase
+    .from("worker_evaluation_decisions")
+    .upsert(
+      { evaluation_id: evaluationId, old_ctc: oldCtc, new_ctc: newCtc },
+      { onConflict: "evaluation_id" },
+    )
+    .select("evaluation_id, old_ctc, new_ctc");
 
   if (error) return { ok: false, error: { code: "SAVE_FAILED", message: error.message } };
 
-  revalidatePath(`/admin/worker-appraisals`);
+  if (!written || written.length === 0) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_WRITTEN",
+        message:
+          "The salary was not saved — the record did not accept the change. Reload the page and try again; if it keeps happening the appraisal may have been closed.",
+      },
+    };
+  }
+
+  /* -- BOTH paths, not just the list.
+        Every other action in this module revalidates the list AND the specific
+        round; this one revalidated only the list, so the detail page — the one
+        the figures were typed on and are read back on — kept its cached render.
+        A save that is durable and invisible is indistinguishable from one that
+        failed. -- */
+  revalidatePath("/admin/worker-appraisals", "layout");
   return { ok: true, data: { ok: true } };
 }
 

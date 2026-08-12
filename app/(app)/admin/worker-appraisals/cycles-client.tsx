@@ -219,7 +219,6 @@ export function StartRoundDialog({
   const [period, setPeriod] = React.useState("");
   const [selfDue, setSelfDue] = React.useState("");
   const [supervisorDue, setSupervisorDue] = React.useState("");
-  const [mdDue, setMdDue] = React.useState("");
   const [chosen, setChosen] = React.useState<Set<string>>(new Set());
 
   /* -- Who rates each worker, seeded from their Reports-to and CHANGEABLE here.
@@ -263,7 +262,9 @@ export function StartRoundDialog({
         periodLabel: period,
         selfDueOn: selfDue,
         supervisorDueOn: supervisorDue,
-        mdDueOn: mdDue,
+        // No longer collected — the field was removed at the owner's
+        // instruction. The column is nullable and the action coerces "" to null.
+        mdDueOn: "",
       });
       if (!created.ok) {
         setError(created.error.message);
@@ -368,16 +369,12 @@ export function StartRoundDialog({
                 className="min-h-11 tabular"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="wc_md">Final due</Label>
-              <Input
-                id="wc_md"
-                type="date"
-                value={mdDue}
-                onChange={(e) => setMdDue(e.target.value)}
-                className="min-h-11 tabular"
-              />
-            </div>
+            {/* -- "Final due" REMOVED, at the owner's instruction.
+                  A production round is filled by the supervisor and reviewed by
+                  HR; a third deadline was a date nobody worked to and a third
+                  thing to fill in on a phone. `md_due_on` STAYS on the table —
+                  it is nullable, and dropping a column nobody asked to drop is a
+                  schema change (§0.2) — it is simply no longer collected. -- */}
           </div>
 
           <div>

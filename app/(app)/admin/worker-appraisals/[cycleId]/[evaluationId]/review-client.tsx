@@ -319,9 +319,15 @@ function WorkerSalaryPanel({
 }) {
   const router = useRouter();
 
-  // Whatever HR has already saved wins over the record, so reopening the screen
-  // cannot quietly replace a figure they corrected by hand.
-  const [oldCtc, setOldCtc] = React.useState<number | null>(salary.oldCtc ?? currentCtcOnRecord);
+  /* -- NOT PRE-FILLED FROM THE EMPLOYMENT RECORD, at the owner's instruction.
+
+        It used to fall back to `currentCtcOnRecord`, which made an unsaved
+        screen look identical to a saved one: HR saw a figure in the box, had no
+        way to tell it was a suggestion rather than a stored value, and pressing
+        nothing left the appraisal with no salary on it at all. Only what HR has
+        actually saved is shown; the record's figure is offered BESIDE the field
+        as something to copy, so nothing is lost and nothing is assumed. -- */
+  const [oldCtc, setOldCtc] = React.useState<number | null>(salary.oldCtc);
   const [newCtc, setNewCtc] = React.useState<number | null>(salary.newCtc);
   const [busy, setBusy] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
@@ -334,7 +340,14 @@ function WorkerSalaryPanel({
         owner's decision for the staff module and holds here for the same
         reason: the person recommending it cannot see the salary it applies
         to. -- */
-  const suggested = oldCtc !== null && pct !== null ? Math.round(oldCtc * (1 + pct / 100)) : null;
+  /* -- The percentage is priced against whatever figure is actually KNOWN — what
+        HR has typed, or failing that the employment record. The field itself is
+        no longer pre-filled (the owner's instruction), and computing this from
+        the empty field alone would have made "Which comes to" go blank on every
+        appraisal that had not been priced yet — trading one confusing screen for
+        another. What is stored still comes only from what HR typed. -- */
+  const basis = oldCtc ?? currentCtcOnRecord;
+  const suggested = basis !== null && pct !== null ? Math.round(basis * (1 + pct / 100)) : null;
 
   async function save() {
     setBusy(true);
@@ -409,14 +422,29 @@ function WorkerSalaryPanel({
                 value={oldCtc}
                 onValueChange={setOldCtc}
               />
-              {/* Which of the two it is, said plainly. A blank box with no
-                  explanation reads as a missing feature rather than a missing
-                  record (§13.4). */}
-              <p className="font-sans text-body-sm text-ink-muted">
-                {currentCtcOnRecord === null
-                  ? "Not on their employment record — type it here."
-                  : "From their employment record."}
-              </p>
+              {/* -- The record's figure is OFFERED, never assumed.
+                    It used to be pre-filled, which made an unsaved screen look
+                    exactly like a saved one. As a button it does the same work
+                    in one tap and leaves HR in no doubt about which figure is
+                    stored. A blank box with no explanation still reads as a
+                    missing feature, so the empty case says why (§13.4). -- */}
+              {currentCtcOnRecord === null ? (
+                <p className="font-sans text-body-sm text-ink-muted">
+                  Not on their employment record — type it here.
+                </p>
+              ) : oldCtc === currentCtcOnRecord ? (
+                <p className="font-sans text-body-sm text-ink-muted">
+                  Matches their employment record.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setOldCtc(currentCtcOnRecord)}
+                  className="font-sans text-body-sm text-primary underline underline-offset-2"
+                >
+                  Use their recorded salary — {moneyMonthly(currentCtcOnRecord)}
+                </button>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="w_new_hr">New salary</Label>

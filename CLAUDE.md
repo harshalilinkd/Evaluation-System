@@ -5094,3 +5094,58 @@ and both commits were live before the screenshot was taken — so the most likel
 explanation is a browser still running the pre-fix bundle. F21-8 closes the one
 remaining route by which that string could legitimately reach the banner. If it
 recurs after a hard reload it is a different fault and needs the network tab.
+
+---
+
+### FIX-22 — The production appraisal: a date nobody worked to, a figure that was
+### only a suggestion, and two writes that could not fail
+
+No migration. `cycles-client.tsx`, `review-client.tsx`, `lib/worker/review.ts`.
+
+#### Final due, removed
+
+At the owner's instruction. A production round is filled by the supervisor and
+reviewed by HR; a third deadline was a date nobody worked to and a third thing to
+fill in on a phone.
+
+| # | Decision | Why |
+|---|---|---|
+| F22-1 | The FIELD goes; the COLUMN stays | `worker_cycles.md_due_on` is nullable and the action already coerces `""` to null, so nothing breaks and nothing is written. Dropping a column nobody asked to drop is a schema change (§0.2) — and one that would need a migration to undo if the third signature is ever wanted back. |
+
+#### The salary was pre-filled, which made unsaved look exactly like saved
+
+Reported as "salary should not be pre filled", and it is the same report as the
+one beneath it. `oldCtc` initialised to `salary.oldCtc ?? currentCtcOnRecord`, so
+an appraisal with NOTHING stored opened showing a figure. HR had no way to tell a
+suggestion from a stored value — and if they pressed nothing, the appraisal kept
+no salary at all while the screen had shown one all along.
+
+| # | Decision | Why |
+|---|---|---|
+| F22-2 | Only what HR has SAVED is in the box | The field now answers one question — "what is on this appraisal" — instead of two. |
+| F22-3 | The record's figure is **offered as a control**, not withdrawn | It does the same work in one tap and leaves no doubt which figure is stored. Removing it outright would have made HR retype something the system already knew (§13.4). |
+| F22-4 | "Which comes to" still prices, from the record when the field is empty | Computing it from the empty field alone would have blanked that readout on every unpriced appraisal — trading one confusing screen for another. What is STORED still comes only from what HR typed; the preview is allowed a better guess than the input is. |
+
+#### And two writes that could not fail
+
+Reported as "after HR adds current salary and new salary these values getting
+vanished in HR and MD's screen". Both writes in this file had the shape this log
+has now recorded five times.
+
+| # | Decision | Why |
+|---|---|---|
+| F22-5 | The salary upsert now `.select()`s | A PostgREST write matching no row is a SUCCESS with zero rows — so the screen said Saved over figures that were never stored. Same shape as FIX-14, the worker sheet's own ratings (F15-14), 0066 and 0069. |
+| F22-6 | **The close/send update had the guard and not the detection** | It matches on the status it read — `.eq("status", evaluation.status)` — and its comment says "two people acting at once cannot both succeed; the second affects no rows rather than overwriting the first". Nothing looked at the result. So the second person was told their close had worked while the appraisal sat exactly where it was. The comment described a protection that never reached the person it protected. |
+| F22-7 | Both revalidate the **subtree**, not just the list | Every other action in this module revalidates the list AND the specific round; these two revalidated only the list, so the detail page — the one the figures are typed on and read back on — kept its cached render. A save that is durable and invisible is indistinguishable from one that failed, which is exactly how it was reported. |
+
+**Verification — 15 checks, 0 failed**, over comment-stripped source (JSX comments
+stripped too, which the earlier helper did not do — `{/* … */}` survived
+`code()` and would have satisfied an absence check with the sentence explaining
+the absence. The comment trap, tenth occurrence, in a new syntax).
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**The class is worth stating once more, because it is now five.** An INSERT
+refused by RLS raises; an UPDATE that matches nothing succeeds. Every
+`.update()`/`.upsert()` whose match could legitimately find no row needs
+`.select()` and a length check — the guard is not the detection.
