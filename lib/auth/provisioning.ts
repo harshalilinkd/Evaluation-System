@@ -1142,10 +1142,97 @@ export async function importUsers(
       return;
     }
 
+    /* -- WHICH MODULE, in plain words or in the enum.
+          The screens say "Backend Team" and "Production Team" (TRACK_LABELS),
+          so those are what somebody copies off one; STAFF and WORKER are
+          accepted too because that is what the database calls them and a
+          previous export carries them. Blank is STAFF, so a file written before
+          this column existed imports exactly as it did. -- */
+    const trackText = (record.track ?? "").trim().toLowerCase();
+    const track =
+      trackText === "" ? "STAFF"
+      : /worker|production/.test(trackText) ? "WORKER"
+      : /staff|backend/.test(trackText) ? "STAFF"
+      : null;
+    if (track === null) {
+      rows.push({
+        line, name, ok: false,
+        error: `"${record.track}" is not a team. Use Backend Team or Production Team.`,
+      });
+      return;
+    }
+
+    /* -- A PRODUCTION WORKER NEED NOT HAVE AN EMAIL, and most do not.
+          They never sign in — their supervisor rates them (WORKER-1) — but a
+          profile still requires an auth account, which requires an address. So
+          one is derived from the employee code: deterministic, so re-importing
+          the same file finds the same person rather than making a second, and
+          on a `.invalid` domain, which RFC 2606 reserves precisely so that
+          nothing can ever be delivered to it. Nothing is ever sent there in any
+          case — `deliver` skips a person with no phone and no real address.
+
+          The code is REQUIRED in that case, because it is the only thing
+          keeping one worker's account distinct from another's. -- */
+    const emailText = (record.email ?? "").trim();
+    const codeText = (record.employee_code ?? "").trim();
+    let email = emailText;
+    if (!email) {
+      if (track !== "WORKER") {
+        rows.push({
+          line, name, ok: false,
+          error: "An email is required for the Backend Team — they sign in with it.",
+        });
+        return;
+      }
+      if (!codeText) {
+        rows.push({
+          line, name, ok: false,
+          error: "No email and no employee code. A production worker needs a code — it is what their record is keyed on.",
+        });
+        return;
+      }
+      email = `${codeText.toLowerCase().replace(/[^a-z0-9]+/g, "-")}@production.linkdprints.invalid`;
+    }
+
+    /* -- A password nobody uses, for an account nobody signs into.
+          Asking HR to invent one per worker is asking for twenty-five throwaway
+          secrets to be typed into a spreadsheet, which is worse than generating
+          one they never see. Long and random, because it still guards an
+          account. -- */
+    const password =
+      (record.password ?? "").trim() ||
+      (track === "WORKER" ? `wk-${crypto.randomUUID()}${crypto.randomUUID()}` : "");
+
+    /* -- MONTHLY OR ANNUAL, and the database is annual (0061).
+          A payroll sheet is usually monthly, and 32000 read as a year is ₹2,667
+          a month — out by twelve on every percentage, report and printed sheet,
+          and low enough to look plausible. Stating the unit once per row is what
+          makes that impossible rather than careful. Blank is ANNUAL, so an older
+          file is unchanged. -- */
+    const unitText = (record.salary_unit ?? "").trim().toLowerCase();
+    const perMonth = /^month/.test(unitText);
+    if (unitText && !perMonth && !/^annual|^year/.test(unitText)) {
+      rows.push({
+        line, name, ok: false,
+        error: `"${record.salary_unit}" is not a salary unit. Use MONTHLY or ANNUAL.`,
+      });
+      return;
+    }
+    /* Multiplied as TEXT, before the schema's own parser sees it, so ₹, commas
+       and Indian grouping are still accepted exactly as they are on an annual
+       row (P19C-5). */
+    const annual = (raw: string | undefined): string => {
+      const text = (raw ?? "").trim();
+      if (!perMonth || text === "") return text;
+      const n = Number(text.replace(/[₹,\s]/g, ""));
+      return Number.isFinite(n) ? String(Math.round(n * 12)) : text;
+    };
+
     const parsed = createUserSchema.safeParse({
       full_name: name,
-      email: record.email ?? "",
-      password: record.password ?? "",
+      email,
+      password,
+      track,
       department_id: departmentId ?? "",
       // Split on anything that is not a letter or underscore, so "HOD HR_ADMIN",
       // "HOD, HR_ADMIN" and "HOD/HR_ADMIN" all work.
@@ -1162,9 +1249,9 @@ export async function importUsers(
       employment_type: (record.employment_type || "PERMANENT").toUpperCase(),
       last_increment_date: lastIncrement,
       increment_frequency_months: record.increment_frequency_months || 12,
-      joining_ctc: record.joining_ctc ?? "",
-      current_ctc: record.current_ctc ?? "",
-      last_increment_amount: record.last_increment_amount ?? "",
+      joining_ctc: annual(record.joining_ctc),
+      current_ctc: annual(record.current_ctc),
+      last_increment_amount: annual(record.last_increment_amount),
     });
 
     if (!parsed.success) {

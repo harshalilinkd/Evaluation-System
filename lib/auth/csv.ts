@@ -100,9 +100,25 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
   hint: string;
 }> = [
   { key: "full_name", header: "full_name", required: true, hint: "Priya Sharma" },
-  { key: "email", header: "email", required: true, hint: "priya@linkdprints.com" },
-  { key: "password", header: "password", required: true, hint: "at least 10 characters" },
-  { key: "employee_code", header: "employee_code", hint: "LP-014" },
+  /* -- EMAIL IS NO LONGER A REQUIRED COLUMN, and that is a deliberate change.
+
+        A production worker does not sign in — they are rated by their
+        supervisor and never open the app (WORKER-1) — and most have no work
+        address to give. Demanding one meant either inventing twenty-five by
+        hand or leaving twenty-five people out of the system entirely, and a
+        worker with no profile cannot be appraised at all.
+
+        The COLUMN is still there and is still required for anybody on the
+        Backend Team; what changed is that the header need not be present and a
+        Production Team row may leave it blank. That rule lives in the row
+        validation, because it depends on the track. -- */
+  { key: "email", header: "email", hint: "blank is fine for Production Team" },
+  { key: "password", header: "password", hint: "10+ characters — blank is fine for Production Team" },
+  /* -- §7: which MODULE somebody is in. Independent of department, because both
+        modules have people in the same teams. Blank means Backend Team, so a
+        file written before this column existed still imports as it did. -- */
+  { key: "track", header: "track", hint: "Backend Team or Production Team" },
+  { key: "employee_code", header: "employee_code", hint: "LP-014 — REQUIRED when the email is blank" },
   { key: "department", header: "department", hint: "matched by name or code" },
   { key: "phone", header: "phone", hint: "9876543210" },
   { key: "designation", header: "designation", hint: "Senior Designer" },
@@ -112,6 +128,18 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
   { key: "employment_type", header: "employment_type", hint: "PERMANENT / PROBATION / CONTRACT / TRAINEE" },
   { key: "last_increment_date", header: "last_increment_date", hint: "DD-MM-YYYY" },
   { key: "increment_frequency_months", header: "increment_frequency_months", hint: "12" },
+  /* -- THE UNIT, ASKED FOR RATHER THAN ASSUMED.
+
+        Every salary in the database is ANNUAL (0061 — monthly at the edges,
+        annual in the core), and the three figures below have always been read
+        that way. Payroll sheets are usually monthly, so pasting 32000 into a
+        column the system reads as a year stores ₹2,667 a month — out by twelve
+        on every increment percentage, report and printed sheet, and low enough
+        to look plausible rather than obviously wrong.
+
+        One column removes the whole class. Blank means ANNUAL, so a file
+        written before this existed imports exactly as it did. -- */
+  { key: "salary_unit", header: "salary_unit", hint: "MONTHLY or ANNUAL (blank = annual)" },
   { key: "joining_ctc", header: "joining_ctc", hint: "400000" },
   { key: "current_ctc", header: "current_ctc", hint: "480000" },
   { key: "last_increment_amount", header: "last_increment_amount", hint: "80000" },
@@ -120,32 +148,62 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
 /** The template HR downloads: the header row, then one filled example. */
 export function importTemplate(): string {
   const header = IMPORT_COLUMNS.map((c) => c.header).join(",");
-  const example = [
-    "Priya Sharma",
-    "priya@linkdprints.com",
-    "ChangeMe12345",
-    "LP-014",
-    "Design",
-    "9876543210",
-    "Senior Designer",
-    "", // reports_to — blank on the example, since the Manager may not exist yet
-    "",
-    "01-04-2022",
-    "PERMANENT",
-    "01-04-2025",
-    "12",
-    "400000",
-    "480000",
-    "80000",
+  /* -- TWO example rows, not one.
+        The second is a production worker with no email, no password and a
+        MONTHLY salary — the shape most of a real payroll sheet is in, and the
+        one somebody would otherwise have to be told about in prose. An example
+        that only shows the easy case is an example that gets copied. -- */
+  const rows = [
+    [
+      "Priya Sharma",
+      "priya@linkdprints.com",
+      "ChangeMe12345",
+      "Backend Team",
+      "LP-014",
+      "Design",
+      "9876543210",
+      "Senior Designer",
+      "", // reports_to — blank here, since the manager may not exist yet
+      "",
+      "01-04-2022",
+      "PERMANENT",
+      "01-04-2025",
+      "12",
+      "ANNUAL",
+      "400000",
+      "480000",
+      "80000",
+    ],
+    [
+      "Ramesh Kumar",
+      "", // never signs in
+      "", // and so needs no password
+      "Production Team",
+      "PR-08", // required when the email is blank: the account is keyed on it
+      "Fusing",
+      "9137689996",
+      "Helper",
+      "supervisor@linkdprints.com", // who rates them
+      "",
+      "01-01-2021",
+      "PERMANENT",
+      "01-02-2025",
+      "12",
+      "MONTHLY",
+      "15000",
+      "22000",
+      "5000",
+    ],
   ]
     // Quote anything containing a comma, quote or newline, per RFC 4180.
-    .map((v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v))
-    .join(",");
+    .map((cells) =>
+      cells.map((v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(","),
+    );
 
   // CRLF and a BOM, for the same reason the CSV export uses them (P16-8):
   // Excel on Windows renders bare-LF UTF-8 as mojibake, and these are Indian
   // names.
-  return `﻿${header}\r\n${example}\r\n`;
+  return `﻿${header}\r\n${rows.join("\r\n")}\r\n`;
 }
 
 /**

@@ -6567,3 +6567,43 @@ with it.**
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean; all
 seven other suites still pass.
+
+---
+
+### FIX-52 — The employee template, for the payroll sheet HR actually has
+
+No migration. `lib/auth/csv.ts` and the import half of `lib/auth/provisioning.ts`.
+
+Prompted by a real 52-row payroll export. Read against the template, three
+things would have gone in wrong and one of them badly.
+
+| # | Decision | Why |
+|---|---|---|
+| F52-1 | **`salary_unit`, and it is the reason this phase exists** | Every salary in the database is ANNUAL (0061); the sheet HR exports is MONTHLY. Pasting 32000 into a column read as a year stores **₹2,667 a month** — out by twelve on every increment percentage, report and printed sheet, and low enough to look plausible rather than obviously wrong. Stating the unit once per row makes that impossible rather than careful. Blank is ANNUAL, so a file written before this imports exactly as it did. |
+| F52-2 | Converted as TEXT, before the schema's parser | So `₹15,000` still works on a monthly row exactly as it does on an annual one (P19C-5). A figure that is not a number is passed through untouched for the schema to reject with its own message. |
+| F52-3 | **`track`, in the words the screens use** | Everybody imported was STAFF, so a production worker would have been handed the staff 0–5 form instead of the supervisor's tick sheet. "Backend Team" / "Production Team" are what somebody copies off a screen; STAFF / WORKER are accepted too, because that is what the database calls them and what a previous export carries. |
+| F52-4 | **A production worker's email is derived, not demanded** | Half the sheet has none — they never sign in (WORKER-1). But a profile requires an auth account, which requires an address, so demanding one meant either inventing twenty-five by hand or leaving twenty-five people out of the system, and a worker with no profile cannot be appraised at all. Derived from the employee code, so a re-import finds the same person rather than making a second, on a `.invalid` domain — RFC 2606 reserves it precisely so nothing can ever be delivered there. |
+| F52-5 | …which makes the employee code **required** in that case | It is the only thing keeping one worker's account distinct from another's. |
+| F52-6 | A worker's password is **generated** | Asking HR to invent one per worker is asking for twenty-five throwaway secrets to be typed into a spreadsheet, which is worse than one nobody ever sees. Still long and random: it guards an account. |
+| F52-7 | **Two example rows, not one** | The second is a production worker with no email, no password and a monthly salary — the shape most of a real payroll sheet is in. An example that only shows the easy case is an example that gets copied. |
+
+**Every new rule refuses by name.** An unrecognised team, an unrecognised unit, a
+Backend Team row with no email, a worker with neither an email nor a code — each
+says what is wrong and what to do, because a bad row in a 52-row file is found by
+reading the message, not by inspecting the data.
+
+**Verification — 30 checks, 0 failed.** The arithmetic runs: 32000 monthly →
+384000, `₹15,000` → 180000, blank stays blank (not recorded is not zero), annual
+untouched, and a non-numeric figure left for the schema. Plus: only `full_name`
+is a required header now, both examples are emitted, and the conversion is proved
+to happen before the parse.
+
+**One of my own assertions was wrong for the third time in two phases.** "The
+conversion happens before the parse" used `indexOf`, which found the
+single-person create path near the top of the same file — comparing positions
+that happen to correlate rather than the claim. Scoped to the import function.
+**An assertion has to name the thing it is about, and a file offset is not a
+name.**
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean; all
+eight other suites pass.
