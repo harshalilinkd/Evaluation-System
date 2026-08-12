@@ -1480,6 +1480,29 @@ export type Database = {
         /** { seeded_current } — see 0069. */
         Returns: Json;
       };
+      /**
+       * The MD approves and closes a production appraisal (0070).
+       *
+       * SECURITY DEFINER because `worker_evaluations` admits only HR for
+       * UPDATE — before this the MD's close matched zero rows, which PostgREST
+       * reports as a success, and the screen blamed a race that had not
+       * happened.
+       */
+      close_worker_appraisal: {
+        Args: {
+          p_evaluation_id: string;
+          p_remarks: string | null;
+        };
+        Returns: undefined;
+      };
+      /** The MD sends a production appraisal back to HR, with a reason (0064). */
+      return_worker_to_hr: {
+        Args: {
+          p_evaluation_id: string;
+          p_reason: string;
+        };
+        Returns: undefined;
+      };
       raise_app_notification: {
         Args: {
           p_profile_id: string;

@@ -5947,3 +5947,98 @@ nobody questions once it has been printed a hundred times.
 
 **Verification — the 11 print checks and the 12 header checks all still pass.**
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-40 — The MD could never close a production appraisal, and was told somebody else had
+
+Migration `0070_md_closes_worker_appraisal.sql`. Five faults in the production
+appraisal, all reported from using it.
+
+#### The one that matters
+
+Reported as: *"Somebody else moved this appraisal on while you were reading it.
+Reload the page to see where it stands now. but still aprrove button is active
+and cycle not moved to close this is not correct."*
+
+**Nobody had moved anything.** `worker_evaluations` carries exactly one write
+policy — `worker_evaluations_hr_write` (0047), `for all … using
+(public.is_hr())`. The MD is not HR, so the UPDATE issued by "Approve and close"
+matched **zero rows**, and a PostgREST write that matches no row is a success
+that did nothing. The zero-row guard was right to notice, and reported the only
+cause it knew of.
+
+So the message named an innocent third party for a permission the MD has never
+had, and told the reader to do the one thing that cannot help. **The MD has
+never been able to close a production appraisal.**
+
+This is the **eighth appearance of the silent-write class** in this log —
+FIX-14's role write, F15-14's worker ticks, F15-16's launch, 0066, 0069 — and
+the first time its diagnostic actively misdirected.
+
+| # | Decision | Why |
+|---|---|---|
+| F40-1 | **A function, not a policy** | Admitting the MD to `worker_evaluations` for UPDATE would also let them rewrite the worker, the supervisor, the cycle and the snapshot pointer on any appraisal in the system. What is actually needed is one status move. 0054's `complete_worker_appraisal` and 0057's `submit_worker_layer` are the same shape for the same reason (W1-4), and **0064's `return_worker_to_hr` is this function's exact mirror** — the MD sending one back. Only the approving arm was ever built. |
+| F40-2 | Remarks, both timestamps, the decision row and the audit row commit **together** | §8 has no path back from CLOSED, so a half-applied close cannot be unwound. `for update` on the evaluation, so two Approves at the same instant cannot both read REVIEWED (P14-7). |
+| F40-3 | **An approval with no remarks still stamps `decided_by`** | The printed sheet's signature block is gated on it (W1, P34-9). Without this branch, approving without typing anything would print the sheet **unsigned** — a record that was approved and does not say so. |
+| F40-4 | Blank remarks `coalesce`; they never blank an earlier note | Approving in silence must not erase what HR wrote on the way up. |
+| F40-5 | No figure in the audit diff | §5 / P19-10, and it matters here because 0013 lets a lead read `audit_log` for their own reports. |
+| F40-6 | **My own `returnWorkerToHr` was about to repeat the bug** | It was written as a direct `.update()` and would have failed for the MD in exactly the same silent way — while 0064's SECURITY DEFINER function had been sitting there unused since it was written. It calls the RPC now, and its client-side minimum was raised from five characters to **ten**, which is what the function actually accepts: a form that takes what the server then rejects is the two-copies-of-a-threshold problem P13-6 had to unpick. |
+| F40-7 | The screen stops offering actions once the server says it moved | The warning appeared and "Approve and close" stayed live beside it. `stale` hides the actions and `router.refresh()` does the reload the message was asking a person to do. |
+
+#### The other four
+
+| # | Decision | Why |
+|---|---|---|
+| F40-8 | **Production Appraisals opens the round — but ONLY when there is one** | Asked for directly. An unconditional redirect is what FIX-15 had to remove: it went to the newest round and made every earlier one unreachable, because the board had dropped its own picker on the reasoning that this list was it. One round means the list is a page whose only content is one link (P12-15's objection). Two or more, and it is the only way to reach the older one. |
+| F40-9 | **The MD is told where an appraisal is, not offered a hand-up to themselves** | The panel branched on STATUS alone, so the MD looking at a sheet still with HR was offered "Send to management". It branches on role and status now, and each of the four cases says something true. |
+| F40-10 | The MD can decline | Once it reached them their only option was to approve — the second pair of eyes could agree or do nothing, which is not a decision (AMEND-2). A reason is required, and 0064 records it with both statuses. |
+| F40-11 | **`salary_changed` no longer hides figures HR has saved** | It is written by the SUPERVISOR's sheet; `old_ctc` and `new_ctc` are written by HR. So a sheet where the supervisor recorded no percentage, and HR priced it anyway, stored two real figures and rendered "there is nothing to price" — the stored values gone from the one screen that reads them back. The recommendation now governs the recommendation row alone. |
+| F40-12 | The salary card is rendered **unconditionally** | It was conditional on a decisions row existing, so an unpriced appraisal showed no salary section at all — indistinguishable from the section having disappeared, which is how it was reported. The panel says which of the two it is. |
+| F40-13 | **Closed, it reads as three decisions rather than two figures** | "All steps and stages should be transparent." Supervisor recommended · HR priced it · Management approved — each with who, when, and what to. The management row is the one that did not exist: an approved figure that never said it had been approved. Every timestamp was already on the evaluation row and was simply never carried out of the query. |
+| F40-14 | A stage not yet reached says "Not yet approved" | §13.4. A blank beside two filled rows reads as a value that failed to load. |
+
+#### Verification — 77 checks, 0 failed
+
+**The bug is reproduced before it is fixed**, on real Postgres with 0047's policy
+loaded **verbatim from the migration text** rather than retyped — it is the
+subject, and a probe that reimplements what it checks is not a check of it
+(FIX-12):
+
+```
+the MD's bare UPDATE raises NO error                            ok
+…and matches ZERO rows — the silent write                       ok
+…and the appraisal is STILL at REVIEWED                         ok
+HR's identical statement moves ONE row                          ok   ← role, not data
+```
+
+Then 0070: the MD closes it, both timestamps stamped, remarks stored,
+`decided_by` set (the print signature gate), **and the whole salary block
+survives** — current, new, the supervisor's percentage and `salary_changed`
+untouched. One audit row, naming the MD, REVIEWED → CLOSED, carrying no figure.
+Approving with no remarks still signs it; approving with blank remarks does not
+blank an earlier note. HR, an employee and an anonymous caller are each refused
+by the function itself; a sheet still with HR is refused **by name**; a second
+close is refused and writes no duplicate audit row; the migration is idempotent.
+
+Source-level: the redirect fires only on exactly one live round with an empty
+bin; the panel branches on status **and** role with the four arms in the right
+order; the return and the close both go through their SECURITY DEFINER
+functions and issue no direct update; the remaining update is the hand-up alone,
+with no dead CLOSED arm; the salary panel is unconditional; the three stages
+carry actor and date; and no figure reaches an audit diff.
+
+**Four of my own assertions were wrong and were rewritten, not loosened.** They
+pinned `!withMd && isMd` — a spelling the code does not use, because the panel is
+a nested ternary. **That is the substring trap (P31): an assertion must target
+the claim, never a particular way of writing it.** They read the branch order
+now, which is what the change actually promises and cannot be satisfied by
+restoring the old behaviour under a new spelling.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**Action required.** `0070_md_closes_worker_appraisal.sql` is **not applied**.
+Until it is, "Approve and close" still does nothing — and still blames somebody
+else. `supabase/whats-applied.sql` gained a row for it, on the generic function
+detector, which is exact here because the name is new (0056's failure was a
+`LIKE` over tokens the file already contained).

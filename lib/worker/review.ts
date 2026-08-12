@@ -63,6 +63,21 @@ export type WorkerReview = {
    * record being made to look finished by printing it (P34-11).
    */
   mdApproval: { name: string; signature: string | null; at: string } | null;
+  /**
+   * When each stage happened, so the screen can say so rather than implying it.
+   *
+   * "All steps and stages should be transparent" was the ask, and the salary
+   * card was the least transparent thing on the page: once the appraisal
+   * closed it showed two bare figures with nothing to say who set them, when,
+   * or that management had signed them off at all. Every one of these is
+   * already on the evaluation row — they were simply never carried out of this
+   * function.
+   */
+  stages: {
+    supervisorSubmittedAt: string | null;
+    mdReviewedAt: string | null;
+    closedAt: string | null;
+  };
 };
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -199,6 +214,11 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
           }
         : null,
       mdApproval,
+      stages: {
+        supervisorSubmittedAt: evaluation.supervisor_submitted_at,
+        mdReviewedAt: evaluation.md_reviewed_at,
+        closedAt: evaluation.closed_at,
+      },
     },
   };
 }
@@ -288,6 +308,41 @@ export async function reviewWorkerAppraisal(
     };
   }
 
+  /* -- THE MD'S CLOSE GOES THROUGH 0070, AND IT HAD TO.
+
+        `worker_evaluations` carries one write policy — `worker_evaluations_hr_write`
+        (0047), `for all ... using (is_hr())`. The MD is not HR, so the update
+        below matched ZERO ROWS for them, and a PostgREST write that matches no
+        row succeeds having done nothing. The zero-row guard then reported the
+        only cause it knew of: "somebody else moved this appraisal on". Nobody
+        had. The MD has never been able to close a production appraisal, and was
+        told each time that somebody else was responsible.
+
+        Remarks, both timestamps, the decision row and the audit row commit
+        together inside the function, so a close cannot half-happen. -- */
+  if (outcome === "CLOSE") {
+    const { error: closeError } = await supabase.rpc("close_worker_appraisal", {
+      p_evaluation_id: evaluationId,
+      p_remarks: remarks.trim() === "" ? null : remarks.trim(),
+    });
+
+    if (closeError) {
+      return {
+        ok: false,
+        error: {
+          // The function raises a sentence per refusal — not management, gone,
+          // already closed, still with HR. Passed through rather than replaced
+          // by one generic failure (§0.7).
+          code: "NOT_CLOSED",
+          message: closeError.message,
+        },
+      };
+    }
+
+    revalidatePath("/admin/worker-appraisals", "layout");
+    return { ok: true, data: { ok: true } };
+  }
+
   /* -- The remarks land on the DECISIONS row, not the evaluation.
         `worker_evaluations` is readable by the worker and their supervisor;
         management's remarks are neither's to read, and RLS cannot withhold a
@@ -307,14 +362,12 @@ export async function reviewWorkerAppraisal(
     }
   }
 
-  const now = new Date().toISOString();
   const { data: moved, error } = await supabase
     .from("worker_evaluations")
-    .update(
-      outcome === "SEND_TO_MD"
-        ? { status: "REVIEWED" }
-        : { status: "CLOSED", md_reviewed_at: now, closed_at: now },
-    )
+    // Only the hand-up reaches here now; the close returned above. Written as
+    // one outcome rather than a ternary whose other arm can no longer be taken —
+    // a dead branch reads as a live one to whoever edits this next.
+    .update({ status: "REVIEWED" })
     .eq("id", evaluationId)
     // Matched on the status we read, so two people acting at once cannot both
     // succeed — the second affects no rows rather than overwriting the first.
@@ -595,4 +648,91 @@ function collapseRuns(entries: WorkerActivity[]): WorkerActivity[] {
     out.push({ ...entry });
   }
   return out;
+}
+
+/* ================================================ management sends it back == */
+
+/**
+ * The MD returns an appraisal to HR for correction.
+ *
+ * THIS DID NOT EXIST. `worker_evaluation.returned_to_hr` has been in the
+ * activity vocabulary since the trail was written, and nothing ever raised it —
+ * so an appraisal that reached management could only go forward. The MD's
+ * choices were to approve a figure they disagreed with or to leave it sitting
+ * there, and neither is a decision.
+ *
+ * REVIEWED → PENDING_REVIEW, which is the only move it can be: the statuses
+ * already express "with HR" and "with management", so this needs no new enum
+ * value and no migration (the same reasoning W1-11 used for the two endings).
+ *
+ * A REASON IS REQUIRED. §8 requires one on every return in the staff module and
+ * the argument is identical here: a form that comes back with no explanation
+ * sends HR looking for the one person who knows why, and by then the reason is
+ * somebody's recollection. It is recorded verbatim in the audit trail (§12) and
+ * shown on the activity list.
+ */
+export async function returnWorkerToHr(
+  evaluationId: string,
+  reason: string,
+): Promise<Result<{ ok: true }>> {
+  /* -- MANAGEMENT ONLY, and deliberately not HR.
+        HR sending it back to themselves is not a return, it is an edit — and
+        they can already edit while it is theirs. The point of this action is
+        that the second pair of eyes can decline (AMEND-2). -- */
+  const auth = await checkRole(["MD"]);
+  if (!auth.ok) return { ok: false, error: auth.error };
+
+  const note = reason.trim();
+  /* -- Ten, matching what the database will actually accept.
+        0064's function raises below ten characters, so a client minimum of five
+        would let somebody type six, press the button and read a raw Postgres
+        exception. A form that accepts what the server then rejects is the
+        two-copies-of-a-threshold problem P13-6 already had to unpick. -- */
+  if (note.length < 10) {
+    return {
+      ok: false,
+      error: {
+        code: "REASON_REQUIRED",
+        message: "Say what needs changing — at least ten characters, so HR knows what to do.",
+      },
+    };
+  }
+
+  const supabase = await createClient();
+
+  /* -- THROUGH 0064'S FUNCTION, NOT A DIRECT UPDATE — and this is the whole
+        reason the MD's actions were failing.
+
+        `worker_evaluations` has exactly ONE write policy:
+        `worker_evaluations_hr_write`, `for all ... using (is_hr())`. The MD is
+        not HR, so any UPDATE they issue matches ZERO ROWS — and PostgREST
+        reports zero rows as a success. The screen then says "somebody else
+        moved this appraisal on", which is untrue and unactionable: nobody moved
+        anything, and no amount of reloading will help.
+
+        0064 already built `return_worker_to_hr` as SECURITY DEFINER for exactly
+        this reason (W1-4's pattern: the capability goes to one narrow audited
+        function rather than to a policy). It also writes its own audit row with
+        the reason and the two statuses, so nothing further is logged here — a
+        second row would report one return as two. -- */
+  const { error } = await supabase.rpc("return_worker_to_hr", {
+    p_evaluation_id: evaluationId,
+    p_reason: note,
+  });
+
+  if (error) {
+    return {
+      ok: false,
+      error: {
+        // The function raises a SENTENCE for each of its four refusals — not
+        // entitled, gone, wrong stage, reason too short. Passing it through is
+        // what makes the screen say which one happened (§0.7).
+        code: "NOT_RETURNED",
+        message: error.message,
+      },
+    };
+  }
+
+  revalidatePath("/admin/worker-appraisals", "layout");
+  return { ok: true, data: { ok: true } };
 }

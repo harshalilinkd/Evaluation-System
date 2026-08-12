@@ -106,6 +106,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   -- was 0056's failure, and this row deliberately does not repeat it.
   ('0069_record_joining_salary', 'function',   'record_joining_salary',
      'Without it the MD recording a joining salary writes NOTHING and is told it worked — the update matches zero rows, and zero rows is a success.'),
+  -- Also a new name, so the generic detector is exact by construction.
+  ('0070_md_closes_worker_appraisal', 'function', 'close_worker_appraisal',
+     'Without it the MD CANNOT close a production appraisal at all — worker_evaluations admits only HR for UPDATE, so their close matches zero rows, and the screen wrongly reports that somebody else moved it.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',

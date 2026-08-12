@@ -9,8 +9,16 @@ import { ArrowLeft, CheckCircle2, Loader2, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { reviewWorkerAppraisal, type WorkerReview } from "@/lib/worker/review";
+import { returnWorkerToHr, reviewWorkerAppraisal, type WorkerReview } from "@/lib/worker/review";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 import { saveWorkerSalaryAsHr } from "@/lib/worker/review";
@@ -55,6 +63,14 @@ export function WorkerReviewClient({
   const [remarks, setRemarks] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [returning, setReturning] = React.useState(false);
+  const [returnReason, setReturnReason] = React.useState("");
+  /* -- Set when the server says the record moved under us. The panel then stops
+        offering actions, instead of leaving a live button beside a message that
+        says the screen is out of date — which is exactly what was reported: the
+        warning appeared, "Approve and close" stayed active, and nothing had
+        moved. -- */
+  const [stale, setStale] = React.useState(false);
 
   const closed = review.status === "CLOSED";
   const withMd = review.status === "REVIEWED";
@@ -67,6 +83,17 @@ export function WorkerReviewClient({
       const result = await reviewWorkerAppraisal(review.evaluationId, remarks, outcome);
       if (!result.ok) {
         setError(result.error.message);
+        /* -- A LOST RACE FIXES ITSELF.
+              The guard was right — somebody moved the record between this page
+              loading and the button being pressed — but telling a person to
+              reload is asking them to do what the app can do. A refresh
+              re-renders from the server, and `stale` hides the actions until it
+              lands so nothing can be pressed against a status that no longer
+              exists. -- */
+        if (result.error.code === "ALREADY_MOVED" || result.error.code === "NOT_CLOSED") {
+          setStale(true);
+          router.refresh();
+        }
         return;
       }
       router.push(`/admin/worker-appraisals/${cycleId}`);
@@ -196,14 +223,27 @@ export function WorkerReviewClient({
           admits only HR and the MD, so their copy of the query has always
           returned nothing. Where there is no record, HR types it and the panel
           says which of the two it is rather than showing an unexplained blank. */}
-      {review.salary ? (
-        <WorkerSalaryPanel
-          evaluationId={review.evaluationId}
-          salary={review.salary}
-          currentCtcOnRecord={review.currentCtcOnRecord}
-          readOnly={closed || review.status === "REVIEWED"}
-        />
-      ) : null}
+      {/* -- ALWAYS RENDERED, because its absence was itself the report.
+            It used to be conditional on a decisions row existing — so an
+            appraisal the supervisor left unpriced showed no salary section at
+            all, which is indistinguishable from the section having disappeared.
+            The panel says which of the two it is. -- */}
+      <WorkerSalaryPanel
+        evaluationId={review.evaluationId}
+        salary={
+          review.salary ?? {
+            salaryChanged: false,
+            oldCtc: null,
+            incrementPct: null,
+            newCtc: null,
+          }
+        }
+        currentCtcOnRecord={review.currentCtcOnRecord}
+        readOnly={closed || review.status === "REVIEWED"}
+        supervisorName={review.supervisorName}
+        mdApproval={review.mdApproval}
+        stages={review.stages}
+      />
 
       {/* ---------- Finish ---------- */}
       {!done ? (
@@ -239,25 +279,62 @@ export function WorkerReviewClient({
                 : "Closing is final. Send it to management instead if the MD should sign it."}
             </p>
             <div className="flex flex-wrap gap-2">
+              {/* Nothing is pressable against a status that has already moved.
+                  The refresh is in flight; when it lands this panel re-renders
+                  with whatever is now true. */}
+              {stale ? (
+                <p className="font-sans text-body-sm text-ink-muted">
+                  Bringing the page up to date…
+                </p>
+              ) : (
+                <>
               {/* -- ONE BUTTON EACH, and neither sees the other's.
                     Management's approval is required to close now, so HR's
                     only move is to send it up and the MD's only move is to
                     close. Offering HR a Close that the server refuses is the
                     dead end §13.4 is about. -- */}
+              {/* -- WHOSE MOVE IT IS, decided by role AND status.
+
+                    It was decided by status alone, so the MD looking at a sheet
+                    still with HR was offered "Send to management" — an invitation
+                    to send it to themselves. And once it reached them their only
+                    option was to approve: `returnWorkerToHr` did not exist, so
+                    the second pair of eyes could agree or do nothing, which is
+                    not a decision (AMEND-2). -- */}
               {!withMd ? (
-                <Button onClick={() => void finish("SEND_TO_MD")} disabled={busy} className="min-h-11">
-                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                  Send to management
-                </Button>
+                isMd ? (
+                  <p className="font-sans text-body-sm text-ink-muted">
+                    Still with HR. It reaches you when they send it up.
+                  </p>
+                ) : (
+                  <Button onClick={() => void finish("SEND_TO_MD")} disabled={busy} className="min-h-11">
+                    {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                    Send to management
+                  </Button>
+                )
               ) : isMd ? (
-                <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
-                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                  Approve and close
-                </Button>
+                <>
+                  {/* Secondary, and to the left: sending it back is the lesser
+                      of the two acts, and §13.3 gives the primary slot to one. */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setReturning(true)}
+                    disabled={busy}
+                    className="min-h-11"
+                  >
+                    Send back to HR
+                  </Button>
+                  <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
+                    {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                    Approve and close
+                  </Button>
+                </>
               ) : (
                 <p className="font-sans text-body-sm text-ink-muted">
-                  With management. They approve and close it.
+                  With management. They approve and close it, or send it back.
                 </p>
+              )}
+                </>
               )}
             </div>
           </div>
@@ -305,7 +382,117 @@ export function WorkerReviewClient({
         </div>
       ) : null}
 
+      {/* -- SENDING IT BACK, with a reason.
+
+            §8 requires one on every return in the staff module and the argument
+            is identical here: a form that comes back with no explanation sends
+            HR looking for the one person who knows why, and by then the reason
+            is somebody's recollection. It is stored verbatim in the audit trail
+            and appears on the activity list above. -- */}
+      <Dialog open={returning} onOpenChange={(open) => (open ? null : setReturning(false))}>
+        <DialogContent className="w-[min(96vw,480px)] border-rule">
+          <DialogHeader>
+            <DialogTitle className="text-display-sm text-ink">Send this back to HR?</DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              It goes back to HR to change. Nothing already recorded is lost — the
+              supervisor&rsquo;s ticks and the salary figures stay exactly as they are.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="w_return_reason">Why is it going back?</Label>
+            <Textarea
+              id="w_return_reason"
+              value={returnReason}
+              onChange={(e) => setReturnReason(e.target.value)}
+              rows={3}
+              placeholder="What should HR change before sending it up again?"
+            />
+          </div>
+
+          {error ? (
+            <p role="alert" className="font-sans text-body-sm text-critical">
+              {error}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="ghost" className="min-h-11" onClick={() => setReturning(false)}>
+              Keep it here
+            </Button>
+            <Button
+              className="min-h-11"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                const result = await returnWorkerToHr(review.evaluationId, returnReason);
+                setBusy(false);
+                if (!result.ok) {
+                  setError(result.error.message);
+                  if (result.error.code === "ALREADY_MOVED") {
+                    setReturning(false);
+                    setStale(true);
+                    router.refresh();
+                  }
+                  return;
+                }
+                setReturning(false);
+                router.push(`/admin/worker-appraisals/${cycleId}`);
+                router.refresh();
+              }}
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Send back to HR
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+/**
+ * One step in the pay decision: what happened, who did it, when, and to what.
+ *
+ * A pending step is stated as pending rather than shown as a blank — §13.4, and
+ * a blank beside two filled rows reads as a value that failed to load.
+ */
+function SalaryStage({
+  step,
+  who,
+  at,
+  value,
+  note,
+  pending,
+}: {
+  step: string;
+  who: string | null;
+  at: string | null;
+  value: string;
+  note?: string | null;
+  pending?: boolean;
+}) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div className="min-w-0">
+        <p className="font-sans text-body-sm text-ink">{step}</p>
+        <p className="font-sans text-body-sm text-ink-muted">
+          {[who, at ? formatDateTime(at) : null].filter(Boolean).join(" · ") || "—"}
+        </p>
+      </div>
+      <div className="text-right">
+        <p
+          className={cn(
+            "tabular font-sans text-body",
+            pending ? "text-ink-faint" : "text-ink",
+          )}
+        >
+          {value}
+        </p>
+        {note ? <p className="font-sans text-body-sm text-ink-muted">{note}</p> : null}
+      </div>
+    </li>
   );
 }
 
@@ -329,11 +516,17 @@ function WorkerSalaryPanel({
   salary,
   currentCtcOnRecord,
   readOnly,
+  supervisorName,
+  mdApproval,
+  stages,
 }: {
   evaluationId: string;
   salary: { salaryChanged: boolean; oldCtc: number | null; incrementPct: number | null; newCtc: number | null };
   currentCtcOnRecord: number | null;
   readOnly: boolean;
+  supervisorName: string | null;
+  mdApproval: WorkerReview["mdApproval"];
+  stages: WorkerReview["stages"];
 }) {
   const router = useRouter();
 
@@ -367,6 +560,11 @@ function WorkerSalaryPanel({
   const basis = oldCtc ?? currentCtcOnRecord;
   const suggested = basis !== null && pct !== null ? Math.round(basis * (1 + pct / 100)) : null;
 
+  /* -- Stated, not left to be worked out from two figures on adjacent lines.
+        Only where both are known — a difference against a missing figure is not
+        a rise, it is an assumption. -- */
+  const rise = oldCtc !== null && newCtc !== null ? newCtc - oldCtc : null;
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -380,12 +578,25 @@ function WorkerSalaryPanel({
     router.refresh();
   }
 
-  if (!salary.salaryChanged) {
+  /* -- "NO CHANGE RECOMMENDED" IS NOT "NOTHING TO SHOW", and treating them as
+        the same thing is what made the block appear to vanish.
+
+        `salary_changed` is written by the SUPERVISOR's sheet. `old_ctc` and
+        `new_ctc` are written by HR. So a sheet where the supervisor recorded no
+        percentage, and HR then priced it anyway, stored two real figures and
+        rendered a card saying there was nothing to price — the stored values
+        gone from the one screen that reads them back.
+
+        The recommendation now governs the RECOMMENDATION row only. Figures are
+        shown whenever figures exist, at every stage, which is the whole of what
+        was asked for. -- */
+  const hasFigures = oldCtc !== null || newCtc !== null || salary.newCtc !== null;
+  if (!salary.salaryChanged && !hasFigures && readOnly) {
     return (
       <div className="card-surface space-y-2 p-5">
         <p className="font-sans text-body-lg text-ink">Salary</p>
         <p className="font-sans text-body-sm text-ink-muted">
-          The supervisor recorded no change, so there is nothing to price.
+          No pay change was recorded on this appraisal.
         </p>
       </div>
     );
@@ -420,16 +631,43 @@ function WorkerSalaryPanel({
       </dl>
 
       {readOnly ? (
-        <dl className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <dt className="type-label text-ink-muted">Current</dt>
-            <dd className="tabular font-sans text-body text-ink">{moneyMonthly(oldCtc)}</dd>
-          </div>
-          <div>
-            <dt className="type-label text-ink-muted">New</dt>
-            <dd className="tabular font-sans text-body text-ink">{moneyMonthly(newCtc)}</dd>
-          </div>
-        </dl>
+        /* -- THE STAGES, NAMED — not two figures with no account of themselves.
+              Each row states who set it and when, so a closed appraisal reads as
+              a record of three decisions rather than as a screen that has
+              stopped working. The management row is the one that was missing
+              entirely: an approved figure that never said it was approved. -- */
+        <ol className="space-y-3 border-t border-rule pt-4">
+          <SalaryStage
+            step="Supervisor recommended"
+            who={supervisorName}
+            at={stages.supervisorSubmittedAt}
+            value={pct === null ? "No change" : `${pct}%`}
+          />
+          <SalaryStage
+            step="HR priced it"
+            who={null}
+            at={null}
+            value={
+              oldCtc === null && newCtc === null
+                ? "Not priced"
+                : `${moneyMonthly(oldCtc)} → ${moneyMonthly(newCtc)}`
+            }
+            note={rise === null ? null : `A rise of ${moneyMonthly(rise)} a month`}
+          />
+          <SalaryStage
+            step="Management approved"
+            who={mdApproval?.name ?? null}
+            at={mdApproval?.at ?? stages.mdReviewedAt}
+            value={
+              mdApproval
+                ? newCtc === null
+                  ? "Approved"
+                  : moneyMonthly(newCtc)
+                : "Not yet approved"
+            }
+            pending={!mdApproval}
+          />
+        </ol>
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-2">

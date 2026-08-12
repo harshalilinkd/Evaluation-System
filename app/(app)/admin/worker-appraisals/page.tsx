@@ -1,6 +1,7 @@
 /** /admin/worker-appraisals — opens the current round, not a list of one card. */
 
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { WorkerCyclesClient } from "@/app/(app)/admin/worker-appraisals/cycles-client";
 import { requireRole } from "@/lib/auth/guards";
@@ -48,6 +49,24 @@ export default async function Page() {
       .not("deleted_at", "is", null)
       .order("deleted_at", { ascending: false }),
   ]);
+
+  /* -- STRAIGHT TO THE ROUND WHEN THERE IS ONLY ONE.
+
+        The owner does not want a list standing between the menu item and the
+        work, and with a single round that list is a page whose only content is
+        one link — the same objection P12-15 answers on /my-evaluation, where an
+        index of one exists only to be clicked through.
+
+        ONLY WHEN THERE IS EXACTLY ONE, which is what keeps FIX-15 fixed. The
+        redirect that used to live here was unconditional and went to the NEWEST
+        round, so every earlier one became unreachable — the board had removed
+        its own picker on the reasoning that this list was it. With two or more
+        rounds the list still appears, and it is still the only way to reach an
+        older one. -- */
+  const live = cycles ?? [];
+  if (live.length === 1 && (binned ?? []).length === 0) {
+    redirect(`/admin/worker-appraisals/${live[0]!.id}`);
+  }
 
   /* -- The worker pool, for the Start a round dialog. Needed whether or not
         any round exists — starting the SECOND round needs it as much as the
