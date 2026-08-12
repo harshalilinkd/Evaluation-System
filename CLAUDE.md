@@ -6109,3 +6109,29 @@ Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
 CLOSED and §17 forbids reopening one — a closed record is evidence. The test
 round can be binned and run again; a real one would be corrected on the worker's
 employment record, where the pay ledger lives.
+
+---
+
+### FIX-42 — The summary report caught up with the detailed one
+
+No migration. `summary/executive-client.tsx` only.
+
+Asked for directly: *"both reports working should be same, only we showing less
+data in summary report."* Right, and five things had drifted — every one of them
+a change made to the detailed report or the printed sheet and never carried
+across. **Same names, same rules, same units; the summary simply shows less.**
+
+| # | Decision | Why |
+|---|---|---|
+| F42-1 | **The Average column** | AMEND-5 amended §11 to permit it and put it on the detailed report and the printed sheet "together" — the summary was the third surface and was missed. Both-or-nothing (A5-2): Manager Review has no self score, and printing the manager's figure there as an average would state that both sides agreed on a section only one of them answered. Computed on read, stored nowhere, and in plain ink — self is cyan and manager pink because those say WHO, and an average belongs to neither (A5-4). |
+| F42-2 | **One figure, one author** | FIX-28 renamed this "Manager proposed" at the owner's instruction — only the HOD and the MD decide salary — and this screen still said "HR proposes; the MD approves". One number with two authors depending on which report you opened is worse than either name alone. |
+| F42-3 | …and the authorship rule came with the name | F28-3: the field stays editable, so HR can type something other than the manager's recommendation, and then the heading would be untrue. The note names the manager's percentage, or says plainly that there is none to point at. |
+| F42-4 | **Management approved, which this screen never showed** | FIX-36 put it on the detailed report: the gap between proposed and approved IS the decision AMEND-2's second pair of eyes exists to produce. It was visible in the workflow and on no summary. Blank until it is true, never defaulting to the proposal — that would display an approval nobody gave, on the number a salary is paid from. Two absences told apart (F36-3). |
+| F42-5 | **The pay history runs from joining** | FIX-31 did this on the detailed report. Here it listed revisions only, so somebody with no rise yet saw no history at all while their starting salary sat in the card above. The baseline is a COLUMN, not a `salary_history` row (P19E-1), so it is prepended rather than arriving in the list — and it carries no percentage, because it is what rises are measured FROM and a rise against it would describe an increment that never happened. |
+| F42-6 | The last HR attribution went with them | "HR proposes a figure above" was the one sentence left calling the figure HR's. A next-step line naming a different author from the card it points at is worse than none. |
+
+**Verification — 25 checks, 0 failed**, and they are written as **parity**
+assertions rather than as checks on one file: each reads the detailed report or
+the printed sheet, then the summary, and fails if the two disagree. That is what
+stops this recurring — five separate drifts is a pattern, not five accidents.
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.

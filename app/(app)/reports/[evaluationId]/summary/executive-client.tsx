@@ -148,6 +148,11 @@ export function ExecutiveSummary({
                 <span aria-hidden className="size-2 rounded-pill bg-lead" />
                 Manager
               </span>
+              {/* -- AMEND-5's Average, so this table says the same as the
+                    detailed report and the printed sheet. Plain ink and no
+                    swatch: self is cyan and manager is pink because those say
+                    WHO, and an average belongs to neither (§13.1). -- */}
+              <span className="type-label w-9 text-right text-ink-muted">Avg</span>
               <span className="type-label w-[4.25rem] text-right text-ink-muted">Gap</span>
             </div>
             <ul className="space-y-2.5">
@@ -180,6 +185,15 @@ export function ExecutiveSummary({
                       </span>
                       <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
                         {score(s.lead)}
+                      </span>
+                      {/* -- BOTH OR NOTHING (AMEND-5, A5-2). Manager Review has
+                            no self score at all; printing the manager's figure
+                            there as an "average" would state that both sides
+                            agreed on a section only one of them answered. -- */}
+                      <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
+                        {s.self === null || s.lead === null
+                          ? "—"
+                          : ((s.self + s.lead) / 2).toFixed(2)}
                       </span>
                       <Badge tone={tone}>{signed(gap)}</Badge>
                     </span>
@@ -291,11 +305,25 @@ export function ExecutiveSummary({
                 </dl>
               </Card>
 
+              {/* -- THE SAME NAME AS THE DETAILED REPORT.
+                    FIX-28 renamed this figure "Manager proposed" at the owner's
+                    instruction — only the HOD and the MD decide salary — and
+                    this screen was still calling it HR's. One number with two
+                    authors depending on which report you opened is worse than
+                    either name alone.
+
+                    And the same authorship rule with it (F28-3): the field stays
+                    editable, so HR CAN type something other than the manager's
+                    recommendation, and the note says which it is rather than
+                    letting the heading claim an authorship the number does not
+                    have. -- */}
               <Card
-                title={role === "HR_ADMIN" ? "Proposal" : "Approval"}
+                title={role === "HR_ADMIN" ? "Manager proposed salary hike" : "Approval"}
                 note={
                   role === "HR_ADMIN"
-                    ? "HR proposes; the MD approves. Both figures are kept."
+                    ? salary.managerHikePct === null
+                      ? "The manager recommended no percentage. HR sets the figure; the MD approves it."
+                      : `The manager's recommendation of ${salary.managerHikePct}%. The MD approves it.`
                     : `The manager proposed ${moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}.`
                 }
               >
@@ -310,6 +338,38 @@ export function ExecutiveSummary({
                   role={role}
                   settled={header.status === "INTERVIEW_DONE" || header.status === "CLOSED"}
                 />
+                {/* -- WHAT MANAGEMENT APPROVED, which this screen never showed.
+                      FIX-36 put it on the detailed report: the difference
+                      between what was proposed and what was approved IS the
+                      decision AMEND-2's second pair of eyes exists to produce,
+                      and it was visible in the workflow and on no summary.
+
+                      Blank until it is true — never defaulting to the proposal,
+                      which would display an approval nobody gave on the one
+                      number a salary is paid from. -- */}
+                <dl className="mt-3 border-t border-rule pt-3">
+                  <dt className="type-label text-ink-muted">Management approved</dt>
+                  {salary.review?.md_approved_ctc ? (
+                    <>
+                      <dd className="tabular mt-0.5 font-sans text-body-lg text-ink">
+                        {moneyMonthly(salary.review.md_approved_ctc)}
+                      </dd>
+                      <dd className="font-sans text-body-sm text-ink-muted">
+                        {formatInr(salary.review.md_approved_ctc)} a year
+                        {salary.review.md_approved_hike_pct === null
+                          ? ""
+                          : ` · ${salary.review.md_approved_hike_pct.toFixed(2)}%`}
+                      </dd>
+                    </>
+                  ) : (
+                    <dd className="mt-0.5 font-sans text-body-sm text-ink-muted">
+                      {salary.review?.hr_proposed_ctc
+                        ? "Waiting on management. It fills in when they approve and close."
+                        : "Nothing to approve yet — the proposal has to be saved first."}
+                    </dd>
+                  )}
+                </dl>
+
                 <NextStep
                   status={header.status}
                   hasProposal={salary.review?.hr_proposed_ctc !== null && salary.review?.hr_proposed_ctc !== undefined}
@@ -318,9 +378,27 @@ export function ExecutiveSummary({
                 />
               </Card>
 
-              {salary.history.length > 0 ? (
-                <Card title="Increment history">
+              {/* -- FROM JOINING, LIKE THE DETAILED REPORT (FIX-31).
+                    It listed revisions only, so somebody with no rise yet saw no
+                    history at all while their starting salary sat in the card
+                    above — and where there were revisions, the run started
+                    part-way through the story. The baseline is a COLUMN, not a
+                    `salary_history` row (P19E-1), which is why it has to be
+                    prepended here rather than arriving in the list. It carries
+                    no percentage: it is what changes are measured FROM, and a
+                    rise against it would describe an increment that never
+                    happened. -- */}
+              {salary.joiningCtc !== null || salary.history.length > 0 ? (
+                <Card title="Salary history">
                   <ul className="space-y-1">
+                    {salary.joiningCtc === null ? null : (
+                      <li className="flex justify-between gap-3 font-sans text-body-sm">
+                        <span className="text-ink-muted">
+                          {formatDate(salary.dateOfJoining)} · Joining
+                        </span>
+                        <span className="tabular text-ink">{moneyMonthly(salary.joiningCtc)}</span>
+                      </li>
+                    )}
                     {salary.history.map((h) => (
                       <li
                         key={`${h.effectiveFrom}-${h.newCtc}`}
@@ -383,7 +461,10 @@ function NextStep({
 }) {
   const steps: string[] = [];
 
-  if (!hasProposal) steps.push("HR proposes a figure above.");
+  // "HR proposes a figure" was the last sentence on this screen still calling
+  // the figure HR's — FIX-28 renamed it everywhere else, and a next-step line
+  // that names a different author from the card it points at is worse than none.
+  if (!hasProposal) steps.push("Save the manager's proposed figure above.");
   if (status === "PENDING_HR_REVIEW") steps.push("HR reviews the report and sends it to the MD.");
   if (!hasApproval) steps.push("The MD approves the figure.");
   if (status === "HR_APPROVED") steps.push("The MD records their review on the full report.");
