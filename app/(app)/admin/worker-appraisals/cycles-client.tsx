@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HardHat, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { HardHat, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { DashboardCard } from "@/components/appraise/metric-widget";
 import { EmptyState } from "@/components/appraise/states";
@@ -24,10 +24,8 @@ import { Label } from "@/components/ui/label";
 import {
   addWorkersToRound,
   createWorkerCycle,
-  deleteWorkerRoundForever,
   launchWorkerCycle,
   moveWorkerRoundToBin,
-  restoreWorkerRound,
 } from "@/lib/worker/cycle-actions";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
@@ -77,7 +75,6 @@ export function WorkerCyclesClient({
 }) {
   const [open, setOpen] = React.useState(false);
   const [binning, setBinning] = React.useState<WorkerCycleRow | null>(null);
-  const [showBin, setShowBin] = React.useState(false);
 
   return (
     <div className="space-y-6">
@@ -149,42 +146,29 @@ export function WorkerCyclesClient({
         </div>
       )}
 
-      {/* ---------- The recycle bin ----------
-          Collapsed, because it is not the job — but present, because a round
-          that can be binned and never restored is a delete wearing a softer
-          word. §13.4. */}
-      {binned.length > 0 ? (
-        <section className="card-surface p-5">
-          <button
-            type="button"
-            onClick={() => setShowBin((v) => !v)}
-            aria-expanded={showBin}
-            className="flex min-h-11 w-full items-center justify-between gap-3 text-left"
-          >
-            <span className="font-sans text-body font-medium text-ink">
-              Recycle bin · {binned.length} {binned.length === 1 ? "round" : "rounds"}
-            </span>
-            <span className="font-sans text-body-sm text-ink-muted">
-              {showBin ? "Hide" : "Show"}
-            </span>
-          </button>
+      {/* -- THE RECYCLE BIN IS NOT ON THIS SCREEN, at the owner's instruction.
 
-          {showBin ? (
-            <ul className="mt-3 divide-y divide-rule">
-              {binned.map((cycle) => (
-                <li key={cycle.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-sans text-body text-ink">{cycle.name}</p>
-                    <p className="font-sans text-body-sm text-ink-muted">
-                      {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
-                    </p>
-                  </div>
-                  <BinnedRoundActions cycle={cycle} />
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </section>
+            It was a full-width card carrying the same weight as a real round,
+            which is the wrong emphasis for something nobody comes here to do —
+            and it sat there whether or not anybody was looking for it.
+
+            It has NOT been deleted. FIX-17 added it because a round that can be
+            binned and never restored is a delete wearing a softer word (§13.4),
+            and that is still true. Binned rounds now live in
+            Settings › Recycle bin beside the staff cycles, which is where
+            somebody goes when they are actually looking for one. A quiet line
+            below points at it — only when there is something in it. -- */}
+      {binned.length > 0 ? (
+        <p className="font-sans text-body-sm text-ink-muted">
+          {binned.length} {binned.length === 1 ? "round is" : "rounds are"} in the recycle bin.{" "}
+          <Link
+            href="/admin/settings?tab=recycle-bin"
+            className="text-primary underline underline-offset-2"
+          >
+            Restore or remove them in Settings
+          </Link>
+          .
+        </p>
       ) : null}
 
       <BinRoundDialog cycle={binning} onClose={() => setBinning(null)} />
@@ -756,73 +740,3 @@ function BinRoundDialog({
   );
 }
 
-/**
- * Restore, or destroy for good.
- *
- * The second is offered without a confirmation dialog of its own because the
- * SERVER refuses it for anything that was ever launched — the only rounds it
- * can touch are drafts that were never opened to anybody, and it is already
- * the second deliberate act after binning. Where it refuses, the reason is
- * shown in full rather than paraphrased: it explains that the round holds the
- * frozen sheet and the ticks of everyone in it (§5), which is the answer to
- * "why can I not delete this".
- */
-function BinnedRoundActions({ cycle }: { cycle: WorkerCycleRow }) {
-  const router = useRouter();
-  const [busy, setBusy] = React.useState<null | "restore" | "destroy">(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  async function run(which: "restore" | "destroy") {
-    setBusy(which);
-    setError(null);
-    const result =
-      which === "restore"
-        ? await restoreWorkerRound(cycle.id)
-        : await deleteWorkerRoundForever(cycle.id);
-    setBusy(null);
-    if (!result.ok) {
-      setError(result.error.message);
-      return;
-    }
-    router.refresh();
-  }
-
-  return (
-    <div className="flex min-w-0 flex-col items-end gap-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => void run("restore")}
-          disabled={busy !== null}
-          className="min-h-11"
-        >
-          {busy === "restore" ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : (
-            <RotateCcw className="size-4" aria-hidden />
-          )}
-          Restore
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => void run("destroy")}
-          disabled={busy !== null}
-          className="min-h-11 text-critical hover:text-critical"
-        >
-          {busy === "destroy" ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden />
-          ) : (
-            <Trash2 className="size-4" aria-hidden />
-          )}
-          Delete for good
-        </Button>
-      </div>
-
-      {error ? (
-        <p role="alert" className="max-w-prose text-right font-sans text-body-sm text-critical">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}

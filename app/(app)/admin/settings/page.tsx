@@ -14,6 +14,7 @@ import {
 } from "@/app/(app)/admin/settings/users-tab";
 import { GeneralTab } from "@/app/(app)/admin/settings/general-tab";
 import { NotificationsTab } from "@/app/(app)/admin/settings/notifications-tab";
+import { BinnedRounds } from "@/app/(app)/admin/settings/binned-rounds";
 import { RecycleBinTab } from "@/app/(app)/admin/settings/recycle-bin-tab";
 import { listBinnedCycles } from "@/lib/cycles/queries";
 import { getMessageLog, getOutboundState } from "@/lib/notify/settings";
@@ -38,12 +39,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   const supabase = await createClient();
 
-  const [outboundState, logState, binState] = await Promise.all([
+  const [outboundState, logState, binState, binnedRoundRows] = await Promise.all([
     getOutboundState(),
     getMessageLog(),
     listBinnedCycles(),
+    /* -- Production rounds in the bin. Read here rather than through a worker
+          query module because it is four columns and one filter — and read on
+          the ADMIN's own session, so RLS decides (0047 admits HR and the MD).
+          §7: no staff function is reused, and no worker function is bent to
+          serve this screen. -- */
+    supabase
+      .from("worker_cycles")
+      .select("id, name, period_label, status")
+      .not("deleted_at", "is", null)
+      .order("created_at", { ascending: false }),
   ]);
   const binnedCycles = binState.ok ? binState.data : [];
+  const binnedRounds = binnedRoundRows.data ?? [];
   const outbound = outboundState.ok
     ? outboundState.data
     : { paused: false, pausedByName: null, pausedAt: null, reason: null };
@@ -223,6 +235,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           §5 does not permit destroying the frozen question sets it contains. */}
       <TabsContent value="recycle-bin">
         <RecycleBinTab cycles={binnedCycles} />
+        {/* Their own section, not merged into the table above: §7 keeps the two
+            modules from sharing a function, and a merged list would need one
+            restore that branches on which module a row came from. */}
+        <BinnedRounds rounds={binnedRounds} />
       </TabsContent>
 
       {/* P23: the pause switch, the message log and the wording preview. The

@@ -5588,3 +5588,56 @@ still monthly, the table still scrolls rather than widening the page, and the
 panel is still HR-and-MD-only (§5).
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-32 — The recycle bin moves, and the activity trail says what happened
+
+No migration. `cycles-client.tsx`, a new `settings/binned-rounds.tsx`,
+`lib/worker/review.ts` and the worker review screen.
+
+#### The recycle bin is off the Production Appraisals screen
+
+At the owner's instruction. It was a full-width card carrying the same visual
+weight as a live round, on a screen nobody visits looking for a deleted one.
+
+| # | Decision | Why |
+|---|---|---|
+| F32-1 | **Moved, not removed** | FIX-17 added it because a round that can be binned and never restored is a delete wearing a softer word (§13.4), and that is still true. Deleting the control would have stranded every binned round with no way back — the instruction is about where it lives, not about losing it. |
+| F32-2 | Settings › Recycle bin, beside the staff cycles | That is where somebody goes when they are actually looking for something they deleted. It had held staff cycles only; production rounds were homeless. |
+| F32-3 | **A second SECTION, never a merged table** | §7 forbids refactoring a staff function to serve the worker module. One list would need a discriminator on every row and a restore that branches on it — one function doing two modules' work. They share a screen; they share no code. |
+| F32-4 | A quiet line remains on the production screen, only when the bin has something in it | Not a card and not a permanent fixture: one sentence saying how many are in there and where to go. Nothing is hidden, and nothing competes with a live round. |
+| F32-5 | "Delete for good" is offered only on a round that never launched | A launched round cascades to every frozen sheet in it (§5). The action already refuses; not drawing the button is what stops somebody discovering that by pressing it. |
+
+#### The activity trail
+
+Reported as "repetitive, unstructured and not informative". It was all three:
+
+```
+supervisor worker.supervisor submit          ← the stored key, on screen
+supervisor changed the percentage  — —% → 8%
+supervisor changed the percentage            ← no detail at all
+supervisor changed the percentage  — —% → 8%
+harshali.linkd opened
+```
+
+Now:
+
+```
+supervisor submitted their ratings
+supervisor changed the percentage (set to 8%)  ×3
+harshali.linkd opened the appraisal
+```
+
+| # | Decision | Why |
+|---|---|---|
+| F32-6 | **A label MAP, because the regex half-matched** | The fallback stripped a `worker_…` prefix containing an underscore, so `worker.supervisor_submit` (0057) passed straight through and the stored key appeared on screen — §8's rule against showing a raw value, broken by a pattern that did not match. A map cannot half-match, and an unknown action falls to "made a change", which is at least a sentence. |
+| F32-7 | Statuses are words too | `PENDING_REVIEW` became "with HR". Same rule, same reason. |
+| F32-8 | A first value is "set to 8%", not "— —% → 8%" | It printed an em dash for the missing previous figure and a percent sign after it, then the renderer prefixed another dash. Three dashes and a stray sign is a rendering fault, not a number being entered for the first time. |
+| F32-9 | **Repetition is FOLDED, not deleted** | An autosave writes an audit row per save, so three adjustments produced three identical consecutive lines at the same minute — which reads as the log being broken rather than as somebody changing their mind. §12 makes audit append-only and the rows are untouched; they are folded for READING, with a count so the repetition is still visible. |
+| F32-10 | Folded on who AND what AND detail, and not shared with the cycle trail | Two entries that differ in any of the three are two events. P10B-6 performs the same device on a different row shape; one function serving both would have to branch on which. |
+
+**Verification — 17 checks, 0 failed**, plus the fold and the labelling run
+against the exact rows from the report. Mobile audit still 0 findings across 55
+screens. Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
+clean.

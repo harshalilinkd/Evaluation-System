@@ -395,6 +395,14 @@ export type WorkerActivity = {
   who: string;
   what: string;
   detail: string | null;
+  /**
+   * How many identical entries this line stands for.
+   *
+   * Absent or 1 is the ordinary case. An autosave writes a row per save, so a
+   * run of them is folded for reading — the rows themselves are untouched
+   * (§12).
+   */
+  times?: number;
 };
 
 /**
@@ -434,7 +442,7 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
     : { data: [] };
   const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
 
-  return rows.map((r) => {
+  const entries = rows.map((r) => {
     const diff = (r.diff ?? {}) as Record<string, unknown>;
     const changed = typeof diff.changed === "string" ? diff.changed : "";
 
@@ -451,15 +459,29 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
         changed.includes("increment_pct") ? "the percentage" : null,
       ].filter(Boolean) as string[];
       what = parts.length > 0 ? `changed ${parts.join(" and ")}` : "changed the salary block";
-      if (diff.pct_from !== diff.pct_to && diff.pct_to !== null && diff.pct_to !== undefined) {
-        detail = `${diff.pct_from ?? "—"}% → ${diff.pct_to}%`;
+
+      /* -- A FIRST value is "set to 8%", not "—% → 8%".
+            It rendered the em dash for a missing previous figure and then a
+            percent sign after it, so a first entry read "— —% → 8%" — which
+            looks like a rendering fault rather than a number being entered for
+            the first time. -- */
+      const to = diff.pct_to;
+      const from = diff.pct_from;
+      if (to !== null && to !== undefined && from !== to) {
+        detail =
+          from === null || from === undefined ? `set to ${to}%` : `${from}% → ${to}%`;
       }
-    } else if (r.action === "worker_evaluation.returned_to_hr") {
-      what = "sent it back to HR";
     } else if (r.from_status && r.to_status) {
-      what = `moved it from ${String(r.from_status).toLowerCase().replace(/_/g, " ")} to ${String(r.to_status).toLowerCase().replace(/_/g, " ")}`;
+      what = `moved it from ${STAGE_WORD[String(r.from_status)] ?? readable(r.from_status)} to ${STAGE_WORD[String(r.to_status)] ?? readable(r.to_status)}`;
     } else {
-      what = String(r.action).replace(/^worker_[a-z_]*\./, "").replace(/_/g, " ");
+      /* -- A LABEL, never the stored key.
+            The fallback stripped a `worker_…` prefix with an underscore in it,
+            so `worker.supervisor_submit` (0057) came through untouched and
+            "worker.supervisor submit" appeared on screen — §8's rule against
+            showing a raw stored value, broken by a regex that did not match. A
+            map cannot half-match: an action with no entry falls to a sentence
+            that is at least a sentence. -- */
+      what = ACTION_WORD[r.action] ?? "made a change";
     }
 
     return {
@@ -471,4 +493,60 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
       detail,
     };
   });
+
+  return collapseRuns(entries);
+}
+
+/** §8's rule: an employee never sees the stored status, and neither does this. */
+const STAGE_WORD: Record<string, string> = {
+  DRAFT: "not started",
+  OPEN: "in progress",
+  PENDING_REVIEW: "with HR",
+  REVIEWED: "with management",
+  CLOSED: "finished",
+};
+
+const ACTION_WORD: Record<string, string> = {
+  "worker.self_submit": "submitted the worker's own sheet",
+  "worker.supervisor_submit": "submitted their ratings",
+  "worker_evaluation.returned_to_hr": "sent it back to HR",
+  "worker_evaluation.opened": "opened the appraisal",
+  "worker_evaluation.added_to_round": "was added to the round",
+  "worker.sent_to_md": "sent it to management",
+  "worker.closed": "approved and closed it",
+  "worker_salary.changed": "changed the salary block",
+};
+
+function readable(value: string): string {
+  return value.toLowerCase().replace(/_/g, " ");
+}
+
+/**
+ * Fold a run of identical entries into one.
+ *
+ * An autosave writes an audit row per save, so a supervisor adjusting a
+ * percentage three times produced three consecutive lines saying the same thing
+ * at the same minute — which reads as the log being broken rather than as
+ * somebody changing their mind. The rows are NOT deleted (§12: audit is
+ * append-only and the record is the point); they are folded for READING, with a
+ * count so the repetition is still visible.
+ *
+ * The same device `collapseRuns` performs on the cycle activity trail (P10B-6),
+ * for the same reason and deliberately not shared — that one folds a different
+ * row shape, and one function serving both would have to branch on which.
+ */
+function collapseRuns(entries: WorkerActivity[]): WorkerActivity[] {
+  const out: WorkerActivity[] = [];
+  for (const entry of entries) {
+    const last = out[out.length - 1];
+    if (last && last.who === entry.who && last.what === entry.what && last.detail === entry.detail) {
+      last.times = (last.times ?? 1) + 1;
+      // Keep the EARLIEST of a run: "changed it three times, starting at 11:52"
+      // is the true reading, and the rows arrive newest first.
+      last.at = entry.at;
+      continue;
+    }
+    out.push({ ...entry });
+  }
+  return out;
 }

@@ -280,8 +280,21 @@ export function WorkerReviewClient({
                 <span className="font-sans text-body-sm text-ink">
                   <span className="font-medium">{a.who}</span> {a.what}
                 </span>
+                {/* -- The detail is a CLAUSE, not a dash and a fragment. It
+                      printed "— " before whatever came back, so a first
+                      percentage rendered "— —% → 8%": two em dashes and a stray
+                      sign, which reads as a rendering fault. Brackets make it an
+                      aside rather than a broken sentence. -- */}
                 {a.detail ? (
-                  <span className="font-sans text-body-sm text-ink-muted">— {a.detail}</span>
+                  <span className="font-sans text-body-sm text-ink-muted">({a.detail})</span>
+                ) : null}
+                {/* A folded run. §12's rows are untouched — this is the count of
+                    identical consecutive entries, so three autosaves read as one
+                    change made three times rather than as three events. */}
+                {a.times && a.times > 1 ? (
+                  <span className="tabular rounded-pill bg-surface-mute px-1.5 font-sans text-body-sm text-ink-muted">
+                    ×{a.times}
+                  </span>
                 ) : null}
                 <span className="tabular ml-auto font-sans text-body-sm text-ink-muted">
                   {formatDateTime(a.at)}
