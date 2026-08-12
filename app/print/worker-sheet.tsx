@@ -196,19 +196,18 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
               : "Date: ____________"}
           </span>
         </div>
-        <div className="print-sig">
+        {/* -- WIDER, AND A BOX RATHER THAN A LINE.
+              A stamp is round and about 40mm across; a quarter of the row with
+              a rule to sit "on" is not how anybody stamps a document. The
+              dashed area says the space is reserved rather than empty, and it
+              carries no name or date line — a stamp is applied to the paper
+              after this is printed, so the system has nothing to record. -- */}
+        <div className="print-sig print-sig--stamp">
           <span className="print-sig-line" />
           <span className="print-sig-label">Company Stamp</span>
-          <span className="print-sig-name">&nbsp;</span>
-          <span className="print-sig-when">&nbsp;</span>
         </div>
       </div>
 
-      <p className="print-footnote">
-        Reviewed status: {review.status === "CLOSED" ? "Closed" : review.status === "REVIEWED" ? "Reviewed by HR" : "Not yet reviewed"}
-        {" · "}
-        Printed {formatDate(new Date().toISOString())}
-      </p>
     </section>
   );
 }

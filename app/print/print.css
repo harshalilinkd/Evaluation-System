@@ -512,6 +512,47 @@ dl.print-meta dd {
   padding-left: 2.5mm;
 }
 
+/*
+  A THIRD SHAPE, AND IT WAS RENDERING UNSTYLED.
+
+  `.print-meta` is worn by three elements now: a <table> of td pairs on the
+  evaluation sheet, a <dl> on the report, and a <table> of `<th scope="row">`
+  labels on the WORKER sheet. Every rule above addresses `td`, and the worker's
+  labels are `th` — so they matched nothing at all: no width, no caps, no
+  border, and a browser's default `th` is BOLD AND CENTRED. Two rows of
+  content-sized columns then landed at different x positions, which is exactly
+  the misalignment that was reported.
+
+  `th` is the right element — these are row headers and a screen reader should
+  say so — so it is styled to match rather than swapped for a `td`. Widths are
+  fixed so all three rows line up on the same two columns whatever the content.
+*/
+.print-meta th {
+  border: none;
+  border-bottom: 0.4pt solid #dcdcdc;
+  padding: 1.8mm 0 1.8mm 2mm;
+  vertical-align: baseline;
+  text-align: left;
+  font-size: 6.8pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+  width: 17%;
+  white-space: nowrap;
+}
+
+.print-meta tr:last-child th {
+  border-bottom: none;
+}
+
+/* The value beside a `th` label. Same treatment as the td-pair form's values. */
+.print-meta th + td {
+  font-weight: 600;
+  width: 33%;
+  padding-left: 2.5mm;
+}
+
 /* ---------- Narrative ---------- */
 
 .print-narrative {
@@ -841,6 +882,24 @@ dl.print-meta dd {
 .print-sig {
   flex: 1 1 0;
   min-width: 0;
+}
+
+/*
+  THE COMPANY STAMP NEEDS A BOX, NOT A LINE — and more of the row than a
+  signature does.
+
+  A stamp is round and about 40mm across; it was being given a quarter of the
+  row and a rule to sit "on", which is not how anybody stamps a document. It now
+  takes a wider share and a real bordered area, so there is somewhere to put it
+  and the space is obviously reserved rather than looking like an empty column.
+*/
+.print-sig--stamp {
+  flex: 1.4 1 0;
+}
+
+.print-sig--stamp .print-sig-line {
+  height: 22mm;
+  border: 0.4pt dashed #9a9a9a;
 }
 
 /*

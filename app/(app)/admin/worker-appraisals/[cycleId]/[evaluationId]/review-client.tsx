@@ -543,6 +543,8 @@ function SalaryStage({
   value,
   note,
   pending,
+  lead,
+  was,
 }: {
   step: string;
   who: string | null;
@@ -550,6 +552,10 @@ function SalaryStage({
   value: string;
   note?: string | null;
   pending?: boolean;
+  /** The figure the reader is deciding about. Rendered at display size. */
+  lead?: boolean;
+  /** What it was before, as context beside the figure rather than inside it. */
+  was?: string | null;
 }) {
   return (
     <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -567,9 +573,11 @@ function SalaryStage({
         ) : null}
       </div>
       <div className="text-right">
+        {was ? <p className="font-sans text-body-sm text-ink-muted">{was}</p> : null}
         <p
           className={cn(
-            "tabular font-sans text-body",
+            "tabular font-sans",
+            lead && !pending ? "text-display-sm leading-tight" : "text-body",
             pending ? "text-ink-faint" : "text-ink",
           )}
         >
@@ -750,7 +758,16 @@ function WorkerSalaryPanel({
             step="HR priced it"
             who={null}
             at={null}
-            value={rise === null ? "Not priced" : `${moneyMonthly(oldCtc)} → ${moneyMonthly(newCtc)}`}
+            /* -- THE FIGURE THE MD APPROVES, in the size that says so.
+                  It was one line of body text with the whole transition crammed
+                  into it — "₹15,000.00 a month → ₹16,000.00 a month" — and the
+                  rise beneath it in the smallest type on the card. That is the
+                  number a pay decision is signed against; it cannot be the
+                  quietest thing on the screen. The NEW salary leads at display
+                  size and the current one becomes context. -- */
+            lead
+            value={rise === null ? "Not priced" : moneyMonthly(newCtc)}
+            was={rise === null ? null : `from ${moneyMonthly(oldCtc)}`}
             /* -- An unpriced row is a GAP, not a neutral blank. It can only
                   exist on a sheet handed up before the guard above was added,
                   and whoever reads it needs to know the approval has no amount
@@ -768,6 +785,9 @@ function WorkerSalaryPanel({
             step="Management approved"
             who={mdApproval?.name ?? null}
             at={mdApproval?.at ?? stages.mdReviewedAt}
+            // Once approved this is the figure that gets paid, so it leads at
+            // the same size as the one it approves.
+            lead
             value={
               mdApproval
                 ? newCtc === null

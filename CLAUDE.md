@@ -6322,3 +6322,51 @@ same family as the comment and substring traps and has now cost three
 assertions in two phases.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-47 — A quick-set button that never reached its box, and a `<th>` nobody had styled
+
+`components/appraise/money-input.tsx`, the worker review screen,
+`app/print/{worker-sheet.tsx,print.css}`. No migration.
+
+#### The link that did nothing
+
+"Use the supervisor's 8% — ₹16,200.00 a month" set the parent's figure and the
+field went on showing what was typed before.
+
+**`MoneyInput` seeds its text once and then owns it**, deliberately — the field
+must not rewrite itself under somebody's cursor. Its comment promised the caller
+would remount it on a new record; **nobody ever passed a key**, and a key on
+`value` would remount on every keystroke, which is worse than the bug. So a
+value set from OUTSIDE could never reach the box.
+
+| # | Decision | Why |
+|---|---|---|
+| F47-1 | **Adjust during render, not an effect** | React's documented pattern: compare the incoming prop with the one last seen and, when it moved, rewrite the text. No effect, so there is no frame showing the stale figure and nothing for the compiler to reject — the setState-in-effect shape this log has now avoided nine times. |
+| F47-2 | …unless the text already parses to it | Which is the case on every keystroke, and is what keeps the field from rewriting under a cursor. The original constraint is preserved rather than traded away. |
+| F47-3 | Fixed in the COMPONENT, not at the call site | Every quick-set band on the increment screen has the same bug for the same reason. One fix, and a `key` prop nobody remembers to pass stops being load-bearing. |
+
+#### HR's figure was the quietest thing on the MD's screen
+
+It read `₹15,000.00 a month → ₹16,000.00 a month` on one line of body text with
+the rise beneath in the smallest type on the card. **That is the number a pay
+decision is signed against.** The new salary now leads at display size, the
+previous one sits above it as context, and the management row matches — once
+approved, that figure is what gets paid.
+
+#### The worker sheet
+
+| # | Decision | Why |
+|---|---|---|
+| F47-4 | **`.print-meta` is worn by THREE elements, and the third was unstyled** | A `<table>` of `td` pairs on the evaluation sheet, a `<dl>` on the report (FIX-33 fixed that one), and a `<table>` of `<th scope="row">` labels on the worker sheet. Every rule addressed `td`, so the worker's labels matched **nothing**: no width, no caps, no border — and a browser's default `th` is bold and **centred**. Two rows of content-sized columns then landed at different x positions, which is the misalignment that was reported. |
+| F47-5 | The labels stay `<th>` | They are row headers and a screen reader should say so. Styled to match rather than swapped for a `td`, with fixed widths so all three rows share two columns whatever the content. |
+| F47-6 | **The company stamp gets a box and a wider share** | A stamp is round and about 40mm across; it was being given a quarter of the row and a rule to sit "on", which is not how anybody stamps a document. A dashed area says the space is reserved rather than empty. It carries no name and no date line — the stamp is applied after this is printed, so the system has nothing to record. |
+| F47-7 | "Reviewed status … Printed …" removed | At the owner's instruction. The sheet says what state it is in through the signature block itself. |
+
+**Verification — 53 checks, 0 failed** (up from 37), with the new CSS confirmed
+in the built stylesheet rather than the source. §7a re-checked: every colour
+reaching paper is still black, white or a neutral grey, and no tier token
+reaches either sheet.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.

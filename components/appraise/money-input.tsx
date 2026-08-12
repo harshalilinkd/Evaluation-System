@@ -68,6 +68,31 @@ export function MoneyInput({
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
 
+  /* -- A PROGRAMMATIC SET NOW REACHES THE BOX, and until this it did not.
+        Reported on "Use the supervisor's 8% — ₹16,200.00 a month": pressing it
+        set the parent's figure and the field went on showing what was typed
+        before. The same was true of every quick-set band on the increment
+        screen, because they all move the value from outside.
+
+        The seeding comment promised the caller would remount this on a new
+        record — nobody ever passed a key, and a key on `value` would remount on
+        every keystroke, which is worse than the bug.
+
+        This is React's documented adjust-during-render: compare the incoming
+        prop with the one last seen and, when it moved, rewrite the text —
+        UNLESS the text already parses to it, which is the case while somebody
+        is typing and is what keeps the field from rewriting under a cursor. No
+        effect, so there is no frame showing the stale figure and nothing for
+        the compiler to reject. -- */
+  const [seen, setSeen] = React.useState(value);
+  if (value !== seen) {
+    setSeen(value);
+    if (annualFromMonthly(parse(text)) !== value) {
+      const monthly = monthlyFromAnnual(value);
+      setText(monthly === null ? "" : String(monthly));
+    }
+  }
+
   const monthly = parse(text);
 
   return (
