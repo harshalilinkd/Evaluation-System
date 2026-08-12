@@ -212,6 +212,14 @@
   font-size: 9pt;
   text-align: right;
   letter-spacing: 0.04em;
+  /*
+    Room to breathe, and a line height that lets a two-line cycle name sit as
+    two lines rather than as a collision. It carried the tightest default
+    leading on the page while holding the most words per inch — which is what
+    made the top-right corner read as cramped.
+  */
+  line-height: 1.45;
+  padding-left: 4mm;
 }
 
 .print-period strong {
@@ -244,7 +252,17 @@
   caps at a wide track reads as a heading without needing to be large — which
   matters on a sheet that has to fit a whole appraisal.
 */
-.print-section > h2 {
+/*
+  BOTH, because two sheets name the same thing differently.
+
+  The evaluation sheet wraps a section in `.print-section`; the report wraps one
+  in `.print-block`. Only the first was styled, so every heading on the report —
+  "Employee", "What they said", the lot — rendered as an unstyled browser <h2>:
+  bigger than the title's own subheads, with default margins and no rule under
+  it. That is most of what read as "not structured".
+*/
+.print-section > h2,
+.print-block > h2 {
   font-family: Georgia, "Times New Roman", serif;
   font-size: 10.5pt;
   font-weight: 700;
@@ -253,6 +271,51 @@
   border-bottom: 0.75pt solid #000;
   padding-bottom: 1.2mm;
   margin: 0 0 2.5mm;
+}
+
+.print-block + .print-block {
+  margin-top: 6mm;
+}
+
+/*
+  THE IDENTITY BLOCK, AS A DEFINITION LIST.
+
+  `.print-meta` is worn by two different ELEMENTS: a <table> on the evaluation
+  sheet and a <dl> on the report. Every rule under it addresses `td`, so the <dl>
+  inherited `width: 100%` and nothing else — and six label/value pairs stacked
+  into a single narrow column twelve lines deep, which is exactly the screenshot
+  that was reported.
+
+  Three columns, two rows, hairlines between them and the labels set as small
+  letterspaced caps so they read as captions rather than as data — the same
+  treatment P27-3 gave the table form, now applied to the shape that was
+  missing it.
+*/
+dl.print-meta {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 0 4mm;
+  border-top: 0.4pt solid #dcdcdc;
+}
+
+dl.print-meta > div {
+  padding: 2.2mm 5mm 2.2mm 0;
+  border-bottom: 0.4pt solid #dcdcdc;
+}
+
+dl.print-meta dt {
+  margin: 0 0 0.6mm;
+  font-size: 6.8pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+dl.print-meta dd {
+  margin: 0;
+  font-size: 9.5pt;
+  color: #111;
 }
 
 /* ---------- Tables ---------- */
@@ -340,6 +403,19 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
   white-space: nowrap;
+}
+
+/*
+  A LEADING NUMERAL COLUMN IS NARROW.
+
+  On the grading scale the first cell holds one digit and the second holds a
+  sentence, and a `width: 100%` table on auto layout hands the digit a share
+  proportional to nothing — so a single "0" sat marooned in a column an inch
+  wide with a gulf before its label. Constraining it puts the wording where the
+  eye expects it, immediately after the number it belongs to.
+*/
+.print-table td.print-num:first-child {
+  width: 12mm;
 }
 
 .print-total td {

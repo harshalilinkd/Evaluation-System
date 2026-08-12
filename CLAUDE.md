@@ -5641,3 +5641,48 @@ harshali.linkd opened the appraisal
 against the exact rows from the report. Mobile audit still 0 findings across 55
 screens. Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
 clean.
+
+---
+
+### FIX-33 — The printed report was unstyled, not undesigned
+
+No migration. `app/print/print.css` only — no markup changed.
+
+Reported as the export not looking professional, elegant or structured. It was
+none of those, and the cause was not a design decision: **two rules never
+matched the report sheet at all.**
+
+P27 redesigned the printed pack — Georgia headings, hairlines instead of boxes,
+an identity block with no outer box. That work landed on `evaluation-sheet.tsx`.
+The REPORT sheet (P20, `/print/report/[id]`) wears the same class names on
+different ELEMENTS, and two of them fell through:
+
+| Class | Evaluation sheet | Report sheet | What happened |
+|---|---|---|---|
+| `.print-meta` | a `<table>` | a `<dl>` | every rule addresses `td`, so the list inherited `width: 100%` and nothing else — six label/value pairs stacked into one narrow column, twelve lines deep |
+| `h2` | inside `.print-section` | inside `.print-block` | the rule is `.print-section > h2`, so every heading on the report rendered as an unstyled browser `<h2>` — larger than the title's own subheads, default margins, no rule beneath |
+
+That is the whole of "not structured": the identity block was a vertical list and
+the headings had no typographic weight.
+
+| # | Decision | Why |
+|---|---|---|
+| F33-1 | The selector is widened, not duplicated | `.print-section > h2, .print-block > h2` — one declaration for one appearance. Two copies is how the two sheets come to look different again. |
+| F33-2 | The `<dl>` gets the same treatment P27-3 gave the table | Three columns, two rows, hairlines between, labels as small letterspaced caps so they read as captions rather than as data. The table form is untouched — it was already right. |
+| F33-3 | The cycle block was the tightest leading on the page while holding the most words per inch | It carries a name, a period and a type in a corner, at the default line height. Given room and 1.45 leading, a two-line cycle name is two lines rather than a collision. |
+| F33-4 | A leading numeral column is constrained to 12mm | On the grading scale the first cell holds one digit and the second a sentence; a `width: 100%` auto-layout table handed the digit a share proportional to nothing, so "0" sat marooned an inch from its label. |
+
+**Verification — 11 checks, 0 failed**, and the compiled stylesheet was inspected
+directly rather than trusted from source: all four rules survive minification.
+UI-5's lesson — the layer cascade has silently dropped rules in this codebase
+before, and a print stylesheet that looks right in the source and is absent from
+the bundle prints exactly as it did before.
+
+§7a re-checked in full and unchanged: **every colour reaching paper is still
+black, white or a neutral grey** (parsed out of the file with the `@media screen`
+blocks removed by brace-matching, then tested for saturation), no tier token
+reaches the sheet, the grading scale still comes from `SCALE_0_5_LABELS` rather
+than retyped, A4 and the 18mm margins hold, and `break-inside: avoid` still
+guards the blocks and the signature panel.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
