@@ -127,22 +127,36 @@ NEXT_PUBLIC_APP_URL=https://the-address-cloudflared-printed.trycloudflare.com
 
 Two ways. Pick one — whichever credentials you set decide which is used.
 
-### Option A · Your Gmail account (no DNS, quickest)
+### Option A · A Gmail account (no DNS, quickest)
 
-Sends as `harshali.linkd@gmail.com`. Roughly **500 emails a day**, and the
-address your employees see is a personal one.
+Sends as `hrlinkdprints@gmail.com`. Roughly **500 emails a day**, and going over
+that **locks the account** rather than failing the message.
 
-1. Turn on **2-Step Verification**: myaccount.google.com/security
-   (App Passwords do not exist without it)
-2. Go to **myaccount.google.com/apppasswords**
-3. Name it `Appraise` → **Create** → copy the **16-character** password
-4. Set these:
+1. **Sign in as the account you want to send from** — an App Password
+   authenticates the account it was created under, so one made on a different
+   Google account will simply fail to log in.
+2. Turn on **2-Step Verification**: myaccount.google.com/security
+   (App Passwords do not exist without it — the App Passwords page reports
+   "not available for your account" until this is on, which is not what it
+   means)
+3. Go to **myaccount.google.com/apppasswords**
+4. Name it `Appraise` → **Create** → copy the **16-character** password.
+   Shown once. Make a **separate one per app**: a shared App Password revoked
+   for one app silently stops the other, and nothing on either side says why.
+5. Set these:
 
 ```
-SMTP_USER      = harshali.linkd@gmail.com
+SMTP_USER      = hrlinkdprints@gmail.com
 SMTP_PASSWORD  = the 16-character App Password (not your Google password)
-MAIL_FROM      = Appraise <harshali.linkd@gmail.com>
+MAIL_FROM      = LinkD Prints HR <hrlinkdprints@gmail.com>
 ```
+
+**All three move together when the account changes.** A new password against
+the old address is a failed login, not a working send.
+
+The password lives in exactly **two** places: Vercel's environment variables and
+`.env.local`. `.env.example` carries the key blank on purpose and never holds a
+value. Vercel keeps serving the old one until you **redeploy**.
 
 > `MAIL_FROM` **must** contain `SMTP_USER`. Gmail rewrites a From address it
 > does not own, so the message would arrive from somebody other than the app
