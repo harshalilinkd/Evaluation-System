@@ -10,8 +10,17 @@ import { buildEvaluationReport } from "@/lib/reports/build";
 
 export const metadata: Metadata = { title: "Report" };
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<{ download?: string }>;
+}) {
   const { id } = await params;
+  // `?download=1` comes from the Download link and opens the save dialog on
+  // arrival, so downloading is one press rather than two.
+  const auto = (await searchParams)?.download === "1";
 
   /* -- 403, NOT a redacted document.
         Every other print route admits the evaluatee and their lead, and hands
@@ -42,7 +51,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   return (
     <div className="print-canvas">
       <title>{slug}</title>
-      <PrintToolbar />
+      <PrintToolbar auto={auto} />
       <ReportSheet report={report.data} />
     </div>
   );

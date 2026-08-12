@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Printer } from "lucide-react";
+import { Download, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -59,16 +59,26 @@ function Notice({ tone, children }: { tone: "error" | "ok"; children: React.Reac
 
 function PrintActions({ evaluationId }: { evaluationId: string }) {
   return (
+    /* -- TWO BUTTONS THAT NOW DO DIFFERENT THINGS.
+          They were "Export PDF" and "Print", and both opened the same page and
+          waited for a second press — the `?print=1` on the second was read by
+          nothing at all. Download carries `?download=1`, which raises the save
+          dialog on arrival; Print / View opens the sheet to read. -- */
     <div className="flex gap-2">
       <Button asChild variant="secondary" size="sm" className="flex-1">
-        <a href={`/print/report/${evaluationId}`} target="_blank" rel="noopener noreferrer">
-          <Printer className="mr-2 size-4" aria-hidden />
-          Export PDF
+        <a
+          href={`/print/report/${evaluationId}?download=1`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Download className="mr-2 size-4" aria-hidden />
+          Download report
         </a>
       </Button>
       <Button asChild variant="ghost" size="sm" className="flex-1">
-        <a href={`/print/report/${evaluationId}?print=1`} target="_blank" rel="noopener noreferrer">
-          Print
+        <a href={`/print/report/${evaluationId}`} target="_blank" rel="noopener noreferrer">
+          <Printer className="mr-2 size-4" aria-hidden />
+          Print / View
         </a>
       </Button>
     </div>

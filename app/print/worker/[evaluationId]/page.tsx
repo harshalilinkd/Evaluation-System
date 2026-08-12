@@ -9,7 +9,14 @@ import { getWorkerReview } from "@/lib/worker/review";
 
 export const metadata: Metadata = { title: "Worker appraisal" };
 
-export default async function Page({ params }: { params: Promise<{ evaluationId: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ evaluationId: string }>;
+  searchParams?: Promise<{ download?: string }>;
+}) {
+  const auto = (await searchParams)?.download === "1";
   /* -- HR and the MD only, and there is no redacted edition.
         The sheet carries the salary block, which §5 confines to those two. A
         supervisor-facing version could be built by dropping it, but nobody has
@@ -27,7 +34,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
 
   return (
     <>
-      <PrintToolbar label="Print this appraisal" />
+      <PrintToolbar label="Download this appraisal" auto={auto} />
       <WorkerSheet review={review.data} />
     </>
   );

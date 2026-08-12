@@ -6224,3 +6224,58 @@ the Send button's disabled expression contains `!priced`. **The substring trap
 (P31), in my own suite, one phase after recording it.**
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-45 — A fourth signature cell, a heading the scores table never had, and a real Download
+
+`app/print/{report-sheet.tsx,print-toolbar.tsx,print.css}`, the report's action
+rail, and the worker review screen.
+
+#### The company stamp
+
+Asked for as a fourth field beside Managing Director.
+
+| # | Decision | Why |
+|---|---|---|
+| F45-1 | **It carries no name, no date and no mark, and that is deliberate** | A stamp is applied to the paper after it is printed. The other three cells state what the DATABASE recorded; this one states where something goes. Giving it a name or a date would claim the system had witnessed a stamp it cannot see. |
+| F45-2 | …and no "Date: ____________" rule either | Everywhere else that blank is there because somebody signs and dates by hand. A stamp carries its own date or none, and printing a date rule under it asks for something nobody fills in. |
+| F45-3 | The row gap tightened 10mm → **6mm**, and the caption may not wrap | Four cells at 10mm share about 134mm, and "MANAGING DIRECTOR" at 7pt on a 0.13em track wraps to two lines — which drops that cell's baseline below its neighbours and the row stops reading as a row. |
+
+#### The report's own refinements
+
+Asked for as "refine carefully". Two things were concretely wrong rather than a
+matter of taste, and both are most of what read as unstructured.
+
+| # | Decision | Why |
+|---|---|---|
+| F45-4 | **The scores table had no heading at all** | Every other band has one — Employee & cycle, The rating scale, What they said, Record. The most important table on the sheet simply appeared under the identity grid with nothing to tell the eye a new subject had started. It is a `.print-subhead`, not a second `<h2>`: it is a subject inside that band, and it takes no rule because the table's own header rule sits two millimetres below it. |
+| F45-5 | **Figures are right-aligned, and the headers now follow them** | The values were centred and the headers left-aligned, so no column had a single edge anywhere. Centring is also wrong for decimals: "4.60", "-0.40" and "—" each find their own middle, so the points do not stack and a reader comparing a column has to re-find the decimal on every row. Right-aligned with tabular figures, the points line up and the minus signs hang off the left. |
+
+#### Download, and Print / View
+
+Renamed as asked, and the two buttons now do different things — they were
+"Export PDF" and "Print", both opening the same page and both waiting for a
+second press, with the `?print=1` on the second **read by nothing at all**.
+
+| # | Decision | Why |
+|---|---|---|
+| F45-6 | **Download carries `?download=1`, which raises the save dialog on arrival** | One press instead of two. Guarded by a ref so React's double-invoked development mount cannot raise two dialogs, and deferred a frame so the sheet has painted — printing mid-layout is how a pack comes out with its first section missing. |
+| F45-7 | **There is still no PDF library, and the toolbar says how to get a file** | P15 and P34-13 stand, and the three alternatives each cost something this product will not pay: headless Chromium is hostile to Vercel's limits and needs a second authenticated route into a page P20-13 deliberately answers 403 to; a JS library cannot read the 600-line print stylesheet and so becomes a SECOND renderer of a signed document (P9-1); a third-party service would send salary figures and both blind layers off-site, which is a §5 decision and not an engineering one. What the browser already does is render the `@page` rules correctly and write a PDF named from `document.title`, which every print route sets to a real file name. **A button that opens a dialog should not pretend a file has landed**, so the line beneath names the Save-as-PDF step. |
+| F45-8 | Both controls on the worker sheet too | "All reports", as asked. |
+
+**Verification — 37 checks, 0 failed.** §7a re-checked in full with the
+`@media screen` blocks removed by brace matching: every colour reaching paper is
+still black, white or a neutral grey, no tier token reaches either sheet, A4 and
+the 18mm margins hold, the grading scale still comes from the constant, and the
+signature panel still avoids a page break. The three new CSS rules are confirmed
+present in the **built** stylesheet, not merely in the source (UI-5).
+
+**My compiled-CSS check was looking in one directory and reported a present rule
+as missing.** FIX-37 fixed this one level up — it had pinned a single chunk by
+name and gone stale when the hash moved — and the same mistake survived at the
+directory level, because a dev build writes to `.next/dev/static/chunks` rather
+than `.next/static/css`. It walks the whole tree now. **Pinning any part of a
+build artefact's path is the same error as pinning a variable name.**
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.

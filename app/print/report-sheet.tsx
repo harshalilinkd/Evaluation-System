@@ -111,14 +111,21 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
           <div><dt>Cycle type</dt><dd>{header.cycleType ? `${header.cycleType}` : "—"}</dd></div>
         </dl>
 
+        {/* -- THE ONE BLOCK ON THE SHEET WITH NO HEADING, until now.
+              Every other band carries one — Employee & cycle, The rating scale,
+              What they said, Record. This table is the most important thing on
+              the page and it simply appeared under the identity grid, which is
+              most of what read as unstructured: the eye had nothing to tell it
+              a new subject had started. -- */}
+        <h2 className="print-subhead">Scores by section</h2>
         <table className="print-table">
           <thead>
             <tr>
               <th>Section</th>
-              <th>Self</th>
-              <th>Manager</th>
-              <th>Average</th>
-              <th>Gap</th>
+              <th className="print-num">Self</th>
+              <th className="print-num">Manager</th>
+              <th className="print-num">Average</th>
+              <th className="print-num">Gap</th>
             </tr>
           </thead>
           <tbody>
@@ -391,6 +398,23 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             verb: review?.mdOutcome === "APPROVED" ? "Approved" : "Reviewed",
             mark: review?.mdSignature ?? null,
           },
+          {
+            /* -- THE COMPANY STAMP, asked for as a fourth field in the row.
+
+                  It carries no name, no date and no mark, and that is not an
+                  omission — a stamp is applied to the paper after it is printed.
+                  The other three cells state what the DATABASE recorded; this
+                  one states where something goes. Giving it a name or a date
+                  would claim the system had witnessed a stamp it cannot see.
+
+                  The rule is drawn the same as the others so the row reads as
+                  one band, and the four cells sit on the same baseline. -- */
+            who: "Company stamp",
+            name: null,
+            when: null,
+            verb: null as string | null,
+            mark: null as string | null,
+          },
         ].map((cell) => (
           <div key={cell.who} className="print-signature">
             {/* -- THE MARK SITS ON THE RULE, not instead of it.
@@ -415,10 +439,16 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 same document either way, so a half-finished record cannot be
                 made to look finished by printing it. */}
             <p className="name">{cell.name ?? " "}</p>
+            {/* -- The stamp cell takes no date line. Everywhere else the blank
+                  reads "Date: ____________" because somebody signs and dates by
+                  hand; a stamp carries its own date or none, and printing a date
+                  rule under it asks for something nobody fills in. -- */}
             <p className="date">
-              {cell.name && cell.when
-                ? `${cell.verb} ${formatDate(cell.when)}`
-                : "Date: ____________"}
+              {cell.verb === null
+                ? " "
+                : cell.name && cell.when
+                  ? `${cell.verb} ${formatDate(cell.when)}`
+                  : "Date: ____________"}
             </p>
           </div>
         ))}

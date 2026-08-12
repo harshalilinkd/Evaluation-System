@@ -413,10 +413,41 @@ dl.print-meta dd {
 
 /* §3 has one family and no mono; tabular figures are what make a column of
    scores line up, and they survive the print boundary. */
-.print-num {
+/*
+  RIGHT, NOT CENTRED, and the header follows the figures.
+
+  Centred is what a column of scores had, and it is the wrong alignment for
+  decimals: "4.60", "-0.40" and "—" each find their own middle, so the points do
+  not line up and a reader comparing a column down the page has to re-find the
+  decimal on every row. Right-aligned with tabular figures, the points stack and
+  the minus signs hang off the left where they belong.
+
+  `.print-table th.print-num` matters as much: the headings were left-aligned
+  over centred values, so no column had a single edge anywhere. That is a real
+  part of what read as untidy.
+*/
+.print-num,
+.print-table th.print-num {
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  text-align: right;
   white-space: nowrap;
+}
+
+/*
+  A SECOND-LEVEL HEADING, for a table inside a band that already has one.
+
+  Smaller and lighter than an <h2> so it reads as a subject inside the section
+  rather than as a new section — and with no rule under it, because the table's
+  own header rule immediately below would make two lines a few millimetres
+  apart.
+*/
+.print-subhead {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 9.5pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin-top: 6mm;
+  margin-bottom: 1.6mm;
 }
 
 /*
@@ -510,13 +541,21 @@ dl.print-meta dd {
   row is what made this look like a form to fill in rather than a record to
   sign.
 */
+/*
+  6mm, not 10mm — the report carries FOUR cells now (manager, HR, MD, company
+  stamp) where the evaluation sheet carries three. At 10mm the four share
+  roughly 134mm and "MANAGING DIRECTOR" at 7pt on a 0.13em track wraps to two
+  lines, which drops that cell's rule out of line with its neighbours. Shared by
+  both sheets: three cells at 6mm still read as three separate columns.
+*/
 .print-signatures {
   display: flex;
-  gap: 10mm;
+  gap: 6mm;
   margin-top: 12mm;
   padding-top: 5mm;
   border-top: 0.75pt solid #000;
 }
+
 
 .print-signature {
   flex: 1 1 0;
@@ -536,6 +575,9 @@ dl.print-meta dd {
   text-transform: uppercase;
   color: #555;
   margin-top: 1.6mm;
+  /* The caption may not wrap: a two-line label pushes its cell's baseline below
+     the other three and the row stops reading as a row. */
+  white-space: nowrap;
 }
 
 .print-signature .name {

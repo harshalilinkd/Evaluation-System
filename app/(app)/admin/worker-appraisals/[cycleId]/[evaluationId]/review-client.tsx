@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Loader2, Printer } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, Loader2, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -155,12 +155,26 @@ export function WorkerReviewClient({
                 carry into a conversation is exactly as legitimate — and the
                 sheet says which state it is in at its foot, so a draft cannot
                 be mistaken for a final one. -- */}
-          <Button asChild variant="outline" className="min-h-11">
-            <a href={`/print/worker/${review.evaluationId}`} target="_blank" rel="noreferrer">
-              <Printer className="size-4" aria-hidden />
-              Print / PDF
-            </a>
-          </Button>
+          {/* Download and view are two endings of one gesture, so they are two
+              controls rather than one that has to be pressed twice. */}
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="secondary" className="min-h-11">
+              <a
+                href={`/print/worker/${review.evaluationId}?download=1`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Download className="size-4" aria-hidden />
+                Download report
+              </a>
+            </Button>
+            <Button asChild variant="outline" className="min-h-11">
+              <a href={`/print/worker/${review.evaluationId}`} target="_blank" rel="noreferrer">
+                <Printer className="size-4" aria-hidden />
+                Print / View
+              </a>
+            </Button>
+          </div>
         </div>
         <p className="font-sans text-body-sm text-ink-muted">
           {[review.designation, review.department].filter(Boolean).join(" · ") || "—"} ·{" "}
