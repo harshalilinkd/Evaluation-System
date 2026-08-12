@@ -4,10 +4,11 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { ArrowLeft, Plus, Trash2 } from "lucide-react";
 
 import {
   AddWorkersDialog,
+  BinRoundDialog,
   StartRoundDialog,
   type RaterRow,
   type WorkerRow,
@@ -50,8 +51,15 @@ export type BoardRow = {
   incrementPct: number | null;
   currentCtc: number | null;
   lastIncrementDate: string | null;
-  /** How many OTHER rounds this worker has been appraised in. */
-  earlierAppraisals: number;
+  /* -- ITS OWN ROUND, on the row.
+        Every appraisal is a row of its own now, so the round is a column rather
+        than a count of "earlier" ones hanging off the worker's name. That count
+        was a workaround for a table that could only show one round at a time;
+        with all of them listed it would restate what the reader can already
+        see. -- */
+  cycleId: string;
+  roundName: string;
+  roundPeriod: string;
   nextIncrementDate: string | null;
 };
 
@@ -81,25 +89,35 @@ export function WorkerBoard({
   rows,
   workers,
   raters,
-  roundIndex,
-  roundCount,
 }: {
+  /* -- ABSENT MEANS EVERY ROUND, and that is now the ordinary case.
+        The rounds LIST is gone at the owner's instruction: Production
+        Appraisals opens straight onto the table, and every appraisal in every
+        round is a row of its own with the round named in a column. Nothing is
+        hidden behind a card somebody has to pick first.
+        Present means one round, which is what the per-round URL still
+        renders — the evaluation detail lives under it, and a link somebody
+        bookmarked should not stop working. -- */
   cycle: {
     id: string;
     name: string;
     period_label: string;
     status: string;
     supervisor_due_on: string | null;
-  };
+  } | null;
   rows: BoardRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
-  /** Where this round sits in the run, oldest first, and how many there are. */
-  roundIndex: number;
-  roundCount: number;
 }) {
+  const allRounds = cycle === null;
   const [starting, setStarting] = React.useState(false);
   const [adding, setAdding] = React.useState(false);
+  /* -- Binning moved here with the rounds list, because deleting that list
+        would otherwise have removed the only way to bin a round: Settings ›
+        Recycle bin lists what is already binned and restores it, and nothing
+        there puts a round in. This is the better home anyway — you are looking
+        at the round you are binning. -- */
+  const [binning, setBinning] = React.useState(false);
 
   /* -- Who is NOT yet in this round. A latecomer, or somebody HR missed when
         the round opened — until now there was no way to appraise either of them
@@ -157,21 +175,34 @@ export function WorkerBoard({
               Linked to their scorecard rather than restated here: the history
               belongs to the person, and duplicating it on every board is a
               second place for it to drift (N1-13's reasoning). -- */
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <GridCell value={row.original.workerName} />
-            {row.original.earlierAppraisals > 0 ? (
-              <Link
-                href={`/scorecard?person=${row.original.workerId}`}
-                className="block truncate text-body-sm text-ink-muted underline underline-offset-2 hover:text-primary"
-              >
-                {row.original.earlierAppraisals} earlier{" "}
-                {row.original.earlierAppraisals === 1 ? "appraisal" : "appraisals"}
-              </Link>
-            ) : null}
-          </div>
-        ),
+        cell: ({ row }) => <GridCell value={row.original.workerName} />,
       },
+      /* -- THE ROUND, first after the worker.
+            One row per appraisal, so the round is what tells two of the same
+            person's rows apart — and it is the column the owner asked for in
+            place of "1 earlier appraisal" hanging off a name. Only in the
+            all-rounds table: on a single round every row would repeat it. -- */
+      ...(allRounds
+        ? [
+            {
+              id: "round",
+              header: "Round",
+              size: 190,
+              cell: ({ row }: { row: { original: BoardRow } }) => (
+                /* Linked, because the round is where round-level actions live —
+                   adding a latecomer, and binning it. */
+                <Link
+                  href={`/admin/worker-appraisals/${row.original.cycleId}`}
+                  className="block truncate px-3 py-2 text-body-sm text-ink underline-offset-2 hover:underline"
+                >
+                  {[row.original.roundName, row.original.roundPeriod]
+                    .filter(Boolean)
+                    .join(" · ") || "—"}
+                </Link>
+              ),
+            } as ColumnDef<BoardRow>,
+          ]
+        : []),
       {
         accessorKey: "supervisorName",
         header: "Supervisor",
@@ -272,7 +303,7 @@ export function WorkerBoard({
         cell: ({ row }) =>
           row.original.supervisorIn ? (
             <Link
-              href={`/admin/worker-appraisals/${cycle.id}/${row.original.id}`}
+              href={`/admin/worker-appraisals/${row.original.cycleId}/${row.original.id}`}
               className="font-sans text-body-sm font-medium text-primary underline underline-offset-2"
             >
               {row.original.status === "REVIEWED" || row.original.status === "CLOSED"
@@ -304,7 +335,7 @@ export function WorkerBoard({
         },
       },
     ],
-    [],
+    [allRounds],
   );
 
   return (
@@ -323,33 +354,31 @@ export function WorkerBoard({
                 Tailwind emitted nothing and preflight rendered the page title at
                 plain body size. `display-sm` is the step the type scale actually
                 ships, and the one the cycles screen uses. -- */}
-          <h1 className="text-display-sm font-semibold text-ink">Worker appraisals</h1>
+          {/* -- A BACK LINK, on the per-round view only.
+                It was the landing screen, so there was nowhere to go back TO.
+                Production Appraisals now opens the full table, and a screen you
+                arrive at from a list needs the way out (§13.4). -- */}
+          {allRounds ? null : (
+            <Link
+              href="/admin/worker-appraisals"
+              className="inline-flex items-center gap-1.5 text-body-sm text-ink-muted"
+            >
+              <ArrowLeft className="size-4" aria-hidden />
+              All production appraisals
+            </Link>
+          )}
+          {/* -- `text-h2` was here and is not a class this project defines, so
+                Tailwind emitted nothing and preflight rendered the page title at
+                plain body size. `display-sm` is the step the type scale actually
+                ships, and the one the cycles screen uses. -- */}
+          <h1 className="text-display-sm font-semibold text-ink">
+            {allRounds ? "Production appraisals" : "Worker appraisals"}
+          </h1>
           <p className="mt-0.5 text-body-sm text-ink-muted">
-            {cycle.name} · {cycle.period_label} · supervisor due{" "}
-            {formatDate(cycle.supervisor_due_on)}
+            {allRounds
+              ? `Every round, every worker — ${rows.length} appraisal${rows.length === 1 ? "" : "s"} in all.`
+              : `${cycle.name} · ${cycle.period_label} · supervisor due ${formatDate(cycle.supervisor_due_on)}`}
           </p>
-          {/* -- WHICH ROUND THIS IS, AND THE WAY TO THE OTHERS.
-                Reported as a new round "overwriting" the first. Nothing is
-                overwritten — `unique (cycle_id, worker_id)` puts one appraisal
-                per worker per round and says nothing about how many rounds a
-                worker may be in — but the screen gave every reason to think so.
-                Starting a round lands here, and this board looks identical
-                whichever round it is showing: same title, same columns, one row
-                per worker. Only the small line above changes.
-
-                The round picker is gone by instruction (§0.2) and is not coming
-                back; a link is not a picker. Without one this screen is a dead
-                end (§13.4) — and it is reached by a redirect from the sidebar
-                when there is only one round, so the list is not always one click
-                away either. -- */}
-          {roundCount > 1 ? (
-            <p className="mt-0.5 text-body-sm text-ink-muted">
-              Round {roundIndex} of {roundCount} for this team ·{" "}
-              <Link href="/admin/worker-appraisals?all=1" className="text-primary underline underline-offset-2">
-                See all rounds
-              </Link>
-            </p>
-          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -364,12 +393,19 @@ export function WorkerBoard({
                 screen built for it. -- */}
           {/* Only while the round is open to changes, and only when there is
               somebody to add — a control that can do nothing is a dead end. */}
-          {cycle.status === "ACTIVE" && available.length > 0 ? (
+          {!allRounds && cycle.status === "ACTIVE" && available.length > 0 ? (
             <Button variant="secondary" onClick={() => setAdding(true)} className="min-h-11">
               <Plus className="size-4" aria-hidden />
               Add workers
             </Button>
           ) : null}
+
+          {allRounds ? null : (
+            <Button variant="ghost" onClick={() => setBinning(true)} className="min-h-11">
+              <Trash2 className="size-4" aria-hidden />
+              Move round to bin
+            </Button>
+          )}
 
           <Button onClick={() => setStarting(true)} className="min-h-11">
             <Plus className="size-4" aria-hidden />
@@ -482,9 +518,11 @@ export function WorkerBoard({
       <AddWorkersDialog
         open={adding}
         onOpenChange={setAdding}
-        cycleId={cycle.id}
+        cycleId={cycle?.id ?? ""}
         available={available}
       />
+
+      <BinRoundDialog cycle={binning && cycle ? cycle : null} onClose={() => setBinning(false)} />
 
       <StartRoundDialog
         open={starting}

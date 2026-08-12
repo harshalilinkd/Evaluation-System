@@ -1,14 +1,11 @@
 "use client";
 
-/** The worker appraisal list, and the one dialog that starts a round. */
+/** The dialogs a production round needs: start it, add to it, bin it. */
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { HardHat, Loader2, Plus, Trash2 } from "lucide-react";
+import { HardHat, Loader2 } from "lucide-react";
 
-import { DashboardCard } from "@/components/appraise/metric-widget";
-import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -28,17 +25,6 @@ import {
   moveWorkerRoundToBin,
 } from "@/lib/worker/cycle-actions";
 import { cn } from "@/lib/utils";
-import { formatDate } from "@/lib/utils/date";
-
-export type WorkerCycleRow = {
-  id: string;
-  name: string;
-  period_label: string;
-  status: string;
-  self_due_on: string | null;
-  supervisor_due_on: string | null;
-  md_due_on: string | null;
-};
 
 export type WorkerRow = {
   id: string;
@@ -55,135 +41,21 @@ export type RaterRow = {
   designation: string | null;
 };
 
-const STATUS_WORD: Record<string, string> = {
-  DRAFT: "Not started",
-  ACTIVE: "Running",
-  CLOSED: "Finished",
-};
+/* -- THE ROUNDS LIST WAS HERE, and it is gone at the owner's instruction.
 
-export function WorkerCyclesClient({
-  cycles,
-  binned,
-  workers,
-  raters,
-}: {
-  cycles: WorkerCycleRow[];
-  /** In the recycle bin. Hidden from every other screen; restorable from here. */
-  binned: WorkerCycleRow[];
-  workers: WorkerRow[];
-  raters: RaterRow[];
-}) {
-  const [open, setOpen] = React.useState(false);
-  const [binning, setBinning] = React.useState<WorkerCycleRow | null>(null);
+      It rendered a card per round — "test · august · Running" above "test · Aug
+      · Running", because rounds are free to share a name — and stood between the
+      menu item and the work. FIX-40 redirected past it when there was only one
+      round, which was a patch on the same complaint; what was asked for is that
+      there is no list at all. `/admin/worker-appraisals` renders the full table
+      of every appraisal in every round now, with the round as a column.
 
-  return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-display-sm font-semibold text-ink">Worker appraisals</h1>
-          {/* Said once, at the top. The two modules look alike and are not:
-              different form, different scale, different people. Somebody who
-              arrives expecting the staff cycle screen should learn that here
-              rather than after starting a round. */}
-          {/* -- CORRECTED. This described blind parallel rating — "the worker
-                and their supervisor tick the same sheet at the same time, and
-                neither sees the other's answers" — which is the STAFF flow and
-                has never been how this module works. Workers do not rate
-                themselves, at the owner's instruction (WORKER-1), so the
-                sentence promised a second side that does not exist and told
-                anybody reading it the wrong thing about their own product. -- */}
-          <p className="mt-1 max-w-prose font-sans text-body-sm text-ink-muted">
-            The Production Team three-tick sheet. Separate from Backend Team evaluations, and nothing is
-            shared between them. The supervisor ticks the sheet, HR prices the increment, and management
-            approves it.
-          </p>
-        </div>
-        <Button onClick={() => setOpen(true)} className="min-h-11">
-          <Plus className="size-4" aria-hidden />
-          Start a round
-        </Button>
-      </header>
+      DELETED rather than left unused: an orphaned component sitting where the
+      next person reaches for it is the landmine P22 had to remove a template
+      for. The dialogs below are still live and are what this file is now for.
 
-      {cycles.length === 0 ? (
-        <EmptyState
-          title="No worker appraisals yet"
-          body={
-            workers.length === 0
-              ? "Nobody is on the Production Team yet. Set somebody's form to Production Team in Settings, Users first."
-              : `${workers.length} ${workers.length === 1 ? "worker is" : "workers are"} ready to be appraised.`
-          }
-        />
-      ) : (
-        <div className="grid gap-4">
-          {cycles.map((cycle) => (
-            /* The whole card opens the round. A card that looks like a record
-               and does nothing when pressed reads as a broken link, which is
-               exactly how this was reported. */
-            /* The bin control sits BESIDE the link, not inside it: a button
-               nested in an anchor is invalid markup and gives a screen reader
-               one control where there are two. */
-            <div key={cycle.id} className="relative">
-              <Link
-                href={`/admin/worker-appraisals/${cycle.id}`}
-                className="block rounded-card transition-colors hover:bg-surface-mute"
-              >
-                <DashboardCard title={cycle.name}>
-                  <div className="flex flex-wrap items-baseline justify-between gap-3 pr-12">
-                    <p className="font-sans text-body-sm text-ink-muted">
-                      {cycle.period_label} · {STATUS_WORD[cycle.status] ?? cycle.status}
-                    </p>
-                    <p className="tabular font-sans text-body-sm text-ink-muted">
-                      Supervisor due {formatDate(cycle.supervisor_due_on)}
-                    </p>
-                  </div>
-                </DashboardCard>
-              </Link>
-
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Move ${cycle.name} to the recycle bin`}
-                className="absolute right-3 top-3 z-10 min-h-11 text-ink-muted hover:text-critical"
-                onClick={() => setBinning(cycle)}
-              >
-                <Trash2 className="size-4" aria-hidden />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* -- THE RECYCLE BIN IS NOT ON THIS SCREEN, at the owner's instruction.
-
-            It was a full-width card carrying the same weight as a real round,
-            which is the wrong emphasis for something nobody comes here to do —
-            and it sat there whether or not anybody was looking for it.
-
-            It has NOT been deleted. FIX-17 added it because a round that can be
-            binned and never restored is a delete wearing a softer word (§13.4),
-            and that is still true. Binned rounds now live in
-            Settings › Recycle bin beside the staff cycles, which is where
-            somebody goes when they are actually looking for one. A quiet line
-            below points at it — only when there is something in it. -- */}
-      {binned.length > 0 ? (
-        <p className="font-sans text-body-sm text-ink-muted">
-          {binned.length} {binned.length === 1 ? "round is" : "rounds are"} in the recycle bin.{" "}
-          <Link
-            href="/admin/settings?tab=recycle-bin"
-            className="text-primary underline underline-offset-2"
-          >
-            Restore or remove them in Settings
-          </Link>
-          .
-        </p>
-      ) : null}
-
-      <BinRoundDialog cycle={binning} onClose={() => setBinning(null)} />
-
-      <StartRoundDialog open={open} onOpenChange={setOpen} workers={workers} raters={raters} />
-    </div>
-  );
-}
+      The recycle-bin line it carried is not lost — binning, restoring and
+      deleting a round live in Settings › Recycle bin (FIX-32). -- */
 
 /**
  * One dialog, not a four-step wizard.
@@ -685,14 +557,24 @@ export function AddWorkersDialog({
 /**
  * Confirm before binning.
  *
+ * EXPORTED NOW. It used to be rendered by the rounds list, and deleting that
+ * list would have taken with it the only way to bin a round at all — Settings ›
+ * Recycle bin lists what is already binned and restores it, but nothing there
+ * puts a round in. The round's own board renders this instead, which is the
+ * better home anyway: you are looking at the round you are binning.
+ *
  * It says what binning does and what it does NOT do, because the word "delete"
  * on the button that opened this dialog is the thing somebody is afraid of.
  */
-function BinRoundDialog({
+export function BinRoundDialog({
   cycle,
   onClose,
 }: {
-  cycle: WorkerCycleRow | null;
+  /* It reads the id and the name and nothing else, so it asks for those. The
+     six-field row type it used to take was inherited from the list that
+     rendered it, and asking a caller for four fields you never read is how a
+     component ends up impossible to reuse. */
+  cycle: { id: string; name: string } | null;
   onClose: () => void;
 }) {
   const router = useRouter();

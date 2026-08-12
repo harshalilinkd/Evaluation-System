@@ -93,48 +93,8 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
     : { data: [] };
   const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
 
-  /* -- WHERE THIS ROUND SITS, AND WHAT EACH WORKER HAS BEHIND THEM.
-        Both answer the same report: a new round reads as having overwritten the
-        last one, because the board looks identical whichever round it shows and
-        cannot reach any other. Nothing is overwritten — a worker may be in as
-        many rounds as exist — and these two reads are how the screen says so.
-
-        Live rounds only, oldest first, so "Round 2 of 3" counts the same rounds
-        the list shows. A binned round is not part of the run (FIX-32). -- */
-  const [{ data: allRounds }, { data: otherAppraisals }] = await Promise.all([
-    supabase
-      .from("worker_cycles")
-      .select("id")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true }),
-    workerIds.length > 0
-      ? supabase
-          .from("worker_evaluations")
-          .select("worker_id, cycle_id")
-          .in("worker_id", workerIds)
-          .neq("cycle_id", cycleId)
-          .is("excluded_at", null)
-      : Promise.resolve({ data: [] as { worker_id: string; cycle_id: string }[] }),
-  ]);
-
-  const roundIds = (allRounds ?? []).map((c) => c.id);
-  const roundCount = roundIds.length;
-  const roundIndex = roundIds.indexOf(cycleId) + 1;
-
-  /* -- Counted against the LIVE rounds only, so binning a round takes its
-        appraisal out of the tally rather than leaving a link to a round nobody
-        can open. -- */
-  const liveRounds = new Set(roundIds);
-  const earlierOf = new Map<string, number>();
-  for (const row of otherAppraisals ?? []) {
-    if (!liveRounds.has(row.cycle_id)) continue;
-    earlierOf.set(row.worker_id, (earlierOf.get(row.worker_id) ?? 0) + 1);
-  }
-
   return (
     <WorkerBoard
-      roundIndex={roundIndex}
-      roundCount={roundCount}
       cycle={cycle}
       rows={(rows ?? []).map((r) => ({
         id: r.id,
@@ -156,7 +116,9 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         currentCtc: employmentOf.get(r.worker_id)?.current_ctc ?? null,
         lastIncrementDate: employmentOf.get(r.worker_id)?.last_increment_date ?? null,
         nextIncrementDate: employmentOf.get(r.worker_id)?.next_increment_date ?? null,
-        earlierAppraisals: earlierOf.get(r.worker_id) ?? 0,
+        cycleId,
+        roundName: cycle.name,
+        roundPeriod: cycle.period_label,
       }))}
       workers={(workerPool ?? []).map((w) => ({
         id: w.id,

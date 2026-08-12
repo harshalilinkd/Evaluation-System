@@ -6370,3 +6370,48 @@ reaching paper is still black, white or a neutral grey, and no tier token
 reaches either sheet.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-48 — The rounds list deleted, and every appraisal a row of its own
+
+No migration. `app/(app)/admin/worker-appraisals/{page.tsx,cycles-client.tsx}`
+and `[cycleId]/{page.tsx,board.tsx}`.
+
+**Reverses FIX-40's F40-8 and FIX-43, at the owner's instruction — and both were
+patches on this same complaint.** F40-8 redirected past the rounds list when
+there was one round; FIX-43 stopped that redirect counting the bin. The list
+itself was the problem: a page of cards reading "test · august · Running" above
+"test · Aug · Running" — rounds are free to share a name — standing between the
+menu item and the work.
+
+**Production Appraisals now opens the table.** Every appraisal in every live
+round is a row, with the round in its own column.
+
+| # | Decision | Why |
+|---|---|---|
+| F48-1 | **The Round is a COLUMN, replacing "1 earlier appraisal"** | FIX-43 put that count on the worker's name as a workaround for a table that could only show one round at a time. With every round listed it would restate what the reader can already see — and it was never what was asked for. Two appraisals of the same worker are now two rows differing in one column, which is what "nothing should get overwritten" looks like on screen. |
+| F48-2 | The column appears **only** in the all-rounds table | On a single round every row would repeat it. |
+| F48-3 | …and links to that round's own screen | Because round-level actions live there, which is the next decision. |
+| F48-4 | **`cycle` is nullable on the board; null MEANS every round** | One component, two modes, rather than a second table that drifts. The per-round URL still renders — the evaluation detail lives under it and a bookmark should not stop working. |
+| F48-5 | **A back link, on the per-round view only** | Asked for. It was the landing screen, so there was nowhere to go back TO; a screen reached from a table needs the way out (§13.4). The table is the top of the tree and gets none. |
+| F48-6 | **`WorkerCyclesClient` is DELETED, not left unused** | An orphaned component sitting where the next person reaches for it is the landmine P22 had to remove a template for. `WorkerCycleRow`, `STATUS_WORD` and six imports went with it. |
+| F48-7 | **Binning a round moved rather than vanishing** | The trash control lived on those cards, and Settings › Recycle bin only lists what is ALREADY binned and restores it — nothing there puts a round in. Deleting the list would have removed the only way to bin one. `BinRoundDialog` is exported and the round's own board renders it, which is the better home: you are looking at the round you are binning. |
+| F48-8 | Its prop narrowed from a six-field row to `{ id, name }` | That is all it reads. The wider type was inherited from the list that rendered it, and asking a caller for four fields you never read is how a component becomes impossible to reuse. |
+
+**Verification — 28 checks, 0 failed** (rounds.mjs, rewritten). The constraint is
+still lifted from 0047's text and exercised on real Postgres: one worker in two
+rounds, refused a second time in one, all rows surviving, and the table's own
+query proved to list both live appraisals while excluding a binned round's.
+Source-level: the list component is proved gone and unimported, the redirect and
+its `?all=1` hatch proved absent, the Round column proved present and linked, and
+**every capability the list carried is proved to survive** — Start a round, Add
+workers, and binning.
+
+**Five assertions in src.mjs asserted the redirect and were rewritten, not
+deleted.** They encoded behaviour the owner has now reversed twice over; the
+replacements hold the reversal from both sides, so quietly reinstating either
+would fail.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings, one fewer), build
+clean.
