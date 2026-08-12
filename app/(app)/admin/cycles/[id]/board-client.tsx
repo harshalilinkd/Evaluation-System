@@ -26,9 +26,9 @@ import { ActivityPanel } from "@/app/(app)/admin/cycles/[id]/activity-panel";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import type { ActivityEntry } from "@/lib/cycles/activity";
 import { EmptyState } from "@/components/appraise/states";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import type { BoardColumnKey, CycleBoard } from "@/lib/cycles/queries";
 import { daysBetween, plural, today } from "@/lib/cycles/schema";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { SelectablePerson } from "@/lib/cycles/queries";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
@@ -80,6 +80,8 @@ export function BoardClient({
   /** §12's trail, made readable. See lib/cycles/activity.ts. */
   activity: ActivityEntry[];
 }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const router = useRouter();
 
   const [search, setSearch] = React.useState("");
@@ -645,7 +647,7 @@ export function BoardClient({
         <p className="flex items-start gap-3 rounded-card border-l-2 border-l-warning bg-warning-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
           <span>
             <span className="font-medium">Nobody in this cycle has a department set.</span>{" "}
-            {SECTION_LABELS.DEPARTMENT_SPECIFIC} questions are chosen by department, so as it
+            {departmentSection} questions are chosen by department, so as it
             stands every form here will have that section empty. Set each person&rsquo;s
             department in Settings › Users
             {board.cycle.status === "DRAFT" ? " before you launch." : "."}

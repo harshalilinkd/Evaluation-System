@@ -45,6 +45,7 @@ import {
 } from "@/app/(app)/admin/questions/question-drawer";
 import { columnLabel } from "@/components/appraise/data-grid";
 import { EmptyState } from "@/components/appraise/states";
+import { useSectionLabels } from "@/components/appraise/section-labels";
 import { QuestionImportDialog } from "@/app/(app)/admin/questions/question-import-dialog";
 import {
   deleteQuestionsForever,
@@ -59,7 +60,6 @@ import {
   RESPONSE_TYPES,
   SECTIONS,
   TRACKS,
-  SECTION_LABELS,
   answeredByLabel,
   responseTypeLabel,
   sectionLabel,
@@ -161,6 +161,8 @@ export function QuestionsClient({
   departmentsByQuestion,
   departments,
 }: QuestionsClientProps) {
+  // HR's own names, not the shipped defaults (P25).
+  const sectionNames = useSectionLabels();
   const [search, setSearch] = useState("");
   const [section, setSection] = useState(ANY);
   const [track, setTrack] = useState(ANY);
@@ -557,7 +559,7 @@ export function QuestionsClient({
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b border-rule bg-accent px-3 py-2">
         <p className="font-sans text-body-sm text-accent-foreground">
           Every employee answers the same form. Only the{" "}
-          {SECTION_LABELS.DEPARTMENT_SPECIFIC} section changes by department.
+          {sectionNames.DEPARTMENT_SPECIFIC} section changes by department.
         </p>
         {/* Full opacity, not /70. The faded second half was the least legible
             text on the screen, and it carries the rule people most need to

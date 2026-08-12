@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import { QuestionPreview } from "@/app/(app)/admin/questions/question-preview";
 import { saveQuestion, type QuestionActionState } from "@/lib/questions/actions";
 import {
@@ -32,7 +33,6 @@ import {
   DEPARTMENT_SECTION,
   RESPONSE_TYPES,
   SECTIONS,
-  SECTION_LABELS,
   TRACKS,
   dependencySentence,
   needsOptions,
@@ -214,6 +214,8 @@ function QuestionForm({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const [state, action] = useActionState<QuestionActionState, FormData>(saveQuestion, {});
   // One prefix per mount, so every label points at its own control even when
   // two of these forms exist (the builder renders one beside the list).
@@ -348,7 +350,7 @@ function QuestionForm({
               htmlFor={`${uid}-section`}
               hint={
                 isJobSpecific
-                  ? `${SECTION_LABELS.DEPARTMENT_SPECIFIC} is the only section that changes by department. Everything else is identical company-wide.`
+                  ? `${departmentSection} is the only section that changes by department. Everything else is identical company-wide.`
                   : undefined
               }
             >

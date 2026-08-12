@@ -1995,7 +1995,7 @@ from employees (FIX-17), and an edit that demoted HR to EMPLOYEE (FIX-14).
 | **The test suites** | Live in a scratch directory outside the repository and are largely gone. Every claim in §18 up to P23 rests on them; everything since is covered by one-off scripts, also outside the repo. |
 | **Worker analytics** | The appraisal exists (WORKER-1); none of P16's six views covers the `worker_` tables, so a worker's history exists only on their own sheets and appears on no dashboard. |
 | **Worker self-rating** | Deliberately absent, at the owner's instruction — recorded here so it is not mistaken for an oversight. 0048's hand-over function remains if it is ever wanted. |
-| **Section names are half-dynamic** | Every rendered FORM uses HR's names (P25). Screens that call `sectionLabel()` for their own chrome — the question-bank filter, the departments mapping screen, the scorecard section profile, the cycle wizard — still show the shipped defaults. |
+| ~~**Section names are half-dynamic**~~ | **Done — FIX-51.** A rename now reaches the chrome as well as the forms. |
 | **Palette** | Three real failures nobody has acted on: light-mode green↔cyan below the normal-vision floor, dark-mode green and amber outside the lightness band (P29), and the three tier hues all sitting light against the dark surface (P33). All are §2 token changes and need an explicit instruction, since §13.1 reserves those hues. |
 | **Exports** | CSV exists for department scores, the employee and employment imports, and the question bank. P16 asked for it on every table. |
 | **Performance** | P16's "under one second with 500 evaluations" is indexed for and has never been measured. |
@@ -6527,3 +6527,43 @@ counts are proved to use the server's keys and the count's own predicate.
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean. All
 six earlier suites still pass.
+
+---
+
+### FIX-51 — A rename reaches the chrome, not just the forms
+
+No migration. `components/appraise/section-labels.tsx` is new; the `(app)`
+layout provides, nine client screens consume.
+
+P25 made the eight section names editable and every rendered FORM picked it up
+for free — a form travels as a `FormDefinition` and the label rides on it.
+Screens naming a section in their own CHROME did not: they imported
+`SECTION_LABELS`, the SHIPPED defaults. So renaming "Job Specific Skills"
+changed every form and left the question bank, both departments screens, the
+cycle wizard, the cycle board, the scorecard and the employee's own form still
+calling it the old thing. §18 has carried this as outstanding since P25.
+
+| # | Decision | Why |
+|---|---|---|
+| F51-1 | **A context from the shell, not a prop through nine pages** | Those screens are all client components and the config is a server read (P25-6, cached per request). Threading it would mean editing nine server pages and nine signatures for a string none of them otherwise cares about — and the tenth screen is the one somebody forgets. The shell already renders on every authenticated route; it reads once and provides. |
+| F51-2 | **The shipped defaults stay as the backstop** | A missing entry, an unreadable table or no provider at all falls through to what shipped. P25-4: a section with no name is a blank heading on somebody's appraisal, which is worse than an old name. It also means a component still renders correctly outside a provider — in a test, or in the print tree. |
+| F51-3 | Two hooks, not one | `useSectionLabel(section)` for the eight screens that name exactly one, `useSectionLabels()` for the two that index by a section value. A single map-returning hook would have every caller destructuring a record to read one string. |
+| F51-4 | **The standing rule is a test, not a habit** | The suite walks every `.tsx` under `app/` and `components/`, keeps the ones with `"use client"`, and fails on any that reads `SECTION_LABELS` — with a self-test proving the detector can find one. That is what stops the tenth screen drifting, which is how the first nine got here. |
+| F51-5 | Forms are untouched | The renderer still takes the label off the section it was given, and `getEvaluationForm` still applies the config to the frozen snapshot's sections rather than using it to select them (P25-3). |
+
+**Found by the test, not by the list.** `/my-evaluation/[id]/self-form.tsx` was
+a ninth screen nobody had recorded — it hard-codes the METADATA heading, so a
+rename would have left one heading behind on a page where every other one moved.
+
+**Verification — 18 checks, 0 failed**, and two of my own assertions were wrong
+and were corrected rather than loosened. The provider file legitimately imports
+the constant — it IS the fallback — and was being reported as an offender. And
+"the label is applied after the snapshot is read" was written as
+`indexOf("evaluation_questions") < indexOf("labelIn")`, which compared positions
+in the IMPORT BLOCK where both names appear at the top of the file. It reads the
+snapshot query itself now. **Same family as pinning a variable name: the
+assertion has to name the claim, not a position that happens to correlate
+with it.**
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean; all
+seven other suites still pass.

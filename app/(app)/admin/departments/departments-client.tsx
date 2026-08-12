@@ -22,12 +22,12 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/appraise/states";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import {
   deleteDepartment,
   saveDepartment,
   type DepartmentActionState,
 } from "@/lib/departments/actions";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import { cn } from "@/lib/utils";
 
 export type DepartmentRow = {
@@ -76,6 +76,8 @@ function Submit({ label, pendingLabel }: { label: string; pendingLabel: string }
 }
 
 export function DepartmentsClient({ departments }: { departments: DepartmentRow[] }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DepartmentRow | null>(null);
   const [deleting, setDeleting] = useState<DepartmentRow | null>(null);
@@ -96,7 +98,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
           <h2 className="text-display-sm text-ink">Departments</h2>
           <p className="mt-1 max-w-[62ch] text-body-sm text-ink-muted">
             Every employee answers the same evaluation form. Departments only decide the{" "}
-            {SECTION_LABELS.DEPARTMENT_SPECIFIC} section.
+            {departmentSection} section.
           </p>
         </div>
 
@@ -125,8 +127,8 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
           <p className="text-body-sm text-ink">
             <span className="font-medium">
               {missing.length === 1
-                ? `${missing[0]?.name} has no ${SECTION_LABELS.DEPARTMENT_SPECIFIC} questions.`
-                : `${missing.length} departments have no ${SECTION_LABELS.DEPARTMENT_SPECIFIC} questions.`}
+                ? `${missing[0]?.name} has no ${departmentSection} questions.`
+                : `${missing.length} departments have no ${departmentSection} questions.`}
             </span>{" "}
             A cycle cannot be launched for them until they do
             {/* Named, not counted. P8-7: "Used in 3 departments" makes HR go and
@@ -292,6 +294,8 @@ function DeleteDialog({
   department: DepartmentRow | null;
   onClose: () => void;
 }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const [state, action] = useActionState<DepartmentActionState, FormData>(deleteDepartment, {});
 
   // Closing is a side effect of the action completing, not of rendering — the
@@ -333,7 +337,7 @@ function DeleteDialog({
 
             {department.questionCount > 0 ? (
               <p className="text-body-sm text-ink-muted">
-                Its {department.questionCount} {SECTION_LABELS.DEPARTMENT_SPECIFIC} mapping
+                Its {department.questionCount} {departmentSection} mapping
                 {department.questionCount === 1 ? "" : "s"} will be removed. The questions
                 themselves stay in the question bank — other departments that ask them are
                 unaffected.

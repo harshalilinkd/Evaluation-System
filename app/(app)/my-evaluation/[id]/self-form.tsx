@@ -13,6 +13,7 @@ import { FormRenderer } from "@/components/appraise/form-renderer";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +35,6 @@ import {
   writeDraft,
 } from "@/lib/forms/draft-cache";
 import { buildZodSchema, isBlank, validateAnswers } from "@/lib/forms/zod-generator";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
 import { formatDate, formatInr, formatTime } from "@/lib/utils/date";
@@ -63,6 +63,8 @@ const AUTOSAVE_FLUSH_MS = 20_000;
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormMeta }) {
+  // HR's own name for it, not the shipped default (P25).
+  const metadataSection = useSectionLabel("METADATA");
   const router = useRouter();
 
   const [values, setValues] = React.useState<Record<string, unknown>>(form.answers);
@@ -542,10 +544,13 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
 
       {/* ---------- Metadata, read-only ---------- */}
       <section className="card-surface mb-4 p-5">
-        {/* From SECTION_LABELS, never retyped — labels.ts is the single source
+        {/* HR's own name for it (P25), never retyped. This was the shipped
+            default, so renaming the section changed every OTHER heading on the
+            form and left this one behind — the one case where the mismatch
+            appears twice on the same page.
             of section names (§0.2), and P8-PATCH's test fails the build for any
             component that restates one. */}
-        <h2 className="text-display-sm text-ink">{SECTION_LABELS.METADATA}</h2>
+        <h2 className="text-display-sm text-ink">{metadataSection}</h2>
         {/* A definition list, not inputs. These come from the profile and the
             evaluation record; letting somebody type a name here would let it
             disagree with the record it is drawn from. */}

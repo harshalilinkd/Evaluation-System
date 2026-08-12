@@ -5,7 +5,9 @@ import { Suspense, type ReactNode } from "react";
 import { AccessNotice } from "@/app/(app)/access-notice";
 import { PausedBanner } from "@/app/(app)/paused-banner";
 import { AppShell } from "@/components/appraise/app-shell";
+import { SectionLabelProvider } from "@/components/appraise/section-labels";
 import { requireAuth } from "@/lib/auth/guards";
+import { getSectionConfig } from "@/lib/forms/section-config";
 
 /**
  * Nothing under /(app) may ever be prerendered or cached. Every page here is
@@ -24,6 +26,18 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   // the shell so the nav matches what the guards will allow.
   const { profile, roles } = await requireAuth();
 
+  /* -- HR's own section names, read once and provided to every client screen.
+        P25 made them editable and every rendered FORM picked that up, because a
+        form carries its labels. Screens that name a section in their own chrome
+        did not — they import the shipped defaults, so a rename changed the
+        forms and left the question bank, the departments screens, the cycle
+        wizard and the scorecard still using the old name.
+        `getSectionConfig` is cached per request (P25-6), so this is one read for
+        the whole page however many components consume it. It falls back to the
+        shipped defaults on its own, which is the behaviour every screen had
+        before this existed. -- */
+  const sections = await getSectionConfig();
+
   /* -- The cycle query that fed the topbar selector is GONE with it.
         The selector had no handler and nothing read its value, so this was
         twelve rows fetched on every authenticated page load to populate a
@@ -32,6 +46,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <AppShell profile={profile} roles={roles}>
+      <SectionLabelProvider labels={sections.labels}>
       {/* A pause is easy to set and easy to forget, and the failure it creates
           is silence. RLS decides who sees it — an employee gets nothing. */}
       <PausedBanner />
@@ -41,7 +56,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <AccessNotice />
       </Suspense>
-      {children}
+        {children}
+      </SectionLabelProvider>
     </AppShell>
   );
 }

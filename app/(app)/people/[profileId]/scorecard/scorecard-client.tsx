@@ -32,7 +32,8 @@ import { DashboardCard } from "@/components/appraise/metric-widget";
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { EmptyState } from "@/components/appraise/states";
 import { SCALE_0_5_LABELS, TIER_CLASSES, TIER_LABELS } from "@/components/appraise/tier";
-import { SECTION_LABELS, sectionRank } from "@/lib/forms/labels";
+import { useSectionLabels } from "@/components/appraise/section-labels";
+import { sectionRank } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { Scorecard, ScorecardQuestion } from "@/lib/analytics/queries";
 import { formatDate, formatScore } from "@/lib/utils/date";
@@ -64,6 +65,8 @@ const WAITING: Record<string, { who: string; what: string }> = {
 };
 
 export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boolean }) {
+  // HR's own names, not the shipped defaults (P25).
+  const sectionNames = useSectionLabels();
   /* -- Every chart carries a table fallback, and it is not a nicety.
         The palette validator reports cyan below 3:1 on a white surface, which
         obligates relief rather than a different hue — and a polygon is
@@ -117,14 +120,16 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
     return [...bySection.entries()]
       .map(([section, v]) => ({
         section,
-        label: SECTION_LABELS[section],
+        label: sectionNames[section],
         count: Math.max(v.self.length, v.lead.length, v.final.length),
         self: mean(v.self),
         lead: mean(v.lead),
         final: mean(v.final),
       }))
       .sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
-  }, [card.questions]);
+    // `sectionNames` is HR's live naming: a rename has to re-label these rows,
+    // not wait for the answers to change.
+  }, [card.questions, sectionNames]);
 
   /* -- The gap per section. Only sections BOTH sides rated: a difference
         against a blank is not a difference, and drawing one would invent a
@@ -826,7 +831,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-body text-ink">{q.text}</span>
                           <span className="text-body-sm text-ink-muted">
-                            {SECTION_LABELS[q.section]}
+                            {sectionNames[q.section]}
                           </span>
                         </span>
                         <ScorePip tier="self" value={q.self} />
@@ -901,7 +906,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                         <td className="py-2.5 pr-4 text-body text-ink">
                           {q.text}
                           <span className="block text-body-sm text-ink-muted">
-                            {SECTION_LABELS[q.section]}
+                            {sectionNames[q.section]}
                           </span>
                         </td>
                         <td className="py-2.5 pr-4">
@@ -1193,6 +1198,8 @@ function QuestionList({
   settled: (q: ScorecardQuestion) => number | null;
   tone: "success" | "warning";
 }) {
+  // HR's own names, not the shipped defaults (P25).
+  const sectionNames = useSectionLabels();
   const Icon = tone === "success" ? Sparkles : Target;
   return (
     <ul className="space-y-2.5">
@@ -1204,7 +1211,7 @@ function QuestionList({
           />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-body text-ink">{q.text}</span>
-            <span className="text-[11px] text-ink-muted">{SECTION_LABELS[q.section]}</span>
+            <span className="text-[11px] text-ink-muted">{sectionNames[q.section]}</span>
           </span>
           <span className="tabular shrink-0 text-body-lg font-semibold text-ink">
             {formatScore(settled(q))}

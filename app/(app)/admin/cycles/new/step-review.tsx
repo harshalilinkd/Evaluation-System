@@ -6,11 +6,11 @@ import Link from "next/link";
 import { AlertTriangle, ArrowUpRight, Check, Info } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import type { SelectablePerson } from "@/lib/cycles/queries";
 import type { ReadinessReport } from "@/lib/cycles/schema";
 import type { InviteRecipients } from "@/lib/cycles/dispatch-launch";
 import { plural } from "@/lib/cycles/schema";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import { cn } from "@/lib/utils";
 import type { PersonState } from "@/app/(app)/admin/cycles/new/step-people";
 
@@ -50,6 +50,8 @@ export function StepReview({
   recipients: InviteRecipients | null;
   onRecipientsChange: (next: InviteRecipients) => void;
 }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const included = people.filter((p) => state[p.id]?.included);
   const excluded = people.filter((p) => !state[p.id]?.included);
 
@@ -98,10 +100,10 @@ export function StepReview({
 
         {/* -- Job Specific Skills readiness -- */}
         <section className="card-surface p-5">
-          {/* Sourced from SECTION_LABELS, never retyped: labels.ts is the single
+          {/* Sourced from never retyped: labels.ts is the single
               source of section names (§0.2), and P8-PATCH's test fails the build
               for any component that restates one. */}
-          <h3 className="text-display-sm text-ink">{SECTION_LABELS.DEPARTMENT_SPECIFIC}</h3>
+          <h3 className="text-display-sm text-ink">{departmentSection}</h3>
           <p className="mt-1 text-body-sm text-ink-muted">
             Questions mapped per department. This is the only section that varies.
           </p>

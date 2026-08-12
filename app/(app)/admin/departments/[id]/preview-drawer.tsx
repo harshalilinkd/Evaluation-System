@@ -8,7 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { ErrorState, TableSkeleton } from "@/components/appraise/states";
-import { SECTION_LABELS } from "@/lib/forms/labels";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import { loadDepartmentPreview, type PreviewResult } from "@/app/(app)/admin/departments/[id]/preview-action";
 
 /**
@@ -31,6 +31,8 @@ export function PreviewDrawer({
   departmentId: string;
   departmentName: string;
 }) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -42,7 +44,7 @@ export function PreviewDrawer({
             The form a {departmentName} employee will see
           </SheetTitle>
           <p className="text-body-sm text-ink-muted">
-            Read-only. {SECTION_LABELS.DEPARTMENT_SPECIFIC} is highlighted — every other section is
+            Read-only. {departmentSection} is highlighted — every other section is
             identical for every employee in the company.
           </p>
         </SheetHeader>

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { SectionCard } from "@/components/appraise/section-card";
 import { EmptyState } from "@/components/appraise/states";
+import { useSectionLabel } from "@/components/appraise/section-labels";
 import { NeedsQuestionsFlag } from "@/app/(app)/admin/departments/departments-client";
 import { PreviewDrawer } from "@/app/(app)/admin/departments/[id]/preview-drawer";
 import {
@@ -33,7 +34,6 @@ import {
   setQuestionMapping,
   type DepartmentActionState,
 } from "@/lib/departments/actions";
-import { SECTION_LABELS } from "@/lib/forms/labels";
 import { cn } from "@/lib/utils";
 
 export type MappableQuestion = {
@@ -77,6 +77,8 @@ export function MappingClient({
   available,
   otherDepartments,
 }: MappingClientProps) {
+  // HR's own name for it, not the shipped default (P25).
+  const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const [search, setSearch] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState<string>("");
@@ -119,11 +121,11 @@ export function MappingClient({
           reasonably believe they are editing the whole form. */}
       <div className="card-surface space-y-2 p-5">
         <h2 className="text-display-sm text-ink">
-          {SECTION_LABELS.DEPARTMENT_SPECIFIC} · {department.name}
+          {departmentSection} · {department.name}
         </h2>
         <p className="max-w-form text-body text-ink-muted">
           Every employee answers the same evaluation form. This screen sets the questions in the{" "}
-          {SECTION_LABELS.DEPARTMENT_SPECIFIC} section for the {department.name} team — that is the
+          {departmentSection} section for the {department.name} team — that is the
           only part of the form that changes by department.
         </p>
         <div className="flex flex-wrap gap-2 pt-1">
@@ -148,7 +150,7 @@ export function MappingClient({
         {/* ---------- Left: available ---------- */}
         <SectionCard
           title="Available questions"
-          description={`${SECTION_LABELS.DEPARTMENT_SPECIFIC} questions not yet asked of this team.`}
+          description={`${departmentSection} questions not yet asked of this team.`}
         >
           <div className="space-y-3">
             <Input
