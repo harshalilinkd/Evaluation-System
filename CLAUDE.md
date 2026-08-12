@@ -1999,10 +1999,17 @@ from employees (FIX-17), and an edit that demoted HR to EMPLOYEE (FIX-14).
 | **Palette** | Three real failures nobody has acted on: light-mode green↔cyan below the normal-vision floor, dark-mode green and amber outside the lightness band (P29), and the three tier hues all sitting light against the dark surface (P33). All are §2 token changes and need an explicit instruction, since §13.1 reserves those hues. |
 | **Exports** | CSV exists for department scores, the employee and employment imports, and the question bank. P16 asked for it on every table. |
 | **Performance** | P16's "under one second with 500 evaluations" is indexed for and has never been measured. |
-| **CSV import: update** | The employee import creates people but cannot amend them; re-uploading a corrected file fails on the duplicate email. The employment and question imports do update. |
-| **`?increment_for=`** | `/admin/increments` links to `/admin/cycles/new?increment_for={id}` and the wizard ignores the parameter. |
-| **On-demand due sweep** | `compute_due_items` runs only from the nightly cron, so somebody entered today does not appear on `/admin/due` until tomorrow. |
-| **Notification retention** | `app_notifications` (0059) grows one row per person per event for ever. Nothing prunes it. |
+| **The duplicate on the printed sheet** | The worker sheet asks Overall Performance twice — as row 8 of the table and again on the line beneath — because the source paper form does. Raised with the owner and **awaiting their word**: §17 forbids changing a layout taken from the source form without an instruction. A one-line removal once they say. |
+
+**Delivered since this list was last written, and removed from it** — checked
+against the code rather than against §18, because a to-do list nobody verifies
+accumulates entries that are no longer true (FIX-24 found the first of these
+already done and reported as outstanding):
+
+- **CSV import: update** — `provisionPerson` amends an existing person now, matched on email, with the password ignored and salary untouched (FIX-24).
+- **`?increment_for=`** — the wizard reads it and opens on an INCREMENT cycle (P10-B).
+- **On-demand due sweep** — "Check again" on `/admin/due` runs `compute_due_items` (FIX-24).
+- **Notification retention** — the nightly job prunes read notifications older than ninety days (FIX-24).
 
 #### Standing risks
 
