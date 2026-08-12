@@ -32,6 +32,8 @@ export type SalaryBand = {
   /** Absent when there is no employment record — the band says so and blocks. */
   currentCtc: number | null;
   joiningCtc: number | null;
+  /** Dates the baseline row of the pay history. 0024: the ONE joining date. */
+  dateOfJoining: string | null;
   lastIncrementDate: string | null;
   monthsSinceLastIncrement: number | null;
   employeeName: string;
@@ -85,7 +87,13 @@ export async function getSalaryBand(
 
   const [{ data: profile }, { data: employment }, { data: review }, { data: settings }] =
     await Promise.all([
-      supabase.from("profiles").select("id, full_name").eq("id", evaluation.evaluatee_id).maybeSingle(),
+      supabase
+        .from("profiles")
+        // 0024 made this the ONE joining date. It dates the baseline row at the
+        // foot of the pay history.
+        .select("id, full_name, date_of_joining")
+        .eq("id", evaluation.evaluatee_id)
+        .maybeSingle(),
       supabase
         .from("employment_records")
         .select("current_ctc, joining_ctc, last_increment_date")
@@ -123,14 +131,26 @@ export async function getSalaryBand(
   const managerPromotion =
     typeof rawPromotion === "string" && rawPromotion.trim() !== "" ? rawPromotion : null;
 
-  /* -- This person's own last three. Context that stops a number being set in a
-        vacuum, and HR-and-MD-only data (§5). -- */
+  /* -- THEIR WHOLE PAY HISTORY, oldest first, at the owner's instruction: "show
+        all the increments, from joining salary till current".
+
+        It was the last three, newest first. Three is enough context to stop a
+        figure being set in a vacuum and not enough to see a career: somebody
+        with five years of service had the start of it cut off, which is exactly
+        the part that shows whether a 25% ask is a correction or a pattern.
+
+        JOINING ROWS ARE EXCLUDED HERE and the baseline is rendered from
+        `employment_records.joining_ctc` instead — P19E-1 made that column the
+        start of the ledger precisely so it could not be read as a rise, and
+        including both would show the joining figure twice.
+
+        Still HR-and-MD-only data (§5); this panel is guarded to those two. -- */
   const { data: past } = await supabase
     .from("salary_history")
     .select("effective_from, previous_ctc, new_ctc, hike_amount, hike_pct, reason")
     .eq("profile_id", evaluation.evaluatee_id)
-    .order("effective_from", { ascending: false })
-    .limit(3);
+    .neq("reason", "JOINING")
+    .order("effective_from", { ascending: true });
 
   /* -- The department median for this cycle. Computed from the reviews that
         have a final or approved figure, because a proposal nobody has agreed to
@@ -167,6 +187,7 @@ export async function getSalaryBand(
     data: {
       currentCtc: employment?.current_ctc ?? null,
       joiningCtc: employment?.joining_ctc ?? null,
+      dateOfJoining: profile?.date_of_joining ?? null,
       lastIncrementDate: employment?.last_increment_date ?? null,
       monthsSinceLastIncrement: monthsSince(employment?.last_increment_date ?? null, new Date()),
       employeeName: profile?.full_name ?? "this employee",

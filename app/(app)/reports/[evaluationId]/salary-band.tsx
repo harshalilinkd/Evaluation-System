@@ -209,8 +209,10 @@ export function SalaryBand({
       {/* ---------- Row 4: context ---------- */}
       <div className="grid gap-4 md:grid-cols-2">
         <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">Their last three increments</h3>
-          {data.history.length === 0 ? (
+          {/* The heading has to stop promising three once it shows everything —
+              a title that undercounts what is beneath it is its own small lie. */}
+          <h3 className="type-label text-ink-muted">Their pay history</h3>
+          {data.history.length === 0 && data.joiningCtc === null ? (
             <p className="mt-2 font-sans text-body-sm text-ink-muted">Nothing on record yet.</p>
           ) : (
             <div className="-mx-1 mt-2 overflow-x-auto px-1">
@@ -223,6 +225,27 @@ export function SalaryBand({
                 </tr>
               </thead>
               <tbody>
+                {/* -- THE BASELINE, first, and rendered rather than stored.
+                      It comes from `employment_records.joining_ctc`, not from a
+                      history row — P19E-1 made it a column precisely so that
+                      filling it in months later could not be read as a rise over
+                      today's salary, which is how a 620% hike once got written.
+
+                      No previous and no percentage: it is what the ledger starts
+                      FROM, and a baseline with a rise against it would describe
+                      an increment that never happened. -- */}
+                {data.joiningCtc !== null ? (
+                  <tr className="border-b border-rule bg-surface-mute/60">
+                    <td className="py-1.5 tabular text-body-sm text-ink-muted">
+                      {data.dateOfJoining ? formatDate(data.dateOfJoining) : "On joining"}
+                    </td>
+                    <td className="py-1.5 tabular text-body-sm text-ink-muted">—</td>
+                    <td className="py-1.5 tabular text-body-sm text-ink">
+                      {moneyMonthly(data.joiningCtc)}
+                    </td>
+                    <td className="py-1.5 font-sans text-body-sm text-ink-muted">Joining</td>
+                  </tr>
+                ) : null}
                 {data.history.map((row) => (
                   <tr key={row.effectiveFrom} className="border-b border-rule last:border-b-0">
                     <td className="py-1.5 tabular text-body-sm text-ink-muted">{formatDate(row.effectiveFrom)}</td>

@@ -5564,3 +5564,27 @@ at all. A figure that is legitimately absent and a figure that failed to arrive
 look identical when the empty state is a dash, and there is no way for the reader
 to tell which they are looking at. That is the general rule this fix is an
 instance of.
+
+---
+
+### FIX-31 — The pay history runs from joining, and shows all of it
+
+No migration. `lib/increment/queries.ts` and the salary band's history table.
+
+Asked for: "instead of last 3 increments show all the increments, like from
+joining salary till current."
+
+| # | Decision | Why |
+|---|---|---|
+| F31-1 | The cap is gone and the order reversed | Three rows, newest first, cut the start off anybody with a few years of service — which is the part that shows whether a 25% ask is a correction or a pattern. Oldest first is what "from joining till current" means, and it matches the Employment tab HR already reads. |
+| F31-2 | **The baseline is the COLUMN, and JOINING rows are excluded from the query** | `employment_records.joining_ctc` became a column at P19E-1 precisely so that filling it in months later could not be read as a rise over today's salary — that mistake wrote a 620% hike onto somebody's record. Legacy `JOINING` rows still sit in `salary_history` (P19E-4 leaves them: the table is append-only for every caller, and the guarantee is worth more than a tidy table), so rendering both would show the joining figure twice. |
+| F31-3 | The baseline row carries no previous and no percentage | It is what the ledger starts FROM. A baseline with a rise against it describes an increment that never happened. |
+| F31-4 | The joining DATE comes from `profiles`, not the employment record | 0024 made that the one joining date, after the two copies were found disagreeing — written by one screen and read by another. |
+| F31-5 | The heading stops saying "three" | A title that undercounts what is beneath it is its own small lie. |
+| F31-6 | The empty state now needs BOTH to be absent | A joining figure with no revisions is a history, not an emptiness — it was previously judged on the revisions alone, so somebody who has never had a rise would have been told there was nothing on record while their starting salary sat in the column. |
+
+**Verification — 11 checks, 0 failed.** Also asserted unchanged: every figure is
+still monthly, the table still scrolls rather than widening the page, and the
+panel is still HR-and-MD-only (§5).
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
