@@ -154,22 +154,54 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
       {/* -- Three signatures and the stamp, as printed. The form exists to be
             signed; §13.7 makes the pack a first-class output and this block is
             the reason. -- */}
+      {/* -- FOUR CELLS OF EQUAL WIDTH, each with a rule above its label.
+
+            None of `.print-sig`, `.print-sig-line` or `.print-sig-label` had a
+            rule in print.css, so this block rendered as four bare words in a row
+            with no lines at all — `<span>` is inline, so the "signature line"
+            drew nothing whatever. The rules are added there; the markup below
+            gains only the names and the MD's mark.
+
+            THE MD'S SIGNATURE APPEARS ONLY WHEN THEY HAVE APPROVED. `mdApproval`
+            is null until the appraisal is CLOSED with an MD review recorded
+            against it, so a sheet printed mid-flow shows a ruled line exactly as
+            before. The same document either way — an unfinished record cannot be
+            made to look finished by printing it (P34-11). -- */}
       <div className="print-block print-signatures">
         <div className="print-sig">
           <span className="print-sig-line" />
           <span className="print-sig-label">Supervisor Signature</span>
+          <span className="print-sig-name">{review.supervisorName ?? " "}</span>
+          <span className="print-sig-when">Date: ____________</span>
         </div>
         <div className="print-sig">
           <span className="print-sig-line" />
           <span className="print-sig-label">HR Signature</span>
+          <span className="print-sig-name">&nbsp;</span>
+          <span className="print-sig-when">Date: ____________</span>
         </div>
         <div className="print-sig">
-          <span className="print-sig-line" />
+          <span className="print-sig-line">
+            {review.mdApproval?.signature ? (
+              // A data URI, so the page needs no network at print time — and
+              // this renders to paper, where the optimiser has no part to play.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={review.mdApproval.signature} alt="" className="mark" />
+            ) : null}
+          </span>
           <span className="print-sig-label">MD Signature</span>
+          <span className="print-sig-name">{review.mdApproval?.name ?? " "}</span>
+          <span className="print-sig-when">
+            {review.mdApproval
+              ? `Approved ${formatDate(review.mdApproval.at)}`
+              : "Date: ____________"}
+          </span>
         </div>
         <div className="print-sig">
           <span className="print-sig-line" />
           <span className="print-sig-label">Company Stamp</span>
+          <span className="print-sig-name">&nbsp;</span>
+          <span className="print-sig-when">&nbsp;</span>
         </div>
       </div>
 

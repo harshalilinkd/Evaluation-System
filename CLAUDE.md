@@ -5738,3 +5738,59 @@ neutral grey, no tier token reaches the sheet, the grading scale still comes fro
 guards the blocks and the signature panel.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-35 — The worker sheet had four unstyled classes, and the MD can now sign it
+
+`app/print/print.css`, `app/print/worker-sheet.tsx`, `lib/worker/review.ts`,
+`components/appraise/signature-card.tsx`. No migration — 0065 already added
+`profiles.signature_image`.
+
+#### The worker sheet was not designed badly; it was not styled at all
+
+Four class names on that document had **no rule in `print.css` whatsoever**:
+
+| Class | What it was meant to be | What it rendered as |
+|---|---|---|
+| `.print-block-title` | every section heading | an unstyled browser `<h2>` |
+| `.print-sig` | a signature cell | an unsized `<div>` |
+| `.print-sig-line` | the line above the label | **nothing** — `<span>` is inline, so it drew no border at all |
+| `.print-sig-label` | the caption beneath | default body text |
+
+So "Supervisor Signature · HR Signature · MD Signature · Company Stamp" was four
+bare words in a row with nothing above them to sign on. That is the whole of the
+report, and it is the third time this session the same root cause has appeared:
+markup written against class names nobody added (FIX-33 was the report sheet).
+
+| # | Decision | Why |
+|---|---|---|
+| F35-1 | The rules were written; the markup's names were not changed | They are accurate names and the sheet is otherwise correct. Renaming to borrow the report sheet's classes would have coupled two documents that legitimately differ. |
+| F35-2 | Four equal-width cells, each with a rule, a label, a name line and a date line | The owner's "align all signature authority fields". Every cell carries all four rows even where three are blank, so the labels sit on one line and the dates on another — a cell with fewer rows is what pulls a signature panel out of true. |
+
+#### The MD's signature, on the worker appraisal
+
+The flow as the owner set it out: HR sends the form → the supervisor fills it and
+proposes a percentage → HR passes the proposal to the MD → **the MD approves**,
+and only then does their mark appear.
+
+| # | Decision | Why |
+|---|---|---|
+| F35-3 | **Three conditions, all required**: CLOSED, an MD review stamped, and somebody recorded as having decided | None is sufficient alone. CLOSED is reachable by HR on a sheet with no pay change (W1-11), and a decisions row exists from the moment the supervisor records a percentage. Signing on either of those would put the MD's name on something they never saw. |
+| F35-4 | No signature on file still records WHO approved | The name prints over a ruled line. That is a record of the decision without claiming a mark nobody uploaded. |
+| F35-5 | Mid-flow prints a ruled line, exactly as before | P34-11: the same document either way, so an unfinished record cannot be made to look finished by printing it. |
+
+#### The blurred mark
+
+| # | Decision | Why |
+|---|---|---|
+| F35-6 | `object-fit: contain` was doing nothing | It applies only when both dimensions are set, and neither was. |
+| F35-7 | One height for every signature, aspect kept, centred on the rule | `max-height` only ever SHRINKS, so a small scan rendered small and a large one rendered at the cap — three signatures at three sizes, each starting at the left edge and ending somewhere different. That is the misalignment. |
+| F35-8 | **Sharpness is a property of the FILE, and is said where it can still be acted on** | The image is stored exactly as uploaded and printed at 11mm; the browser maps its own pixels into that box, so a 60px-tall scan prints at roughly 50dpi however it is styled. No CSS adds detail that is not there. The upload card now asks for at least 300px — by the time somebody notices, they are holding a printed sheet. |
+
+**Verification — 21 checks, 0 failed.** §7a re-checked in full: every colour
+reaching paper is still black, white or a neutral grey, and no tier token
+reaches the worker sheet. The new rules were confirmed present in the BUILT
+stylesheet, not just the source (UI-5).
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.

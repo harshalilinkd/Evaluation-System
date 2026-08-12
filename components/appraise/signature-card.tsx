@@ -131,7 +131,15 @@ export function SignatureCard({ initial }: { initial: string | null }) {
           {image ? "Replace" : "Upload a signature"}
         </Button>
         <p className="mt-1.5 font-sans text-body-sm text-ink-muted">
-          PNG, JPEG or GIF, under 300KB. A cropped scan on white reads best.
+          PNG, JPEG or GIF, under 300KB. A cropped scan on white reads best.{" "}
+          {/* -- SIZE, said in the one place it can still be acted on.
+                The image is stored exactly as uploaded and printed at 11mm tall,
+                so the browser maps its own pixels into that box: a 60px-tall
+                scan prints at roughly 50dpi and looks soft on paper however it
+                is styled. No CSS can add detail that is not in the file, and by
+                the time somebody notices they are holding a printed sheet. -- */}
+          <span className="font-medium">At least 300px tall</span>, or it will look
+          soft when printed.
         </p>
       </div>
 

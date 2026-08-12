@@ -719,12 +719,117 @@ dl.print-meta dd {
 .print-signature .mark {
   position: absolute;
   bottom: 0.6mm;
-  left: 0;
-  max-height: 12mm;
-  max-width: 90%;
-  object-fit: contain;
+  /*
+    CENTRED ON THE RULE, which is where a signature sits on paper. It was pinned
+    to the left edge, so a wide mark and a narrow one started in the same place
+    and ended in different ones — the three cells never lined up with each other.
+  */
+  left: 50%;
+  transform: translateX(-50%);
+  /*
+    ONE HEIGHT FOR EVERY SIGNATURE, whatever was uploaded. `max-height` only ever
+    shrinks, so a small scan rendered small and a large one rendered at the cap —
+    three signatures at three sizes on one sheet. A fixed height with auto width
+    keeps the aspect ratio and makes them siblings.
+
+    Sharpness is a property of the FILE, not of this rule: the browser maps the
+    image's own pixels into this box, so a 60px-tall scan prints at about 50dpi
+    however it is styled. That is why the upload card asks for 300px or more.
+  */
+  height: 11mm;
+  width: auto;
+  max-width: 92%;
   /* Print engines drop background graphics by default but honour <img>. A
      signature that vanishes on paper is worse than one that was never added. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* ==========================================================================
+   The worker sheet's own blocks
+
+   FOUR CLASSES ON THAT SHEET HAD NO RULES AT ALL: `.print-block-title`,
+   `.print-sig`, `.print-sig-line` and `.print-sig-label`. So every section
+   heading rendered as an unstyled browser <h2>, and the signature panel was
+   four bare words in a row with no lines above them at all — which is the whole
+   of "not structured, not professional" on that document.
+
+   Same root cause as the report sheet (FIX-33): markup written against class
+   names nobody added. Written here rather than by renaming the markup, because
+   the names are accurate and the sheet is otherwise correct.
+   ========================================================================== */
+
+.print-block-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 10.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 0.75pt solid #000;
+  padding-bottom: 1.2mm;
+  margin: 6mm 0 2.5mm;
+}
+
+/*
+  The signature panel. Four cells of equal width so the rules line up with each
+  other — the owner's "align all signature authority fields".
+*/
+.print-block.print-signatures {
+  display: flex;
+  gap: 8mm;
+  margin-top: 10mm;
+  padding-top: 5mm;
+  border-top: 0.75pt solid #000;
+}
+
+.print-sig {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/*
+  The LINE, which did not exist. `<span>` is inline by default, so it drew
+  nothing whatever CSS it was given until it was made a block.
+*/
+.print-sig-line {
+  display: block;
+  position: relative;
+  height: 14mm;
+  border-bottom: 0.5pt solid #000;
+}
+
+.print-sig-label {
+  display: block;
+  margin-top: 1.6mm;
+  font-size: 7pt;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #555;
+}
+
+/* Who signed, under the label — printed only where the record says so. */
+.print-sig-name {
+  display: block;
+  margin-top: 0.4mm;
+  font-size: 9pt;
+  font-weight: 600;
+}
+
+.print-sig-when {
+  display: block;
+  font-size: 8pt;
+  color: #555;
+}
+
+/* The mark itself, on the rule. Same treatment as the report sheet's. */
+.print-sig-line .mark {
+  position: absolute;
+  bottom: 0.6mm;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 11mm;
+  width: auto;
+  max-width: 92%;
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }

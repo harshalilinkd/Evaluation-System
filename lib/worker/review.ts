@@ -51,6 +51,18 @@ export type WorkerReview = {
    * the screen says which of the two it is rather than showing a blank box.
    */
   currentCtcOnRecord: number | null;
+  /**
+   * The MD who approved, their mark and when — and ONLY once they have.
+   *
+   * The flow the owner set out: HR sends the form, the supervisor fills it and
+   * proposes a percentage, HR passes the proposal to the MD, and the MD approves
+   * or revises. The signature belongs to the last step and to no earlier one, so
+   * this is null until the appraisal is CLOSED with an MD review recorded
+   * against it. A sheet printed mid-flow shows a ruled line, exactly as it did
+   * before — the same document either way, which is what stops an unfinished
+   * record being made to look finished by printing it (P34-11).
+   */
+  mdApproval: { name: string; signature: string | null; at: string } | null;
 };
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -72,7 +84,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
   const { data: evaluation } = await supabase
     .from("worker_evaluations")
     .select(
-      "id, cycle_id, worker_id, supervisor_id, status, overall_tick, supervisor_submitted_at",
+      "id, cycle_id, worker_id, supervisor_id, status, overall_tick, supervisor_submitted_at, md_reviewed_at, closed_at",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -101,7 +113,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
         .eq("evaluation_id", evaluationId),
       supabase
         .from("worker_evaluation_decisions")
-        .select("salary_changed, old_ctc, increment_pct, new_ctc")
+        .select("salary_changed, old_ctc, increment_pct, new_ctc, decided_by, decided_at")
         .eq("evaluation_id", evaluationId)
         .maybeSingle(),
     ]);
@@ -118,6 +130,39 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
   const worker = byId.get(evaluation.worker_id);
+
+  /* -- THE MD'S APPROVAL, and only once it exists.
+
+        Three things must all be true: the appraisal is CLOSED, an MD review is
+        stamped on it, and somebody is recorded as having decided. Any one of
+        them alone is not an approval — CLOSED can be reached by HR on a sheet
+        with no pay change (W1-11), and a decisions row exists as soon as the
+        supervisor records a percentage.
+
+        Fetched separately because it is keyed on `decided_by`, which is not
+        known until the row above has been read. A second trip on a page that is
+        printed rather than typed into. -- */
+  const approvedAt = evaluation.closed_at && evaluation.md_reviewed_at ? evaluation.md_reviewed_at : null;
+  let mdApproval: WorkerReview["mdApproval"] = null;
+
+  if (approvedAt && decisions?.decided_by) {
+    const { data: md } = await supabase
+      .from("profiles")
+      .select("full_name, signature_image")
+      .eq("id", decisions.decided_by)
+      .maybeSingle();
+
+    if (md) {
+      mdApproval = {
+        name: md.full_name,
+        // Null is fine and stays null: the sheet then prints their NAME over a
+        // ruled line, which is a record of who approved without claiming a
+        // signature nobody uploaded.
+        signature: md.signature_image,
+        at: approvedAt,
+      };
+    }
+  }
 
   const supervisorRow = (responses ?? []).find((r) => r.layer === "SUPERVISOR");
   const supervisorAnswers = (supervisorRow?.answers ?? {}) as Record<string, WorkerTick>;
@@ -153,6 +198,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
             newCtc: decisions.new_ctc,
           }
         : null,
+      mdApproval,
     },
   };
 }
