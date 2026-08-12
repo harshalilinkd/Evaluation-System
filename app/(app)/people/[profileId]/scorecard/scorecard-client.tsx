@@ -380,7 +380,12 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   this page; what the score IS, is the first. */}
               <div className="flex gap-2.5">
                 <HeroTier tier="self" value={latest?.self_overall ?? null} />
-                <HeroTier tier="lead" value={latest?.lead_overall ?? null} />
+                {/* §5: not shown on your own card, at any status. The server
+                    has already nulled it — this stops an em dash standing in,
+                    which would read as "your manager did not rate you". */}
+                {card.showLead ? (
+                  <HeroTier tier="lead" value={latest?.lead_overall ?? null} />
+                ) : null}
                 <HeroTier tier="final" value={latest?.final_overall ?? null} />
               </div>
             </div>
@@ -445,6 +450,12 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 value={String(card.questions.length)}
                 hint="answered by at least one side"
               />
+              {/* -- Both of these describe the two sides against each other,
+                     so §5 keeps them off your own card. Not merely hidden for
+                     tidiness: `bothRated` is empty there, so "Agreed exactly"
+                     computed 0/0 and rendered NaN%. -- */}
+              {card.showLead ? (
+                <>
               <MiniStat
                 icon={<Handshake className="size-4" />}
                 accent="green"
@@ -466,6 +477,8 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 value={widest ? signed((widest.lead ?? 0) - (widest.self ?? 0)) : "—"}
                 hint={widest?.text}
               />
+                </>
+              ) : null}
               <MiniStat
                 icon={<Sparkles className="size-4" />}
                 accent="cyan"
@@ -513,7 +526,15 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 columns={[
                   { header: "Cycle", cell: (r) => r.period },
                   { header: "Self", cell: (r) => formatScore(r.self), align: "right" },
-                  { header: "Manager", cell: (r) => formatScore(r.lead), align: "right" },
+                  ...(card.showLead
+                    ? [
+                        {
+                          header: "Manager",
+                          cell: (r: (typeof comboRows)[number]) => formatScore(r.lead),
+                          align: "right" as const,
+                        },
+                      ]
+                    : []),
                   { header: "Final", cell: (r) => formatScore(r.final), align: "right" },
                 ]}
               >
@@ -522,11 +543,13 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   xKey="period"
                   bars={[
                     { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
+                    ...(card.showLead
+                      ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
+                      : []),
                   ]}
                   line={{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }}
                 />
-                <TierLegend showFinal lineFinal />
+                <TierLegend showFinal lineFinal showLead={card.showLead} />
               </ChartFigure>
             </DashboardCard>
           ) : null}
@@ -553,7 +576,15 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                     columns={[
                       { header: "Section", cell: (s) => s.label },
                       { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
-                      { header: "Manager", cell: (s) => formatScore(s.lead), align: "right" },
+                      ...(card.showLead
+                        ? [
+                            {
+                              header: "Manager",
+                              cell: (s: (typeof sections)[number]) => formatScore(s.lead),
+                              align: "right" as const,
+                            },
+                          ]
+                        : []),
                       { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                     ]}
                   >
@@ -562,13 +593,15 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                       height={320}
                       series={[
                         { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                        { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
+                        ...(card.showLead
+                          ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
+                          : []),
                         ...(radarHasFinal
                           ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
                           : []),
                       ]}
                     />
-                    <TierLegend showFinal={radarHasFinal} />
+                    <TierLegend showFinal={radarHasFinal} showLead={card.showLead} />
                   </ChartFigure>
                 </DashboardCard>
               ) : null}
@@ -622,7 +655,15 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 columns={[
                   { header: "Section", cell: (s) => s.label },
                   { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
-                  { header: "Manager", cell: (s) => formatScore(s.lead), align: "right" },
+                  ...(card.showLead
+                    ? [
+                        {
+                          header: "Manager",
+                          cell: (s: (typeof sectionBars)[number]) => formatScore(s.lead),
+                          align: "right" as const,
+                        },
+                      ]
+                    : []),
                   { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                 ]}
               >
@@ -631,13 +672,15 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   labelKey="label"
                   series={[
                     { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
+                    ...(card.showLead
+                      ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
+                      : []),
                     ...(sectionBarsHaveFinal
                       ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
                       : []),
                   ]}
                 />
-                <TierLegend showFinal={sectionBarsHaveFinal} />
+                <TierLegend showFinal={sectionBarsHaveFinal} showLead={card.showLead} />
               </ChartFigure>
             </DashboardCard>
           ) : null}
@@ -669,7 +712,12 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
               ramp: zero is agreement, and agreement is not a small amount of
               disagreement. Every bar is directly labelled, which is also what
               discharges the validator's contrast warning on cyan. */}
-          {sectionGaps.length > 0 ? (
+          {/* §5: guarded on showLead as well as on emptiness. `sectionGaps` is
+              derived from `q.lead`, which the server nulls on your own card, so
+              this is already empty there — but that is an indirect guard, and a
+              refactor that changed how the gaps are derived would silently
+              restore the card. The rule is stated where it applies. */}
+          {card.showLead && sectionGaps.length > 0 ? (
             <DashboardCard title="Where you and your lead agreed — and did not">
               {/* One toggle component for every chart on the page. This card
                   carried its own `useState` and its own hand-built table, which
@@ -746,7 +794,14 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 Renders even when nothing differs, and says so. "No answer
                 differs by 2 or more" is a real finding about a review — a card
                 that simply vanishes leaves the reader unsure whether it was
-                checked. */}
+                checked.
+
+                On your OWN card it is absent entirely. Its empty state reads
+                "this appears once both sides have rated the same questions",
+                which on a self-view is a promise the product must never keep
+                (§5) — a card that waits for ever for something forbidden is
+                worse than no card. */}
+            {card.showLead ? (
             <DashboardCard title="Where you and your lead saw it differently">
               {bothRated.length === 0 ? (
                 <p className="text-body-sm text-ink-muted">
@@ -798,6 +853,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 </>
               )}
             </DashboardCard>
+            ) : null}
           </div>
 
           {/* ---------- Every answer ----------
@@ -821,7 +877,11 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                       <th scope="col" className="type-label w-[168px] py-2 text-left font-bold text-ink">
                         Profile
                       </th>
-                      {["Self", "Manager", "Final"].map((h) => (
+                      {/* §5 again — header, profile track and cell all drop
+                          together. The lead track was drawn even here: a bar
+                          whose LENGTH is the manager's score is the same
+                          disclosure as the number. */}
+                      {["Self", ...(card.showLead ? ["Manager"] : []), "Final"].map((h) => (
                         <th
                           key={h}
                           scope="col"
@@ -850,16 +910,20 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                               row twice. */}
                           <div className="space-y-1">
                             <SectionBar decorative tier="self" value={q.self} />
-                            <SectionBar decorative tier="lead" value={q.lead} />
+                            {card.showLead ? (
+                              <SectionBar decorative tier="lead" value={q.lead} />
+                            ) : null}
                             <SectionBar decorative tier="final" value={q.final} />
                           </div>
                         </td>
                         <td className="tabular py-2.5 text-right text-body text-ink">
                           {formatScore(q.self)}
                         </td>
-                        <td className="tabular py-2.5 text-right text-body text-ink">
-                          {formatScore(q.lead)}
-                        </td>
+                        {card.showLead ? (
+                          <td className="tabular py-2.5 text-right text-body text-ink">
+                            {formatScore(q.lead)}
+                          </td>
+                        ) : null}
                         <td className="tabular py-2.5 text-right text-body font-medium text-ink">
                           {formatScore(q.final)}
                         </td>
@@ -868,7 +932,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                   </tbody>
                 </table>
               </div>
-              <TierLegend showFinal className="mt-4" />
+              <TierLegend showFinal showLead={card.showLead} className="mt-4" />
             </DashboardCard>
           ) : null}
 
@@ -906,7 +970,19 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
               <table className="w-full">
                 <thead>
                   <tr>
-                    {["Period", "Self", "Manager", "Final", "Promotion", "Increment %"].map((h) => (
+                    {/* §5: the Manager column is absent on your own card, not
+                        empty. The header and the cell are dropped TOGETHER —
+                        they are two literals describing one column, and the
+                        classic way a table like this breaks is one of them
+                        being edited without the other. */}
+                    {[
+                      "Period",
+                      "Self",
+                      ...(card.showLead ? ["Manager"] : []),
+                      "Final",
+                      "Promotion",
+                      "Increment %",
+                    ].map((h) => (
                       <th key={h} scope="col" className="type-label py-2 text-left font-bold text-ink">
                         {h}
                       </th>
@@ -918,7 +994,11 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                     <tr key={h.evaluation_id} className="border-t border-rule">
                       <td className="py-2 text-body text-ink">{h.period_label}</td>
                       <td className="tabular py-2 text-body text-ink">{formatScore(h.self_overall)}</td>
-                      <td className="tabular py-2 text-body text-ink">{formatScore(h.lead_overall)}</td>
+                      {card.showLead ? (
+                        <td className="tabular py-2 text-body text-ink">
+                          {formatScore(h.lead_overall)}
+                        </td>
+                      ) : null}
                       <td className="tabular py-2 text-body font-medium text-ink">
                         {formatScore(h.final_overall)}
                       </td>
@@ -1048,10 +1128,15 @@ function HeroTier({ tier, value }: { tier: "self" | "lead" | "final"; value: num
  */
 function TierLegend({
   showFinal = false,
+  showLead = true,
   lineFinal = false,
   className,
 }: {
   showFinal?: boolean;
+  /** §5: false on somebody's own card, where the manager series is not drawn.
+   *  A legend entry for a series that is not there is worse than no legend — it
+   *  tells the reader to look for something the page will never show them. */
+  showLead?: boolean;
   lineFinal?: boolean;
   className?: string;
 }) {
@@ -1062,7 +1147,7 @@ function TierLegend({
         className,
       )}
     >
-      {(["self", "lead"] as const).map((tier) => (
+      {(showLead ? (["self", "lead"] as const) : (["self"] as const)).map((tier) => (
         <li key={tier} className="flex items-center gap-1.5">
           <span aria-hidden className={cn("size-2.5 rounded-[2px]", TIER_CLASSES[tier].dot)} />
           {TIER_LABELS[tier]}

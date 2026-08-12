@@ -1128,11 +1128,16 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
             <p className="font-sans text-body-sm text-ink-muted">
               {String(ownHistory[0]?.period_label ?? ownHistory[0]?.cycle_name ?? "Your first cycle")}
             </p>
-            <dl className="grid grid-cols-3 gap-3">
+            {/* -- §5: "Your lead" is gone. `ownHistory` is always the reader's
+                   own row, so this was the LEAD layer shown to the evaluatee —
+                   which §17 forbids in any screen. The server nulls the figure
+                   as well, so it does not reach the browser; dropping the cell
+                   is what stops an em dash standing in its place and reading as
+                   "your manager did not rate you". -- */}
+            <dl className="grid grid-cols-2 gap-3">
               {(
                 [
                   ["You said", ownHistory[0]?.self_overall, "text-ink"],
-                  ["Your lead", ownHistory[0]?.lead_overall, "text-ink"],
                   ["Agreed", ownHistory[0]?.final_overall, "text-ink"],
                 ] as const
               ).map(([label, value, tone]) => (
@@ -1157,7 +1162,7 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
             columns={[
               { header: "Cycle", cell: (r) => String(r.period_label ?? r.cycle_name ?? "—") },
               { header: "You said", cell: (r) => score(r.self_overall), align: "right" },
-              { header: "Your lead", cell: (r) => score(r.lead_overall), align: "right" },
+              // No "Your lead" column — see the tiles above.
               { header: "Agreed", cell: (r) => score(r.final_overall), align: "right" },
             ]}
           >
@@ -1180,7 +1185,9 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
                 .map((row) => ({
                   label: String(row.period_label ?? row.cycle_name ?? "—"),
                   self: row.self_overall === null ? null : Number(row.self_overall),
-                  lead: row.lead_overall === null ? null : Number(row.lead_overall),
+                  // Always null on your own history (§5). Passed explicitly so
+                  // the chart keeps its three-series shape for other callers.
+                  lead: null,
                   final: row.final_overall === null ? null : Number(row.final_overall),
                 }))}
             />

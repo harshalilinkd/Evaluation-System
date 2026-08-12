@@ -31,6 +31,30 @@ export type LeadVariance = Views<"v_variance_by_lead">;
 export type RatingBucket = Views<"v_rating_distribution">;
 export type HistoryRow = Views<"v_employee_history">;
 
+/* -- §5's BLINDNESS, at the one place it can still leak.
+      0021 revoked the evaluatee's read of the LEAD layer on
+      `evaluation_responses`, which is why the per-question Manager column on a
+      person's own card is already empty. It could not do the same for
+      `evaluations.lead_overall`: that is a COLUMN on the row the evaluatee
+      legitimately owns, and RLS grants a ROW, not a column — the same wall
+      P5-4, P19-2 and W1-2 each had to build around.
+
+      So the aggregate walked straight past the invariant. A person's own
+      scorecard showed "Manager 3.59" beside their own 4.38, plotted a Manager
+      series against every cycle, and the dashboard told them "Your lead". §17
+      forbids exactly that — "the employee the lead's answers, in ANY screen,
+      export, report, notification or API response" — and an average IS the
+      lead's answers, summarised.
+
+      Stripped on the SERVER, so the figure never reaches the browser at all
+      rather than being hidden once it arrives. The screens are also told not
+      to draw the column (`showLead`), because a nulled score renders as an em
+      dash and an em dash means "not rated" — which would be a lie, and a more
+      confusing one than the leak. -- */
+function withoutLeadLayer(rows: HistoryRow[]): HistoryRow[] {
+  return rows.map((row) => ({ ...row, lead_overall: null }));
+}
+
 export type DashboardAudience = "hr" | "md" | "lead" | "employee";
 
 /** §9's matrix, reduced to the one question this screen asks. */
@@ -310,7 +334,9 @@ export async function getAnalytics(
       sections: sections.data ?? [],
       variance: variance.data ?? [],
       distribution: distribution.data ?? [],
-      ownHistory: history.data ?? [],
+      // Always the viewer's OWN row (`profile_id` is the viewer), so this is a
+      // self-view by construction and the lead layer never belongs in it.
+      ownHistory: withoutLeadLayer(history.data ?? []),
       timeline,
       needsAttention,
     },
@@ -366,6 +392,10 @@ export type Scorecard = {
   current: ScorecardCurrent | null;
   /** True when the viewer is the employee and the policy withholds detail. */
   redacted: boolean;
+  /** False when somebody is looking at their own card: §5 keeps the LEAD layer
+   *  off it entirely, so the manager tile, series, column and gap panel are not
+   *  rendered rather than rendered empty. */
+  showLead: boolean;
 };
 
 /**
@@ -521,6 +551,17 @@ export async function getScorecard(
   // whose policy says nothing about them.
   const redacted = viewerId === profileId && rated?.disclosure === "NONE";
 
+  /* -- Looking at your own card. §5: the LEAD layer is never shown to the
+        evaluatee, "at any status, including CLOSED" — so this is not gated on
+        disclosure the way `redacted` is. Disclosure decides whether somebody
+        may see their OUTCOME; blindness decides whether they may see their
+        manager's rating, and the answer to that is always no.
+
+        It applies to everybody looking at their own card, HR and the MD
+        included. They are evaluatees there like anybody else, and their
+        administrative view of other people is untouched. -- */
+  const ownCard = viewerId === profileId;
+
   return {
     ok: true,
     data: {
@@ -532,11 +573,13 @@ export async function getScorecard(
         department: department?.name ?? null,
         dateOfJoining: profile.date_of_joining,
       },
-      history: rows,
+      history: ownCard ? withoutLeadLayer(rows) : rows,
       latestSections: sections ?? [],
-      questions,
+      questions: ownCard ? questions.map((q) => ({ ...q, lead: null })) : questions,
       current,
       redacted,
+      // The screens read this to REMOVE the column rather than blank it (P20-3).
+      showLead: !ownCard,
     },
   };
 }
