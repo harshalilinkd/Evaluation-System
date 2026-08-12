@@ -143,24 +143,41 @@ export async function getEvaluationForm(
   const rows = snapshotRows as SnapshotRow[];
   const visibility = resolveVisibility(rows, answers);
 
-  /* -- Filter to this layer, then to what is currently visible -- */
+  /* -- Filter to this LAYER. Not to what is currently visible.
+
+        THIS USED TO DROP HIDDEN QUESTIONS FROM THE PAYLOAD ENTIRELY, and that
+        is why a conditional needed a page reload to appear. The browser was
+        never sent the question, so recomputing visibility on the client could
+        only ever hide MORE — it could not reveal something that had not
+        arrived. Answering "Yes" to Promotion recommendation therefore did
+        nothing until a refresh, at which point the server recomputed against
+        the saved answer and included it.
+
+        Every question for this layer is now sent, and `hiddenQuestionIds` is
+        the authority on what shows. `FormRenderer` has always filtered on it,
+        `buildZodSchema` recomputes it from the current answers, and both were
+        already correct — they were being handed an incomplete list.
+
+        WHAT THIS DOES NOT CHANGE. §6's rule is that a hidden question is
+        neither validated nor stored, and both of those are decided server-side
+        at submit from the frozen snapshot — untouched. And nothing crosses a
+        layer: `allowed` is still this layer's own questions, so no blindness
+        boundary moves. What is sent is the TEXT of a question this person will
+        see the moment they answer its parent. -- */
   const allowed = LAYER_ANSWERED_BY[layer];
   const layerRows = rows.filter((row) => allowed.includes(row.answered_by));
 
-  const visibleQuestions: FormQuestion[] = [];
+  const layerQuestions: FormQuestion[] = [];
   const hiddenQuestionIds: string[] = [];
 
   for (const row of layerRows) {
-    if (visibility.get(row.question_id) === true) {
-      visibleQuestions.push(toFormQuestion(row));
-    } else {
-      hiddenQuestionIds.push(row.question_id);
-    }
+    layerQuestions.push(toFormQuestion(row));
+    if (visibility.get(row.question_id) !== true) hiddenQuestionIds.push(row.question_id);
   }
 
   /* -- Group into sections, preserving snapshot order -- */
   const sections: FormSection[] = [];
-  for (const question of visibleQuestions) {
+  for (const question of layerQuestions) {
     const current = sections.at(-1);
     if (current && current.section === question.section) {
       current.questions.push(question);
@@ -216,7 +233,7 @@ export async function getEvaluationForm(
       evaluationStatus: evaluation.status,
       track: evaluation.track,
       sections,
-      questions: visibleQuestions,
+      questions: layerQuestions,
       answers,
       comments,
       isSubmitted: response?.submitted_at != null,

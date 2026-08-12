@@ -318,8 +318,16 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
     return Math.round((scored.reduce((a, b) => a + b, 0) / scored.length) * 100) / 100;
   }, [form.questions, values]);
 
-  const answered = form.questions.filter((q) => !isBlank(values[q.questionId])).length;
-  const total = form.questions.length;
+  /* -- Counted over what is ON SCREEN, not over the whole layer.
+        `form.questions` now carries every question for this layer including the
+        currently hidden conditionals — that is what lets one appear the moment
+        its parent is answered. The total has to exclude them or the progress
+        would count a question nobody has been asked. `answered` was already
+        safe (a hidden question has no answer) but is filtered too, so the two
+        halves of the fraction are drawn from the same list. -- */
+  const shown = form.questions.filter((q) => !hiddenQuestionIds.includes(q.questionId));
+  const answered = shown.filter((q) => !isBlank(values[q.questionId])).length;
+  const total = shown.length;
   /* -- Locked EITHER because it was submitted, or for one of the reasons the
         save gate carries and the render used to ignore — withdrawn, skipped, or
         moved past OPEN. Without the second half this screen rendered fully

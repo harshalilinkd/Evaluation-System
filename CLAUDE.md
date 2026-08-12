@@ -5397,3 +5397,51 @@ copy dialog offers both people and reports which link it made.
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean, mobile
 audit still 0 findings across 55 screens.
+
+---
+
+### FIX-27 — The conditional could not appear, because it was never sent
+
+No migration. `lib/forms/get-form.ts`, and the manager's progress count.
+
+**FIX-21 fixed half of this and I reported it as done.** The manager's screen was
+not recomputing visibility at all — the memo was missing and only its comment was
+there — so that fix was necessary. It was not sufficient, and the owner reported
+the same symptom again against a build that provably contained it (their
+screenshot shows the section navigator, which shipped two commits later).
+
+#### The half that was left
+
+`getEvaluationForm` split the layer's questions into `visibleQuestions` and
+`hiddenQuestionIds`, and returned **only the visible ones** as `questions` and
+`sections`.
+
+So a conditional that is hidden at page load **is not sent to the browser at
+all**. The client's recomputation can only ever hide MORE — it cannot reveal
+something that never arrived. Answering "Yes" to Promotion recommendation
+therefore did nothing until a reload, at which point the server recomputed
+against the saved answer and included it. Which is exactly what was reported,
+twice.
+
+| # | Decision | Why |
+|---|---|---|
+| F27-1 | Every question for the layer is sent; `hiddenQuestionIds` is the authority | It always was — `FormRenderer` has filtered on it since P12 and `buildZodSchema` recomputes it from the current answers. Both were already correct and were being handed an incomplete list. The fix is to stop lying to them. |
+| F27-2 | **§6 is untouched** | "A hidden question is neither validated nor stored" is decided SERVER-side at submit, from the frozen snapshot, by the same `resolveVisibility`. Sending the question's text to the browser changes nothing about what is accepted or written. |
+| F27-3 | **No blindness boundary moves** | The layer filter is unchanged: `allowed.includes(row.answered_by)`. What crosses the wire is a question from this person's OWN layer — the one they will see the moment they answer its parent — never the other side's. |
+| F27-4 | The manager's progress had to be re-counted | `total = form.questions.length` would now include the hidden conditionals and count a question nobody has been asked. `answered` was already safe (a hidden question has no answer) but is filtered too, so both halves of the fraction come from the same list. |
+| F27-5 | The employee's form needed no change | It counts `activeQuestions`, which `buildZodSchema` already filters. The same bug was in its payload and the same fix cures it. |
+| F27-6 | Nothing else needed changing, and that was checked rather than assumed | The print pack drops any narrative whose body is an em dash, so an unanswered hidden question cannot reach paper. Every other consumer either filters on `hiddenQuestionIds` or keys off an answer. |
+
+**Verification.** The reveal was simulated against the real `resolveVisibility`
+rather than described: unanswered → hidden, No → hidden, **Yes → shown**, Can be
+considered → shown, and back to No → hidden again. Plus 10 structural checks that
+the payload carries everything and every consumer still filters.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean; the
+invite-landing suite (15) and the mobile audit (55 screens, 0 findings) both
+still pass.
+
+**Worth recording against myself.** FIX-21 was reported as fixing this. It fixed
+a real and necessary part of it, and I did not check the whole path — I verified
+that the client recomputed, and never asked whether the client had anything to
+recompute WITH. A test that the memo exists is not a test that the field appears.
