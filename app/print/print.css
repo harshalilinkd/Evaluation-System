@@ -833,3 +833,33 @@ dl.print-meta dd {
   print-color-adjust: exact;
   -webkit-print-color-adjust: exact;
 }
+
+/*
+  THE STACKED MASTHEAD.
+
+  The three-column header — mark left, title centre, cycle right — made the title
+  compete with a block of small print for the top of the page, and left the
+  artwork reading as a corner logo rather than as a letterhead. Stacked and
+  centred, the mark sits over the title it belongs to and the cycle moves down
+  into the employee details where it is one fact among several.
+
+  The three-column rule is kept for the sheets that still use it.
+*/
+.print-header.print-header-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2mm;
+  text-align: center;
+}
+
+/* The caption sits UNDER the title here, not under the mark. */
+.print-header-stacked .print-brand-sub {
+  margin-top: 0.5mm;
+}
+
+/* A centred mark has no flank to balance against, so it can take more width. */
+.print-header-stacked .print-logo {
+  max-height: 15mm;
+  max-width: 54mm;
+}

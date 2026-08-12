@@ -51,22 +51,23 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
   return (
     <article className="print-sheet">
       {/* ---------- Masthead ---------- */}
-      <header className="print-header">
-        <div className="print-brand">
-          {/* The mark, with its caption beneath. Empty alt: a broken decorative
-              image renders as nothing, so a missing file leaves the caption
-              standing rather than a broken glyph on a signed document. */}
-          {/* eslint-disable-next-line @next/next/no-img-element -- rendered to paper; the optimiser has no part to play. */}
-          <img src="/logo.png" alt="" className="print-logo" />
-          <span className="print-brand-sub">Performance Evaluation</span>
-        </div>
+      {/* -- CENTRED AND STACKED, at the owner's instruction.
+
+            It was three columns — mark on the left, title in the middle, cycle
+            on the right — which made the title compete with a block of small
+            print for the top of the page and left the mark reading as a corner
+            logo rather than as a letterhead. The cycle moves down into the
+            employee details, where it is one fact among several rather than a
+            second heading.
+
+            Empty alt on the mark: a broken decorative image renders as nothing,
+            so a missing file leaves the caption standing rather than putting a
+            broken glyph on a signed document. -- */}
+      <header className="print-header print-header-stacked">
+        {/* eslint-disable-next-line @next/next/no-img-element -- rendered to paper; the optimiser has no part to play. */}
+        <img src="/logo.png" alt="" className="print-logo" />
         <h1 className="print-title">Performance Evaluation Report</h1>
-        <span className="print-period">
-          <strong>Cycle</strong>
-          {header.cycleName} · {header.period}
-          <br />
-          {header.cycleType} cycle
-        </span>
+        <span className="print-brand-sub">Performance Evaluation</span>
       </header>
 
       {/* ---------- Band 1 ---------- */}
@@ -82,6 +83,16 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <dd>{header.dateOfJoining ? formatDate(header.dateOfJoining) : "—"}</dd>
           </div>
           <div><dt>Rated by</dt><dd>{header.leadName ?? "—"}</dd></div>
+          {/* -- THE CYCLE, as a third row rather than a corner block.
+                Three fields, so the grid stays a clean multiple of its three
+                columns — seven or eight would leave a ragged last row, and the
+                rule that hides the trailing border keys on the last three
+                children. Split into cycle, period and type because they are
+                three separate facts that were being run together with a
+                middle dot. -- */}
+          <div><dt>Cycle</dt><dd>{header.cycleName || "—"}</dd></div>
+          <div><dt>Period</dt><dd>{header.period || "—"}</dd></div>
+          <div><dt>Cycle type</dt><dd>{header.cycleType ? `${header.cycleType}` : "—"}</dd></div>
         </dl>
 
         <table className="print-table">
@@ -313,20 +324,26 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
         {[
           {
             who: "Manager",
-            /* -- NAMED, so the line says whose it is.
-                  It was blank, which left whoever handed the sheet round to
-                  work out which of three lines the manager should sign.
+            /* -- NAMED, AND DATED FROM WHAT THEY ACTUALLY DID.
 
-                  This does NOT make an unsigned line look signed, and that
-                  distinction is the reason it is safe: `when` stays null, so the
-                  row below still reads "Date: ____________" rather than
-                  "Reviewed 12-08-2026". A printed name over a blank rule and an
-                  empty date is a nameplate — which is what a signature block on
-                  paper has always been. P34-11's rule holds: signed where the
-                  database says so, ruled where it does not. -- */
+                  The date was blank, and the reason was real: nothing in the
+                  system records a manager SIGNING this report. HR reviews it and
+                  the MD approves it; the manager's act is submitting their
+                  ratings, and there was no field for that here.
+
+                  So the date is the one they earned — `leadSubmittedAt`, the
+                  moment they submitted — and the verb says which act it was.
+                  "Rated" rather than "Reviewed" or "Approved" is the whole
+                  distinction: it states what this person did without borrowing
+                  the meaning of what the two beside them did.
+
+                  The RULE above stays empty either way. A wet signature is still
+                  wanted on a printed sheet, and a recorded submission is not
+                  one — P34-11 holds: signed where the database says so, ruled
+                  where it does not. -- */
             name: header.leadName ?? null,
-            when: null as string | null,
-            verb: null as string | null,
+            when: meta.leadSubmittedAt,
+            verb: "Rated",
             mark: null as string | null,
           },
           {

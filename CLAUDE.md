@@ -5824,3 +5824,47 @@ WHAT TEST ASKED FOR      MANAGER PROPOSED         MANAGEMENT APPROVED
 **Verification — 11 checks, 0 failed**; mobile audit still 0 findings across 55
 screens. Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
 clean.
+
+---
+
+### FIX-37 — A letterhead, and the manager's date was blank for a reason
+
+No migration. `app/print/report-sheet.tsx` and `app/print/print.css`.
+
+#### The masthead
+
+Asked for: the mark centred over the title, and the cycle moved down beside the
+employee details.
+
+| # | Decision | Why |
+|---|---|---|
+| F37-1 | Stacked and centred | Three columns — mark left, title centre, cycle right — made the title compete with a block of small print for the top of the page, and left the artwork reading as a corner logo rather than as a letterhead. |
+| F37-2 | The cycle becomes an employee detail, split into three fields | It was a second heading in the corner; beside the employee it is one fact among several. Cycle, Period and Cycle type were being run together with a middle dot and are three separate things. |
+| F37-3 | **Three fields, not one or two** | The grid is three columns and the rule that hides its trailing border keys on the last three children (FIX-34). Seven or eight fields would leave a ragged last row and the doubled rule would come back. Nine is two rows of employee and one of cycle. |
+| F37-4 | The three-column header rule is KEPT for the sheets still using it | The evaluation sheet and the worker sheet are not this document and were not asked about. A variant class, not a replacement. |
+
+#### Why the manager's date was blank
+
+A fair question with a real answer: **nothing in the system recorded a manager
+signing this report.** HR reviews it and the MD approves it — both stamped, both
+printed. The manager's act is submitting their ratings, and there was no field
+for that on the signature block, so the line had a name and no date.
+
+| # | Decision | Why |
+|---|---|---|
+| F37-5 | Dated from `leadSubmittedAt` — the moment they actually submitted | It is the one dated act attributable to that person on this record. |
+| F37-6 | **The verb is "Rated", not "Reviewed" or "Approved"** | That is the whole distinction. Borrowing either of the other two words would state that the manager did what HR or the MD did — on a document whose entire purpose is recording who decided what. |
+| F37-7 | The rule above it stays empty | A wet signature is still wanted on a printed sheet, and a recorded submission is not one. P34-11 holds: signed where the database says so, ruled where it does not. |
+
+**Verification — 12 checks on this change, 0 failed, plus the 11 print checks
+still passing.** §7a re-confirmed: every colour reaching paper is black, white or
+neutral grey, no tier token, the grading scale still from the constant, A4 and
+the margins intact.
+
+**A check of mine was wrong again, and the fix is worth keeping.** It looked for
+the compiled rule in "the" print stylesheet, picked by name — and after a rebuild
+the chunk hash had moved, so it read a stale file and reported the rule missing
+when it was present. It now scans EVERY css chunk. Picking one build artefact by
+name is the same shape of mistake as pinning an assertion to a variable name.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
