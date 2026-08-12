@@ -31,8 +31,25 @@ export default async function PeoplePage() {
   const [{ data: people, error }, { data: departments }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, designation, department_id, reports_to, is_active")
-      .eq("track", "STAFF")
+      /* -- BOTH TEAMS, and this is the fix for a real gap rather than a
+            widening of §7.
+
+            The roster was `track = 'STAFF'`, so a production worker appeared
+            nowhere in it — and the Employment tab is reached from this table
+            and from nothing else. So there was no way at all for HR to record a
+            worker's salary, joining date or increment schedule, which is
+            exactly why the production appraisal's Current salary box says "Not
+            on their employment record". The panel asked for a figure the app
+            gave nobody a way to enter.
+
+            §7's isolation rule is about FUNCTIONS — never refactor a staff
+            evaluation path to serve the worker module. `profiles`,
+            `departments` and `employment_records` are the shared
+            infrastructure §7 explicitly lists, and this is a list of people
+            against a list of people. The staff EVALUATION columns stay staff:
+            the query below is unchanged and a worker simply has no row in it,
+            so nothing from one module is fed into the other's figures. -- */
+      .select("id, full_name, employee_code, designation, department_id, reports_to, is_active, track")
       .order("full_name"),
     supabase.from("departments").select("id, name").order("name"),
   ]);
@@ -63,6 +80,7 @@ export default async function PeoplePage() {
       departmentName: p.department_id ? (departmentName.get(p.department_id) ?? null) : null,
       leadName: p.reports_to ? (leadName.get(p.reports_to) ?? null) : null,
       isActive: p.is_active,
+      track: p.track,
       // A withdrawn participant (P10-6) is not "in progress" — the organisation
       // stopped asking. Reporting it as a status would put them in the chase
       // list for a form nobody is waiting on.

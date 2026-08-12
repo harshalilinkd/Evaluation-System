@@ -33,6 +33,11 @@ export type PersonRow = {
   departmentName: string | null;
   leadName: string | null;
   isActive: boolean;
+  /* -- Which team they are on. Production workers are appraised in their own
+        module (§7), so every staff-evaluation cell below reads "Production
+        team" for them rather than an em dash — a dash beside four other dashes
+        says "not rated yet", which is a different and untrue claim. -- */
+  track: string;
   status: Enums<"evaluation_status"> | null;
   excluded: boolean;
   self: number | null;
@@ -65,6 +70,11 @@ export function PeopleClient({
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ANY);
   const [status, setStatus] = React.useState(ANY);
+  /* -- Both teams are on one roster now, so there has to be a way to see one.
+        `ANY` is the default: HR looking for a person does not know or care
+        which module appraises them, and the point of one list is that they do
+        not have to. -- */
+  const [team, setTeam] = React.useState(ANY);
   const [showInactive, setShowInactive] = React.useState(false);
   const router = useRouter();
   // The per-row entrance animation went with the list. A grid of forty rows
@@ -77,6 +87,7 @@ export function PeopleClient({
       if (!showInactive && !r.isActive) return false;
       if (department !== ANY && r.departmentName !== department) return false;
       if (status !== ANY && r.status !== status) return false;
+      if (team !== ANY && r.track !== team) return false;
       if (!needle) return true;
       // Employee code as well as name: HR looks people up by code as often as
       // by spelling, and a name search alone makes them scroll.
@@ -86,7 +97,7 @@ export function PeopleClient({
         (r.designation ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [rows, search, department, status, showInactive]);
+  }, [rows, search, department, status, team, showInactive]);
 
   /*
      Counted against the CURRENT §8 statuses.
@@ -104,7 +115,12 @@ export function PeopleClient({
   */
   const counts = React.useMemo(
     () => ({
-      total: rows.filter((r) => r.isActive).length,
+      /* -- Counted PER TEAM, because one number over two modules answers
+            nothing: a production worker is never in a staff cycle, so folding
+            them into "Backend Team" would overstate it and folding them into
+            the stage counts would understate every one of those. -- */
+      staff: rows.filter((r) => r.isActive && r.track !== "WORKER").length,
+      workers: rows.filter((r) => r.isActive && r.track === "WORKER").length,
       open: rows.filter((r) => r.isActive && r.status === "OPEN").length,
       withHr: rows.filter(
         (r) => r.isActive && (r.status === "PENDING_HR_REVIEW" || r.status === "HR_APPROVED"),
@@ -177,11 +193,33 @@ export function PeopleClient({
         cell: ({ row }) => <GridCell value={dash(row.original.leadName)} />,
       },
       {
+        id: "team",
+        header: "Team",
+        size: 130,
+        cell: ({ row }) => (
+          <GridCell
+            value={row.original.track === "WORKER" ? "Production" : "Backend"}
+          />
+        ),
+      },
+      {
         id: "stage",
         header: "Stage",
         size: 160,
         cell: ({ row }) =>
-          row.original.excluded ? (
+          /* -- A WORKER IS NOT "not in this cycle". They are appraised in their
+                own module on their own rounds (§7), so saying they are absent
+                from a staff cycle is true and useless — and it reads as
+                somebody who was left out. Named, and linked to where their
+                appraisals actually are. -- */
+          row.original.track === "WORKER" ? (
+            <Link
+              href="/admin/worker-appraisals"
+              className="text-body-sm text-ink-muted underline-offset-2 hover:text-primary hover:underline"
+            >
+              Production appraisals
+            </Link>
+          ) : row.original.excluded ? (
             // P10-6: withdrawal is an `excluded_at`, not a status — somebody
             // nobody is waiting on should not sit in the chase list.
             <span className="rounded-pill bg-surface-mute px-2.5 py-1 text-[11px] font-medium text-ink-muted">
@@ -200,23 +238,36 @@ export function PeopleClient({
         header: "Self",
         size: 84,
         meta: { align: "right" },
-        cell: ({ row }) => <Score value={row.original.self} className={TIER_CLASSES.self.numeral} />,
+        cell: ({ row }) =>
+          row.original.track === "WORKER" ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : (
+            <Score value={row.original.self} className={TIER_CLASSES.self.numeral} />
+          ),
       },
       {
         id: "lead",
         header: "Manager",
         size: 84,
         meta: { align: "right" },
-        cell: ({ row }) => <Score value={row.original.lead} className={TIER_CLASSES.lead.numeral} />,
+        cell: ({ row }) =>
+          row.original.track === "WORKER" ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : (
+            <Score value={row.original.lead} className={TIER_CLASSES.lead.numeral} />
+          ),
       },
       {
         id: "final",
         header: "Final",
         size: 84,
         meta: { align: "right" },
-        cell: ({ row }) => (
-          <Score value={row.original.final} className={TIER_CLASSES.final.numeral} />
-        ),
+        cell: ({ row }) =>
+          row.original.track === "WORKER" ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : (
+            <Score value={row.original.final} className={TIER_CLASSES.final.numeral} />
+          ),
       },
       {
         id: "actions",
@@ -274,13 +325,20 @@ export function PeopleClient({
         <div className="min-w-0">
           <h1 className="text-display-sm font-semibold text-ink">Team review</h1>
           <p className="mt-0.5 text-body-sm text-ink-muted">
+            {/* -- The list no longer depends on a staff cycle running, so it
+                  no longer says it does. It carried "No cycle is running yet.
+                  This list fills in once one is launched" over five populated
+                  rows, which was already odd; with the production team in it
+                  the sentence would be plainly wrong. Everybody is here always,
+                  and the CYCLE is what the stage and score columns describe. -- */}
             {cycleLabel
-              ? `Everyone in ${cycleLabel}. Open a person to see their scorecard.`
-              : "No cycle is running yet. This list fills in once one is launched."}
+              ? `Everybody, both teams. Stages and scores are for ${cycleLabel}.`
+              : "Everybody, both teams. Stages and scores fill in once a cycle is launched."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Tally label={TRACK_LABELS.STAFF} value={counts.total} />
+          <Tally label={TRACK_LABELS.STAFF} value={counts.staff} />
+          <Tally label={TRACK_LABELS.WORKER} value={counts.workers} />
           <Tally label="In progress" value={counts.open} tone="self" />
           <Tally label="With HR" value={counts.withHr} tone="warning" />
           <Tally label="Completed" value={counts.done} tone="final" />
@@ -315,6 +373,17 @@ export function PeopleClient({
               {d}
             </option>
           ))}
+        </select>
+
+        <select
+          value={team}
+          onChange={(e) => setTeam(e.target.value)}
+          aria-label="Filter by team"
+          className={SELECT_CLASS}
+        >
+          <option value={ANY}>Both teams</option>
+          <option value="STAFF">{TRACK_LABELS.STAFF}</option>
+          <option value="WORKER">{TRACK_LABELS.WORKER}</option>
         </select>
 
         {/* The §8 statuses that a live evaluation can actually hold. The four

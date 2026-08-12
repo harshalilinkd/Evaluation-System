@@ -6415,3 +6415,38 @@ would fail.
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings, one fewer), build
 clean.
+
+---
+
+### FIX-49 — Production workers had no route to their own employment record
+
+No migration. `app/(app)/admin/people/{page.tsx,people-client.tsx}`.
+
+Reported as workers not appearing in Team review, and asked as **"how will HR
+update their employment details"**. The second half is the real fault.
+
+**The Employment & pay tab is reached from this roster and from nothing else**,
+and the roster was `track = 'STAFF'`. So there was no way anywhere in the
+product for HR to record a production worker's salary, joining date or increment
+schedule — which is exactly why the production appraisal's Current salary box
+reads *"Not on their employment record — type it here"*. **The panel asked for a
+figure the app gave nobody a way to enter**, and HR had to retype it onto every
+appraisal because nothing could store it.
+
+| # | Decision | Why |
+|---|---|---|
+| F49-1 | **This does not widen §7, and the distinction matters** | §7's isolation rule is about FUNCTIONS — never refactor a staff evaluation path to serve the worker module. `profiles`, `departments` and `employment_records` are the shared infrastructure §7 explicitly lists, and this is a list of people against a list of people. The employment page was already track-agnostic; it reads those two tables and nothing else. |
+| F49-2 | **The staff evaluation query is untouched** | It is keyed on the staff cycle, so a worker simply has no row in it. Nothing from one module is fed into the other's figures, and a test asserts the page still touches no `worker_` table. |
+| F49-3 | A worker's Self / Manager / Final are an **em dash** | They are appraised on their own rounds. Rendering anything else there would be inventing a staff score. |
+| F49-4 | …but their **Stage says where their appraisals ARE** | "Not in this cycle" is true and useless — it reads as somebody who was left out of something. It links to Production appraisals instead. |
+| F49-5 | A **Team** column and filter, defaulting to both | HR looking up a person does not know or care which module appraises them, and the point of one list is that they do not have to. The labels come from `TRACK_LABELS`, not retyped. |
+| F49-6 | The tallies count **per team** | One number over two modules answers nothing: folding workers into "Backend Team" overstates it, and folding them into the stage counts understates every one of those. |
+| F49-7 | The header stops claiming the list depends on a cycle | It said *"No cycle is running yet. This list fills in once one is launched"* over five populated rows, which was already odd; with the production team in it the sentence is plainly wrong. Everybody is always here — the CYCLE is what the stage and score columns describe. |
+
+**Verification — 24 checks, 0 failed.** The module boundary is asserted from
+both sides: the staff evaluation read is proved still keyed on the staff cycle,
+the page proved to touch no `worker_` table, and all three staff score cells
+proved to render an em dash for a worker. Plus the route HR actually needs —
+the row menu, the row click and the track-agnostic employment page.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
