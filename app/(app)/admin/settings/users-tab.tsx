@@ -327,7 +327,12 @@ function ImportDialog({
             role="status"
             className="rounded-control border border-final/40 bg-final-tint px-3 py-2 font-sans text-body-sm text-final"
           >
+            {/* Created and updated are counted apart, because they are different
+                things to have happened to a file HR is about to upload again.
+                A row for somebody already here now AMENDS them rather than
+                failing, and saying so is what makes a re-upload legible. */}
             {state.created} {state.created === 1 ? "person" : "people"} created
+            {state.updated ? `, ${state.updated} updated` : ""}
             {state.failed ? `, ${state.failed} not imported — see below.` : "."}
           </p>
         ) : null}

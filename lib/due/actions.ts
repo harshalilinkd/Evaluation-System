@@ -199,7 +199,7 @@ export async function skipDueItem(input: {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: skipped, error } = await supabase
     .from("due_items")
     .update({
       status: "SKIPPED",
@@ -208,10 +208,53 @@ export async function skipDueItem(input: {
       actioned_at: new Date().toISOString(),
     })
     .eq("id", parsed.data.dueItemId)
-    .eq("status", "PENDING");
+    // Only a PENDING item can be skipped — which is a guard, and a guard is not
+    // a detection: a zero-row update succeeds, so without the select below the
+    // screen said "skipped" over an item somebody else had already actioned.
+    .eq("status", "PENDING")
+    .select("id");
 
   if (error) return cycleError("SAVE_FAILED", `Could not skip it: ${error.message}`);
 
+  if (!skipped || skipped.length === 0) {
+    return cycleError(
+      "ALREADY_ACTIONED",
+      "That one is no longer waiting — somebody has already created or skipped it. Reload to see where it stands.",
+    );
+  }
+
   revalidatePath("/admin/due");
   return { ok: true, data: { skipped: true } };
+}
+
+/**
+ * Recompute what is due, on demand.
+ *
+ * The nightly job has always done this, and only the nightly job — so somebody
+ * entered this morning did not appear on this screen until tomorrow. HR notices
+ * that on the day they add a joiner, which is exactly when they want to see the
+ * milestone appear.
+ *
+ * SAFE TO PRESS REPEATEDLY. `compute_due_items` writes PENDING items and
+ * nothing else — no evaluation, no message — and a unique index means a second
+ * run over the same window creates nothing (P22-1, P22-2). So this is a refresh,
+ * not an action with consequences, and it needs no confirmation.
+ */
+export async function refreshDueItems(): Promise<CycleResult<{ found: number }>> {
+  const auth = await requireHr();
+  if (!auth.ok) return auth;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("compute_due_items", {
+    // Defaulted in SQL to `current_date`, and left to SQL deliberately: the
+    // server's clock is UTC and "today" here has to be the database's day, not
+    // the lambda's (P17-2 hit the same distinction from the other side).
+    p_on: undefined,
+  });
+
+  if (error) return cycleError("SWEEP_FAILED", `Could not refresh what is due: ${error.message}`);
+
+  revalidatePath("/admin/due");
+  revalidatePath("/dashboard");
+  return { ok: true, data: { found: data ?? 0 } };
 }

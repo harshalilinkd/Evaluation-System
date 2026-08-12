@@ -119,6 +119,147 @@ export async function createUser(
  * Returns a message rather than throwing (§14). The caller decides whether that
  * is a form error or one row of an import report.
  */
+/**
+ * Amend somebody who is already on the system, from an import row.
+ *
+ * WHY THIS EXISTS. The import could create people and not update them, so
+ * re-uploading a corrected file failed every row with "somebody already has that
+ * email address" — and the correction HR had just made was the reason they were
+ * uploading it. The employment and question imports have always updated; this
+ * one was the odd path out.
+ *
+ * FOUR RULES, and each of them is about not destroying something.
+ *
+ * 1. THE PASSWORD IS IGNORED. The template carries a password column because
+ *    creating an account needs one. Applying it on an update would reset the
+ *    password of everybody in the file every time HR corrected a department —
+ *    silently locking out the whole company from a spreadsheet.
+ *
+ * 2. A BLANK COLUMN MEANS "NOT IN THIS FILE", never "set it to nothing"
+ *    (P19D-4). A file of corrected phone numbers must not wipe designations.
+ *
+ * 3. SALARY IS NOT TOUCHED. `salary_history` is append-only for every caller
+ *    (P19-3), so a re-import would either duplicate an opening row or write a
+ *    pay change nobody decided. A pay change is a deliberate act on the
+ *    Employment tab, not a side effect of fixing a typo.
+ *
+ * 4. ROLES ARE DIFFED, NOT REPLACED, and HR cannot remove their own
+ *    administrator access here — FIX-14, where a wholesale replace deleted the
+ *    caller's own HR row and then could not re-insert it, demoting them to
+ *    EMPLOYEE from an edit that never touched access.
+ */
+async function amendPerson(
+  profileId: string,
+  input: CreateUserInput,
+  actorProfileId: string,
+): Promise<{ ok: true; profileId: string } | { ok: false; error: string }> {
+  const supabase = await createClient();
+
+  /* -- Rule 2, as a helper. `undefined` drops the key from the patch entirely,
+        so PostgREST leaves the column alone rather than writing null. -- */
+  const keep = <T,>(v: T | null | undefined): T | undefined =>
+    v === null || v === undefined || v === "" ? undefined : (v as T);
+
+  let phoneE164: string | undefined;
+  if (input.phone) {
+    const { normaliseToE164 } = await import("@/lib/notify/phone");
+    const result = normaliseToE164(input.phone);
+    if (!result.ok) return { ok: false, error: `That mobile number is not usable: ${result.reason}` };
+    phoneE164 = result.e164;
+  }
+
+  const patch = {
+    full_name: keep(input.full_name),
+    employee_code: keep(input.employee_code),
+    phone_e164: phoneE164,
+    department_id: keep(input.department_id),
+    designation: keep(input.designation),
+    reports_to: keep(input.reports_to),
+    date_of_joining: keep(input.date_of_joining),
+    track: keep(input.track),
+  };
+
+  const { data: amended, error: profileError } = await supabase
+    .from("profiles")
+    .update(patch)
+    .eq("id", profileId)
+    // The zero-rows class, for the sixth time: an update that matches nothing
+    // succeeds, and this one would then report a row as imported.
+    .select("id");
+
+  if (profileError) {
+    return {
+      ok: false,
+      error: /duplicate|unique/i.test(profileError.message)
+        ? "That employee code is already used by somebody else."
+        : `Could not update them: ${profileError.message}`,
+    };
+  }
+  if (!amended || amended.length === 0) {
+    return { ok: false, error: "Their record could not be updated. Check you still have access." };
+  }
+
+  /* -- Employment: only the columns this file carried, and only when it carried
+        one. `coalesce` on the database side is not available through PostgREST,
+        so the patch simply omits what is blank. -- */
+  const employmentPatch = {
+    employment_type: keep(input.employment_type),
+    last_increment_date: keep(input.last_increment_date),
+    increment_frequency_months: keep(input.increment_frequency_months),
+  };
+  if (Object.values(employmentPatch).some((v) => v !== undefined)) {
+    const { error } = await supabase
+      .from("employment_records")
+      .update(employmentPatch)
+      .eq("profile_id", profileId);
+    // Not fatal. The profile is corrected either way, and naming the gap beats
+    // failing a row whose main purpose already succeeded (P19B-8).
+    if (error) {
+      return { ok: false, error: `Their details were updated but the employment record was not: ${error.message}` };
+    }
+  }
+
+  /* -- Rule 4. Everyone holds EMPLOYEE and it is never removed (P8-3). -- */
+  const wanted = new Set<string>(["EMPLOYEE", ...input.roles]);
+  const { data: held } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("profile_id", profileId);
+  const have = new Set((held ?? []).map((r) => r.role as string));
+
+  const toAdd = [...wanted].filter((r) => !have.has(r));
+  const toRemove = [...have].filter((r) => r !== "EMPLOYEE" && !wanted.has(r));
+
+  // Adds first: a partial failure then leaves MORE access rather than less,
+  // which is visible and harmless. The reverse is silent (FIX-14).
+  if (toAdd.length > 0) {
+    await supabase
+      .from("user_roles")
+      .insert(toAdd.map((role) => ({ profile_id: profileId, role: role as AppRole })));
+  }
+  if (toRemove.length > 0) {
+    const selfDemotion = profileId === actorProfileId && toRemove.some((r) => r === "HR_ADMIN");
+    if (!selfDemotion) {
+      await supabase
+        .from("user_roles")
+        .delete()
+        .eq("profile_id", profileId)
+        .in("role", toRemove as AppRole[]);
+    }
+  }
+
+  // §12, and no figure in the diff (§5, P19-10) — no salary is written here at
+  // all, so there is none to leak.
+  await supabase.rpc("log_admin_action", {
+    p_entity: "profile",
+    p_entity_id: profileId,
+    p_action: "person.amended_by_import",
+    p_diff: { fields: Object.keys(patch).filter((k) => patch[k as keyof typeof patch] !== undefined) } as Json,
+  });
+
+  return { ok: true, profileId };
+}
+
 async function provisionPerson(
   input: CreateUserInput,
   actorProfileId: string,
@@ -886,10 +1027,14 @@ export type ImportRowResult = {
   name: string;
   ok: boolean;
   error?: string;
+  /** True when this row amended somebody already on the system. */
+  updated?: boolean;
 };
 
 export type ImportState = {
   ran?: boolean;
+  /** People this run AMENDED rather than created. */
+  updated?: number;
   error?: string;
   created?: number;
   failed?: number;
@@ -1058,13 +1203,39 @@ export async function importUsers(
     };
   }
 
-  /* -- Pass 2: create. -- */
+  /* -- Pass 2: create, or AMEND where they are already here.
+
+        An email already on the system used to fail the row — so re-uploading a
+        corrected file failed on every person it was correcting, which is the one
+        time HR most wants to upload again. Existing people are matched by email
+        and updated; `amendPerson` carries the rules that make that safe (the
+        password is ignored, a blank column is left alone, salary is untouched,
+        roles are diffed).
+
+        Matched on EMAIL because it is the identifier the account is keyed on and
+        the one a spreadsheet reliably carries (P19C-14). An employee code can be
+        blank on a new joiner and can legitimately be corrected by this very
+        file. -- */
+  const alreadyHere = await supabase
+    .from("profiles")
+    .select("id, email")
+    .in("email", prepared.map((p) => p.input.email.toLowerCase()));
+  const idByEmail = new Map(
+    (alreadyHere.data ?? []).map((p) => [(p.email ?? "").toLowerCase(), p.id] as const),
+  );
+
   let created = 0;
+  let updated = 0;
   for (const item of prepared) {
-    const result = await provisionPerson(item.input, auth.session.profile.id);
+    const already = idByEmail.get(item.input.email.toLowerCase());
+    const result = already
+      ? await amendPerson(already, item.input, auth.session.profile.id)
+      : await provisionPerson(item.input, auth.session.profile.id);
+
     if (result.ok) {
-      created += 1;
-      rows.push({ line: item.line, name: item.name, ok: true });
+      if (already) updated += 1;
+      else created += 1;
+      rows.push({ line: item.line, name: item.name, ok: true, updated: Boolean(already) });
     } else {
       rows.push({ line: item.line, name: item.name, ok: false, error: result.error });
     }
@@ -1074,7 +1245,7 @@ export async function importUsers(
   revalidatePath("/admin/people");
 
   const failed = rows.filter((r) => !r.ok).length;
-  return { ran: true, created, failed, rows: rows.sort((a, b) => a.line - b.line) };
+  return { ran: true, created, updated, failed, rows: rows.sort((a, b) => a.line - b.line) };
 }
 
 /** The template HR downloads, served as a string the browser turns into a file. */

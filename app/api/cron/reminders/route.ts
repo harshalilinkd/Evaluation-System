@@ -121,6 +121,40 @@ export async function GET(request: Request) {
      Both run BEFORE the per-person reminders' early returns: a day with no
      evaluation to chase is still a day HR may have an increment due. */
   await supabase.rpc("compute_due_items", { p_on: today });
+
+  /* ---------- Prune the notification bell ----------
+
+     `app_notifications` (0059) grows one row per person per event for ever, and
+     nothing had ever removed one. A bell is a feed, not a record: what happened
+     is in `audit_log` and what was SENT is in `notifications_log`, both of which
+     are permanent by design and neither of which this touches.
+
+     NINETY DAYS, and only rows that have been READ. An unread notification is
+     still somebody's outstanding message however old it is — deleting one would
+     take away a task they never saw, which is the opposite of what the bell is
+     for. A read one has done its job.
+
+     The service client is what makes this possible at all: 0059 gives the table
+     no DELETE policy for anyone (N1-9 — a bell that can be emptied is a record
+     that can be made never to have existed), so this is the one caller that can
+     prune it, and it does so on a rule rather than on request.
+
+     Guarded like everything else here: a prune that fails must not stop the
+     chase, which is the job people actually notice. */
+  const cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  let pruned = 0;
+  try {
+    const { data } = await supabase
+      .from("app_notifications")
+      .delete()
+      .not("read_at", "is", null)
+      .lt("created_at", cutoff)
+      .select("id");
+    pruned = data?.length ?? 0;
+  } catch {
+    // Left at 0 and reported as such. Nothing downstream depends on it.
+  }
+
   /* -- GUARDED, because it can throw and take the whole job with it.
         `sendDueDigests` builds links through `absoluteUrl()`, which REFUSES to
         produce one when NEXT_PUBLIC_APP_URL is unset or points at localhost
@@ -386,6 +420,9 @@ export async function GET(request: Request) {
     skipped,
     // "Mark the row so HR can see it" — who could only be reached by email.
     contactGaps: digests.skipped,
+    // Read notifications older than ninety days, removed. Reported so a run
+    // that prunes nothing is distinguishable from one that never tried.
+    pruned,
     day: today,
   });
 }

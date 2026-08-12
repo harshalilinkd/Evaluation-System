@@ -6,7 +6,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createAndSend, skipDueItem } from "@/lib/due/actions";
+import { createAndSend, refreshDueItems, skipDueItem } from "@/lib/due/actions";
 import type { DueList, DueRow } from "@/lib/due/queries";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -46,6 +46,27 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   const [message, setMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [skipping, setSkipping] = React.useState<DueRow | null>(null);
   const [reason, setReason] = React.useState("");
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  /** Recompute what is due. A refresh, not an action with consequences. */
+  async function onRefresh() {
+    setRefreshing(true);
+    setMessage(null);
+    const result = await refreshDueItems();
+    setRefreshing(false);
+    if (!result.ok) {
+      setMessage({ tone: "error", text: result.error.message });
+      return;
+    }
+    setMessage({
+      tone: "ok",
+      text:
+        result.data.found === 0
+          ? "Nothing new is due. Anything added today with a milestone in the next few weeks would appear here."
+          : `${result.data.found} new ${result.data.found === 1 ? "item" : "items"} added.`,
+    });
+    router.refresh();
+  }
 
   async function onCreate(row: DueRow) {
     setBusyId(row.id);
@@ -203,8 +224,31 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         title="What is due"
         subtitle={
           list.rows.length === 0
-            ? "Nothing is waiting. New joiners and increments appear here as their dates approach."
+            ? "Nothing is waiting. New joiners and increments appear here as their dates approach. If you have just added somebody, press Check again."
             : `${list.thisMonth} ${list.thisMonth === 1 ? "thing needs" : "things need"} your attention this month · ${list.rows.length} in total`
+        }
+        /* -- ON DEMAND, because the sweep used to run only overnight.
+              Somebody entered this morning did not appear until tomorrow, and
+              HR notices that on the day they add a joiner — which is exactly
+              when they want to see the milestone appear.
+
+              A secondary action, not the primary one: the job on this screen is
+              acting on what is listed, and §13.3 gives that slot to "Create and
+              send". Safe to press repeatedly — the sweep writes pending items
+              and nothing else, and a unique index means a second run over the
+              same window creates nothing. -- */
+        action={
+          canAct ? (
+            <Button
+              variant="outline"
+              className="min-h-11"
+              disabled={refreshing}
+              onClick={() => void onRefresh()}
+            >
+              <RotateCcw aria-hidden className={cn("size-4", refreshing && "animate-spin")} />
+              {refreshing ? "Checking…" : "Check again"}
+            </Button>
+          ) : undefined
         }
       />
 

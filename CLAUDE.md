@@ -5219,3 +5219,84 @@ is not an escape JavaScript recognises, so the class silently collapsed to
 recorded this family three times now — the comment trap, the substring trap, and
 this. The standing remedy is the same: **prefer a plain `indexOf`/`slice` over a
 regex you had to escape through another language.**
+
+---
+
+### FIX-24 — The outstanding list, closed
+
+No migration. Five items, one of which turned out to be already done.
+
+#### 1 · "Start increment" — already delivered
+
+P10-B did it and §18's STATUS was stale: the wizard reads `presetCycleType` and
+opens on INCREMENT. Confirmed by test rather than by reading the log, which is
+the point — **a to-do list that is not checked against the code accumulates
+entries that are no longer true.**
+
+#### 2 · What is due, on demand
+
+`compute_due_items` ran only from the nightly job, so somebody entered this
+morning did not appear until tomorrow — and HR notices that on the day they add
+a joiner.
+
+| # | Decision | Why |
+|---|---|---|
+| F24-1 | A SECONDARY action, not the primary one | §13.3 gives that slot to "Create and send", which is the job on this screen. This is a refresh. |
+| F24-2 | Safe to press repeatedly, and therefore no confirmation | The sweep writes PENDING items and nothing else — no evaluation, no message (P22-1) — and a unique index means a second run over the same window creates nothing (P22-2). |
+| F24-3 | "Today" is decided by the DATABASE | `p_on` is left to its SQL default. A Vercel function runs in UTC and passing the lambda's date would put the window a day out for part of every evening — the same distinction P17-2 hit from the other side. |
+| F24-4 | **`skipDueItem` was another silent write** | `.eq("status", "PENDING")` is a guard, and a guard is not a detection: a zero-row update succeeds, so the screen said "skipped" over an item somebody else had already actioned. Sixth appearance. |
+
+#### 3 · The bell is pruned
+
+`app_notifications` (0059) grew one row per person per event for ever and
+nothing had ever removed one.
+
+| # | Decision | Why |
+|---|---|---|
+| F24-5 | Ninety days, and **only rows that have been READ** | An unread notification is still somebody's outstanding message however old it is; deleting one would take away a task they never saw, which is the opposite of what a bell is for. |
+| F24-6 | A feed, not a record — and the records are untouched | What happened is in `audit_log`; what was SENT is in `notifications_log`. Both are permanent by design and neither is touched. A test asserts no delete reaches either. |
+| F24-7 | The cron is the only caller that CAN | 0059 gives the table no DELETE policy for anyone (N1-9 — a bell that can be emptied is a record that can be made never to have existed), so this prunes on a rule rather than on request. |
+| F24-8 | Guarded, and the count is reported | A prune failure must not stop the nightly chase, which is the job people actually notice; and a run that pruned nothing must be distinguishable from one that never tried. |
+
+#### 4 · The employee import can update
+
+Re-uploading a corrected file failed every row with "somebody already has that
+email address" — at the one moment HR most wants to upload again. The employment
+and question imports have always updated; this was the odd path out.
+
+**Four rules, each about not destroying something.**
+
+| # | Decision | Why |
+|---|---|---|
+| F24-9 | **The password is ignored on an update** | The template carries one because creating an account needs one. Applying it on an update would reset the password of everybody in the file every time HR corrected a department — locking out the company from a spreadsheet. |
+| F24-10 | A blank column means "not in this file", never "set it to nothing" | P19D-4. A file of corrected phone numbers must not wipe designations. `undefined` drops the key so PostgREST leaves the column alone. |
+| F24-11 | Salary is not touched at all | `salary_history` is append-only for every caller (P19-3), so a re-import would either duplicate an opening row or write a pay change nobody decided. A pay change is a deliberate act on the Employment tab, not a side effect of fixing a typo. |
+| F24-12 | Roles are diffed and HR cannot demote themselves | FIX-14 exactly: a wholesale replace deleted the caller's own HR row and could not re-insert it, demoting them from an edit that never touched access. |
+| F24-13 | Matched on EMAIL | It is what the account is keyed on and what a spreadsheet reliably carries (P19C-14). An employee code can be blank on a new joiner and can legitimately be corrected BY this file. |
+| F24-14 | Created and updated are counted apart | They are different things to have happened to a file somebody is about to upload again. |
+
+#### 5 · A production worker has a scorecard
+
+Every one of P16's six views filters `track = 'STAFF'` (P16-6), so a worker
+opening `/scorecard` got a page of em dashes — which reads as broken rather than
+as "you are on the other form".
+
+| # | Decision | Why |
+|---|---|---|
+| F24-15 | Two cards, not one card with branches | §7 forbids refactoring a staff function to serve the worker module. The route picks between them and they share nothing else. |
+| F24-16 | **It shows outcomes, and the absence of the detail is EXPLAINED** | 0047 admits a worker to their own SELF layer only; the supervisor's per-quality ticks and comment are for the supervisor, HR and management. That is a disclosure decision already made in the database — the card states it in words rather than leaving an unexplained gap (§13.4). |
+| F24-17 | The salary block is not queried at all | 0064 leaves `worker_evaluation_decisions` to HR and the MD. Not querying it makes the absence structural rather than a filter somebody has to remember — P19-2's reasoning for the employee's own employment dates. |
+| F24-18 | The overall is the WORD | §11: on this track the overall IS the supervisor's tick, never a mean; and §6.2 keeps the 5/3/1 analytics mapping off a worker's own sheet, which is the most worker-facing surface there is. |
+| F24-19 | Two queries merged in TypeScript, not an embedded join | `types/database.ts` is hand-authored (P1-6) and declares no relationship between the two tables, and supabase-js resolves an embed from exactly that at compile time. Adding a Relationships entry to satisfy one query would be editing a generated-shaped file to describe something the next `db:types` run would rewrite. P3-7's pattern. |
+
+**Verification — 33 checks, 0 failed; the mobile audit still clean at 55
+screens.** Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
+clean.
+
+**A test of mine was wrong again, and it is the SAME family for the third time
+in two phases.** "The overall is never a number" matched `py-2.5` — a Tailwind
+spacing class. §18 has recorded the `gap-3` version of this twice. Rewritten to
+test the CLAIM — that the 5/3/1 mapping is absent — rather than to search for a
+digit. The general rule, now stated as generally as it can be: **an assertion
+must name the thing it is about, not a character that thing happens to
+contain.**
