@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { MoneyInput } from "@/components/appraise/money-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   annualisedPct,
@@ -138,7 +139,7 @@ export function HikeCalculator({
     setError(null);
 
     if (target === null || target <= 0) {
-      setError("Enter a percentage or a new CTC first.");
+      setError("Enter a percentage or a new salary first.");
       return;
     }
     setSaving(true);
@@ -164,7 +165,7 @@ export function HikeCalculator({
     setError(null);
 
     if (target === null || target <= 0) {
-      setError("Enter a percentage or a new CTC first.");
+      setError("Enter a percentage or a new salary first.");
       return;
     }
     if (!effectiveFrom) {
@@ -244,15 +245,20 @@ export function HikeCalculator({
           />
         </div>
         <div>
-          <Label htmlFor="hike-ctc">or a new CTC</Label>
-          <Input
+          {/* -- MONTHLY, and the label says which.
+                "or a new CTC" with an annual placeholder, on a panel whose own
+                readouts below are captioned "a month" — the reader had to guess,
+                and guessing wrong is a figure out by twelve. MoneyInput takes
+                and returns the ANNUAL value this control already worked in
+                (0061), so `applyCtc` is untouched and only what is TYPED
+                changes. -- */}
+          <Label htmlFor="hike-ctc">or a new salary</Label>
+          <MoneyInput
             id="hike-ctc"
-            inputMode="numeric"
-            value={target === null ? "" : String(target)}
-            onChange={(e) => applyCtc(e.target.value)}
+            value={target}
+            onValueChange={(annual) => applyCtc(annual === null ? "" : String(annual))}
             disabled={settled}
-            placeholder="e.g. 210000"
-            className="tabular mt-1"
+            className="mt-1"
           />
         </div>
       </div>

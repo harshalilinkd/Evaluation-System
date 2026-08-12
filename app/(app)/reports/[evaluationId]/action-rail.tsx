@@ -29,6 +29,7 @@ import {
   saveHrReview,
   sendToMd,
 } from "@/lib/reports/actions";
+import { MoneyInput } from "@/components/appraise/money-input";
 import { saveProposal } from "@/lib/increment/actions";
 import type { EvaluationReport } from "@/lib/reports/types";
 import { formatDateTime } from "@/lib/utils/date";
@@ -308,13 +309,24 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               Proposed salary
               <span className="font-normal normal-case tracking-normal">optional</span>
             </Label>
-            <Input
+            {/* -- MONTHLY, like every other salary field in the product.
+
+                  This was a bare number input with an annual-looking
+                  placeholder and no unit anywhere on it — sitting directly
+                  beside "Current salary ₹25,000.00 a month". Somebody typing the
+                  monthly figure they had just read would have had it stored as
+                  an ANNUAL one: out by twelve, in the direction that under-pays,
+                  on the number the MD approves.
+
+                  MoneyInput is the control the salary panel and the roster
+                  already use. It takes and returns the ANNUAL figure the column
+                  stores (0061) and shows the monthly one, so the conversion
+                  lives in one place and no caller has to remember which unit is
+                  in flight. -- */}
+            <MoneyInput
               id="hr_proposed_ctc"
-              value={proposedCtc}
-              onChange={(e) => setProposedCtc(e.target.value)}
-              inputMode="numeric"
-              placeholder="e.g. 210000"
-              className="tabular min-h-11"
+              value={proposedCtc === "" ? null : Number(proposedCtc)}
+              onValueChange={(annual) => setProposedCtc(annual === null ? "" : String(annual))}
             />
             <Textarea
               value={proposalNote}
@@ -324,7 +336,8 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               className="resize-y rounded-card border-rule bg-surface px-3.5 py-2.5 text-body shadow-none placeholder:text-ink-faint focus-visible:border-primary/50 focus-visible:ring-4 focus-visible:ring-primary/10"
             />
             <p className="font-sans text-body-sm text-ink-muted">
-              Saved with the record when you send. Leave blank to let the MD set the figure —
+              A monthly figure. Saved with the record when you send. Leave blank to let the MD set
+              the figure —
               either way they approve it, and the full salary panel is in section{" "}
               {report.narratives.paired.length > 0 ? 5 : 4} below.
             </p>

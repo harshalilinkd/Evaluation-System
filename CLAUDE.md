@@ -5483,3 +5483,43 @@ asserts the count is two rather than checking that "a" card was converted.
 
 **Verification — 12 checks, 0 failed.** Typecheck 0 errors, lint 0 errors (11
 pre-existing warnings), build clean.
+
+---
+
+### FIX-29 — Two salary inputs still asked for a bare number
+
+No migration. `action-rail.tsx` and `hike-calculator.tsx`.
+
+The reported card — "What {name} asked for" showing an annual figure above a gap
+reading "a month" — was already fixed and deployed in FIX-28. Re-reading it
+turned up two things that were not.
+
+#### Two inputs where the unit was left to be guessed
+
+| Where | What it looked like |
+|---|---|
+| The review rail's **Proposed salary** | a bare input, `placeholder="e.g. 210000"`, no unit anywhere |
+| The executive summary's **"or a new CTC"** | the same, on a panel whose own readouts are captioned "a month" |
+
+Both sit inches from "Current salary ₹25,000.00 **a month**". Somebody typing the
+monthly figure they had just read would have had it stored as an ANNUAL one —
+**out by twelve, in the direction that under-pays, on the number the MD
+approves.** That is the 733% class from the other direction, and it was the last
+place in the product where a salary could be typed without a stated unit.
+
+| # | Decision | Why |
+|---|---|---|
+| F29-1 | Both now use `MoneyInput` | The control the salary band and the roster already use. It takes and returns the ANNUAL figure the column stores (0061) and displays the monthly one, so the conversion lives in one place and no caller has to remember which unit is in flight. |
+| F29-2 | `applyCtc` is UNCHANGED | It already worked in annual. Converting there as well as inside the control would divide by twelve twice — the exact failure the shared control exists to prevent, reintroduced by being helpful. Asserted by a test rather than trusted. |
+| F29-3 | The label stops saying "CTC" | "CTC" is an annual word. On a field that now shows a monthly figure it is the wrong noun, and it is jargon on a screen a manager reads. |
+| F29-4 | **And the two error messages that still said "CTC" were changed with it** | Found by the check, not by reading: "Enter a percentage or a new CTC first." would have contradicted the label directly above it. A rename that stops at the visible label leaves the app arguing with itself. |
+| F29-5 | A standing sweep, not two more fixes | The suite walks every `.tsx` under `app/` and fails on any bare input whose placeholder is a salary-sized number. That is what found the second one after I had fixed the first, and it is what will catch the third. |
+
+**Verification — 11 checks, 0 failed**, including that no salary-sized
+placeholder survives anywhere in `app/`. Typecheck 0 errors, lint 0 errors (11
+pre-existing warnings), build clean.
+
+**My own check earned its place twice in one run.** It caught the "A monthly
+figure" hint that a `perl` substitution had silently failed to apply, and the two
+stale error strings I had not looked for. Both were reported as failures against
+code I had just written and believed was finished.
