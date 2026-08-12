@@ -296,7 +296,7 @@ export function ExecutiveSummary({
                 note={
                   role === "HR_ADMIN"
                     ? "HR proposes; the MD approves. Both figures are kept."
-                    : `HR proposed ${moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}.`
+                    : `The manager proposed ${moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}.`
                 }
               >
                 {/* -- Locked once the increment is settled. Past INTERVIEW_DONE

@@ -396,8 +396,15 @@ function HrProposal({
           <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
           {review?.employee_expectation_ctc ? (
             <>
+              {/* Monthly: it is the unit the employee TYPED it in (0061). There
+                  are TWO of these cards and FIX-21 converted the other one — this
+                  is the one HR actually reads, and it was left showing an annual
+                  figure beside a column of monthly ones. */}
               <p className="mt-1 tabular text-display-md text-ink">
-                {money(review.employee_expectation_ctc)}
+                {moneyMonthly(review.employee_expectation_ctc)}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {money(review.employee_expectation_ctc)} a year
               </p>
               {review.employee_expectation_note ? (
                 <p className="mt-1 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
@@ -411,7 +418,13 @@ function HrProposal({
         </article>
 
         <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">Your proposal against their ask</h3>
+          {/* -- ATTRIBUTED TO THE MANAGER, at the owner's instruction: the
+                manager recommends the figure and the MD decides it, so nothing
+                on this screen should read as HR's own proposal. "against their
+                ask" is kept because the number below is a DIFFERENCE, and a
+                heading of "Manager proposal" over a gap would name the wrong
+                thing. -- */}
+          <h3 className="type-label text-ink-muted">Manager proposal against their ask</h3>
           {gap.amount === null ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
               {review?.employee_expectation_ctc ? "Enter a proposal to compare." : "Nothing to compare."}
@@ -468,7 +481,24 @@ function HrProposal({
 
       {/* ---------- Row 3 ---------- */}
       <article className="card-surface space-y-4 p-6">
-        <h3 className="font-sans text-body font-medium text-ink">Your proposal</h3>
+        {/* -- ATTRIBUTED TO THE MANAGER, at the owner's instruction: "only HOD
+              and MD will decide salary", so nothing on this screen should read
+              as HR's own proposal. HR is recording the manager's figure and
+              passing it up.
+
+              THE ONE RISK, handled rather than argued: the field stays editable,
+              so HR CAN type something other than the manager's recommendation —
+              and then a heading reading "Manager proposed" would be untrue. The
+              line beneath says which it is, so the label can never claim an
+              authorship the number does not have. -- */}
+        <h3 className="font-sans text-body font-medium text-ink">Manager proposed salary hike</h3>
+        {data.managerHikePct !== null ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            {pctInput.trim() !== "" && Number(pctInput) !== data.managerHikePct
+              ? `Changed from the manager's ${data.managerHikePct}%. The MD sees both.`
+              : `The manager's recommendation of ${data.managerHikePct}%.`}
+          </p>
+        ) : null}
 
         {error ? <Notice tone="error">{error}</Notice> : null}
         {saved && !error ? <Notice tone="ok">Saved.</Notice> : null}
@@ -564,7 +594,7 @@ function HrProposal({
             ? "Saving…"
             : !dirty && proposed !== null
               ? "Proposal saved"
-              : "Save the proposal"}
+              : "Save manager proposal"}
         </Button>
       </article>
     </>
@@ -712,7 +742,11 @@ function MdApproval({
 
         {/* HR's figures, read-only for the MD — the trigger refuses a write. */}
         <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">HR proposed</h3>
+          {/* -- The SAME figure the previous card calls the manager's, so it
+                carries the same name. Leaving this as "HR proposed" while HR's
+                own screen said "Manager proposed" would have one number with two
+                authors depending on who was reading it. -- */}
+          <h3 className="type-label text-ink-muted">Manager proposed</h3>
           <p className="mt-1 tabular text-display-md text-ink">
             {moneyMonthly(review?.hr_proposed_ctc ?? null)}
           </p>

@@ -5445,3 +5445,41 @@ still pass.
 a real and necessary part of it, and I did not check the whole path — I verified
 that the client recomputed, and never asked whether the client had anything to
 recompute WITH. A test that the memo exists is not a test that the field appears.
+
+---
+
+### FIX-28 — The salary proposal is the manager's, and says so
+
+No migration. `salary-band.tsx` and the executive summary.
+
+**RENAMES, EXPLICITLY INSTRUCTED** — §0.2 requires that, and here it is: "only
+HOD and MD will decide salary… so basically instead of HR we need to mention
+Manager Proposed Hike or Manager Proposed salary."
+
+| Was | Now |
+|---|---|
+| Your proposal | Manager proposed salary hike |
+| Your proposal against their ask | Manager proposal against their ask |
+| Save the proposal | Save manager proposal |
+| HR proposed *(the MD's card)* | Manager proposed |
+| "HR proposed ₹X." *(executive summary)* | "The manager proposed ₹X." |
+
+| # | Decision | Why |
+|---|---|---|
+| F28-1 | The gap card keeps "against their ask" | Instructed as "Manager proposal", but the figure under that heading is a DIFFERENCE, not a proposal — a heading of "Manager proposal" over ₹3,750 would name the wrong thing. The attribution changes, which is what was asked for; the noun stays true. |
+| F28-2 | **The MD's card was renamed too, and that was not on the list** | It shows the SAME stored figure. Leaving it as "HR proposed" while HR's own screen said "Manager proposed" would give one number two authors depending on who was reading it — which is worse than either label alone. |
+| F28-3 | **The label cannot claim an authorship the number does not have** | The field stays editable, so HR can type something other than the manager's recommendation — and then "Manager proposed" is untrue. A line beneath the heading says which it is: "The manager's recommendation of 5%", or "Changed from the manager's 5%. The MD sees both." The rename is honoured and the screen still cannot lie. |
+
+#### And the same card was showing an annual figure
+
+"What {name} asked for" read ₹3,60,000 beside a column of monthly figures, and
+the gap directly under it read "₹3,750.00 a month". **There are TWO of these
+cards in this file and FIX-21 converted the other one** — the one HR does not
+look at. The fix-one-leave-the-sibling mistake, in the same file where I recorded
+it against the joining-salary write two days ago.
+
+Both now lead with the monthly figure and carry the annual beneath, and a test
+asserts the count is two rather than checking that "a" card was converted.
+
+**Verification — 12 checks, 0 failed.** Typecheck 0 errors, lint 0 errors (11
+pre-existing warnings), build clean.
