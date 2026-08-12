@@ -5922,3 +5922,28 @@ removed, and "time(s)" matched the sentence explaining why that wording went. Th
 suite now strips comments at the top of the file so every check inherits it,
 rather than each one remembering. §18 has recorded this repeatedly; putting the
 helper first is the structural fix rather than another correction.
+
+---
+
+### FIX-39 — "Employee & cycle", because the heading had stopped describing the block
+
+No migration. One heading on `app/print/report-sheet.tsx`.
+
+The owner asked for "Employee" to become "Employee Details" — and then asked
+whether that was still the right name, since the block now carries cycle facts
+too. It was not, and the question was the useful part.
+
+FIX-37 moved Cycle, Period and Cycle type into that block. A heading naming only
+the employee would then sit over three rows it does not describe — **the same
+class of small untruth as a column labelled with the wrong unit**, which is what
+FIX-20 and FIX-29 were both reported for. Cheap to fix now; the sort of thing
+nobody questions once it has been printed a hundred times.
+
+| # | Decision | Why |
+|---|---|---|
+| F39-1 | **Employee & cycle**, chosen by the owner from four options | It names both halves plainly, so the heading matches what is under it. "Appraisal details" would have covered both without saying what to expect; splitting into two blocks would have undone the move requested one change earlier. |
+| F39-2 | The alternatives were offered with the objection stated, not just the preference | §0.2 makes a label the owner's to set, and the honest way to ask is to include the option they originally named — with the reason it is worse — rather than quietly substituting a better one. |
+| F39-3 | The on-screen report needed no matching change | Checked rather than assumed: it has no equivalent heading. |
+
+**Verification — the 11 print checks and the 12 header checks all still pass.**
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.

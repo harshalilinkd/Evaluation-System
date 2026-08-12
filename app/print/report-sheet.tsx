@@ -78,8 +78,17 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
       </header>
 
       {/* ---------- Band 1 ---------- */}
+      {/* -- "EMPLOYEE & CYCLE", at the owner's instruction after asking whether
+            "Employee details" still fitted.
+
+            It did not, and the reason is worth keeping: FIX-37 moved the cycle,
+            period and type into this block, so a heading naming only the
+            employee would sit over three rows it does not describe. That is the
+            same class of small untruth as a column labelled with the wrong unit
+            — cheap to fix now, and the sort of thing nobody questions once it
+            has been printed a hundred times. -- */}
       <section className="print-block">
-        <h2>Employee</h2>
+        <h2>Employee &amp; cycle</h2>
         <dl className="print-meta">
           <div><dt>Name</dt><dd>{header.employeeName}</dd></div>
           <div><dt>Employee code</dt><dd>{header.employeeCode ?? "—"}</dd></div>
