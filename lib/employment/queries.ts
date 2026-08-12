@@ -104,6 +104,14 @@ export type IncrementCalendar = {
   dueThisMonth: number;
   dueNextMonth: number;
   overdue: number;
+  /* -- The two month keys the counts above were computed FROM.
+        Returned rather than recomputed on the screen: the tiles filter by
+        exactly the string their own number came from, so a count and the list
+        behind it cannot disagree — which they could across midnight, or with a
+        browser in a different zone from the server (§0.10 pins Asia/Kolkata for
+        the app; a client `new Date()` obeys the laptop). -- */
+  thisMonth: string;
+  nextMonth: string;
   next90: number;
 };
 
@@ -140,9 +148,20 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
 
   if (error) return cycleError("QUERY_FAILED", `Could not read employment records: ${error.message}`);
 
+  /* -- Hoisted, because the empty-calendar return needs these as well.
+        They are the two month keys the counts are computed from and the tiles
+        filter by, so both paths must carry them. -- */
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
+
   const ids = (records ?? []).map((r) => r.profile_id);
   if (ids.length === 0) {
-    return { ok: true, data: { rows: [], dueThisMonth: 0, dueNextMonth: 0, overdue: 0, next90: 0 } };
+    return {
+      ok: true,
+      data: { rows: [], dueThisMonth: 0, dueNextMonth: 0, overdue: 0, next90: 0, thisMonth, nextMonth },
+    };
   }
 
   const [{ data: people }, { data: departments }] = await Promise.all([
@@ -179,11 +198,6 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
 
   rows.sort((a, b) => a.nextIncrementDate.localeCompare(b.nextIncrementDate));
 
-  const now = new Date();
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const nextDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const nextMonth = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
-
   return {
     ok: true,
     data: {
@@ -192,6 +206,8 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
       dueNextMonth: rows.filter((r) => r.nextIncrementDate.startsWith(nextMonth)).length,
       overdue: rows.filter((r) => r.daysRemaining < 0).length,
       next90: rows.filter((r) => r.daysRemaining >= 0 && r.daysRemaining <= 90).length,
+      thisMonth,
+      nextMonth,
     },
   };
 }

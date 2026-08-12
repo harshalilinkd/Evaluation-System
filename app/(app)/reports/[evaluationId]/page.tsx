@@ -72,6 +72,31 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               top of a document. The numbered headings start at Ratings. */}
           <HeaderBand report={data} />
 
+          {/* -- STILL OPEN: say which side is outstanding.
+                HR reaches this report as soon as ONE side is in, so a record
+                arriving here half-finished is now ordinary rather than an
+                error. Without this the missing column reads as somebody who
+                rated nothing — which is a different and untrue claim, and the
+                one §11 keeps insisting on (missing is not zero).
+
+                It also states that the record is not reviewable yet, because
+                the rail's Send button is absent at OPEN and a control that is
+                simply not there explains nothing (§13.4).
+
+                No §5 problem in naming the side: this page is HR and the MD
+                only, and P20-13 answers 403 to everybody else. -- */}
+          {data.header.status === "OPEN" ? (
+            <p className="rounded-card border border-warning/40 bg-warning-tint px-4 py-3 font-sans text-body-sm text-ink">
+              <span className="font-medium">This is still being filled in.</span>{" "}
+              {data.meta.selfSubmittedAt && !data.meta.leadSubmittedAt
+                ? `${data.header.employeeName} has submitted; their manager has not yet.`
+                : !data.meta.selfSubmittedAt && data.meta.leadSubmittedAt
+                  ? `Their manager has submitted; ${data.header.employeeName} has not yet.`
+                  : "One side is still outstanding."}{" "}
+              You can read what is here now. It becomes reviewable once both sides are in.
+            </p>
+          ) : null}
+
           {/* -- THE NUMBERS ARE COUNTED, NOT WRITTEN DOWN.
                 They were hard-coded, and had drifted: Ratings was 1, the
                 comparison band and the employee's words were BOTH 3, there was

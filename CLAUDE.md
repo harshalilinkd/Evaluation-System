@@ -6450,3 +6450,73 @@ proved to render an em dash for a worker. Plus the route HR actually needs —
 the row menu, the row click and the track-agnostic employment page.
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
+
+---
+
+### FIX-50 — Every KPI tile filters, launch stops asking you to type, and HR reads a report as soon as one side is in
+
+No migration. Five screens, two queries, the launch dialog and the supervisor's
+on-screen sheet.
+
+#### The tiles
+
+Thirteen counts across four screens did nothing when pressed. The machinery
+already existed — `KpiCard` has taken `onSelect`/`active` since the production
+board was built — and only that one screen used it.
+
+| # | Decision | Why |
+|---|---|---|
+| F50-1 | Same shape on all five: one key, pressing the active one clears it | No "All" tile needed, and the row can never end up with nothing selected. ANDed with the selects rather than replacing them — a tile that reset the other filters would throw away work somebody had just done. |
+| F50-2 | **"Ready to close" needed its own key** | It is TWO §8 statuses (MD_REVIEWED and INTERVIEW_DONE) and the status select holds one value. A tile is not limited to one. |
+| F50-3 | **The increment tiles filter by the SERVER's month keys** | "Due this month" counts *this month AND not already late*, which the month select cannot express — routing it through would reveal overdue rows under a tile reading 0. And a browser `new Date()` can disagree with the server across midnight or in another zone (§0.10), so `getIncrementCalendar` now returns the two strings its own counts were computed from. A tile that disagrees with its own number is worse than a tile that does nothing. |
+| F50-4 | The team tiles drive the **existing select** | There the three tiles ARE the three values of `leadState`, so a second piece of state could only ever disagree with the control beside it. |
+
+#### Launch
+
+| # | Decision | Why |
+|---|---|---|
+| F50-5 | **The type-to-confirm is gone**, at the owner's instruction | P10 called launch "effectively irreversible" and guarded it by making HR type the cycle name. Removed on request; the confirmation moves to the other side of the press. |
+| F50-6 | **The dialog HOLDS OPEN and says it worked** | It used to close and navigate, so the only acknowledgement was a banner on the next screen — which reads as the app having moved on rather than as the thing having succeeded. Counts only: §10 keeps a name, an address and a token out of anything that travels. |
+| F50-7 | **A bug I introduced, and caught: the footer button would have re-launched** | It shares `onConfirm` with Launch. A guard existed for the no-links-went-out path only — so on a *successful* launch, "Open the cycle" would have called the launch again on a live cycle. One guard now covers both endings (`launchDestination` is set on each), and the old single-path one is deleted rather than left as a second answer. |
+
+#### HR reads a report as soon as one side is in
+
+Asked for directly. The queue started at `PENDING_HR_REVIEW`, so an employee
+could have filled their form days ago and **no screen showed it**. §9 has always
+given HR both layers at every status — the waiting was the screen's, not the
+policy's.
+
+| # | Decision | Why |
+|---|---|---|
+| F50-8 | `OPEN` joins the queue, but **only where a side is actually in** | An untouched record has nothing to read, and listing it would bury the ones that do among the whole roster. A skipped layer counts as in: HR advanced past it deliberately (§8), so the other side is all there is going to be. |
+| F50-9 | **The tile went in with the filter** | `queries.ts` already carried a comment about a status the query admits and no tile counts — it vanishes from the row above while sitting plainly in the table. Widening the `in` without the tile is the exact failure that comment describes. |
+| F50-10 | …and it is captioned as a **read**, not a queue of work | "Readable now · not ready to review". A fifth number beside four queues would otherwise look like a fifth thing to do. |
+| F50-11 | A half-finished report **names the outstanding side** | Otherwise the empty column reads as somebody who rated nothing — a different and untrue claim, and the one §11 keeps insisting on. No §5 problem in naming it: this page is HR and the MD only, and P20-13 answers 403 to everybody else. |
+| F50-12 | **Send to management is untouched** | Still gated on `PENDING_HR_REVIEW`, in the rail and in §8's own table. HR can now READ earlier; nothing about what they may DO has moved. |
+
+#### The production sheet
+
+**The screenshot in the brief was the printed PDF, and the brief described
+converting a paper form into web controls — two different documents.** The print
+sheet's underscores and tick marks are deliberate (§7a, P15): it is A4 and signed
+by hand, and giving it radio buttons would stop it being a signable record. The
+on-screen form the supervisor fills already had real radiogroups, bounded inputs
+and card-grouped metadata. Two things from the brief genuinely applied and were
+added: **row hover** (pointer only — there is no hover on a phone, and
+`focus-within` covers the keyboard) and **numbered qualities** matching the paper
+sheet's Sr. column, so a supervisor holding both sees the same document.
+
+The brief's salary auto-calculation is deliberately **absent** there: 0064 took
+the amounts away from supervisors and left them the percentage, and it already
+exists on HR's panel. **Open, and asked rather than assumed:** the printed sheet
+asks Overall Performance twice because the source paper form does. §17 forbids
+changing that without an instruction.
+
+**Verification — 56 checks, 0 failed.** Every tile on every screen is proved to
+have both `onSelect` and `active`; the interactive one is proved to be a real
+`<button>` with `aria-pressed` while a plain figure stays a `div`; each screen's
+toggle-off is proved; and the two tiles that could have disagreed with their own
+counts are proved to use the server's keys and the count's own predicate.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean. All
+six earlier suites still pass.

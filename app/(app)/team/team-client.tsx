@@ -99,24 +99,35 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
       {/* AMEND-3: all three count the LEAD's OWN side. The old middle one
           counted "not yet submitted BY THE EMPLOYEE", which is precisely the
           signal about the other side that blindness withholds. */}
+      {/* -- THE TILES DRIVE THE STAGE SELECT, rather than carrying a filter of
+            their own. Here the three tiles ARE the three values of `leadState`,
+            so a second piece of state could only ever disagree with the control
+            beside it — one source, two ways to reach it. Pressing the active
+            tile clears back to Any stage. -- */}
       <KpiRow>
         <KpiCard
           label="Not started"
           value={queue.counts.notStarted}
           caption="You have not opened these yet"
           tone="plain"
+          onSelect={() => setStatus((c) => (c === "not_started" ? ANY : "not_started"))}
+          active={status === "not_started"}
         />
         <KpiCard
           label="In progress"
           value={queue.counts.inProgress}
           caption="Started, not submitted"
           tone="lead"
+          onSelect={() => setStatus((c) => (c === "in_progress" ? ANY : "in_progress"))}
+          active={status === "in_progress"}
         />
         <KpiCard
           label="Submitted"
           value={queue.counts.submitted}
           caption="Now with HR"
           tone="final"
+          onSelect={() => setStatus((c) => (c === "submitted" ? ANY : "submitted"))}
+          active={status === "submitted"}
         />
       </KpiRow>
 

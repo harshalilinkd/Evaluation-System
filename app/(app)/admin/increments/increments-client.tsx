@@ -46,6 +46,17 @@ export function IncrementsClient({
   const [overdueOnly, setOverdueOnly] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [importOpen, setImportOpen] = React.useState(false);
+  /* -- The three counts, made pressable.
+        Its OWN key rather than driving the month select, because the counts use
+        predicates that select cannot express: "due this month" is the month AND
+        not already late, so routing it through the month filter would reveal
+        overdue rows under a tile reading 0. The month strings come from the
+        server, so the tile filters by exactly what its number was counted
+        from — a client `new Date()` could disagree across midnight or in
+        another timezone (§0.10). -- */
+  const [tile, setTile] = React.useState<null | "this" | "next" | "overdue">(null);
+  const toggleTile = (next: "this" | "next" | "overdue") =>
+    setTile((current) => (current === next ? null : next));
 
   const months = React.useMemo(
     () => [...new Set(calendar.rows.map((r) => r.nextIncrementDate.slice(0, 7)))].sort(),
@@ -58,13 +69,18 @@ export function IncrementsClient({
       if (department !== ANY && r.departmentName !== department) return false;
       if (month !== ANY && !r.nextIncrementDate.startsWith(month)) return false;
       if (overdueOnly && r.daysRemaining >= 0) return false;
+      // Mirrors `getIncrementCalendar`'s own predicates, clause for clause.
+      if (tile === "this" && !(r.nextIncrementDate.startsWith(calendar.thisMonth) && r.daysRemaining >= 0))
+        return false;
+      if (tile === "next" && !r.nextIncrementDate.startsWith(calendar.nextMonth)) return false;
+      if (tile === "overdue" && r.daysRemaining >= 0) return false;
       if (!needle) return true;
       return (
         r.name.toLowerCase().includes(needle) ||
         (r.employeeCode ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [calendar.rows, department, month, overdueOnly, search]);
+  }, [calendar.rows, calendar.thisMonth, calendar.nextMonth, department, month, overdueOnly, tile, search]);
 
   /*
      ONE TABLE, not a section per month.
@@ -218,13 +234,27 @@ export function IncrementsClient({
       />
 
       <KpiRow>
-        <KpiCard label="Due this month" value={calendar.dueThisMonth} tone="self" />
-        <KpiCard label="Due next month" value={calendar.dueNextMonth} tone="lead" />
+        <KpiCard
+          label="Due this month"
+          value={calendar.dueThisMonth}
+          tone="self"
+          onSelect={() => toggleTile("this")}
+          active={tile === "this"}
+        />
+        <KpiCard
+          label="Due next month"
+          value={calendar.dueNextMonth}
+          tone="lead"
+          onSelect={() => toggleTile("next")}
+          active={tile === "next"}
+        />
         <KpiCard
           label="Overdue"
           value={calendar.overdue}
           tone={calendar.overdue > 0 ? "critical" : "plain"}
           caption={calendar.overdue > 0 ? "Already past their date" : "Nobody is late"}
+          onSelect={() => toggleTile("overdue")}
+          active={tile === "overdue"}
         />
       </KpiRow>
 

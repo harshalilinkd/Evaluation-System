@@ -33,6 +33,15 @@ export type QueueRow = {
 
 export type ReportQueue = {
   rows: QueueRow[];
+  /**
+   * One side in, the other not — readable, not yet reviewable.
+   *
+   * HR could not see these at all before: the queue started at
+   * PENDING_HR_REVIEW, so an employee's answers sat unread until their HOD
+   * caught up. §9 gives HR both layers at every status; the waiting was the
+   * screen's, not the policy's.
+   */
+  partlyIn: number;
   pendingHr: number;
   withMd: number;
   /** Reviewed by the MD, still to be closed. INTERVIEW_DONE counts too. */
@@ -70,7 +79,23 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
       // was never selected, so nothing downstream could show it.
       "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall, updated_at, evaluation_cycles!inner(deleted_at)",
     )
-    .in("status", ["PENDING_HR_REVIEW", "HR_APPROVED", "MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"])
+    /* -- OPEN IS IN THE LIST NOW, at the owner's instruction.
+          A record appeared here only once BOTH sides had submitted, so an
+          employee could have filled their form days ago and HR had no way to
+          read it — the answers existed and no screen showed them. HR is one of
+          only two roles §9 permits to read either layer, and nothing about
+          waiting for the second side makes the first unreadable.
+
+          The rows are filtered below to those where at least ONE side is
+          actually in: an OPEN evaluation nobody has touched has nothing to
+          show, and listing it would bury the ones that do among the whole
+          roster.
+
+          §5 IS UNTOUCHED. This widens what HR sees, and HR already reads both
+          layers — it grants nothing to a lead or an employee, and every read
+          still goes through the authenticated client so RLS decides. What
+          changes is the WAITING, not the permission. -- */
+    .in("status", ["OPEN", "PENDING_HR_REVIEW", "HR_APPROVED", "MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"])
     .is("excluded_at", null)
     // A binned cycle's records leave the queue with it. Without this, binning a
     // cycle cleared it from every list except the one HR works from.
@@ -79,11 +104,23 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
 
   if (error) return cycleError("QUERY_FAILED", `Could not read the queue: ${error.message}`);
 
-  const list = evaluations ?? [];
+  /* -- An OPEN record earns its place by having something in it.
+        Nobody has touched it → nothing to read, and listing it would bury the
+        records that DO have answers among the entire roster. A skipped layer
+        counts as in: HR advanced past it deliberately (§8), so the other side
+        is all there is going to be. -- */
+  const list = (evaluations ?? []).filter(
+    (e) =>
+      e.status !== "OPEN" ||
+      Boolean(e.self_submitted_at) ||
+      Boolean(e.lead_submitted_at) ||
+      e.self_skipped ||
+      e.lead_skipped,
+  );
   if (list.length === 0) {
     return {
       ok: true,
-      data: { rows: [], pendingHr: 0, withMd: 0, readyToClose: 0, closedThisCycle: 0, oldestWaiting: null, cycles: [], departments: [] },
+      data: { rows: [], partlyIn: 0, pendingHr: 0, withMd: 0, readyToClose: 0, closedThisCycle: 0, oldestWaiting: null, cycles: [], departments: [] },
     };
   }
 
@@ -200,6 +237,12 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
     return gb - ga || (b.daysWaiting ?? 0) - (a.daysWaiting ?? 0);
   });
 
+  /* -- The fifth tile, and the comment below is why it exists at the same time
+        as the widened filter: a status the query admits and no tile counts is
+        one that vanishes from the row above while sitting plainly in the table.
+        OPEN records are the ones where one side is in and the other is not. -- */
+  const partlyIn = rows.filter((r) => r.status === "OPEN");
+
   const pending = rows.filter((r) => r.status === "PENDING_HR_REVIEW");
 
   /* -- THE TILES HAD A HOLE IN THE MIDDLE OF §8.
@@ -223,6 +266,7 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
     ok: true,
     data: {
       rows,
+      partlyIn: partlyIn.length,
       pendingHr: pending.length,
       withMd: rows.filter((r) => r.status === "HR_APPROVED").length,
       readyToClose,

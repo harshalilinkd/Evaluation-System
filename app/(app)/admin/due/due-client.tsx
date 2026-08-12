@@ -47,6 +47,19 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   const [skipping, setSkipping] = React.useState<DueRow | null>(null);
   const [reason, setReason] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
+  /* -- The three counts, made pressable. Milestone and increment are the two
+        kinds of item; overdue cuts across both, which is why it is its own key
+        rather than a third kind. Pressing the active one clears it. -- */
+  const [tile, setTile] = React.useState<null | "milestone" | "increment" | "overdue">(null);
+  const toggleTile = (next: "milestone" | "increment" | "overdue") =>
+    setTile((current) => (current === next ? null : next));
+
+  const visible = React.useMemo(() => {
+    if (tile === "overdue") return list.rows.filter((r) => r.daysRemaining < 0);
+    if (tile === "increment") return list.rows.filter((r) => r.milestoneType === "INCREMENT");
+    if (tile === "milestone") return list.rows.filter((r) => r.milestoneType !== "INCREMENT");
+    return list.rows;
+  }, [list.rows, tile]);
 
   /** Recompute what is due. A refresh, not an action with consequences. */
   async function onRefresh() {
@@ -253,13 +266,27 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
       />
 
       <KpiRow>
-        <KpiCard label="Milestone evaluations due" value={list.milestonesDue} tone="self" />
-        <KpiCard label="Increments due" value={list.incrementsDue} tone="lead" />
+        <KpiCard
+          label="Milestone evaluations due"
+          value={list.milestonesDue}
+          tone="self"
+          onSelect={() => toggleTile("milestone")}
+          active={tile === "milestone"}
+        />
+        <KpiCard
+          label="Increments due"
+          value={list.incrementsDue}
+          tone="lead"
+          onSelect={() => toggleTile("increment")}
+          active={tile === "increment"}
+        />
         <KpiCard
           label="Overdue"
           value={list.overdue}
           tone={list.overdue > 0 ? "critical" : "plain"}
           caption={list.overdue > 0 ? "Past their date" : "Nothing is late"}
+          onSelect={() => toggleTile("overdue")}
+          active={tile === "overdue"}
         />
       </KpiRow>
 
@@ -278,7 +305,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
       ) : null}
 
       <DataGrid
-        data={list.rows}
+        data={visible}
         columns={columns}
         storageKey="appraise.due.column-widths"
         rowNoun="item"
@@ -310,7 +337,8 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         }
         status={
           <span className="tabular text-body-sm text-ink">
-            {list.rows.length} {list.rows.length === 1 ? "item" : "items"} · soonest first
+            {visible.length} {visible.length === 1 ? "item" : "items"}
+            {tile ? ` of ${list.rows.length}` : ""} · soonest first
           </span>
         }
       />

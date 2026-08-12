@@ -161,6 +161,14 @@ export function WizardClient({
   const [launchError, setLaunchError] = React.useState<string | null>(null);
   /** Launched, but no invite could be sent. Not an error — see `onLaunch`. */
   const [launchNotice, setLaunchNotice] = React.useState<string | null>(null);
+  /* -- Set once the launch has worked and the invites are away. The dialog
+        holds on it rather than closing, so the confirmation lands where the
+        button was pressed instead of as a banner on the next screen — which
+        reads as the app having moved on rather than as the thing having
+        worked. -- */
+  const [launchSent, setLaunchSent] = React.useState<{ total: number; failed: number } | null>(null);
+  /** Where "Open the cycle" goes, held so the dialog owns the navigation. */
+  const [launchDestination, setLaunchDestination] = React.useState<string | null>(null);
 
   /* ---------- saving ---------- */
 
@@ -330,14 +338,11 @@ export function WizardClient({
   const onLaunch = async () => {
     if (!cycleId) return;
 
-    /* -- Already launched, and the dialog is showing the "no links went out"
-          notice: this button is now "Open the cycle" and must not launch
-          again. Pressing it twice would be a second launch on a live cycle. -- */
-    if (launchNotice) {
-      setDialogOpen(false);
-      router.push(`/admin/cycles/${cycleId}?launched=1`);
-      return;
-    }
+    /* -- The "already launched, do not launch again" guard now lives in
+          `onConfirm`, which routes to `launchDestination` whenever one is set.
+          That covers BOTH endings — the success panel and the no-links-went-out
+          notice — where this only ever covered the second, so the button on a
+          successful launch would have re-launched. One guard, both paths. -- */
 
     setLaunching(true);
     setLaunchError(null);
@@ -360,13 +365,20 @@ export function WizardClient({
           screen. Not an error — the launch worked (PW-2, PR-11). -- */
     if (result.data.messagesBlocked) {
       setLaunchNotice(result.data.messagesBlocked);
+      /* -- The destination is set on THIS path too, and it matters.
+            Its footer button reads "Open the cycle" and shares `onConfirm`
+            with Launch. Without a destination that press would call the launch
+            again — on a cycle that is already live. The server refuses a second
+            launch by name, so it was never destructive, but it put an error in
+            front of somebody whose launch had worked. -- */
+      setLaunchDestination(`/admin/cycles/${cycleId}?launched=1`);
       return;
     }
 
-    setDialogOpen(false);
+    /* -- HOLD, and say so. The navigation is now the button in the dialog.
 
-    /* -- The dispatch outcome travels to the board, because the board is where
-          HR reads it and it cannot be recomputed there.
+          The dispatch outcome still travels to the board, because the board is
+          where HR reads it afterwards and it cannot be recomputed there.
 
           Without this the confirmation said "Send the links when you are ready"
           on every launch — copy from before P17 reversed PW-3 and made LAUNCH
@@ -382,7 +394,11 @@ export function WizardClient({
       queued: String(result.data.messagesQueued),
       failed: String(result.data.messagesFailed),
     });
-    router.push(`/admin/cycles/${cycleId}?${outcome.toString()}`);
+    setLaunchSent({
+      total: result.data.messagesSent + result.data.messagesQueued,
+      failed: result.data.messagesFailed,
+    });
+    setLaunchDestination(`/admin/cycles/${cycleId}?${outcome.toString()}`);
   };
 
   const includedCount = people.filter((p) => state[p.id]?.included).length;
@@ -790,7 +806,13 @@ export function WizardClient({
         pending={launching}
         error={launchError}
         notice={launchNotice}
-        onConfirm={() => void onLaunch()}
+        sent={launchSent}
+        /* -- Once it has launched, the button is the way OUT rather than a
+              second launch. `launchDestination` is set only on success, so
+              there is no state in which pressing this could launch twice. -- */
+        onConfirm={() =>
+          launchDestination ? router.push(launchDestination) : void onLaunch()
+        }
       />
     </div>
   );

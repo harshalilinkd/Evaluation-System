@@ -327,9 +327,31 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       ) : null}
 
       <div className="card-surface divide-y divide-rule p-0">
-        {sheet.questions.map((question) => (
-          <div key={question.questionId} className="space-y-3 p-4 sm:p-5">
-            <div>
+        {sheet.questions.map((question, index) => (
+          /* -- A HOVER STATE, and a number.
+                The hover is the row saying it is one thing: eight qualities on
+                one card surface with only a hairline between them read as a
+                wall, and the tint under the pointer is what separates the row
+                being answered from the seven around it. Pointer only — there is
+                no hover on a phone, and `focus-within` covers the keyboard,
+                which is the reader §13.8 is actually about.
+
+                The number matches the printed sheet's Sr. column. A supervisor
+                may well have the paper form beside them, and "3" against
+                Attendance in both places is what makes the two the same
+                document. -- */
+          <div
+            key={question.questionId}
+            className="space-y-3 p-4 transition-colors focus-within:bg-surface-mute sm:p-5 lg:hover:bg-surface-mute"
+          >
+            <div className="flex gap-3">
+              <span
+                aria-hidden
+                className="tabular mt-0.5 shrink-0 font-sans text-body-sm text-ink-faint"
+              >
+                {index + 1}.
+              </span>
+              <div className="min-w-0 flex-1">
               <p className="font-sans text-body-lg text-ink">
                 {question.text}
                 {question.isRequired ? (
@@ -345,6 +367,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   {question.helpText}
                 </p>
               ) : null}
+              </div>
             </div>
 
             <TickScale

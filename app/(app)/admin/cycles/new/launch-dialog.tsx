@@ -3,7 +3,7 @@
 /** The launch confirmation. P10 — "Launch is effectively irreversible." */
 
 import * as React from "react";
-import { Loader2, Rocket } from "lucide-react";
+import { CheckCircle2, Loader2, Rocket } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -14,8 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 /**
  * The stages the launch passes through, shown while the transaction runs.
@@ -44,6 +42,7 @@ export function LaunchDialog({
   pending,
   error,
   notice = null,
+  sent = null,
   onConfirm,
 }: {
   open: boolean;
@@ -56,6 +55,14 @@ export function LaunchDialog({
   pending: boolean;
   error: string | null;
   /**
+   * Set once the launch has SUCCEEDED and the invites have gone.
+   *
+   * The dialog holds open on it rather than closing, so the acknowledgement
+   * lands where the button was pressed. Counts only — §10 keeps a name, an
+   * address and a token out of anything that travels.
+   */
+  sent?: { total: number; failed: number } | null;
+  /**
    * Set when the launch SUCCEEDED but no invite went out.
    *
    * Distinct from `error` on purpose — the cycle is live either way, and the
@@ -67,7 +74,6 @@ export function LaunchDialog({
   // Both start empty for a given opening. The caller keys this component on
   // `open`, so a second attempt after a failure begins with the name box clear
   // rather than needing an effect to wipe it.
-  const [typed, setTyped] = React.useState("");
   const [stage, setStage] = React.useState(0);
 
   // Walk the stage labels while the action is in flight. Deliberately not tied
@@ -81,7 +87,6 @@ export function LaunchDialog({
   // Typing the name is the friction. It is compared case-insensitively and
   // trimmed: the point is to make somebody read which cycle they are launching,
   // not to test their typing.
-  const confirmed = typed.trim().toLowerCase() === cycleName.trim().toLowerCase();
 
   return (
     <Dialog open={open} onOpenChange={pending ? () => {} : onOpenChange}>
@@ -137,20 +142,36 @@ export function LaunchDialog({
               nothing is saved.
             </p>
           </div>
-        ) : (
-          <div className="space-y-2 py-2">
-            <Label htmlFor="confirm-name">
-              Type <span className="font-medium text-ink">{cycleName}</span> to confirm
-            </Label>
-            <Input
-              id="confirm-name"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              autoComplete="off"
-              placeholder={cycleName}
-            />
+        ) : null}
+
+        {/* ---------- Launched, and everybody has been told ----------
+            The confirmation belongs HERE, where the button was pressed. It used
+            to close and navigate, so the only acknowledgement was a banner on
+            the next screen — which reads as the app having moved on rather than
+            as the thing having worked. The dialog holds, states what went out,
+            and the one button forward opens the cycle.
+
+            Counts, never names or addresses: §10 keeps a token, a name and an
+            address out of every URL and out of this. -- */}
+        {sent ? (
+          <div
+            role="status"
+            className="space-y-1 rounded-control border border-success/40 bg-success-tint px-3 py-2.5"
+          >
+            <p className="flex items-center gap-2 text-body font-medium text-ink">
+              <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
+              Sent successfully.
+            </p>
+            <p className="text-body-sm text-ink-muted">
+              {sent.total === 0
+                ? "The cycle is live. Nobody was picked to receive a link, so none went out — send them from the cycle's Send links screen whenever you are ready."
+                : `${participantCount} ${participantCount === 1 ? "evaluation is" : "evaluations are"} open. ${sent.total} ${sent.total === 1 ? "message" : "messages"} went out to ${participantCount} ${participantCount === 1 ? "employee" : "employees"} and ${leadCount} ${leadCount === 1 ? "HOD" : "HODs"}.`}
+              {sent.failed > 0
+                ? ` ${sent.failed} could not be delivered — retry those from Send links.`
+                : ""}
+            </p>
           </div>
-        )}
+        ) : null}
 
         {/* ---------- Launched, but nobody has been told ----------
             AMBER, not rose, and that distinction is the whole point: the cycle
@@ -183,7 +204,7 @@ export function LaunchDialog({
         {/* Once launched there is nothing left to confirm and no way to undo
             it, so the footer stops offering both — one button, forward. */}
         <DialogFooter>
-          {notice ? (
+          {notice || sent ? (
             <Button type="button" className="min-h-11" onClick={onConfirm}>
               Open the cycle
             </Button>
@@ -201,7 +222,7 @@ export function LaunchDialog({
               <Button
                 type="button"
                 className="min-h-11"
-                disabled={!confirmed || pending}
+                disabled={pending}
                 onClick={onConfirm}
               >
                 {pending ? (

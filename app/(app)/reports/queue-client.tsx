@@ -70,6 +70,21 @@ function TierHead({ tier, children }: { tier: "self" | "lead"; children: React.R
   );
 }
 
+type TileKey = "partial" | "hr" | "md" | "ready" | "closed";
+
+/* "Ready to close" is TWO statuses (§8: MD_REVIEWED and INTERVIEW_DONE), which
+   the status select cannot express — a tile is not limited to one value.
+
+   At module scope because it is a constant: one rebuilt each render is a new
+   object every time, which the dependency linter is right to complain about. */
+const TILE_STATUSES: Record<TileKey, string[]> = {
+  partial: ["OPEN"],
+  hr: ["PENDING_HR_REVIEW"],
+  md: ["HR_APPROVED"],
+  ready: ["MD_REVIEWED", "INTERVIEW_DONE"],
+  closed: ["CLOSED"],
+};
+
 export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: boolean }) {
   const [cycle, setCycle] = React.useState(ANY);
   const [type, setType] = React.useState(ANY);
@@ -78,6 +93,22 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
   const [flaggedOnly, setFlaggedOnly] = React.useState(false);
   const [minGap, setMinGap] = React.useState("");
   const [search, setSearch] = React.useState("");
+  /* -- THE TILES ARE A FILTER, and until now they were four numbers that did
+        nothing when pressed. A count sitting above the list it describes invites
+        a press — "show me those" — and a control that ignores it reads as broken
+        rather than as a label.
+
+        Same shape as the production board's, deliberately: one key at a time,
+        pressing the active one turns it off. That means the row can never end up
+        with nothing selected, and it needs no "All" tile to get back.
+
+        ANDed with the selects rather than replacing them. A tile that silently
+        reset the other filters would throw away work somebody had just done;
+        filters intersect, which is what filters do everywhere else. -- */
+  const [tile, setTile] = React.useState<TileKey | null>(null);
+  const toggleTile = (next: TileKey) =>
+    setTile((current) => (current === next ? null : next));
+
 
   const rows = React.useMemo(() => {
     const threshold = Number(minGap);
@@ -86,6 +117,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       if (type !== ANY && r.cycleType !== type) return false;
       if (department !== ANY && r.department !== department) return false;
       if (status !== ANY && r.status !== status) return false;
+      if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
       if (flaggedOnly && r.flaggedCount === 0) return false;
       if (minGap !== "" && Number.isFinite(threshold)) {
         if (r.gap === null || Math.abs(r.gap) < threshold) return false;
@@ -97,7 +129,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       }
       return true;
     });
-  }, [queue.rows, cycle, type, department, status, flaggedOnly, minGap, search]);
+  }, [queue.rows, cycle, type, department, status, tile, flaggedOnly, minGap, search]);
 
   /* -- ONE GRID, and the cycle is a COLUMN.
         It was a card per cycle, each with its own header and its own <table>.
@@ -355,10 +387,46 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
             below. "Ready to close" is where MD_REVIEWED and INTERVIEW_DONE
             land, which is also the tile that says whose turn it now is. -- */}
       <KpiRow>
-        <KpiCard label="Pending your review" value={queue.pendingHr} tone="self" />
-        <KpiCard label="With the MD" value={queue.withMd} tone="lead" />
-        <KpiCard label="Ready to close" value={queue.readyToClose} tone="final" />
-        <KpiCard label="Closed" value={queue.closedThisCycle} tone="final" />
+        {/* -- FIRST, because it is the earliest state a record can be in and
+              the row reads left to right as §8 does. It is a READ, not a task:
+              the caption says so, since a count beside four queues of work
+              would otherwise look like a fifth. -- */}
+        <KpiCard
+          label="One side in"
+          value={queue.partlyIn}
+          caption="Readable now · not ready to review"
+          tone="plain"
+          onSelect={() => toggleTile("partial")}
+          active={tile === "partial"}
+        />
+        <KpiCard
+          label="Pending your review"
+          value={queue.pendingHr}
+          tone="self"
+          onSelect={() => toggleTile("hr")}
+          active={tile === "hr"}
+        />
+        <KpiCard
+          label="With the MD"
+          value={queue.withMd}
+          tone="lead"
+          onSelect={() => toggleTile("md")}
+          active={tile === "md"}
+        />
+        <KpiCard
+          label="Ready to close"
+          value={queue.readyToClose}
+          tone="final"
+          onSelect={() => toggleTile("ready")}
+          active={tile === "ready"}
+        />
+        <KpiCard
+          label="Closed"
+          value={queue.closedThisCycle}
+          tone="final"
+          onSelect={() => toggleTile("closed")}
+          active={tile === "closed"}
+        />
       </KpiRow>
 
       {/* ---------- Filters ----------
@@ -418,6 +486,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
           </select>
           <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
             <option value={ANY}>Every status</option>
+            <option value="OPEN">One side in</option>
             <option value="PENDING_HR_REVIEW">Pending HR review</option>
             <option value="HR_APPROVED">With the MD</option>
             <option value="MD_REVIEWED">Reviewed</option>
