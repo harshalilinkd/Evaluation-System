@@ -2,11 +2,12 @@
 
 /** Settings → Users. HR creates people and decides their access level. */
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { MoreHorizontal, Pencil, Plus, Trash2, Upload, UserCheck, UserX } from "lucide-react";
+import { MoreHorizontal, Pencil, Plus, Table2, Trash2, Upload, UserCheck, UserX } from "lucide-react";
 
 import {
   createUser,
@@ -19,11 +20,14 @@ import {
   type ProvisionState,
 } from "@/lib/auth/provisioning";
 import { IMPORT_COLUMNS } from "@/lib/auth/csv";
+import { bulkUpdatePeople } from "@/lib/employment/bulk";
+import { MoneyCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
 import { ACCESS_LEVELS } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -79,6 +83,36 @@ export type PersonRow = {
 };
 
 export type DepartmentOption = { id: string; name: string };
+
+/**
+ * What a table edit may change, and nothing else.
+ *
+ * A patch of exactly the touched cells — never a copy of the row. A full copy
+ * would send every field of every person on save, so a row loaded before
+ * somebody else's edit would silently overwrite it on the way back. A patch
+ * cannot: what was not touched is not sent.
+ *
+ * `current_ctc` is ANNUAL, as stored. The cell types monthly and converts, so
+ * the unit crosses the boundary exactly once (0061, and the confusion FIX-20
+ * was reported for).
+ */
+export type PersonPatch = {
+  employee_code?: string;
+  designation?: string;
+  department_id?: string | null;
+  reports_to?: string | null;
+  employment_type?: "PERMANENT" | "CONTRACT" | "PROBATION" | "INTERN";
+  current_ctc?: number;
+};
+
+type SalaryReason = "ANNUAL_INCREMENT" | "PROMOTION" | "CORRECTION" | "MARKET_ADJUSTMENT";
+
+const SALARY_REASONS: Array<{ value: SalaryReason; label: string }> = [
+  { value: "ANNUAL_INCREMENT", label: "Annual increment" },
+  { value: "PROMOTION", label: "Promotion" },
+  { value: "MARKET_ADJUSTMENT", label: "Market adjustment" },
+  { value: "CORRECTION", label: "Correction to an earlier entry" },
+];
 
 /** §11 / P7-9: absent is an em dash, never an empty cell and never a zero. */
 function dash(value: string | null | undefined): string {
@@ -1397,6 +1431,7 @@ export function UsersTab({
   departments: DepartmentOption[];
   currentProfileId: string;
 }) {
+  const router = useRouter();
   const [activeState, activeAction] = useActionState<ProvisionState, FormData>(setUserActive, {});
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -1404,6 +1439,106 @@ export function UsersTab({
   const [deleting, setDeleting] = useState<PersonRow | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("ALL");
+
+  /* -- TABLE EDIT MODE.
+        Editing twelve salaries one dialog at a time is the wrong shape for a
+        pay round, which is a single decision applied to a list of people. In
+        edit mode the cells themselves are typed into and one Save writes the
+        lot.
+
+        `drafts` holds ONLY the cells somebody has touched, keyed by profile.
+        Not a copy of the rows: a full copy would send every field of every
+        person on save, so a stale row loaded before somebody else's edit would
+        silently overwrite it. A patch of exactly what changed cannot. -- */
+  const [tableEdit, setTableEdit] = useState(false);
+  const [drafts, setDrafts] = useState<Map<string, PersonPatch>>(new Map());
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [payOpen, setPayOpen] = useState(false);
+  const [payReason, setPayReason] = useState<SalaryReason>("ANNUAL_INCREMENT");
+  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [payNote, setPayNote] = useState("");
+
+  const setCell = useCallback(<K extends keyof PersonPatch>(id: string, key: K, value: PersonPatch[K]) => {
+    setDrafts((prev) => {
+      const next = new Map(prev);
+      const row = { ...(next.get(id) ?? {}) };
+      row[key] = value;
+      next.set(id, row);
+      return next;
+    });
+  }, []);
+
+  /** What a cell should show: the draft if it has one, otherwise the record. */
+  const cellValue = useCallback(
+    <K extends keyof PersonPatch>(row: PersonRow, key: K, fallback: PersonPatch[K]): PersonPatch[K] => {
+      const draft = drafts.get(row.id);
+      return draft && key in draft ? (draft[key] as PersonPatch[K]) : fallback;
+    },
+    [drafts],
+  );
+
+  const isDirty = useCallback(
+    (id: string, key: keyof PersonPatch) => {
+      const draft = drafts.get(id);
+      return Boolean(draft && key in draft);
+    },
+    [drafts],
+  );
+
+  const changedCount = drafts.size;
+  const salaryChanged = useMemo(
+    () => [...drafts.values()].some((d) => d.current_ctc !== undefined),
+    [drafts],
+  );
+
+  function leaveEditMode() {
+    setTableEdit(false);
+    setDrafts(new Map());
+    setPayOpen(false);
+  }
+
+  async function saveTable() {
+    // A pay change has to say why and from when — `salary_history` is the
+    // evidence, and P19-8's reasoning holds however many people are in the
+    // batch. Asked ONCE for the batch rather than once per person.
+    if (salaryChanged && !payOpen) {
+      setPayOpen(true);
+      return;
+    }
+
+    setSaving(true);
+    setSaveResult(null);
+    const result = await bulkUpdatePeople({
+      patches: [...drafts.entries()].map(([profileId, patch]) => ({ profileId, ...patch })),
+      salaryReason: salaryChanged ? payReason : undefined,
+      salaryEffectiveFrom: salaryChanged ? payDate : undefined,
+      salaryNote: salaryChanged ? payNote : undefined,
+    });
+    setSaving(false);
+    setPayOpen(false);
+
+    if (!result.ok) {
+      setSaveResult({ tone: "error", text: result.error.message });
+      return;
+    }
+
+    const failed = result.data.rows.filter((r) => !r.ok);
+    setSaveResult({
+      tone: failed.length > 0 ? "error" : "ok",
+      text:
+        failed.length > 0
+          ? `${result.data.updated} saved, ${failed.length} could not be: ${failed[0]?.error ?? ""}`
+          : `${result.data.updated} ${result.data.updated === 1 ? "person" : "people"} updated${
+              result.data.salaryChanges > 0
+                ? `, ${result.data.salaryChanges} pay ${result.data.salaryChanges === 1 ? "change" : "changes"} recorded`
+                : ""
+            }.`,
+    });
+
+    if (failed.length === 0) leaveEditMode();
+    router.refresh();
+  }
 
   const rows = useMemo(
     () =>
@@ -1442,26 +1577,71 @@ export function UsersTab({
         accessorKey: "employee_code",
         header: "Code",
         size: 110,
-        cell: ({ row }) => <GridCell value={dash(row.original.employee_code)} className="tabular" />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "employee_code", row.original.employee_code ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "employee_code", v)}
+              label={`Employee code for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "employee_code")}
+            />
+          ) : (
+            <GridCell value={dash(row.original.employee_code)} className="tabular" />
+          ),
       },
       {
         accessorKey: "designation",
         header: "Designation",
         size: 180,
-        cell: ({ row }) => <GridCell value={dash(row.original.designation)} />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "designation", row.original.designation ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "designation", v)}
+              label={`Designation for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "designation")}
+            />
+          ) : (
+            <GridCell value={dash(row.original.designation)} />
+          ),
       },
       {
         accessorKey: "department",
         header: "Department",
         size: 150,
         // §11 / P7-9: missing is not the same as empty, and never zero.
-        cell: ({ row }) => <GridCell value={dash(row.original.department)} />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <SelectCell
+              value={cellValue(row.original, "department_id", row.original.department_id) ?? ""}
+              onChange={(v) => setCell(row.original.id, "department_id", v === "" ? null : v)}
+              label={`Department for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "department_id")}
+              options={departments.map((d) => ({ value: d.id, label: d.name }))}
+            />
+          ) : (
+            <GridCell value={dash(row.original.department)} />
+          ),
       },
       {
         id: "reports_to",
         header: "Reports to",
         size: 170,
-        cell: ({ row }) => <GridCell value={dash(row.original.reports_to_name)} />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <SelectCell
+              value={cellValue(row.original, "reports_to", row.original.reports_to) ?? ""}
+              onChange={(v) => setCell(row.original.id, "reports_to", v === "" ? null : v)}
+              label={`Who ${row.original.full_name} reports to`}
+              dirty={isDirty(row.original.id, "reports_to")}
+              blankLabel="Nobody"
+              options={people
+                .filter((p) => p.id !== row.original.id && p.is_active)
+                .map((p) => ({ value: p.id, label: p.full_name }))}
+            />
+          ) : (
+            <GridCell value={dash(row.original.reports_to_name)} />
+          ),
       },
       {
         accessorKey: "phone_e164",
@@ -1482,7 +1662,18 @@ export function UsersTab({
         accessorKey: "employment_type",
         header: "Employment",
         size: 130,
-        cell: ({ row }) => <GridCell value={employmentLabel(row.original.employment_type)} />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <SelectCell
+              value={cellValue(row.original, "employment_type", row.original.employment_type as PersonPatch["employment_type"]) ?? ""}
+              onChange={(v) => setCell(row.original.id, "employment_type", (v || undefined) as PersonPatch["employment_type"])}
+              label={`Employment type for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "employment_type")}
+              options={Object.entries(EMPLOYMENT_LABELS).map(([value, label]) => ({ value, label }))}
+            />
+          ) : (
+            <GridCell value={employmentLabel(row.original.employment_type)} />
+          ),
       },
       {
         id: "current_ctc",
@@ -1492,9 +1683,22 @@ export function UsersTab({
         // §5: salary is readable by HR_ADMIN and MD only, and this screen is
         // guarded to exactly those two. It appears here and nowhere a HOD or an
         // employee can reach.
-        cell: ({ row }) => (
-          <GridCell value={row.original.current_ctc === null ? "—" : formatInr(row.original.current_ctc)} className="tabular" />
-        ),
+        cell: ({ row }) =>
+          tableEdit ? (
+            // Typed MONTHLY, stored annual — the conversion happens in the cell
+            // so the unit crosses the boundary exactly once (0061).
+            <MoneyCell
+              annual={cellValue(row.original, "current_ctc", row.original.current_ctc ?? undefined) ?? null}
+              onChangeAnnual={(v) => setCell(row.original.id, "current_ctc", v ?? undefined)}
+              label={`Salary for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "current_ctc")}
+            />
+          ) : (
+            <GridCell
+              value={row.original.current_ctc === null ? "—" : formatInr(row.original.current_ctc)}
+              className="tabular"
+            />
+          ),
       },
       {
         accessorKey: "next_increment_date",
@@ -1554,7 +1758,13 @@ export function UsersTab({
         ),
       },
     ],
-    [activeAction, currentProfileId],
+    /* -- `tableEdit` IS LOAD-BEARING HERE, not a lint appeasement. The cell
+          renderers close over it, so leaving it out would memoise a set of
+          columns that read `tableEdit === false` for ever and the table would
+          never become editable at all. The rest are the same story: `drafts`
+          reaches these through `cellValue`/`isDirty`, so without them a typed
+          character would not appear in its own cell. -- */
+    [activeAction, currentProfileId, tableEdit, cellValue, isDirty, setCell, departments, people],
   );
 
   return (
@@ -1611,22 +1821,88 @@ export function UsersTab({
             from a spreadsheet" is six words for a button, and at 375px the two
             of them together are wider than the screen. */}
         <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-          <Button
-            variant="outline"
-            className="min-h-11 flex-1 sm:flex-none"
-            onClick={() => setImportOpen(true)}
-          >
-            <Upload className="size-4" aria-hidden />
-            <span className="hidden sm:inline">Import from a spreadsheet</span>
-            <span className="sm:hidden">Import</span>
-          </Button>
-          <Button className="min-h-11 flex-1 sm:flex-none" onClick={() => setAddOpen(true)}>
-            <Plus className="size-4" aria-hidden />
-            <span className="hidden sm:inline">Add new user</span>
-            <span className="sm:hidden">Add</span>
-          </Button>
+          {/* -- EDIT MODE replaces the other two rather than sitting beside
+                them. Import and Add are ways to change the list; while somebody
+                is part-way through editing it, offering either is offering to
+                navigate away from unsaved work. §13.3 — one job at a time. -- */}
+          {tableEdit ? (
+            <>
+              <Button
+                variant="ghost"
+                className="min-h-11"
+                onClick={leaveEditMode}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={() => void saveTable()}
+                disabled={saving || changedCount === 0}
+              >
+                {saving
+                  ? "Saving…"
+                  : changedCount === 0
+                    ? "Nothing changed yet"
+                    : `Save ${changedCount} ${changedCount === 1 ? "person" : "people"}`}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={() => setTableEdit(true)}
+              >
+                <Table2 className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Edit the table</span>
+                <span className="sm:hidden">Edit</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Import from a spreadsheet</span>
+                <span className="sm:hidden">Import</span>
+              </Button>
+              <Button className="min-h-11 flex-1 sm:flex-none" onClick={() => setAddOpen(true)}>
+                <Plus className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Add new user</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
+            </>
+          )}
         </div>
       </div>
+
+      {/* -- What edit mode is, said once, where somebody is standing when they
+            enter it. The salary sentence is the load-bearing half: a pay change
+            is an entry in a permanent ledger, not a corrected typo, and knowing
+            that BEFORE typing is what stops somebody using this screen to fix a
+            figure they meant to correct on the Employment tab. -- */}
+      {tableEdit ? (
+        <p className="rounded-control border border-primary/40 bg-primary/10 px-4 py-3 font-sans text-body-sm text-ink">
+          <span className="font-medium">Editing the table.</span> Change any cell and press Save.
+          Salaries are typed as a <span className="font-medium">monthly</span> figure, and saving one
+          records a pay change in the salary history — you will be asked why and from when.
+        </p>
+      ) : null}
+
+      {saveResult ? (
+        <p
+          role="status"
+          className={cn(
+            "rounded-control px-4 py-3 font-sans text-body-sm",
+            saveResult.tone === "ok"
+              ? "border border-final/40 bg-final-tint text-final"
+              : "border border-critical/40 bg-critical-tint text-critical",
+          )}
+        >
+          {saveResult.text}
+        </p>
+      ) : null}
 
       <DataGrid
         data={rows}
@@ -1681,6 +1957,88 @@ export function UsersTab({
         onClose={() => setDeleting(null)}
       />
 
+      {/* -- WHY A PAY CHANGE STOPS TO ASK.
+            Every other cell on this grid is a fact and correcting one is a
+            correction. A salary is an EVENT: it appends to `salary_history`,
+            which is append-only for every caller (P19-3), and 0068 takes the
+            increment clock from that ledger's latest entry. P19-8 required a
+            reason for exactly this — "a pay change with no explanation is the
+            thing somebody has to reconstruct from memory two years later".
+
+            Asked ONCE for the batch, not once per person: twelve rises on the
+            same date for the same reason is the case this screen exists for,
+            and asking twelve times would send people back to the dialog they
+            were trying to escape. -- */}
+      <Dialog open={payOpen} onOpenChange={(open) => (open ? null : setPayOpen(false))}>
+        <DialogContent className="w-[min(96vw,520px)] border-rule">
+          <DialogHeader>
+            <DialogTitle className="text-display-sm text-ink">
+              Why are these salaries changing?
+            </DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} pay{" "}
+              {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1
+                ? "change goes"
+                : "changes go"}{" "}
+              into the salary history with this reason and date. The history cannot be edited
+              afterwards — a mistake is fixed by adding a correction.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="pay_reason">Reason</Label>
+              <select
+                id="pay_reason"
+                value={payReason}
+                onChange={(e) => setPayReason(e.target.value as SalaryReason)}
+                className="min-h-11 w-full min-w-0 rounded-input border border-rule bg-surface px-3 font-sans text-body-sm text-ink"
+              >
+                {SALARY_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pay_date">Effective from</Label>
+              <Input
+                id="pay_date"
+                type="date"
+                value={payDate}
+                onChange={(e) => setPayDate(e.target.value)}
+                className="min-h-11 tabular"
+              />
+              <p className="font-sans text-body-sm text-ink-muted">
+                When the new salary starts being paid. An annual increment dated here also moves
+                their next increment date.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="pay_note">Note</Label>
+              <Textarea
+                id="pay_note"
+                value={payNote}
+                onChange={(e) => setPayNote(e.target.value)}
+                placeholder="Optional. Anything the record should carry."
+                className="min-h-20"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" className="min-h-11" onClick={() => setPayOpen(false)}>
+              Back to the table
+            </Button>
+            <Button className="min-h-11" onClick={() => void saveTable()} disabled={saving}>
+              {saving ? "Saving…" : "Record and save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

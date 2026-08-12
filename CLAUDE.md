@@ -5300,3 +5300,60 @@ test the CLAIM — that the 5/3/1 mapping is absent — rather than to search fo
 digit. The general rule, now stated as generally as it can be: **an assertion
 must name the thing it is about, not a character that thing happens to
 contain.**
+
+---
+
+### FIX-25 — The roster, editable like a spreadsheet
+
+No migration. `lib/employment/bulk.ts`, `components/appraise/editable-cell.tsx`,
+and edit mode on Settings › Users.
+
+Asked for directly: "if i need to edit salaries of peoples i need to edit users
+single single — i want like we do in google sheets, table has open and we can
+edit cells we want and save."
+
+Right, and the shape was wrong: a pay round is ONE decision applied to a list of
+people, and the product made it twelve dialogs.
+
+#### The one thing that could not simply become a cell
+
+Everything on that grid is a fact about a person — designation, department, who
+they report to. Editing one is a correction, and writing it straight to the
+column is right.
+
+**A salary is not a fact, it is an EVENT.** `salary_history` is append-only for
+every caller including a migration (P19-3), `previous_ctc` and the percentage
+are derived rather than accepted (P19-7), and 0068 takes the increment clock
+from the ledger's latest entry. A cell that wrote `current_ctc` directly would
+put a figure on the record the ledger cannot account for — and every stored
+percentage was computed against that ledger.
+
+| # | Decision | Why |
+|---|---|---|
+| F25-1 | A changed salary cell becomes a call to `addSalaryChange`, not an update | It is the one implementation of what a pay change is. Reimplementing it for a grid would give two answers to "what happens when somebody's pay moves", and the disagreement would be in the pay record. |
+| F25-2 | The reason and effective date are asked ONCE for the batch | P19-8 required a reason and the reasoning holds however many people are in it — "a pay change with no explanation is the thing somebody has to reconstruct from memory two years later". Asking twelve times would send people back to the dialog they were trying to escape. Twelve rises on one date for one reason is the case this screen exists for. |
+| F25-3 | A batch with no salary in it is never asked | Validated on what actually changed, not in the schema. A file of designation fixes has no pay reason to give. |
+| F25-4 | The dialog says the history cannot be edited afterwards | Before the save, not after. It is the one thing about this screen somebody needs to know in advance. |
+
+#### The rest
+
+| # | Decision | Why |
+|---|---|---|
+| F25-5 | **A patch of touched cells, never a copy of the row** | A full copy would send every field of every person on save — so a row loaded before somebody else's edit would silently overwrite it on the way back. What was not touched is not sent, so it cannot be. |
+| F25-6 | `tableEdit` is in the columns' dependency array, and that is load-bearing | The cell renderers close over it. Omitting it would memoise columns that read `tableEdit === false` for ever and the table would never become editable at all — a lint warning that was a real bug. |
+| F25-7 | The salary cell types MONTHLY, stores annual | 0061's rule: monthly at the edges, annual in the core. The conversion happens once, in the cell, so no caller has to remember which unit is in flight — precisely the confusion FIX-20 was reported for. |
+| F25-8 | The typed TEXT is the source of truth while editing | Deriving the displayed value back out of the annual figure fights the person typing: "15" becomes 180000 becomes "15000" under their cursor. |
+| F25-9 | Import and Add are HIDDEN in edit mode | Both are ways to change the list, and offering either mid-edit is offering to navigate away from unsaved work. §13.3 — one job at a time. |
+| F25-10 | Cells are plain inputs, not the shadcn control | A bordered control inside a table cell puts a box in a box and doubles the row height — on a twelve-column roster that is the difference between seeing six people and three. The edit affordance is on the CELL: a tint, a focus ring, and a stronger tint once dirty. 44px throughout (§13.8). |
+| F25-11 | The profile update reports what it touched | Seventh appearance of the class: an update matching no row succeeds, and this loop would have counted it as saved. |
+| F25-12 | The audit row carries counts and field names, never an amount | §5, P19-10. 0013 lets a lead read `audit_log` for their own reports, so a CTC in a diff would walk past the confinement invariant. |
+
+**Verification — 21 checks, 0 failed; the mobile audit still clean at 55
+screens.** Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build
+clean.
+
+**One of my own assertions was wrong again, same family.** "Only touched cells
+are sent" searched for `drafts.get(id)` where the code reads `next.get(id)` —
+inside the state updater, where `next` IS the map. It was testing my recall of a
+local variable name rather than the property. Rewritten to assert the property:
+a draft accumulates single keys and never absorbs `row.original`.
