@@ -37,7 +37,7 @@ import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { FormDefinition } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
 import { formatDate, formatInr, formatTime } from "@/lib/utils/date";
-import { describeSaveFailure } from "@/lib/forms/save-failure";
+import { describeSaveFailure, humaniseServerError } from "@/lib/forms/save-failure";
 
 export type SelfFormMeta = {
   evaluateeName: string;
@@ -174,7 +174,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
     inSync.current = false;
     setSaveState("error");
     setFailures((n) => n + 1);
-    setSaveError(result.error.message);
+    setSaveError(humaniseServerError(result.error.message));
     return false;
   }, [form.evaluationId, readOnly]);
 
@@ -356,7 +356,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
     setSubmitting(false);
 
     if (!result.ok) {
-      setSubmitError(result.error.message);
+      setSubmitError(humaniseServerError(result.error.message));
       return;
     }
 

@@ -4994,3 +4994,103 @@ asserted** — one call site, and the union declaring it once.
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
 
 **No migration.** All three are application-level; nothing to apply.
+
+---
+
+### FIX-21 — Five faults on the increment path, four of them found on a phone
+
+No migration. `review-screen.tsx`, `lib/reports/build.ts`, `salary-band.tsx`,
+`executive-client.tsx`, `lib/forms/save-failure.ts`, `self-form.tsx`.
+
+#### A conditional that needed a page reload
+
+Reported as "Hike percentage field not appear even if manager selected yes in
+promotion recommendation — user needs to refresh page".
+
+**The memo was missing and its comment was not.** `review-screen.tsx` carried
+the comment "a hidden conditional is neither required nor stored (§6), so the
+schema is a function of the current answers rather than a constant (P12-2)" —
+and then nothing. No `buildZodSchema` call, no `hiddenQuestionIds`, and
+`FormRenderer` was given none. So the only visibility that screen ever had was
+whatever the server computed at page load.
+
+| # | Decision | Why |
+|---|---|---|
+| F21-1 | Mirrored from the employee's form rather than written fresh | `self-form.tsx` has had the identical memo since P12 and it is correct. Two implementations of "what is visible now" is how the two forms come to disagree about a rule §6 states once. |
+| F21-2 | `buildZodSchema` is right for the MERGED review form, not merely tolerable on it | It resolves visibility against `form.questions` **entire**, not the layer-filtered list — deliberately, so a parent belonging to the other layer is still found. That is exactly the condition here: the hike percentage is `LEAD_ONLY` and hangs off a question the merged form also carries (P13-3). |
+
+#### The manager's recommended percentage reached the report nowhere at all
+
+Reported as "hike percentage decided by manager but in report its not
+mentioned". Correct, and it was falling between two filters:
+
+- §11 keeps `NUMBER` out of the **ratings** band, because it never enters a score;
+- the **Manager Review** band admitted `isNarrative || SINGLE_SELECT || BOOLEAN`.
+
+So a figure 0067 made **required** was invisible on the document a pay decision
+is signed from.
+
+| # | Decision | Why |
+|---|---|---|
+| F21-3 | `NUMBER` added to the narrative band, not to the ratings band | Putting it among the ratings would drag a percentage into a column of 0–5 scores and imply it was one. It belongs beside the promotion recommendation it is conditional on. |
+| F21-4 | §5 is untouched, and the distinction is worth stating | A **percentage** is not a salary figure — the same line 0064 draws when it leaves the supervisor a percent and takes the amounts away. The report is HR/MD-only in any case (P20-13 answers 403 to everybody else). |
+
+#### Salary shown as annual CTC on screens where the unit is now monthly
+
+Reported directly. FIX-20 converted the employment ledger and the employee's
+outcome card and **deliberately left the increment screens alone**, on the
+grounds that changing what HR/MD instruments say is an instruction rather than a
+repair. The instruction arrived.
+
+Now monthly, with the annual figure kept as a caption wherever it was useful:
+what the employee asked for, HR's proposal, the manager's proposed salary, the
+gap against their ask, the hike amount, the pay-history rows, and the same three
+on the executive summary. Every `formatInr` still in those files is explicitly
+labelled "a year", and a test asserts exactly that rather than asserting the
+count.
+
+| # | Decision | Why |
+|---|---|---|
+| F21-5 | `money()` was NOT redefined to be monthly | The obvious one-line change, and wrong twice over: two call sites already read `${money(currentCtc)} a year`, which would have become a lie, and one read `money(monthlyFromAnnual(...))`, which would have divided by twelve twice. A helper whose meaning flips under existing callers is how a display bug becomes an arithmetic one. |
+| F21-6 | "Hike amount" is monthly **because of what sits beside it** | It shares a three-item list with "New monthly". An annual rise next to a monthly salary makes the reader do arithmetic to compare two cells of one list. |
+
+#### The page scrolled sideways, so every card was cut off
+
+Both screenshots showed cards clipped at the right edge — on different cards, on
+two different screens. One cause: **a four-column pay-history table, `w-full`
+with no `overflow-x-auto` wrapper.** Dates and currency give it an intrinsic
+minimum far wider than 375px, and a table cannot go below its intrinsic minimum,
+so it pushed the whole layout sideways and took every sibling card with it.
+
+| # | Decision | Why |
+|---|---|---|
+| F21-7 | The TABLE scrolls; the PAGE does not | §13.2, and the general rule that wide content scrolls inside its own container. The grids around it were already `sm:grid-cols-*` and single-column on a phone — they were never the problem, they were the victims. |
+
+#### And a transport error could still be printed raw
+
+`describeSaveFailure` translates Next's E394 into a sentence somebody can act
+on — but only on the THROW path. A `{ ok: false }` message was printed verbatim,
+which is right for our own errors and wrong for that one.
+
+| # | Decision | Why |
+|---|---|---|
+| F21-8 | A second function, not a wider `describeSaveFailure` | That one ends in a generic fallback, so routing our real errors through it would replace "You have already submitted this evaluation." with "could not be saved just now" — losing the one sentence that explains what happened (§0.7). `humaniseServerError` translates ONLY transport-shaped strings and returns everything else untouched. |
+| F21-9 | One predicate, `isTransportMessage`, shared by both | Two copies of "is this Next's error" is how one of them stops recognising a message the other still catches. |
+
+**Verification — 21 checks, 0 failed**, over comment-stripped source. Typecheck
+0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**One of my own assertions was wrong and was fixed, not loosened** — again. "Every
+remaining annual figure is labelled a year" searched for `formatInr(x) a year`,
+but the source interpolates: `${formatInr(x)} a year`, with a closing brace
+between. It was testing my quoting rather than the file. Same family as the
+comment trap and the substring trap, and the same remedy: match the syntax that
+is actually there.
+
+**Not fixed, and it needs saying.** The mobile save error was reported again with
+Next's raw text still on screen. Every path in `saveSelfDraft` returns a typed
+failure rather than throwing, the throw path has been translated since FIX-15,
+and both commits were live before the screenshot was taken — so the most likely
+explanation is a browser still running the pre-fix bundle. F21-8 closes the one
+remaining route by which that string could legitimately reach the banner. If it
+recurs after a hard reload it is a different fault and needs the network tab.

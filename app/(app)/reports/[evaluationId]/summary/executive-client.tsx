@@ -265,7 +265,8 @@ export function ExecutiveSummary({
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <Fact
                     label="Employee requested"
-                    value={formatInr(salary.review?.employee_expectation_ctc ?? null)}
+                    // Monthly: the unit the employee typed it in (0061).
+                    value={moneyMonthly(salary.review?.employee_expectation_ctc ?? null)}
                     caption={
                       salary.review?.employee_expectation_ctc
                         ? undefined
@@ -295,7 +296,7 @@ export function ExecutiveSummary({
                 note={
                   role === "HR_ADMIN"
                     ? "HR proposes; the MD approves. Both figures are kept."
-                    : `HR proposed ${formatInr(salary.review?.hr_proposed_ctc ?? null)}.`
+                    : `HR proposed ${moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}.`
                 }
               >
                 {/* -- Locked once the increment is settled. Past INTERVIEW_DONE
@@ -327,7 +328,7 @@ export function ExecutiveSummary({
                       >
                         <span className="text-ink-muted">{formatDate(h.effectiveFrom)}</span>
                         <span className="tabular text-ink">
-                          {formatInr(h.newCtc)}
+                          {moneyMonthly(h.newCtc)}
                           {h.hikePct === null ? "" : ` · ${h.hikePct.toFixed(1)}%`}
                         </span>
                       </li>

@@ -45,12 +45,12 @@ import {
   unsavedFrom,
   writeDraft,
 } from "@/lib/forms/draft-cache";
-import { isBlank, validateAnswers } from "@/lib/forms/zod-generator";
+import { buildZodSchema, isBlank, validateAnswers } from "@/lib/forms/zod-generator";
 import type { FormDefinition, FormQuestion } from "@/lib/forms/types";
 import type { EvaluationStatus } from "@/lib/evaluations/transitions";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
-import { describeSaveFailure } from "@/lib/forms/save-failure";
+import { describeSaveFailure, humaniseServerError } from "@/lib/forms/save-failure";
 
 export type ReviewMeta = {
   evaluationId: string;
@@ -101,8 +101,24 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
   const inSync = React.useRef(true);
 
   /* -- A hidden conditional is neither required nor stored (§6), so the schema
-        is a function of the current answers rather than a constant (P12-2). -- */
-  
+        is a function of the current answers rather than a constant (P12-2).
+
+        THIS MEMO WAS MISSING, and the comment describing it was here on its own.
+        Without it the only visibility this screen ever had was whatever the
+        server computed at page load, so selecting "Yes" on Promotion
+        recommendation did not reveal "Recommended increment percentage" — the
+        manager had to reload the page to see a field their own answer had just
+        unlocked (0062's `YES|CAN_BE_CONSIDERED` condition).
+
+        `buildZodSchema` resolves visibility against form.questions ENTIRE, not
+        the layer-filtered list, so a parent belonging to the other layer is
+        still found — which is what makes it correct on the merged review form
+        as well as the employee's (P13-3). -- */
+  const { hiddenQuestionIds } = React.useMemo(
+    () => buildZodSchema(form, "LEAD", values),
+    [form, values],
+  );
+
   /** Returns whether the server now holds everything typed so far. */
   const flush = React.useCallback(async (): Promise<boolean> => {
     const answersPatch = pending.current.answers;
@@ -164,7 +180,7 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
     };
     inSync.current = false;
     setSaveState("error");
-    setActionError(result.error.message);
+    setActionError(humaniseServerError(result.error.message));
     return false;
   }, [meta.evaluationId]);
 
@@ -342,7 +358,7 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
       // covers it completely — which is how a failed submit reads as a button
       // that does nothing at all.
       setConfirmOpen(false);
-      setActionError(result.error.message);
+      setActionError(humaniseServerError(result.error.message));
       return;
     }
     setConfirmOpen(false);
@@ -483,6 +499,9 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
         errors={errors}
         readOnly={readOnly}
         onChange={onChange}
+        // Recomputed on every answer, so a conditional appears the moment its
+        // parent is answered rather than on the next page load.
+        hiddenQuestionIds={hiddenQuestionIds}
         renderAside={(question: FormQuestion) => (
           <CommentField
             question={question}

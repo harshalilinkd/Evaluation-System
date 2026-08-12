@@ -16,12 +16,38 @@
  * The three cases are genuinely different repairs, so they get different
  * sentences (§0.7, §13.4).
  */
+/**
+ * True when a message is Next's transport failure rather than one of ours.
+ *
+ * Exported because the same string can arrive by TWO routes and only one of
+ * them was being translated: a rejected promise (caught, and handed to
+ * `describeSaveFailure`), and a `{ ok: false }` whose message the form printed
+ * VERBATIM — correct for our own sentences and wrong for this one, which is
+ * how an employee ended up reading "An unexpected response was received from
+ * the server" on a form that had been filled in correctly.
+ */
+export function isTransportMessage(message: string): boolean {
+  return /unexpected response|Failed to find Server Action|text\/x-component/i.test(message);
+}
+
+/**
+ * A server-returned message, left ALONE unless it is transport-shaped.
+ *
+ * Deliberately not `describeSaveFailure`: that one ends in a generic fallback,
+ * so putting our real errors through it would replace "You have already
+ * submitted this evaluation." with "could not be saved just now" — losing the
+ * one sentence that explains what happened (§0.7).
+ */
+export function humaniseServerError(message: string): string {
+  return isTransportMessage(message) ? describeSaveFailure(new Error(message)) : message;
+}
+
 export function describeSaveFailure(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : String(cause ?? "");
 
   // Next's E394: the POST got a real HTTP response that was not RSC — an error
   // page or a redirect. In this app that is overwhelmingly a lapsed session.
-  if (/unexpected response|Failed to find Server Action|text\/x-component/i.test(message)) {
+  if (isTransportMessage(message)) {
     return "Your sign-in may have expired while you were filling this in. Open the app in a new tab, sign in again, then come back here and press Save draft.";
   }
 

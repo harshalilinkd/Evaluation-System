@@ -235,10 +235,27 @@ export async function buildEvaluationReport(
     .filter((q) => q.answeredBy !== "EMPLOYEE_ONLY")
     .filter((q) => q.section === "MANAGER_REVIEW")
     .filter((q) => !hidden.has(q.questionId) || answeredHidden(q.questionId))
-    // The lead's assessment is prose AND the two selects and the concern flag —
-    // "can they handle more responsibility" belongs with the written verdict,
-    // not among the ratings.
-    .filter((q) => isNarrative(q) || q.responseType === "SINGLE_SELECT" || q.responseType === "BOOLEAN")
+    /* -- The lead's assessment is prose AND the two selects and the concern flag
+          — "can they handle more responsibility" belongs with the written
+          verdict, not among the ratings.
+
+          NUMBER ADDED, because the manager's recommended increment percentage
+          (0062) was falling between two filters and reaching the report nowhere
+          at all: §11 keeps NUMBER out of the ratings band because it never
+          enters a score, and this band excluded it as not-prose. So a figure the
+          manager was REQUIRED to give (0067) was invisible on the document the
+          pay decision is signed from.
+
+          A percentage is not a salary figure, so §5's confinement is untouched —
+          the same distinction 0064 draws when it leaves the supervisor a percent
+          and takes the amounts away. -- */
+    .filter(
+      (q) =>
+        isNarrative(q) ||
+        q.responseType === "SINGLE_SELECT" ||
+        q.responseType === "BOOLEAN" ||
+        q.responseType === "NUMBER",
+    )
     .map((q) => ({ question: q.text, answer: readableAnswer(q, leadAnswers[q.questionId]) }));
 
   /* ---------- Meta: §12's record of what actually happened ---------- */

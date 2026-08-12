@@ -172,12 +172,14 @@ export function SalaryBand({
                   : "They were asked and left it blank."
           }
         />
+        {/* Monthly leads here too, so this card and the HR/MD cards below it
+            are all in one unit. The annual figure rides the hint. */}
         <Figure
           label="Manager's proposed salary"
-          value={money(newCtcFromPct(currentCtc, data.managerHikePct))}
+          value={moneyMonthly(newCtcFromPct(currentCtc, data.managerHikePct))}
           hint={
             data.managerHikePct !== null && currentCtc !== null
-              ? `${money(currentCtc)} plus ${data.managerHikePct}% — ${money(monthlyFromAnnual(newCtcFromPct(currentCtc, data.managerHikePct)))} a month.`
+              ? `${moneyMonthly(currentCtc)} plus ${data.managerHikePct}% — ${money(newCtcFromPct(currentCtc, data.managerHikePct))} a year.`
               : "Needs both a current salary and a recommended percentage."
           }
         />
@@ -211,7 +213,8 @@ export function SalaryBand({
           {data.history.length === 0 ? (
             <p className="mt-2 font-sans text-body-sm text-ink-muted">Nothing on record yet.</p>
           ) : (
-            <table className="mt-2 w-full border-collapse">
+            <div className="-mx-1 mt-2 overflow-x-auto px-1">
+            <table className="w-full min-w-[19rem] border-collapse">
               <thead>
                 <tr className="border-b border-rule">
                   {["From", "Previous", "New", "Hike"].map((h) => (
@@ -223,13 +226,20 @@ export function SalaryBand({
                 {data.history.map((row) => (
                   <tr key={row.effectiveFrom} className="border-b border-rule last:border-b-0">
                     <td className="py-1.5 tabular text-body-sm text-ink-muted">{formatDate(row.effectiveFrom)}</td>
-                    <td className="py-1.5 tabular text-body-sm text-ink-muted">{money(row.previousCtc)}</td>
-                    <td className="py-1.5 tabular text-body-sm text-ink">{money(row.newCtc)}</td>
+                    {/* Monthly, so this table is in the same unit as every
+                        headline above it. */}
+                    <td className="py-1.5 tabular text-body-sm text-ink-muted">
+                      {moneyMonthly(row.previousCtc)}
+                    </td>
+                    <td className="py-1.5 tabular text-body-sm text-ink">
+                      {moneyMonthly(row.newCtc)}
+                    </td>
                     <td className="py-1.5 tabular text-body-sm text-ink">{pctText(row.hikePct)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </article>
 
@@ -423,7 +433,11 @@ function HrProposal({
                   gap.amount < 0 ? "text-critical" : "text-ink",
                 )}
               >
-                {gap.amount === 0 ? money(0) : money(Math.abs(gap.amount))}
+                {/* Monthly, so the difference is in the same unit as the two
+                    figures it sits between. An annual gap under two monthly
+                    salaries is the arithmetic the reader cannot do in their
+                    head. */}
+                {gap.amount === 0 ? moneyMonthly(0) : moneyMonthly(Math.abs(gap.amount))}
               </p>
               <p className="font-sans text-body-sm text-ink-muted">
                 {gap.amount === 0
@@ -497,7 +511,11 @@ function HrProposal({
         <dl className="grid gap-3 sm:grid-cols-3">
           <div>
             <dt className="type-label text-ink-muted">Hike amount</dt>
-            <dd className="tabular text-body text-ink">{money(amount)}</dd>
+            {/* Monthly, because it sits directly beside "New monthly". An
+                annual rise next to a monthly salary is the reader doing
+                arithmetic to compare two cells of one list. */}
+            <dd className="tabular text-body text-ink">{moneyMonthly(amount)}</dd>
+            <dd className="font-sans text-body-sm text-ink-muted">{money(amount)} a year</dd>
           </div>
           <div>
             <dt className="type-label text-ink-muted">Annualised</dt>
@@ -672,7 +690,15 @@ function MdApproval({
           <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
           {review?.employee_expectation_ctc ? (
             <>
-              <p className="mt-1 tabular text-display-md text-ink">{money(review.employee_expectation_ctc)}</p>
+              {/* Monthly, because that is the unit the employee TYPED it in
+                  (0061). Showing their monthly ask as an annual figure invited
+                  exactly the misreading this whole change removed. */}
+              <p className="mt-1 tabular text-display-md text-ink">
+                {moneyMonthly(review.employee_expectation_ctc)}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {money(review.employee_expectation_ctc)} a year
+              </p>
               {review.employee_expectation_note ? (
                 <p className="mt-1 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
                   {review.employee_expectation_note}
@@ -687,8 +713,11 @@ function MdApproval({
         {/* HR's figures, read-only for the MD — the trigger refuses a write. */}
         <article className="card-surface p-4">
           <h3 className="type-label text-ink-muted">HR proposed</h3>
-          <p className="mt-1 tabular text-display-md text-ink">{money(review?.hr_proposed_ctc ?? null)}</p>
+          <p className="mt-1 tabular text-display-md text-ink">
+            {moneyMonthly(review?.hr_proposed_ctc ?? null)}
+          </p>
           <p className="font-sans text-body-sm text-ink-muted">
+            {money(review?.hr_proposed_ctc ?? null)} a year ·{" "}
             {pctText(review?.hr_proposed_hike_pct ?? null)}
           </p>
           {review?.hr_justification ? (
