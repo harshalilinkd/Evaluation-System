@@ -87,6 +87,26 @@ export function WorkerReviewClient({
     !recommendsAChange ||
     (review.salary?.oldCtc != null && review.salary?.newCtc != null);
 
+  /* -- THE SALARY DRAFT LIVES HERE, not inside the panel, and that is the fix
+        for the second half of the report.
+
+        HR was sent the appraisal back, typed 17,000, and pressed Send to
+        management WITHOUT pressing Save. The figure never left the browser, so
+        the MD opened it and saw the old 16,500. FIX-41's guard did not catch it
+        because it asks whether the appraisal is priced AT ALL — and it was,
+        with the previous figures. Stale is not the same as absent.
+
+        The panel cannot answer "are there unsaved edits" for a button that
+        lives outside it, so the two values move up and the panel is handed
+        them. No effect, no callback: `dirty` is derived by comparing the draft
+        against the props, and a successful save refreshes the props to match,
+        which clears it on its own. -- */
+  const savedOldCtc = review.salary?.oldCtc ?? null;
+  const savedNewCtc = review.salary?.newCtc ?? null;
+  const [oldCtc, setOldCtc] = React.useState<number | null>(savedOldCtc);
+  const [newCtc, setNewCtc] = React.useState<number | null>(savedNewCtc);
+  const salaryDirty = oldCtc !== savedOldCtc || newCtc !== savedNewCtc;
+
   async function finish(outcome: "CLOSE" | "SEND_TO_MD") {
     setBusy(true);
     setError(null);
@@ -254,6 +274,11 @@ export function WorkerReviewClient({
         supervisorName={review.supervisorName}
         mdApproval={review.mdApproval}
         stages={review.stages}
+        oldCtc={oldCtc}
+        newCtc={newCtc}
+        setOldCtc={setOldCtc}
+        setNewCtc={setNewCtc}
+        dirty={salaryDirty}
       />
 
       {/* ---------- Finish ---------- */}
@@ -328,7 +353,7 @@ export function WorkerReviewClient({
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       onClick={() => void finish("SEND_TO_MD")}
-                      disabled={busy || !priced}
+                      disabled={busy || !priced || salaryDirty}
                       className="min-h-11"
                     >
                       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
@@ -337,6 +362,16 @@ export function WorkerReviewClient({
                     {!priced ? (
                       <p className="font-sans text-body-sm text-critical">
                         Set the current and new salary above first — management approves an amount.
+                      </p>
+                    ) : salaryDirty ? (
+                      /* -- THE REPORTED BUG, from the other end. HR was sent it
+                            back, typed 17,000, and pressed this without saving.
+                            The MD opened it and saw the old figure — the new one
+                            had never left the browser. FIX-41's guard passed
+                            because the appraisal WAS priced, just not with what
+                            was on screen. Stale is not absent. -- */
+                      <p className="font-sans text-body-sm text-critical">
+                        Save the salary above first — management would otherwise be sent the previous figure.
                       </p>
                     ) : null}
                   </div>
@@ -506,9 +541,16 @@ function SalaryStage({
     <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <div className="min-w-0">
         <p className="font-sans text-body-sm text-ink">{step}</p>
-        <p className="font-sans text-body-sm text-ink-muted">
-          {[who, at ? formatDateTime(at) : null].filter(Boolean).join(" · ") || "—"}
-        </p>
+        {/* -- NOTHING, rather than an em dash. A dash under a step with a real
+              figure beside it reads as a value that failed to load; the HR row
+              genuinely has no actor or date to show, because pricing is not a
+              transition and stamps neither. Saying nothing is the truthful
+              rendering of nothing. -- */}
+        {who || at ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            {[who, at ? formatDateTime(at) : null].filter(Boolean).join(" · ")}
+          </p>
+        ) : null}
       </div>
       <div className="text-right">
         <p
@@ -548,6 +590,11 @@ function WorkerSalaryPanel({
   supervisorName,
   mdApproval,
   stages,
+  oldCtc,
+  newCtc,
+  setOldCtc,
+  setNewCtc,
+  dirty,
 }: {
   evaluationId: string;
   salary: { salaryChanged: boolean; oldCtc: number | null; incrementPct: number | null; newCtc: number | null };
@@ -556,6 +603,12 @@ function WorkerSalaryPanel({
   supervisorName: string | null;
   mdApproval: WorkerReview["mdApproval"];
   stages: WorkerReview["stages"];
+  /** The draft, owned above so the hand-up can refuse while it is unsaved. */
+  oldCtc: number | null;
+  newCtc: number | null;
+  setOldCtc: (v: number | null) => void;
+  setNewCtc: (v: number | null) => void;
+  dirty: boolean;
 }) {
   const router = useRouter();
 
@@ -567,10 +620,7 @@ function WorkerSalaryPanel({
         nothing left the appraisal with no salary on it at all. Only what HR has
         actually saved is shown; the record's figure is offered BESIDE the field
         as something to copy, so nothing is lost and nothing is assumed. -- */
-  const [oldCtc, setOldCtc] = React.useState<number | null>(salary.oldCtc);
-  const [newCtc, setNewCtc] = React.useState<number | null>(salary.newCtc);
   const [busy, setBusy] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const pct = salary.incrementPct;
@@ -603,7 +653,6 @@ function WorkerSalaryPanel({
       setError(result.error.message);
       return;
     }
-    setSaved(true);
     router.refresh();
   }
 
@@ -692,10 +741,12 @@ function WorkerSalaryPanel({
                   exist on a sheet handed up before the guard above was added,
                   and whoever reads it needs to know the approval has no amount
                   behind it rather than assume the figure failed to load. -- */
+            /* `moneyMonthly` already ends in "a month" — appending another
+               rendered "A rise of ₹1,500.00 a month a month". */
             note={
               rise === null
                 ? "No figure was recorded before this went up"
-                : `A rise of ${moneyMonthly(rise)} a month`
+                : `A rise of ${moneyMonthly(rise)}`
             }
             pending={rise === null}
           />
@@ -768,10 +819,36 @@ function WorkerSalaryPanel({
             </p>
           ) : null}
 
-          <Button onClick={() => void save()} disabled={busy} variant="secondary" className="min-h-11">
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            {saved ? "Saved" : "Save salary"}
-          </Button>
+          {/* -- COMPULSORY, AND IMPOSSIBLE TO MISS.
+                It was `variant="secondary"` reading "Save salary", and reported
+                as being sent past: HR typed a figure, went straight to Send to
+                management, and the MD received the previous one. A control that
+                MUST be pressed for the next step to be honest is a primary
+                action (§13.3), not a quiet one.
+
+                Three states, each true: nothing typed yet, unsaved edits, and
+                saved. The old button said "Saved" and then went on saying it
+                while somebody typed a new figure over the top — which is the
+                single most misleading thing it could have said. -- */}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              onClick={() => void save()}
+              disabled={busy || !dirty}
+              className="min-h-11"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              {dirty ? "Save salary" : "Saved"}
+            </Button>
+            {dirty ? (
+              <p className="font-sans text-body-sm text-critical">
+                Not saved yet. Management sees the saved figure, not what is typed here.
+              </p>
+            ) : oldCtc !== null || newCtc !== null ? (
+              <p className="font-sans text-body-sm text-ink-muted">
+                Saved. Management will see these figures.
+              </p>
+            ) : null}
+          </div>
         </>
       )}
     </div>

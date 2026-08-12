@@ -6183,3 +6183,44 @@ Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
 being edited in parallel during this phase — §5 work hiding the lead tier on
 somebody's own card — and passed through a non-compiling state mid-write. It had
 settled by the end. Recorded so §18 accounts for every change in the tree.
+
+---
+
+### FIX-44 — Stale is not absent, and the Save button was the reason
+
+No migration. `review-client.tsx` only.
+
+**The owner diagnosed this themselves and was right.** The MD sent an appraisal
+back, HR changed the salary to 17,000 and sent it up, and the MD saw the old
+figure. *"I think the whole problem is save button — he sending to md without
+saving."* Exactly that.
+
+**FIX-41's guard did not catch it, and the reason is worth stating.** It asks
+whether the appraisal is priced AT ALL. After a return it is — with the previous
+figures — so the guard passed while the number on screen had never left the
+browser. **Stale is not the same as absent, and a guard written for one does not
+cover the other.**
+
+| # | Decision | Why |
+|---|---|---|
+| F44-1 | **The salary draft moved OUT of the panel** | The panel cannot answer "are there unsaved edits" for a button that lives outside it. The two figures are owned by the screen and handed down, so `dirty` is a comparison between the draft and the props — no effect, no callback, and a successful save refreshes the props to match, which clears it on its own. The setState-in-effect shape the compiler rejects has now been avoided eight times in this log; deriving is what keeps avoiding it. |
+| F44-2 | **Send to management is blocked while the salary is unsaved** | The sentence names the consequence rather than the state: "management would otherwise be sent the previous figure". A refusal that says "unsaved changes" leaves the reader to work out why that matters, and here it matters because somebody approves a pay rise against it. |
+| F44-3 | Save is a **primary** action | Asked for as "compulsory and noticeable". It was `variant="secondary"` reading "Save salary", sitting quietly beside a prominent Send. A control that MUST be pressed for the next step to be honest is the primary action on that card (§13.3). |
+| F44-4 | …disabled when there is nothing to save, and it **never says "Saved" over an edited figure** | The old button said "Saved" and went on saying it while somebody typed a new number over the top — the single most misleading thing it could have said, and a fair part of why the figure was believed to be stored. |
+| F44-5 | **This guard is client-side, and that is stated rather than glossed** | The server cannot see what is typed in a browser; it can only refuse what it can observe, which FIX-41 already does. The failure this prevents is a stale-but-valid figure reaching the MD, not a privilege being exceeded — so the screen is the right place for it, and §9 is not weakened. |
+| F44-6 | **"A rise of ₹1,500.00 a month a month"** | `moneyMonthly` already ends in the unit and the note appended a second one. Visible in the owner's screenshot; mine, from FIX-40. |
+| F44-7 | A stage with no actor and no date renders **nothing**, not an em dash | Pricing is not a transition and stamps neither, so the HR row genuinely has nobody and no time to show. A dash under a step with a real figure beside it reads as a value that failed to load — the same misreading FIX-30 was reported for. |
+
+**Verification — 70 checks, 0 failed** (up from 59). The draft is proved to be
+owned above the panel and derived rather than synced; the hand-up is proved
+blocked on both `!priced` and `salaryDirty`; Save is proved primary, disabled
+when clean, and never labelled "Saved" while dirty; and both display faults are
+proved gone.
+
+**One of my own assertions failed and was rewritten, not loosened.** FIX-41's
+check pinned `disabled={busy || !priced}` — the exact spelling — and broke the
+moment a third clause was added for the unsaved case. It reads the *claim* now:
+the Send button's disabled expression contains `!priced`. **The substring trap
+(P31), in my own suite, one phase after recording it.**
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
