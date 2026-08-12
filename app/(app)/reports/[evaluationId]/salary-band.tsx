@@ -129,21 +129,40 @@ export function SalaryBand({
         hint="Every figure here is for HR and the MD only."
       />
 
-      {/* ---------- Row 1 ---------- */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Figure label="Joining salary" value={moneyMonthly(data.joiningCtc)} />
+      {/* ---------- Where they are today ----------
+          THREE FACTS, NOT FOUR. "Months since last increment" and "Last
+          increment" were two cards answering one question, and the first of
+          them rendered a bare "0" — a number with no unit, under a label most
+          readers have to parse twice. They are one card now: the date, with how
+          long ago underneath.
+
+          Plain words throughout, at the owner's instruction: not everybody
+          reading this screen reads English comfortably, and "increment" is
+          payroll vocabulary where "raise" is not. -- */}
+      <p className="type-label mt-1 text-ink-muted">Where they are today</p>
+      <div className="mt-2 grid gap-4 sm:grid-cols-3">
         <Figure
-          label="Current salary"
+          label="Salary when they joined"
+          value={moneyMonthly(data.joiningCtc)}
+          hint={data.joiningCtc === null ? "Not on their record." : `${money(data.joiningCtc)} a year`}
+        />
+        <Figure
+          label="Salary now"
           value={moneyMonthly(currentCtc)}
           hint={`${money(currentCtc)} a year`}
         />
         <Figure
-          label="Months since last increment"
-          value={data.monthsSinceLastIncrement === null ? "—" : String(data.monthsSinceLastIncrement)}
-        />
-        <Figure
-          label="Last increment"
-          value={data.lastIncrementDate ? formatDate(data.lastIncrementDate) : "—"}
+          label="Last raise"
+          value={data.lastIncrementDate ? formatDate(data.lastIncrementDate) : "None yet"}
+          hint={
+            data.monthsSinceLastIncrement === null
+              ? "No raise on record."
+              : data.monthsSinceLastIncrement === 0
+                ? "This month."
+                : `${data.monthsSinceLastIncrement} month${
+                    data.monthsSinceLastIncrement === 1 ? "" : "s"
+                  } ago.`
+          }
         />
       </div>
 
@@ -158,29 +177,35 @@ export function SalaryBand({
           never shown, or that they saw it and left it blank. Collapsing those
           into one dash would have HR chasing a manager who has already
           answered. */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+      {/* ---------- ONE CARD, NOT TWO — and this was the reported confusion.
+
+          It was "Manager's recommended hike" beside "Manager's PROPOSED
+          salary", and further down sits "Manager PROPOSED". Two cards with
+          almost the same name showing different numbers: the first is what the
+          manager's percentage WOULD come to, the second is the figure actually
+          saved. A reader has no way to tell those apart from the labels, and
+          they legitimately differ.
+
+          So the suggestion is one card — the percentage, with what it comes to
+          underneath — and the word "proposed" is left to mean exactly one
+          thing: the figure on the record. -- */}
+      <p className="type-label mt-6 text-ink-muted">What the manager suggested</p>
+      <div className="mt-2">
         <Figure
-          label="Manager's recommended hike"
-          value={data.managerHikePct === null ? "—" : `${data.managerHikePct}%`}
+          label="Their suggested rise"
+          value={data.managerHikePct === null ? "Nothing" : `${data.managerHikePct}% more`}
           hint={
-            data.managerHikePct !== null
-              ? "From their evaluation form. A recommendation — you decide the figure."
-              : data.managerPromotion === null
+            data.managerHikePct === null
+              ? data.managerPromotion === null
                 ? "Their review is not in yet."
                 : data.managerPromotion === "NO"
-                  ? "They did not recommend a promotion, so they were not asked for a percentage."
+                  ? "They did not recommend a promotion, so they were not asked."
                   : "They were asked and left it blank."
-          }
-        />
-        {/* Monthly leads here too, so this card and the HR/MD cards below it
-            are all in one unit. The annual figure rides the hint. */}
-        <Figure
-          label="Manager's proposed salary"
-          value={moneyMonthly(newCtcFromPct(currentCtc, data.managerHikePct))}
-          hint={
-            data.managerHikePct !== null && currentCtc !== null
-              ? `${moneyMonthly(currentCtc)} plus ${data.managerHikePct}% — ${money(newCtcFromPct(currentCtc, data.managerHikePct))} a year.`
-              : "Needs both a current salary and a recommended percentage."
+              : currentCtc === null
+                ? "We do not know their salary now, so this cannot be priced."
+                : `That would be ${moneyMonthly(
+                    newCtcFromPct(currentCtc, data.managerHikePct),
+                  )}. It is only a suggestion — the figure is set below.`
           }
         />
       </div>
@@ -447,7 +472,7 @@ function HrProposal({
                 ask" is kept because the number below is a DIFFERENCE, and a
                 heading of "Manager proposal" over a gap would name the wrong
                 thing. -- */}
-          <h3 className="type-label text-ink-muted">Manager proposal against their ask</h3>
+          <h3 className="type-label text-ink-muted">Compared with what they asked for</h3>
           {gap.amount === null ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
               {review?.employee_expectation_ctc ? "Enter a proposal to compare." : "Nothing to compare."}

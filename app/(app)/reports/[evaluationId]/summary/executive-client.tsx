@@ -58,6 +58,9 @@ export function ExecutiveSummary({
   const lead = classifyNarratives(narratives.leadAssessment);
   const self = classifyNarratives(narratives.employeeVoice);
   const tenure = tenureLabel(header.dateOfJoining, new Date());
+  // "Employee requested" is a form label; the person has a name and it reads as
+  // a sentence. Same device the detailed report uses.
+  const firstName = header.employeeName.trim().split(/\s+/)[0] || "They";
 
   return (
     <div
@@ -247,14 +250,27 @@ export function ExecutiveSummary({
               />
 
               {/* One unified compensation card */}
-              <Card title="Where they stand today">
-                <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {/* -- THREE FACTS, AND THE SAME PLAIN WORDS AS THE DETAILED
+                    REPORT. It was four, two of which answered one question —
+                    "Since last rise: 0 mo" beside "Last increment: 01-09-2026".
+                    Merged, with the date leading and how long ago underneath,
+                    which is the order somebody reads it in. -- */}
+              <Card title="Where they are today">
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   {/* Monthly, like every other salary in the product. This is the
                       screen the MD approves from, so it is the last place that should
                       still speak a different unit from the one HR typed it in. */}
-                  <Fact label="Joining salary" value={moneyMonthly(salary.joiningCtc)} />
                   <Fact
-                    label="Current salary"
+                    label="Salary when they joined"
+                    value={moneyMonthly(salary.joiningCtc)}
+                    caption={
+                      salary.joiningCtc === null
+                        ? "Not on their record."
+                        : `${formatInr(salary.joiningCtc)} a year`
+                    }
+                  />
+                  <Fact
+                    label="Salary now"
                     value={moneyMonthly(salary.currentCtc)}
                     caption={
                       salary.currentCtc === null
@@ -264,21 +280,25 @@ export function ExecutiveSummary({
                     strong
                   />
                   <Fact
-                    label="Since last rise"
-                    value={
+                    label="Last raise"
+                    value={salary.lastIncrementDate ? formatDate(salary.lastIncrementDate) : "None yet"}
+                    caption={
                       salary.monthsSinceLastIncrement === null
-                        ? "—"
-                        : `${salary.monthsSinceLastIncrement} mo`
+                        ? "No raise on record."
+                        : salary.monthsSinceLastIncrement === 0
+                          ? "This month."
+                          : `${salary.monthsSinceLastIncrement} month${
+                              salary.monthsSinceLastIncrement === 1 ? "" : "s"
+                            } ago.`
                     }
                   />
-                  <Fact label="Last increment" value={formatDate(salary.lastIncrementDate)} />
                 </dl>
               </Card>
 
-              <Card title="Appraisal baseline">
+              <Card title="What was asked for">
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <Fact
-                    label="Employee requested"
+                    label={`${firstName} asked for`}
                     // Monthly: the unit the employee typed it in (0061).
                     value={moneyMonthly(salary.review?.employee_expectation_ctc ?? null)}
                     caption={
@@ -288,7 +308,7 @@ export function ExecutiveSummary({
                     }
                   />
                   <Fact
-                    label="Department benchmark"
+                    label="Typical in this team"
                     value={
                       salary.departmentMedianPct === null
                         ? "—"
@@ -299,7 +319,7 @@ export function ExecutiveSummary({
                         ? `Median across ${salary.departmentSampleSize} agreed ${
                             salary.departmentSampleSize === 1 ? "figure" : "figures"
                           }.`
-                        : "Data pending: minimum department sample size not met."
+                        : "Not enough figures in this team yet to give an average."
                     }
                   />
                 </dl>

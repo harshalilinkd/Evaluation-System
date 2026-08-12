@@ -6279,3 +6279,46 @@ than `.next/static/css`. It walks the whole tree now. **Pinning any part of a
 build artefact's path is the same error as pinning a variable name.**
 
 Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+---
+
+### FIX-46 — Two cards called the same thing, and payroll vocabulary
+
+`salary-band.tsx` and `summary/executive-client.tsx`. No migration.
+
+Reported as the salary block being messy and confusing, with a second
+instruction: **not everybody reading this screen reads English comfortably**, so
+the words have to be plain.
+
+#### The confusion was real, and it was a naming collision
+
+The block showed **"Manager's recommended hike 15%"** beside **"Manager's
+PROPOSED salary ₹37,030"**, and further down **"Manager PROPOSED ₹32,200"**.
+Two cards with almost the same name showing different numbers — and they
+legitimately differ: the first is what the manager's percentage *would* come to,
+the second is the figure actually saved. A reader has no way to tell those apart
+from the labels.
+
+| # | Decision | Why |
+|---|---|---|
+| F46-1 | **The computed preview stops calling itself a proposal** | It is now one card — "Their suggested rise", the percentage, with what it comes to underneath and the sentence "It is only a suggestion — the figure is set below". Two cards became one, and the word *proposed* is left to mean exactly one thing: the figure on the record. |
+| F46-2 | **"Manager proposed" is NOT renamed** | FIX-28 renamed things *to* it at the owner's explicit instruction — only the HOD and the MD decide salary — and §0.2 freezes a label once created. I renamed it in passing while simplifying and reverted it: "simpler wording" is not a licence to undo a rename that was asked for. |
+| F46-3 | **Four facts became three** | "Months since last increment" and "Last increment" were two cards answering one question, and the first rendered a bare **"0"** — a number with no unit under a label most readers have to parse twice. One card: the date leads, "This month" or "3 months ago" underneath. |
+| F46-4 | Payroll vocabulary out, plain words in | *Joining salary* → **Salary when they joined**. *Current salary* → **Salary now**. *Months since last increment* → **Last raise**. *Appraisal baseline* → **What was asked for**. *Department benchmark* → **Typical in this team**. *"Data pending: minimum department sample size not met"* → **"Not enough figures in this team yet to give an average."** *Manager proposal against their ask* → **Compared with what they asked for**. And "Employee requested" names the person instead. |
+| F46-5 | Both reports moved together | The summary and the detailed report carry the same three cards and the same labels. FIX-42 had to close five separate drifts between them; adding a sixth in the same week would be careless. |
+| F46-6 | **Nothing was lost while simplifying** | The manager's three different absences are still told apart — review not in, promotion answered No, asked and left blank — because collapsing them into one dash has HR chasing a manager who already answered. §5's audience line, monthly-first with the annual as labelled context, and every figure still coming from `calc.ts` are all asserted. |
+
+**Verification — 34 checks, 0 failed.** Every replaced term is checked in both
+directions: the old wording gone, the new wording present, on whichever screen
+carried it.
+
+**Two of my own assertions were too broad and one was testing my own recall.**
+"No arithmetic in the component" matched the mean of two SCORES that mirrors
+0046's SQL — P21-2 forbids **salary** arithmetic, and the check is scoped to
+salary identifiers now. And "how long ago is the hint" searched for
+`"months ago"`, which never appears contiguously because the hint is a template
+literal — **testing the rendered output rather than the file**, which is the
+same family as the comment and substring traps and has now cost three
+assertions in two phases.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
