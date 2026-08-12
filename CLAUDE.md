@@ -5357,3 +5357,43 @@ are sent" searched for `drafts.get(id)` where the code reads `next.get(id)` —
 inside the state updater, where `next` IS the map. It was testing my recall of a
 local variable name rather than the property. Rewritten to assert the property:
 a draft accumulates single keys and never absorbs `row.original`.
+
+---
+
+### FIX-26 — A copied link opened the wrong person's form
+
+No migration. `lib/notify/actions.ts` and the distribution screen's copy dialog.
+
+Asked for: a manager's link should open the screen for rating their team; a
+self-evaluation link should open My evaluation.
+
+**Three of the four senders already did exactly that**, and it is worth writing
+down which, because the audit is the answer to "is this right everywhere":
+
+| Sender | Layer |
+|---|---|
+| the launch dispatch | passes the recipient's (F12-2) |
+| the nightly chase | passes the recipient's |
+| the per-row send on the distribution screen | passes the chosen one |
+| **"Copy a link"** | **took the `'SELF'` default** |
+
+So a link HR copied to hand to a MANAGER was an employee link. `/invite/consume`
+branches on the token's own layer — correctly — and sent them to
+`/my-evaluation/{id}` for an evaluation that is not theirs, where the guard
+bounced them. It looked like a broken link and was a mis-aimed one.
+
+| # | Decision | Why |
+|---|---|---|
+| F26-1 | The parameter defaults to `'SELF'`, so no existing caller changes behaviour | The bug was a missing argument, not a wrong default. Changing the default would have been a second, silent change to every path that already worked. |
+| F26-2 | **The dialog ASKS, rather than inferring** | A row on that board has two people on it. "Copy the link" was ambiguous before the layers existed and has been wrong since; a screen that guesses which of two forms somebody wants is a screen that is right half the time. |
+| F26-3 | The layer travels BACK, and the result names whose link it is | A copied link is pasted into a message somebody types by hand. Handing the manager's link to the employee is not a wrong page — it is somebody opening a rating form about themselves. |
+| F26-4 | The manager is not NAMED on that dialog | `DistributionRow` carries no lead — the board's rows are about the employee — and fetching one for a label would be a query per row for a dialog most people never open. "Their manager" is true and costs nothing. |
+| F26-5 | `/invite/consume` was already right and is left alone | It branches on the TOKEN's layer, not on the person's role — which matters for the case that motivated blind rating: a HOD who is also being appraised holds both, and a role branch would send them to whichever form their role implied rather than the one the link was for. |
+
+**Verification — 15 checks, 0 failed**, tracing the whole chain: which layer each
+of the four senders mints, that the consume route branches on the token rather
+than the role, that the manager's message points at `/team/{id}`, and that the
+copy dialog offers both people and reports which link it made.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean, mobile
+audit still 0 findings across 55 screens.

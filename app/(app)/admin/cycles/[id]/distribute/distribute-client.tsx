@@ -105,7 +105,7 @@ export function DistributeClient({
         mis-aimed bulk send cannot be recalled. -- */
   const [recipients, setRecipients] = React.useState<Array<"SELF" | "LEAD">>(["SELF"]);
   const [copyWarning, setCopyWarning] = React.useState<DistributionRow | null>(null);
-  const [copied, setCopied] = React.useState<{ link: string; name: string } | null>(null);
+  const [copied, setCopied] = React.useState<{ link: string; name: string; layer: "SELF" | "LEAD" } | null>(null);
   const [fixing, setFixing] = React.useState<DistributionRow | null>(null);
   const [history, setHistory] = React.useState<DistributionRow | null>(null);
 
@@ -718,9 +718,9 @@ export function DistributeClient({
             setCopyWarning(null);
             setCopied(null);
           }}
-          onConfirm={async () => {
+          onConfirm={async (layer) => {
             if (!copyWarning) return;
-            const result = await issueCopyableLink(copyWarning.evaluationId);
+            const result = await issueCopyableLink(copyWarning.evaluationId, layer);
             if (result.ok) setCopied(result.data);
             router.refresh();
           }}
@@ -1006,23 +1006,64 @@ function CopyLinkDialog({
   onConfirm,
 }: {
   row: DistributionRow | null;
-  copied: { link: string; name: string } | null;
+  copied: { link: string; name: string; layer: "SELF" | "LEAD" } | null;
   onCancel: () => void;
-  onConfirm: () => Promise<void>;
+  onConfirm: (layer: "SELF" | "LEAD") => Promise<void>;
 }) {
   const [pending, setPending] = React.useState(false);
+  /* -- WHOSE LINK. A row has two people on it — the employee and their
+        manager — and each has their own form. A single "copy the link" button
+        was minting the employee's every time, so a link handed to a manager
+        opened a form about themselves and the guard bounced them. -- */
+  const [layer, setLayer] = React.useState<"SELF" | "LEAD">("SELF");
 
   return (
     <Dialog open={row !== null} onOpenChange={(next) => !next && onCancel()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{copied ? `Link for ${copied.name}` : "Create a new link?"}</DialogTitle>
+          <DialogTitle>
+            {copied
+              ? copied.layer === "LEAD"
+                ? `Manager’s link for ${copied.name}`
+                : `${copied.name}’s own link`
+              : "Which link do you need?"}
+          </DialogTitle>
           <DialogDescription>
             {copied
-              ? "Copy it now — it is shown once and cannot be shown again."
-              : "This creates a new link and stops the previous one working. Continue?"}
+              ? copied.layer === "LEAD"
+                ? "Send this to their manager. It opens the form for rating this person."
+                : "Send this to them. It opens their own self-evaluation."
+              : "Each link opens a different form, and creating one stops the previous link of that kind working."}
           </DialogDescription>
         </DialogHeader>
+
+        {!copied && row ? (
+          <fieldset className="space-y-2">
+            <legend className="type-label mb-1 text-ink-muted">Who is this link for?</legend>
+            {([
+              { value: "SELF", label: `${row.name} — their own self-evaluation` },
+              // Not named: this board's rows are about the EMPLOYEE and carry no
+              // lead. Fetching one for a label would be a query per row for a
+              // dialog most people never open.
+              { value: "LEAD", label: `Their manager — to rate ${row.name}` },
+            ] as const).map((option) => (
+              <label
+                key={option.value}
+                className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control border border-rule px-3"
+              >
+                <input
+                  type="radio"
+                  name="copy_layer"
+                  value={option.value}
+                  checked={layer === option.value}
+                  onChange={() => setLayer(option.value)}
+                  className="size-4"
+                />
+                <span className="font-sans text-body-sm text-ink">{option.label}</span>
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
 
         {copied ? (
           <div className="space-y-2">
@@ -1049,7 +1090,7 @@ function CopyLinkDialog({
               disabled={pending}
               onClick={async () => {
                 setPending(true);
-                await onConfirm();
+                await onConfirm(layer);
                 setPending(false);
               }}
             >

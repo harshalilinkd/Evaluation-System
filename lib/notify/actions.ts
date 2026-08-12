@@ -326,7 +326,19 @@ export async function sendBulk(
  */
 export async function issueCopyableLink(
   evaluationId: string,
-): Promise<CycleResult<{ link: string; name: string }>> {
+  /* -- WHOSE LINK THIS IS, and it was missing.
+        Every other sender — the launch, the nightly chase, the per-row send —
+        passes a layer, so the employee's link and the HOD's are separate tokens
+        and `/invite/consume` lands each on their own screen. This one took the
+        `'SELF'` default, so a link HR copied to hand to a MANAGER was an
+        employee link: it opened `/my-evaluation/{id}` for an evaluation that is
+        not theirs, and the guard bounced them.
+
+        The default stays SELF so no existing caller changes behaviour — but the
+        distribution screen now always says which, because "copy a link" on a
+        row that has two people on it is ambiguous either way. -- */
+  layer: "SELF" | "LEAD" = "SELF",
+): Promise<CycleResult<{ link: string; name: string; layer: "SELF" | "LEAD" }>> {
   const auth = await guard();
   if (!auth.ok) return auth;
 
@@ -341,7 +353,7 @@ export async function issueCopyableLink(
     );
   }
 
-  const issued = await issueInviteToken(evaluationId, "email");
+  const issued = await issueInviteToken(evaluationId, "email", layer);
   if (!issued.ok) return cycleError("TOKEN_FAILED", "Could not create a link.");
 
   const supabase = await createClient();
@@ -359,7 +371,14 @@ export async function issueCopyableLink(
 
   revalidatePath(`/admin/cycles/${target.cycle.id}/distribute`);
 
-  return { ok: true, data: { link: inviteUrl(issued.data.token), name: target.person.full_name } };
+  /* -- The layer travels BACK so the screen can name who the link is for.
+        A copied link is pasted into a message somebody types by hand, and
+        handing the HOD's link to the employee is not a wrong page — it is
+        somebody opening a rating form about themselves. -- */
+  return {
+    ok: true,
+    data: { link: inviteUrl(issued.data.token), name: target.person.full_name, layer },
+  };
 }
 
 /* ---------- updatePhone ---------- */
