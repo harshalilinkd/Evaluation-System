@@ -5523,3 +5523,44 @@ pre-existing warnings), build clean.
 figure" hint that a `perl` substitution had silently failed to apply, and the two
 stale error strings I had not looked for. Both were reported as failures against
 code I had just written and believed was finished.
+
+---
+
+### FIX-30 — "Why is this field blank?" is a question the screen should answer
+
+No migration. `salary-band.tsx`.
+
+Reported against a card reading:
+
+```
+MANAGER PROPOSED
+—
+— a year · —
+```
+
+**The data was right.** `hr_proposed_ctc` is null because no proposal has been
+saved for that evaluation, and the save path is sound — checked rather than
+assumed: `increment_reviews.evaluation_id` is the primary key, so the upsert's
+conflict target resolves, and a refusal would surface as an error rather than
+vanish.
+
+**The screen was wrong.** Three em dashes and no sentence is indistinguishable
+from a figure that failed to load, which is exactly how it was read — the report
+was a question about the software, not about the process. §13.4: no dead ends.
+
+| # | Decision | Why |
+|---|---|---|
+| F30-1 | The empty card names the absence AND the next step | "Nothing proposed yet. The manager recommended 5% — set it in the panel above and press Save manager proposal." The sibling card immediately above already tells three different absences apart (P21's "their review is not in yet" / "they answered No" / "they left it blank"); this one was the odd card out. |
+| F30-2 | Two absences, told apart | With a manager's recommendation on record the card can name the figure to use. Without one there is nothing to point at, and saying so is more useful than inventing an instruction. |
+| F30-3 | **An absent value is an absent CLAUSE, not a dash mid-sentence** | Beneath the approve box: "Defaults to the manager's proposal. **—** on the current salary." An em dash dropped into the middle of a sentence reads as a rendering fault. It now says "…once one has been saved." when there is no percentage, and the full sentence when there is. |
+| F30-4 | The other cards were checked, not assumed | Every `md_approved_ctc` use is already inside a conditional, and after this change no `moneyMonthly(review?.…)` remains — so no other card on the panel can render a bare dash. |
+
+**Verification — 11 checks still passing**, typecheck 0, lint 0 errors, build
+clean.
+
+**Worth noting about the report itself.** "Why is this field blank" was answerable
+from the data in about a minute; the useful part was that the question got asked
+at all. A figure that is legitimately absent and a figure that failed to arrive
+look identical when the empty state is a dash, and there is no way for the reader
+to tell which they are looking at. That is the general rule this fix is an
+instance of.

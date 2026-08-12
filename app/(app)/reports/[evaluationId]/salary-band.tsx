@@ -747,13 +747,35 @@ function MdApproval({
                 own screen said "Manager proposed" would have one number with two
                 authors depending on who was reading it. -- */}
           <h3 className="type-label text-ink-muted">Manager proposed</h3>
-          <p className="mt-1 tabular text-display-md text-ink">
-            {moneyMonthly(review?.hr_proposed_ctc ?? null)}
-          </p>
-          <p className="font-sans text-body-sm text-ink-muted">
-            {money(review?.hr_proposed_ctc ?? null)} a year ·{" "}
-            {pctText(review?.hr_proposed_hike_pct ?? null)}
-          </p>
+          {/* -- AN EMPTY CARD HAS TO SAY WHY IT IS EMPTY (§13.4).
+                This read "—" over "— a year · —": three dashes and no sentence,
+                which is indistinguishable from a figure that failed to load. It
+                was reported as exactly that question — "why is this field
+                blank?"
+
+                The sibling card above already tells three different absences
+                apart. This one has two: nothing has been proposed, or something
+                has. -- */}
+          {review?.hr_proposed_ctc ? (
+            <>
+              <p className="mt-1 tabular text-display-md text-ink">
+                {moneyMonthly(review.hr_proposed_ctc)}
+              </p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {money(review.hr_proposed_ctc)} a year ·{" "}
+                {pctText(review.hr_proposed_hike_pct ?? null)}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 tabular text-display-md text-ink-muted">—</p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                {data.managerHikePct === null
+                  ? "Nothing proposed yet, and the manager has not recommended a percentage either."
+                  : `Nothing proposed yet. The manager recommended ${data.managerHikePct}% — set it in the panel above and press Save manager proposal.`}
+              </p>
+            </>
+          )}
           {review?.hr_justification ? (
             <p className="mt-2 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
               {review.hr_justification}
@@ -795,8 +817,15 @@ function MdApproval({
               onValueChange={(annual) => setCtcText(annual === null ? "" : String(annual))}
               disabled={settled}
             />
+            {/* -- A SENTENCE, or nothing. It read "Defaults to the manager's
+                  proposal. — on the current salary." whenever no percentage
+                  could be worked out — an em dash dropped into the middle of a
+                  sentence, which reads as a rendering fault rather than as a
+                  missing figure. An absent value is an absent CLAUSE. -- */}
             <p className="font-sans text-body-sm text-ink-muted">
-              Defaults to HR&rsquo;s proposal. {pctText(pct)} on the current salary.
+              {pct === null
+                ? "Defaults to the manager's proposal, once one has been saved."
+                : `Defaults to the manager's proposal. ${pctText(pct)} on the current salary.`}
             </p>
 
             {/* -- The close needs a start date; the approval did not. Defaulted
