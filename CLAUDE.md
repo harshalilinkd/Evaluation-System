@@ -6042,3 +6042,27 @@ Until it is, "Approve and close" still does nothing — and still blames somebod
 else. `supabase/whats-applied.sql` gained a row for it, on the generic function
 detector, which is exact here because the name is new (0056's failure was a
 `LIKE` over tokens the file already contained).
+
+**FIX-40 addendum — the redirect did not fire, because I gated it on the bin.**
+
+Reported straight back: Production Appraisals still opened the list. F40-8 was
+written as "exactly one live round **and an empty recycle bin**", and there is
+one round in the bin — so the guard held the list open for a round that has been
+deleted.
+
+The extra condition was mine and it was wrong on its own terms. FIX-32 moved the
+recycle bin to Settings › Recycle bin **at the owner's instruction**, precisely
+so a binned round stops competing with live ones for this screen; the line on
+this page is a pointer to Settings, not the only way back. Holding the whole list
+open for it puts a deleted round between the menu item and the job. The rule is
+now what F40-8 says it is: **one live round, straight in**, whatever is in the
+bin. FIX-15 is still fixed — two or more live rounds and the list is still there,
+and still the only way to reach an older one.
+
+**And the header on that screen described a flow this module has never had.**
+"The worker and their supervisor tick the same sheet at the same time, and
+neither sees the other's answers" is blind parallel rating — the STAFF flow
+(§1, AMEND-3). Workers do not rate themselves, at the owner's instruction
+(WORKER-1), so the sentence promised a second side that does not exist. It now
+reads: the supervisor ticks the sheet, HR prices the increment, and management
+approves it — which is the flow that runs.

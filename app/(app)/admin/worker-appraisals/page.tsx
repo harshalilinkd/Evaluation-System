@@ -57,14 +57,21 @@ export default async function Page() {
         one link — the same objection P12-15 answers on /my-evaluation, where an
         index of one exists only to be clicked through.
 
-        ONLY WHEN THERE IS EXACTLY ONE, which is what keeps FIX-15 fixed. The
-        redirect that used to live here was unconditional and went to the NEWEST
-        round, so every earlier one became unreachable — the board had removed
-        its own picker on the reasoning that this list was it. With two or more
-        rounds the list still appears, and it is still the only way to reach an
-        older one. -- */
+        ONLY WHEN THERE IS EXACTLY ONE LIVE ROUND, which is what keeps FIX-15
+        fixed. The redirect that used to live here was unconditional and went to
+        the NEWEST round, so every earlier one became unreachable — the board had
+        removed its own picker on the reasoning that this list was it. With two
+        or more rounds the list still appears, and it is still the only way to
+        reach an older one.
+
+        THE BIN DOES NOT COUNT, and gating on it was my mistake — the redirect
+        did not fire on a database with one live round and one binned one, which
+        is exactly what was reported. A binned round is not work; FIX-32 moved
+        the bin to Settings › Recycle bin at the owner's instruction precisely so
+        it stops competing with live rounds for this screen. Holding the list
+        open for it puts a deleted round between the menu item and the job. -- */
   const live = cycles ?? [];
-  if (live.length === 1 && (binned ?? []).length === 0) {
+  if (live.length === 1) {
     redirect(`/admin/worker-appraisals/${live[0]!.id}`);
   }
 

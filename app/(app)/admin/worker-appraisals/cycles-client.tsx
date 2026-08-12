@@ -85,10 +85,17 @@ export function WorkerCyclesClient({
               different form, different scale, different people. Somebody who
               arrives expecting the staff cycle screen should learn that here
               rather than after starting a round. */}
+          {/* -- CORRECTED. This described blind parallel rating — "the worker
+                and their supervisor tick the same sheet at the same time, and
+                neither sees the other's answers" — which is the STAFF flow and
+                has never been how this module works. Workers do not rate
+                themselves, at the owner's instruction (WORKER-1), so the
+                sentence promised a second side that does not exist and told
+                anybody reading it the wrong thing about their own product. -- */}
           <p className="mt-1 max-w-prose font-sans text-body-sm text-ink-muted">
-            The Production Team three-tick sheet. Separate from Backend Team evaluations, and nothing is shared
-            between them. The worker and their supervisor tick the same sheet at the same time, and
-            neither sees the other&rsquo;s answers.
+            The Production Team three-tick sheet. Separate from Backend Team evaluations, and nothing is
+            shared between them. The supervisor ticks the sheet, HR prices the increment, and management
+            approves it.
           </p>
         </div>
         <Button onClick={() => setOpen(true)} className="min-h-11">
