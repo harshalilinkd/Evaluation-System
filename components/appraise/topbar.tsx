@@ -42,7 +42,9 @@ export function Topbar({
 }: {
   roles: readonly AppRole[];
   userName: string;
-  userEmail: string;
+  /* Null for a production worker (0071) — though they never open this shell,
+     the type has to be honest about what a profile can hold. */
+  userEmail: string | null;
   /** Read server-side by the shell, so the badge is right in the first frame. */
   notifications: NotificationFeed;
   /** A form action — sign-out must clear an httpOnly cookie server-side. */
@@ -175,7 +177,7 @@ export function Topbar({
           <DropdownMenuContent align="end" className="w-60 border-rule">
             <DropdownMenuLabel className="space-y-0.5 font-normal">
               <p className="font-sans text-body text-ink">{userName}</p>
-              <p className="truncate tabular text-body-sm text-ink-muted">{userEmail}</p>
+              <p className="truncate tabular text-body-sm text-ink-muted">{userEmail ?? "—"}</p>
               {roleBadges.length > 0 ? (
                 <p className="type-label pt-1 text-ink-muted">
                   {roleBadges.map((r) => ROLE_LABELS[r]).join(" · ")}

@@ -109,6 +109,8 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   -- Also a new name, so the generic detector is exact by construction.
   ('0070_md_closes_worker_appraisal', 'function', 'close_worker_appraisal',
      'Without it the MD CANNOT close a production appraisal at all — worker_evaluations admits only HR for UPDATE, so their close matches zero rows, and the screen wrongly reports that somebody else moved it.'),
+  ('0071_worker_profile_without_email', 'nullable', 'profiles.email',
+     'Without it a production worker cannot be imported at all — their profile needs an address they do not have, and the column refuses null.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',
@@ -195,6 +197,16 @@ select
        where c.table_schema = 'public'
          and c.table_name  = split_part(e.object_name, '.', 1)
          and c.column_name = split_part(e.object_name, '.', 2))
+    -- A column that EXISTS either way; what 0071 changed is whether it may be
+    -- null. The generic 'column' check would report it applied before it ran,
+    -- which is the 0056 false positive in a different costume — a detector has
+    -- to match what the migration WROTE.
+    when 'nullable' then exists (
+      select 1 from information_schema.columns c
+       where c.table_schema = 'public'
+         and c.table_name   = split_part(e.object_name, '.', 1)
+         and c.column_name  = split_part(e.object_name, '.', 2)
+         and c.is_nullable  = 'YES')
     when 'enum_label' then exists (
       select 1 from pg_enum en join pg_type t on t.oid = en.enumtypid
        where t.typname = 'evaluation_status' and en.enumlabel = e.object_name)

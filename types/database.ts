@@ -588,7 +588,8 @@ export type Database = {
           id: string;
           full_name: string;
           employee_code: string | null;
-          email: string;
+          /** NULL for a production worker, who never signs in (0071). */
+          email: string | null;
           phone_e164: string | null;
           department_id: string | null;
           designation: string | null;
@@ -605,7 +606,8 @@ export type Database = {
           id: string;
           full_name: string;
           employee_code?: string | null;
-          email: string;
+          /** NULL for a production worker, who never signs in (0071). */
+          email: string | null;
           phone_e164?: string | null;
           department_id?: string | null;
           designation?: string | null;
@@ -621,7 +623,8 @@ export type Database = {
           id?: string;
           full_name?: string;
           employee_code?: string | null;
-          email?: string;
+          /** NULL for a production worker, who never signs in (0071). */
+          email?: string | null;
           phone_e164?: string | null;
           department_id?: string | null;
           designation?: string | null;

@@ -317,6 +317,20 @@ async function provisionPerson(
       department_id: input.department_id ? input.department_id : null,
       employee_code: input.employee_code ? input.employee_code : null,
       track: input.track === "WORKER" ? "WORKER" : "STAFF",
+      /* -- A PRODUCTION WORKER'S PROFILE CARRIES NO ADDRESS (0071).
+
+            They never sign in — their supervisor fills the sheet (WORKER-1) —
+            so the address is not a contact route, not a credential and not an
+            identifier. `profiles.id` still references `auth.users(id)`, and
+            every RLS policy compares `auth.uid()` against it, so the IDENTITY
+            still needs one; it gets a derived internal address on a `.invalid`
+            domain that nothing can deliver to. This column deliberately does
+            not repeat it.
+
+            Only where none was given. A worker who DOES have a real address
+            keeps it — the rule is that one is not required, not that one is
+            refused. -- */
+      email: input.track === "WORKER" && !input.email_supplied ? null : undefined,
       phone_e164: phoneE164,
       designation: input.designation ? input.designation : null,
       reports_to: input.reports_to ? input.reports_to : null,
@@ -1209,8 +1223,18 @@ export async function importUsers(
           and low enough to look plausible. Stating the unit once per row is what
           makes that impossible rather than careful. Blank is ANNUAL, so an older
           file is unchanged. -- */
+    /* -- MONTHLY IS THE DEFAULT FOR THE PRODUCTION TEAM, at the owner's
+          instruction, and it is the honest default: a shop-floor wage is quoted
+          per month everywhere — on the payroll sheet, on the appraisal, in the
+          conversation. The Backend Team still defaults to ANNUAL, because a CTC
+          is quoted per year just as consistently.
+
+          Two defaults in one column is worth a second look and it is right
+          here: the column says what the FIGURE is, and the two teams genuinely
+          state it differently. Either value is still accepted on either team —
+          this decides only what a BLANK means. -- */
     const unitText = (record.salary_unit ?? "").trim().toLowerCase();
-    const perMonth = /^month/.test(unitText);
+    const perMonth = unitText === "" ? track === "WORKER" : /^month/.test(unitText);
     if (unitText && !perMonth && !/^annual|^year/.test(unitText)) {
       rows.push({
         line, name, ok: false,
@@ -1231,6 +1255,11 @@ export async function importUsers(
     const parsed = createUserSchema.safeParse({
       full_name: name,
       email,
+      /* -- Whether a PERSON gave it. The auth identity needs an address either
+            way; `profiles.email` is left NULL when we derived one (0071), so
+            the profile says honestly that there is none rather than carrying a
+            fabricated one that would look like a contact route. -- */
+      email_supplied: emailText !== "",
       password,
       track,
       department_id: departmentId ?? "",

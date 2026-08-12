@@ -6607,3 +6607,47 @@ name.**
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean; all
 eight other suites pass.
+
+---
+
+### FIX-53 — A production worker's profile carries no address, and their wage is monthly
+
+Migration `0071_worker_profile_without_email.sql`.
+
+Both at the owner's explicit instruction: *"for production teams profile should
+get created without emails and salary should be monthly"*.
+
+#### No address on the profile
+
+FIX-52 derived an internal one and stored it. That satisfied the constraint and
+not the request: the profile still carried an address, and an address on a
+record is a contact route as far as any reader is concerned.
+
+| # | Decision | Why |
+|---|---|---|
+| F53-1 | **`profiles.email` is nullable, and P1-5's reasoning has expired** | It was NOT NULL deliberately: auth was email OTP at the time, so a profile without an address was one nobody could contact — fail loudly rather than create it (§0.7). Two things changed underneath that. P8 moved to email + password, and WORKER-1 established that a production worker **never signs in at all**. For that track the address is not a contact route, not a credential and not an identifier — it is a column somebody has to invent a value for. |
+| F53-2 | **The auth IDENTITY still has one, and that is not a fudge** | `profiles.id` references `auth.users(id)` and every RLS policy compares `auth.uid()` against it — a worker without an auth row could not be referenced by any policy in the system. So the identity keeps a derived address on a `.invalid` domain (RFC 2606 reserves it precisely so nothing can be delivered there), and the PROFILE says honestly that there is none. The identity is an implementation detail of a foreign key; the profile is what the product reads. |
+| F53-3 | Only where none was given | A worker who does have a real address keeps it. The rule is that one is not required, not that one is refused. |
+| F53-4 | **The trigger stops depending on an address to NAME somebody** | `handle_new_auth_user` fell back to the email's local part for `full_name`, which is NOT NULL — with no address that insert fails on a NOT NULL column for a reason nobody would guess from the message. Three fallbacks now, ending in something obviously a placeholder. |
+| F53-5 | Nothing is sent to a null, and that was checked rather than assumed | `deliver` builds no EMAIL channel without an address, both digests skip, and the distribution screen reports the contact gap rather than attempting a send (P11-11 — a `notifications_log` row means an attempt was made). |
+| F53-6 | The roster renders an **em dash** | Not "null", and not the derived address. `types/database.ts` is hand-authored (P1-6), so it followed the migration by hand; the compiler then found all five places that assumed a string, which is the value of typing it honestly. |
+
+#### Monthly is the default for the production team
+
+| # | Decision | Why |
+|---|---|---|
+| F53-7 | **Blank means MONTHLY for Production, ANNUAL for Backend** | Two defaults in one column is worth a second look and is right here: the column says what the FIGURE is, and the two teams genuinely state it differently — a shop-floor wage is quoted per month everywhere, a CTC per year just as consistently. Either value is still accepted on either team; this decides only what a blank means. |
+
+**Verification — 39 checks, 0 failed** (up from 30). The `nullable` detector
+added to `whats-applied.sql` is **run**, not merely written: it answers false
+before the migration, true after, and false for a column that does not exist.
+The generic `column` kind would have reported 0071 applied before it ran — the
+0056 false positive in a different costume, and a detector has to match what the
+migration WROTE.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean; all
+eight other suites pass.
+
+**Action required.** `0071_worker_profile_without_email.sql` is **not applied**.
+Until it is, a production worker with no address cannot be imported at all —
+`profiles.email` refuses the null.

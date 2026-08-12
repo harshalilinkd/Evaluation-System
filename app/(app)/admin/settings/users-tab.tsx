@@ -61,7 +61,10 @@ import { TRACK_FORM_LABELS, TRACK_LABELS } from "@/lib/forms/labels";
 export type PersonRow = {
   id: string;
   full_name: string;
-  email: string;
+  /* -- Null for a production worker (0071). They never sign in, so their
+        profile carries no address — and a screen that typed this as `string`
+        would render "null" rather than the em dash it means. -- */
+  email: string | null;
   employee_code: string | null;
   /** §7: which module they are in. Decides which appraisal form they receive. */
   track: string | null;
@@ -996,7 +999,7 @@ function EditPersonDialog({
                   id="e_email"
                   name="email"
                   type="email"
-                  defaultValue={person.email}
+                  defaultValue={person.email ?? ""}
                   className="min-h-11"
                 />
               </Field>
@@ -1549,7 +1552,7 @@ export function UsersTab({
         const needle = search.trim().toLowerCase();
         return (
           person.full_name.toLowerCase().includes(needle) ||
-          person.email.toLowerCase().includes(needle) ||
+          (person.email ?? "").toLowerCase().includes(needle) ||
           (person.department ?? "").toLowerCase().includes(needle)
         );
       }),
@@ -1571,7 +1574,9 @@ export function UsersTab({
         accessorKey: "email",
         header: "Email",
         size: 260,
-        cell: ({ row }) => <GridCell value={row.original.email} className="tabular" />,
+        /* An em dash, not "null" and not a fabricated address: a production
+           worker genuinely has none (0071). */
+        cell: ({ row }) => <GridCell value={row.original.email ?? "—"} className="tabular" />,
       },
       {
         accessorKey: "employee_code",

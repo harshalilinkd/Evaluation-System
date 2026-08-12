@@ -112,7 +112,7 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         Backend Team; what changed is that the header need not be present and a
         Production Team row may leave it blank. That rule lives in the row
         validation, because it depends on the track. -- */
-  { key: "email", header: "email", hint: "blank is fine for Production Team" },
+  { key: "email", header: "email", hint: "blank for Production Team — they never sign in" },
   { key: "password", header: "password", hint: "10+ characters — blank is fine for Production Team" },
   /* -- §7: which MODULE somebody is in. Independent of department, because both
         modules have people in the same teams. Blank means Backend Team, so a
@@ -139,7 +139,7 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
 
         One column removes the whole class. Blank means ANNUAL, so a file
         written before this existed imports exactly as it did. -- */
-  { key: "salary_unit", header: "salary_unit", hint: "MONTHLY or ANNUAL (blank = annual)" },
+  { key: "salary_unit", header: "salary_unit", hint: "MONTHLY or ANNUAL (blank = monthly for Production, annual for Backend)" },
   { key: "joining_ctc", header: "joining_ctc", hint: "400000" },
   { key: "current_ctc", header: "current_ctc", hint: "480000" },
   { key: "last_increment_amount", header: "last_increment_amount", hint: "80000" },

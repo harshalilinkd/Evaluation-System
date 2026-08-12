@@ -101,6 +101,18 @@ const ROLE_VALUES = new Set<string>(ACCESS_LEVELS.map((level) => level.value));
 export const createUserSchema = z.object({
   full_name: z.string().trim().min(2, "Enter their full name").max(120),
   email: emailSchema,
+  /* -- Whether the address came from a PERSON or was derived for us.
+
+        A production worker's auth identity still needs one — `profiles.id`
+        references `auth.users(id)` and every RLS policy compares `auth.uid()`
+        against it — so the importer derives an internal address on a `.invalid`
+        domain when none was given. `profiles.email` is then left NULL (0071),
+        because the profile is what the product reads and it should say
+        honestly that there is no address.
+
+        Defaults to true: the create form always asks for one, so only the
+        importer ever sets this false. -- */
+  email_supplied: z.boolean().default(true),
   password: newPasswordSchema,
   department_id: z.string().uuid("Choose a department").or(z.literal("")).optional(),
   /*
