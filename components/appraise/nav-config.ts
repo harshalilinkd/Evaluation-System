@@ -147,7 +147,7 @@ export const NAV: readonly NavGroup[] = [
         icon: "cycles",
         roles: ["HR_ADMIN", "MD"],
       },
-      { href: "/admin/due", label: "What is due", icon: "cycles", roles: ["HR_ADMIN", "MD"] },
+      { href: "/admin/due", label: "Evaluation Due", icon: "cycles", roles: ["HR_ADMIN", "MD"] },
       { href: "/admin/increments", label: "Increments", icon: "increments", roles: ["HR_ADMIN", "MD"] },
       { href: ROUTES.adminPeople, label: "Team review", icon: "people", roles: ["HR_ADMIN", "MD"] },
       { href: ROUTES.adminSettings, label: "Settings", icon: "settings", roles: ["HR_ADMIN", "MD"] },

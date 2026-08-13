@@ -6985,3 +6985,121 @@ with backticks INSIDE a template literal closed the string. And one assertion
 checked that the pay row still pointed at an evaluation — after the detach step
 had deliberately removed that link; it asserts the pay by value now, which is
 the claim.
+
+---
+
+### FIX-59 — Employee ID first, an Average that is one, and a baseline HR can correct
+
+Migration `0075_correct_joining_salary.sql`. `lib/utils/employee-code.ts` is new;
+`data-grid.tsx`, `editable-cell.tsx`, Team review, Settings › Users and
+`lib/employment/bulk.ts` edited.
+
+**Note on numbering.** This was written as `0074` and renumbered: the concurrent
+Google sign-in work had already committed a `0074`. §0.8 makes numbering
+sequential, and two files with one number is a diagnostic nobody can read.
+
+#### The three score columns
+
+| # | Decision | Why |
+|---|---|---|
+| F59-1 | **"Final" was not an average of anything, so it was not renamed — it was replaced** | It read `evaluations.final_overall`, written in exactly one place since 0046: `confirm_increment`, when an INCREMENT cycle closes. On an evaluation cycle it is null for ever, so most of the roster showed a permanent em dash — and where it did fill in it was a settled increment score. Relabelling that "Average" would have put a wrong name on a real number, which is worse than a column nobody reads. It now IS the mean §11 permits (AMEND-5), computed on read and stored nowhere. |
+| F59-2 | **Both or nothing** | One side alone is not an average of two, and printing the manager's figure there would say the two sides agreed when only one has answered (A5-2). |
+| F59-3 | Plain ink, no tier | Cyan means "the employee said this" and pink "their HOD did". An average belongs to neither — which is exactly the objection §11 raised before the owner chose the column (A5-4). |
+
+#### Employee ID, and the # that could not simply be deleted
+
+| # | Decision | Why |
+|---|---|---|
+| F59-4 | **The gutter carries the code; it is not removed** | "Remove the #" could not be granted literally: that column is the one focusable control per row and therefore the keyboard path to opening one, on every grid in the product. `rowLabel` replaces the counter and keeps the control. |
+| F59-5 | …and renders an **editable cell** where a screen needs one | Settings › Users can edit the code, and the gutter would have made it read-only. Safe for the reason `onRowClick` is documented as an enhancement: the row's ⋯ menu carries the same action. A grid with no such menu must not pass it. |
+| F59-6 | The width is set by the **heading**, not the values | Every heading is 12px uppercase with letterspacing, so "EMPLOYEE ID" runs to ~97px against 24px of padding — 104px clipped it to "EMPLOYEE I…". Headings truncate rather than wrap, so one that does not fit does not look tight, it disappears. The check measures this from the code and the Tailwind config rather than trusting it. |
+| F59-7 | **One comparator, two screens** | Sorting by the NUMBER in the code, because text sorting puts AN-15 before AN-4 — the classic way a "sorted" list stops being sorted past ten people. I wrote a second copy on the Users tab and pulled both into `lib/utils/employee-code.ts`: a roster that orders itself differently depending on which screen you opened is a difference nobody can explain later. |
+
+#### The joining salary, correctable
+
+| # | Decision | Why |
+|---|---|---|
+| F59-8 | **0075 reverses 0069's once-only rule, at the owner's instruction** | 0069 refused in capitals: "Once recorded, joining_salary remains static for audit purposes." The concern was put to the owner and they asked for it to be editable. §0.9 requires that exchange before a documented decision is undone; this is the record. |
+| F59-9 | It is survivable, and that was PROVED rather than argued | `previous_ctc`, `hike_amount` and `hike_pct` are written onto each pay row when it is recorded and never recomputed from the baseline — so correcting a typo cannot rewrite a single stored percentage. Demonstrated on real Postgres: after moving a baseline from 1,80,000 to 2,00,000 the existing rise still reads "from 1,80,000, 166.67%". |
+| F59-10 | The one visible cost is stated | Where somebody already has a rise, the baseline row and that rise's stored previous figure can now read differently — a reading to interpret, not corrupted data. Before any rise, today's salary moves with the baseline and there is no such effect. |
+| F59-11 | 0069 is **not edited** (§0.8); the new function sits beside it | An applied migration is never changed. `record_joining_salary` keeps its behaviour and its callers. |
+| F59-12 | Four more columns became editable | Team, joining date, review frequency and joining salary — everything the CSV import writes, so a mistake made in a spreadsheet is correctable on the screen that shows it. `last_increment_date` is deliberately NOT among them: 0068 made the pay ledger authoritative for it, so a hand-typed date would be overruled by the next recorded rise, and a cell that does not hold its value is worse than no cell. |
+
+**Verification — 22 checks on 0075 against real Postgres** (the bug reproduced
+before the fix), 49 on the Users tab, 28 on Team review. The Users-tab check
+derives its column list from the IMPORT TEMPLATE and fails if a column is on the
+sheet and missing from the table.
+
+---
+
+### P36 — Creating a cycle, stripped to three steps
+
+`wizard-client.tsx`, `step-people.tsx`, `increments-client.tsx`,
+`cycles/new/page.tsx`, `board-client.tsx`, `lib/cycles/schema.ts`. No migration.
+
+At the owner's instruction: "Make cycle creation simple, fast, and
+time-saving… HR only names the cycle, confirms the period, confirms who's
+included, and launches."
+
+| # | Decision | Why |
+|---|---|---|
+| P36-1 | **The Dates step is gone. A cycle opens the day it launches and runs a week.** | Every cycle asked for the same three dates, and the third was only ever the second plus a few days. All four are still SAVED — the launch guard needs them and messages carry the due date — they are derived rather than typed. |
+| P36-2 | **The week is a REMINDER schedule, not a deadline**, and that was checked rather than assumed | The owner asked that the form not close after it. §8 locks a layer on SUBMISSION and no guard anywhere reads a due date, so this was already true. A check now pins it, so a future change cannot quietly make the week a deadline. |
+| P36-3 | **An increment cycle starts with the people who are due** | Ticking all fifty-two and asking HR to untick forty-seven is the work this screen exists to save. The list of who is due is one the system already keeps. |
+| P36-4 | **Choosing the type reshapes the cycle — in a HANDLER, not the state initialiser** | The first version did this work at mount, so it only fired for a cycle arriving from the increment calendar. Somebody who opened the wizard and pressed "Increment" got the evaluation defaults: all fifty-two ticked and two empty fields. Reported as "nothing is done… here all are selected already", and it was the more common way in. |
+| P36-5 | …and it never overwrites a name HR has typed | Prefilling an empty field is a convenience; overwriting one loses somebody's work. |
+| P36-6 | **A manager is required before Continue on an increment cycle** | It was caught at LAUNCH for every cycle, which on an increment is two screens too late: the whole point of a pay round is that somebody rates the person whose salary is being decided. The button and the sentence beside it come from ONE expression, so they cannot disagree — a disabled control with no explanation is a dead end (§13.4). |
+| P36-7 | **One press starts a round** | It was one "Start increment" per row, so a pay round of twelve people meant twelve cycles — which is not what a round is. The per-row button stays for the genuine single case. |
+| P36-8 | The URL says WHAT to select, never a list of ids | `?increment_for=due`. A URL carrying fifty uuids breaks at the browser's length limit and cannot be typed, bookmarked or reasoned about. |
+| P36-9 | **The disclosure default is now "their own summary only" on BOTH types** | An increment used to default to the summary plus the pay outcome. The narrower default is the safer one — a pay figure reaching somebody before HR meant to release it cannot be taken back — and the other option is one click away. |
+| P36-10 | The title stops calling an increment round an evaluation | It read "New evaluation cycle" whatever the type, on the one screen where the two are told apart. |
+
+---
+
+### P37 — Evaluation timing, per employee and configurable
+
+Migration `0076_evaluation_schedule.sql`. `lib/due/schedule.ts` and
+`app/(app)/admin/settings/schedule-tab.tsx` are new; the due screen, its query,
+the nav and the dashboard edited.
+
+**The schedule, as the owner set it out** — two anchors, and the second repeats:
+
+```
+NEW JOINER — from their joining date
+  +1 month    evaluation     +6 months  evaluation     +12 months  increment
+
+THEREAFTER — from their LAST INCREMENT, re-anchored at every one
+  +3 months   evaluation     +9 months  evaluation     +12 months  increment
+                                                        …then again
+```
+
+| # | Decision | Why |
+|---|---|---|
+| P37-1 | **The intervals are an ARRAY, not columns** | "How many evaluations per year" is the thing being configured, so the COUNT has to be data. Three columns would fix it at three. Same device `increment_settings.hike_bands` already uses (P21-16). |
+| P37-2 | **The milestone vocabulary is open now** | It was a CHECK listing five names. With the intervals configurable the milestone is `MONTH_3`, `MONTH_9`, whatever HR sets — so a fixed list would make the setting a lie, failing the nightly sweep at 10pm with nothing on screen. The shape is still constrained to `MONTH_<n>` or a named kind, and the label is generated so no stored value reaches a screen (§13.5). |
+| P37-3 | The array rule is a **TRIGGER**, because a CHECK cannot hold a subquery | An IMMUTABLE function would let the CHECK compile and would be a lie — the answer depends on another column and Postgres would not re-validate it. An evaluation on or after the increment it precedes belongs to the NEXT cycle and would be created twice. |
+| P37-4 | **Changing it recalculates everyone**, in the same transaction as the write | The owner chose this. Two calls from the action would leave a window where the setting says one thing and the due list shows another, and a crash between them would leave it permanently. |
+| P37-5 | …and withdraws only **PENDING** items | A CREATED item became an evaluation somebody may have filled in; a SKIPPED one records a decision. Neither is a prediction that can be withdrawn. |
+| P37-6 | **A joiner leaves the joining anchor for good at their first increment** | Otherwise a five-year employee would be offered a "one month after joining" review for ever. |
+| P37-7 | The increment date is **not recomputed** by the sweep | `next_increment_date` is derived from the person's OWN frequency, which may differ from the company default, and 0068 keeps it in step with the pay ledger. One implementation. |
+| P37-8 | **Evaluation Due is evaluations only, filtered at SOURCE** | Increments have their own menu section and their own calendar. Filtering in the render would let the counts above the table and the rows inside it describe different sets — which is how a KPI card ends up disagreeing with the list it filters. |
+| P37-9 | "Increments due" became **"Due in the next 30 days"** | It was the one card on the evaluation screen that sent HR somewhere else. Thirty days is the notice period the schedule itself carries, so the card and the message HR receives count the same thing. |
+| P37-10 | **"Add more" is a sentence, not a button** | There was nothing for a button to do: the full roster is already the table below, and a button whose only effect is to scroll teaches people it does nothing. The sentence names what is ticked, why, and where the rest are. |
+| P37-11 | The settings tab **spells the year out as it is typed** | Four numbers in four boxes do not tell anybody when their people will be reviewed — the reader has to hold the arithmetic. The effect of a change is visible before it is saved rather than a month later when somebody is chased on the wrong day. |
+| P37-12 | Reading the schedule falls back to the shipped defaults rather than throwing | A settings page that will not open because it could not read a setting is worse than one showing the default. P25-5's call. |
+
+**Verification — 22 checks on 0076 against real Postgres, 71 on the flow.** The
+loop was run rather than described: a new joiner gets 1 and 6 and nothing from
+the after-increment set; somebody who has had a rise gets 3 and 9 from that rise
+and never their joining anniversary again; changing the setting removes the old
+date and creates the new one when the sweep reaches it; a CREATED item survives.
+
+**A test of mine asserted the look-ahead window was broken.** It checked every
+milestone after ONE sweep on ONE day and failed on the four that were months
+out — the 45-day window working exactly as P22-5 intended, read as a fault.
+Production runs the sweep nightly, so the suite now sweeps at several dates,
+which is what actually happens.
+
+**Not done, and named.** Notifications for due-soon and overdue evaluations
+(the digests, the bell and the nightly job all exist — this is wiring), and
+post-launch tracking from the evaluation screen.

@@ -1,12 +1,13 @@
 "use client";
 
-/** What is due, grouped by month. This screen is how HR runs the year. */
+/** Evaluation Due — every employee review that is coming up or late. */
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, RotateCcw } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, RotateCcw, Rocket } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
@@ -50,16 +51,29 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   /* -- The three counts, made pressable. Milestone and increment are the two
         kinds of item; overdue cuts across both, which is why it is its own key
         rather than a third kind. Pressing the active one clears it. -- */
-  const [tile, setTile] = React.useState<null | "milestone" | "increment" | "overdue">(null);
-  const toggleTile = (next: "milestone" | "increment" | "overdue") =>
+  const [tile, setTile] = React.useState<null | "milestone" | "soon" | "overdue">(null);
+  const toggleTile = (next: "milestone" | "soon" | "overdue") =>
     setTile((current) => (current === next ? null : next));
 
   const visible = React.useMemo(() => {
     if (tile === "overdue") return list.rows.filter((r) => r.daysRemaining < 0);
-    if (tile === "increment") return list.rows.filter((r) => r.milestoneType === "INCREMENT");
-    if (tile === "milestone") return list.rows.filter((r) => r.milestoneType !== "INCREMENT");
+    /* Thirty days AND not already late — the same predicate the count uses, so
+       a tile can never disagree with its own number (F50-3). */
+    if (tile === "soon")
+      return list.rows.filter((r) => r.daysRemaining >= 0 && r.daysRemaining <= 30);
+    if (tile === "milestone") return list.rows;
     return list.rows;
   }, [list.rows, tile]);
+
+  /* -- WHO A ROUND WOULD COVER: everybody due or already late.
+        The same set "Start evaluations for everyone due" preselects, counted
+        here so the button says how many people it is about rather than opening
+        a screen to find out. DISTINCT people, not items: somebody with two
+        reviews falling together is one person in one cycle. -- */
+  const dueOrOverdueCount = React.useMemo(
+    () => new Set(list.rows.filter((r) => r.daysRemaining <= 30).map((r) => r.profileId)).size,
+    [list.rows],
+  );
 
   /** Recompute what is due. A refresh, not an action with consequences. */
   async function onRefresh() {
@@ -234,10 +248,10 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   return (
     <TableScreen>
       <ScreenHeader
-        title="What is due"
+        title="Evaluation Due"
         subtitle={
           list.rows.length === 0
-            ? "Nothing is waiting. New joiners and increments appear here as their dates approach. If you have just added somebody, press Check again."
+            ? "No evaluations are waiting. Each person's reviews are worked out from their joining date and their last increment — they appear here as the dates approach. If you have just added somebody, press Check again."
             : `${list.thisMonth} ${list.thisMonth === 1 ? "thing needs" : "things need"} your attention this month · ${list.rows.length} in total`
         }
         /* -- ON DEMAND, because the sweep used to run only overnight.
@@ -252,15 +266,38 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               same window creates nothing. -- */
         action={
           canAct ? (
-            <Button
-              variant="outline"
-              className="min-h-11"
-              disabled={refreshing}
-              onClick={() => void onRefresh()}
-            >
-              <RotateCcw aria-hidden className={cn("size-4", refreshing && "animate-spin")} />
-              {refreshing ? "Checking…" : "Check again"}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* -- ONE PRESS FOR THE WHOLE ROUND, at the owner's instruction:
+                    "Add a button that redirects HR to the evaluation cycle
+                    screen with everything pre-filled."
+
+                    It was one "Create and send" per row, so a month with nine
+                    reviews due meant nine separate cycles — which is not what a
+                    review round is. The per-row action stays for the genuine
+                    single case and is still the primary one ON A ROW.
+
+                    The URL says WHAT to select, never a list of ids: the wizard
+                    resolves who from the same due items this page is showing,
+                    and a URL carrying fifty uuids breaks at the browser's
+                    length limit. -- */}
+              {dueOrOverdueCount > 0 ? (
+                <Button asChild className="min-h-11">
+                  <Link href="/admin/cycles/new?evaluate=due">
+                    <Rocket aria-hidden className="size-4" />
+                    Start evaluations for everyone due ({dueOrOverdueCount})
+                  </Link>
+                </Button>
+              ) : null}
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={refreshing}
+                onClick={() => void onRefresh()}
+              >
+                <RotateCcw aria-hidden className={cn("size-4", refreshing && "animate-spin")} />
+                {refreshing ? "Checking…" : "Check again"}
+              </Button>
+            </div>
           ) : undefined
         }
       />
@@ -273,15 +310,19 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
           onSelect={() => toggleTile("milestone")}
           active={tile === "milestone"}
         />
+        {/* -- "Increments due" was here. Increments have their own menu
+                section and their own calendar, so counting them on the
+                evaluation screen was the one card that sent HR somewhere else.
+                "Due soon" is the evaluation question this page can answer. -- */}
         <KpiCard
-          label="Increments due"
-          value={list.incrementsDue}
+          label="Due in the next 30 days"
+          value={list.dueSoon}
           tone="lead"
-          onSelect={() => toggleTile("increment")}
-          active={tile === "increment"}
+          onSelect={() => toggleTile("soon")}
+          active={tile === "soon"}
         />
         <KpiCard
-          label="Overdue"
+          label="Evaluations overdue"
           value={list.overdue}
           tone={list.overdue > 0 ? "critical" : "plain"}
           caption={list.overdue > 0 ? "Past their date" : "Nothing is late"}

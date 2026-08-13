@@ -7,6 +7,8 @@ import {
   type DepartmentRow,
 } from "@/app/(app)/admin/departments/departments-client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScheduleTab } from "@/app/(app)/admin/settings/schedule-tab";
+import { getEvaluationSchedule } from "@/lib/due/schedule";
 import {
   UsersTab,
   type DepartmentOption,
@@ -65,6 +67,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   // 0073: HR’s own wording where they have written some, the shipped default
   // where they have not. `listTemplates` reads both.
   const templatePreviews = await listTemplates();
+  const schedule = await getEvaluationSchedule();
 
   // P21 stored these and P23 finally renders the editor.
   const { data: incrementSettings } = await supabase
@@ -104,7 +107,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     supabase
       .from("employment_records")
       .select(
-        "profile_id, employment_type, current_ctc, last_increment_date, next_increment_date, increment_frequency_months",
+        "profile_id, employment_type, current_ctc, joining_ctc, last_increment_date, next_increment_date, increment_frequency_months",
       ),
   ]);
 
@@ -147,6 +150,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       reports_to_name: p.reports_to ? (nameById.get(p.reports_to) ?? null) : null,
       employment_type: job?.employment_type ?? null,
       current_ctc: job?.current_ctc ?? null,
+      joining_ctc: job?.joining_ctc ?? null,
       last_increment_date: job?.last_increment_date ?? null,
       next_increment_date: job?.next_increment_date ?? null,
       increment_frequency_months: job?.increment_frequency_months ?? null,
@@ -210,6 +214,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <TabsTrigger value="users" className="font-sans text-body">
           Users
         </TabsTrigger>
+        <TabsTrigger value="periods" className="font-sans text-body">
+          Evaluation periods
+        </TabsTrigger>
         <TabsTrigger value="messages" className="font-sans text-body">
           Messages
         </TabsTrigger>
@@ -220,6 +227,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           Recycle bin
         </TabsTrigger>
       </TabsList>
+
+      {/* 0076: how everybody's review dates are worked out. HR writes it, the
+          MD reads it — the tab renders for both and `save_evaluation_schedule`
+          re-checks `is_hr()` in SQL, because a rendered form is not a permission. */}
+      <TabsContent value="periods">
+        <ScheduleTab schedule={schedule} />
+      </TabsContent>
 
       <TabsContent value="general">
         <GeneralTab hikeBands={hikeBands} signature={me?.signature_image ?? null} />

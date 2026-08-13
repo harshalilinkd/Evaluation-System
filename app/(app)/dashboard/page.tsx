@@ -129,7 +129,10 @@ export default async function Page({
               total: due.data.rows.length,
               thisMonth: due.data.thisMonth,
               overdue: due.data.overdue,
-              increments: due.data.incrementsDue,
+              /* The due list is evaluations only now (0076/the rename), so
+                 this counts what is coming up rather than increments — those
+                 have their own calendar and their own tile below. */
+              dueSoon: due.data.dueSoon,
             }
           : null
       }

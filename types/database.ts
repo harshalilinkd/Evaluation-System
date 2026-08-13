@@ -831,6 +831,26 @@ export type Database = {
 
       // 0073. HR's own wording for a message; a key with no row uses the
       // default in lib/notify/templates.ts.
+      // 0076. How everybody's evaluation and increment dates are worked out.
+      // The month lists are arrays because "how many reviews a year" is the
+      // thing being configured, so the COUNT has to be data.
+      evaluation_schedule: {
+        Row: {
+          id: boolean;
+          joiner_evaluation_months: number[];
+          joiner_increment_months: number;
+          cycle_evaluation_months: number[];
+          cycle_increment_months: number;
+          notice_days: number;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // No RLS policy admits a write — save_evaluation_schedule is the path.
+        Insert: { id?: boolean };
+        Update: Partial<Database["public"]["Tables"]["evaluation_schedule"]["Insert"]>;
+        Relationships: [];
+      };
+
       notification_templates: {
         Row: {
           key: string;
@@ -1456,6 +1476,19 @@ export type Database = {
       };
       // 0073. The whole write path for message wording — HR-gated inside the
       // function, and audited in the same statement.
+      // 0076. Writes the schedule AND recalculates every pending due item in
+      // one transaction — so there is no moment where the setting and the due
+      // list disagree. Returns how many items the sweep created.
+      save_evaluation_schedule: {
+        Args: {
+          p_joiner_evaluation_months: number[];
+          p_joiner_increment_months: number;
+          p_cycle_evaluation_months: number[];
+          p_cycle_increment_months: number;
+          p_notice_days: number;
+        };
+        Returns: number;
+      };
       save_notification_template: {
         Args: { p_key: string; p_subject: string; p_body: string };
         Returns: undefined;
@@ -1500,6 +1533,11 @@ export type Database = {
           p_reason: string;
         };
         /** { figure_moved, clock_moved } — see 0066. */
+        Returns: Json;
+      };
+      // 0074. The corrective path: same rules, minus the once-only refusal.
+      set_joining_salary: {
+        Args: { p_profile_id: string; p_amount: number };
         Returns: Json;
       };
       record_joining_salary: {

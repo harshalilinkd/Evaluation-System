@@ -43,7 +43,7 @@ export type DueSummary = {
   total: number;
   thisMonth: number;
   overdue: number;
-  increments: number;
+  dueSoon: number;
 };
 
 /**
@@ -311,8 +311,8 @@ export function DashboardClient({
               </p>
               <dl className="space-y-1 font-sans text-body-sm">
                 <div className="flex justify-between">
-                  <dt className="text-ink-muted">Increments coming</dt>
-                  <dd className="tabular text-ink">{due.increments}</dd>
+                  <dt className="text-ink-muted">Due in the next 30 days</dt>
+                  <dd className="tabular text-ink">{due.dueSoon}</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-ink-muted">Overdue</dt>

@@ -26,7 +26,7 @@ export type DueRow = {
 export type DueList = {
   rows: DueRow[];
   milestonesDue: number;
-  incrementsDue: number;
+  dueSoon: number;
   overdue: number;
   thisMonth: number;
 };
@@ -42,6 +42,29 @@ export const MILESTONE_LABELS: Record<string, string> = {
         whether to start. The two are the same appraisal form — only the
         reason for running it differs. -- */
   PRE_INCREMENT: "Pre-increment review",
+};
+
+/**
+ * What to call a milestone, for any interval HR has configured.
+ *
+ * THE VOCABULARY IS OPEN NOW (0076). The intervals are a setting, so the
+ * milestone is `MONTH_3`, `MONTH_9`, `MONTH_18` — whatever the schedule says —
+ * and a fixed map would show a stored enum value the moment HR changed one.
+ * §8's rule is that a person never reads a stored value, and it applies to a
+ * name the system generated just as much as to one it shipped with.
+ *
+ * The named kinds keep their own wording, because "One-month review" reads
+ * better than the sentence below and is what HR is used to.
+ */
+export function milestoneLabel(type: string): string {
+  const known = MILESTONE_LABELS[type];
+  if (known) return known;
+
+  const months = /^MONTH_(\d+)$/.exec(type);
+  if (!months) return type;
+
+  const n = Number(months[1]);
+  return n === 12 ? "One-year review" : `${n}-month review`;
 };
 
 function daysUntil(iso: string): number {
@@ -64,13 +87,21 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
     .from("due_items")
     .select("id, profile_id, milestone_type, due_on")
     .eq("status", "PENDING")
+    /* -- EVALUATIONS ONLY, at the owner's instruction: "This page is now
+          dedicated specifically to employee evaluation dues (increments live in
+          their own menu section)."
+
+          Filtered at SOURCE rather than in the render, so the counts above the
+          table and the rows inside it cannot describe different sets — which is
+          how a KPI card ends up disagreeing with the list it filters. -- */
+    .neq("milestone_type", "INCREMENT")
     .order("due_on");
 
   if (error) return cycleError("QUERY_FAILED", `Could not read the list: ${error.message}`);
 
   const list = items ?? [];
   if (list.length === 0) {
-    return { ok: true, data: { rows: [], milestonesDue: 0, incrementsDue: 0, overdue: 0, thisMonth: 0 } };
+    return { ok: true, data: { rows: [], milestonesDue: 0, dueSoon: 0, overdue: 0, thisMonth: 0 } };
   }
 
   const ids = [...new Set(list.map((i) => i.profile_id))];
@@ -129,7 +160,7 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
       department: person.department_id ? (deptName.get(person.department_id) ?? null) : null,
       departmentId: person.department_id,
       milestoneType: item.milestone_type,
-      what: MILESTONE_LABELS[item.milestone_type] ?? item.milestone_type,
+      what: milestoneLabel(item.milestone_type),
       dueOn: item.due_on,
       daysRemaining: daysUntil(item.due_on),
       leadId: person.reports_to,
@@ -144,10 +175,35 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
     ok: true,
     data: {
       rows,
-      milestonesDue: rows.filter((r) => r.milestoneType !== "INCREMENT").length,
-      incrementsDue: rows.filter((r) => r.milestoneType === "INCREMENT").length,
+      milestonesDue: rows.length,
+      /* -- "Due soon" replaced "Increments due", which now belongs to the
+            increment calendar. Thirty days is the notice period the schedule
+            itself carries (0076), so the card and the message HR receives are
+            counting the same thing. -- */
+      dueSoon: rows.filter((r) => r.daysRemaining >= 0 && r.daysRemaining <= 30).length,
       overdue: rows.filter((r) => r.daysRemaining < 0).length,
       thisMonth: rows.filter((r) => r.dueOn.startsWith(month)).length,
     },
   };
+}
+
+/**
+ * Everybody whose evaluation is due or already late, by profile id.
+ *
+ * READ FROM THE SAME PENDING ITEMS the Evaluation Due screen lists, so the
+ * button's count and the roster the wizard ticks cannot describe different
+ * sets — which is how a screen ends up saying "9 people" and preselecting
+ * eleven.
+ *
+ * DISTINCT people, not items. Somebody whose three-month and nine-month reviews
+ * fall in the same window is one person in one cycle, not two.
+ *
+ * Thirty days, matching the schedule's own notice period (0076) and the "due
+ * soon" tile. Anything further out is not something HR is being asked to start
+ * today.
+ */
+export async function dueProfileIds(): Promise<string[]> {
+  const list = await getDueList();
+  if (!list.ok) return [];
+  return [...new Set(list.data.rows.filter((r) => r.daysRemaining <= 30).map((r) => r.profileId))];
 }
