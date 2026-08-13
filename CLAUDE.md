@@ -6891,3 +6891,52 @@ remedy was ignored three times in one session and is restated here: **prefer a
 plain `indexOf` over a regex you had to escape through another language.**
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
+
+---
+
+### FIX-57 — The pay ledger read out of order, and its start date was never written
+
+No migration. `lib/employment/queries.ts`, `lib/auth/provisioning.ts`.
+
+Two faults on the Employment tab, both reported from the screen, both about the
+same three rows.
+
+#### The order
+
+The table read **2023 · 2026 · 2025**. The query ordered newest first — which
+was defensible on its own, since the current figure is what somebody opens the
+page to see — and stopped being so when 0043 put the **joining salary** at the
+top as row 1. That row is the oldest of all, so the table became a first row
+older than everything followed by the rest descending, which is not an order.
+
+| # | Decision | Why |
+|---|---|---|
+| F57-1 | Oldest first, so the baseline is genuinely the oldest row | "From joining till current" is what the table claims to be. |
+| F57-2 | **FIX-31 made this exact change to the salary band and left its sibling** | Second time in this log a fix landed on one of a pair. The suite now asserts **both pay-history queries use the same direction**, so the next change to either has to be made in both or it goes red. |
+| F57-3 | Nothing read a position, and that was checked rather than assumed | The one consumer filters and maps; no `history[0]`, no `.at(-1)`. |
+
+#### The date that was never written
+
+**Effective from** rendered an em dash for every person the import created.
+`employment_records.salary_effective_from` was written only by
+`apply_salary_to_record` (0068), which runs on the Add-salary-change path alone.
+
+| # | Decision | Why |
+|---|---|---|
+| F57-4 | **It is a different question from `last_increment_date`** | That one answers "when were they last given a rise" and is legitimately null for a new joiner. This answers "since when have they been on this figure" — and for a new joiner that is the day they joined, not nothing. |
+| F57-5 | It was doing quiet damage as well as showing a dash | The column decides whether a later CORRECTION is treated as fixing the past or as moving today's pay (P19-9). Null meant the first correction on any imported person would unconditionally overwrite their current salary. |
+| F57-6 | **A re-import fills it only where it is EMPTY** | `.is("salary_effective_from", null)` on the update. F24-11 keeps salary untouched on a re-import and this obeys it: a record where a real salary change has since set the date matches nothing. It fills a gap; it never overwrites an answer. |
+| F57-7 | **`newestRise` is one function, used by both paths** | Three things are derived from "the most recent rise this row describes" — the increment clock, this date, and the ledger's newest row — and they must agree. 0068 made the same rule authoritative in SQL. |
+
+**Verification — 17 checks, 0 failed**, plus ledger 46 and template 61. The
+helper is lifted from source and RUN rather than restated (FIX-12).
+
+**Three of my own extractions broke on this and were fixed.** Two lifted the
+helper with a lazy `\n}` that matched the brace closing its multi-line
+PARAMETER TYPE rather than the one ending the function — the same family as an
+`indexOf` finding the wrong occurrence, and the remedy was the same: slice past
+the `return` first. The third pinned a call-site count of 3 from memory against
+a real count of 2; it asserts the claim — exactly one implementation — instead
+of a number.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.

@@ -39,9 +39,17 @@ export async function getEmployment(profileId: string): Promise<CycleResult<Empl
       .from("salary_history")
       .select("*")
       .eq("profile_id", profileId)
-      // Newest first: the current figure is what somebody opens this to see.
-      .order("effective_from", { ascending: false })
-      .order("recorded_at", { ascending: false }),
+      /* -- OLDEST FIRST, because the table it feeds begins with the JOINING
+            SALARY and that is the oldest row of all.
+            Newest-first was defensible on its own — the current figure is what
+            somebody opens this to see — and stopped being so once the baseline
+            was rendered above it (0043). The table then read 2023, 2026, 2025:
+            a first row older than everything and the rest descending, which is
+            not an order at all.
+            FIX-31 made exactly this change to the salary band on the report and
+            left this query, its sibling, behind. -- */
+      .order("effective_from", { ascending: true })
+      .order("recorded_at", { ascending: true }),
     supabase
       .from("increment_reminders")
       .select("remind_on")

@@ -39,6 +39,29 @@ import {
  *
  * Lower-cased, because every lookup here is.
  */
+/**
+ * The most recent rise this row describes, from whichever column carried it.
+ *
+ * ONE IMPLEMENTATION, because three things are derived from it and they must
+ * agree: `last_increment_date` (when the increment calendar counts from),
+ * `salary_effective_from` (since when they have been on today's figure), and
+ * the ledger's own newest row. 0068 made the same rule authoritative in SQL —
+ * "once there is a recorded rise, that is when they were last given one".
+ *
+ * Null when there are no rises at all. That is not the same as the joining
+ * date, and the two callers differ on what to do about it.
+ */
+function newestRise(input: {
+  last_increment_date?: string;
+  increments?: ReadonlyArray<{ effective_from: string }>;
+}): string | null {
+  const dates = [
+    ...(input.last_increment_date ? [input.last_increment_date] : []),
+    ...(input.increments ?? []).map((entry) => entry.effective_from),
+  ];
+  return dates.length === 0 ? null : dates.sort().at(-1)!;
+}
+
 function normaliseEmailCell(value: string | undefined): string {
   const text = (value ?? "").trim().toLowerCase();
   return /^(-{1,2}|–|—|n\/a|na)$/.test(text) ? "" : text;
@@ -251,6 +274,25 @@ async function amendPerson(
     }
   }
 
+  /* -- FILL `salary_effective_from` WHERE IT IS EMPTY, and only there.
+        Anybody imported before it was written has it null, so Current pay shows
+        an em dash and a later CORRECTION would be treated as moving today's pay
+        rather than fixing the past (P19-9). Re-uploading the same file should
+        repair that.
+
+        THE `.is(..., null)` IS THE WHOLE SAFETY OF IT. F24-11 keeps salary
+        untouched on a re-import, and this obeys that: a record where a real
+        salary change has since set the date matches nothing and is left exactly
+        as it is. It fills a gap; it never overwrites an answer. -- */
+  const startedOn = newestRise(input) ?? (input.date_of_joining || null);
+  if (startedOn) {
+    await supabase
+      .from("employment_records")
+      .update({ salary_effective_from: startedOn })
+      .eq("profile_id", profileId)
+      .is("salary_effective_from", null);
+  }
+
   /* -- Rule 4. Everyone holds EMPLOYEE and it is never removed (P8-3). -- */
   const wanted = new Set<string>(["EMPLOYEE", ...input.roles]);
   const { data: held } = await supabase
@@ -418,7 +460,23 @@ async function provisionPerson(
         the employment record with NO last increment date, so the increment
         calendar would not know when the next one falls due. HR would have
         entered everything and been silently dropped from the schedule. -- */
-  const lastIncrementOn = ledger.at(-1)?.effective_from ?? null;
+  const lastIncrementOn = newestRise(input);
+
+  /* -- WHEN TODAY'S SALARY TOOK EFFECT, which is a different question.
+        `last_increment_date` answers "when were they last given a rise" and is
+        null for somebody who has never had one. `salary_effective_from` answers
+        "since when have they been on this figure" — and for a new joiner that
+        is the day they joined, not nothing.
+
+        The import never wrote it at all, so Current pay rendered an em dash for
+        every person it created. Only `apply_salary_to_record` (0068) set it,
+        and that runs on the Add-salary-change path alone.
+
+        It also decides whether a later CORRECTION is treated as fixing the past
+        or as moving today's pay (P19-9), so leaving it null made every imported
+        person's first correction unconditionally overwrite their current
+        salary. -- */
+  const salaryEffectiveFrom = lastIncrementOn ?? input.date_of_joining ?? null;
 
   /* -- The employment record, when there is anything to put in it.
         Created here rather than on a second screen: the increment reminder is
@@ -433,6 +491,7 @@ async function provisionPerson(
     const { error: employmentError } = await supabase.from("employment_records").insert({
       profile_id: profileId,
       last_increment_date: lastIncrementOn,
+      salary_effective_from: salaryEffectiveFrom,
       increment_frequency_months: input.increment_frequency_months,
       employment_type: input.employment_type,
       // The figure on the record is what they are paid TODAY. If HR gave only a
