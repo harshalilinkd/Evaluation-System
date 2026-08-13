@@ -655,7 +655,7 @@ function WorkerSalaryPanel({
   /* -- The percentage is priced against whatever figure is actually KNOWN — what
         HR has typed, or failing that the employment record. The field itself is
         no longer pre-filled (the owner's instruction), and computing this from
-        the empty field alone would have made "Which comes to" go blank on every
+        the empty field alone would have made "Which would make it" go blank on every
         appraisal that had not been priced yet — trading one confusing screen for
         another. What is stored still comes only from what HR typed. -- */
   const basis = oldCtc ?? currentCtcOnRecord;
@@ -716,15 +716,34 @@ function WorkerSalaryPanel({
         </p>
       </div>
 
-      <dl className="grid gap-4 sm:grid-cols-2">
+      {/* -- THREE FIGURES, AND NAMES THAT SAY WHICH IS WHICH.
+
+            It was two cards — "Supervisor's recommendation" (8%) and "Which
+            comes to" (₹16,200) — and they were reported as confusing, fairly:
+            they are two views of ONE thing, the suggestion, and neither name
+            says so. "Which comes to" in particular reads as a conclusion when
+            it is a hypothetical.
+
+            Three now, left to right in the order the decision is actually made:
+            what the supervisor suggested, what that percentage would come to,
+            and what HR actually set. The third is the one that was missing from
+            the top of the panel entirely — it sat only in the stage list below,
+            so the divergence between ₹16,200 and ₹16,000 was two glances apart
+            when it is the whole point of the row. -- */}
+      <dl className="grid gap-4 sm:grid-cols-3">
         <div>
-          <dt className="type-label text-ink-muted">Supervisor&rsquo;s recommendation</dt>
+          <dt className="type-label text-ink-muted">Supervisor suggested</dt>
           <dd className="tabular font-sans text-display-sm text-ink">
             {pct === null ? "—" : `${pct}%`}
           </dd>
+          <dd className="font-sans text-body-sm text-ink-muted">
+            {pct === null
+              ? "They recorded no percentage."
+              : "From their sheet. A suggestion, not the figure."}
+          </dd>
         </div>
         <div>
-          <dt className="type-label text-ink-muted">Which comes to</dt>
+          <dt className="type-label text-ink-muted">Which would make it</dt>
           <dd className="tabular font-sans text-display-sm text-ink">{moneyMonthly(suggested)}</dd>
           {/* -- Three audiences, three sentences. "Needs a current salary" is an
                 instruction, and the MD cannot act on it — they send it back to
@@ -732,11 +751,35 @@ function WorkerSalaryPanel({
           <dd className="font-sans text-body-sm text-ink-muted">
             {suggested !== null
               ? readOnly
-                ? "What the supervisor's percentage comes to."
+                ? "If their percentage were used as it is."
                 : "You can set a different figure below."
               : readOnly
                 ? "HR did not record a current salary, so the percentage cannot be priced. Send it back to have it added."
                 : "Needs a current salary and a percentage."}
+          </dd>
+        </div>
+        {/* -- WHAT HR ACTUALLY SET, at the owner's instruction.
+
+              Blank until it is saved — never falling back to the suggestion,
+              which would show a figure nobody chose on the number a wage is
+              paid from. Where it differs from the suggestion the card says by
+              how much, because that difference IS the decision HR made and it
+              is what management is being asked to approve. -- */}
+        <div>
+          <dt className="type-label text-ink-muted">What HR set</dt>
+          <dd className="tabular font-sans text-display-sm text-ink">
+            {salary.newCtc === null ? "—" : moneyMonthly(salary.newCtc)}
+          </dd>
+          <dd className="font-sans text-body-sm text-ink-muted">
+            {salary.newCtc === null
+              ? readOnly
+                ? "HR did not record a figure before this went up."
+                : "Set it below and press Save salary."
+              : suggested === null || salary.newCtc === suggested
+                ? "The same as the suggestion."
+                : `${moneyMonthly(Math.abs(salary.newCtc - suggested))} ${
+                    salary.newCtc > suggested ? "more" : "less"
+                  } than the suggestion.`}
           </dd>
         </div>
       </dl>

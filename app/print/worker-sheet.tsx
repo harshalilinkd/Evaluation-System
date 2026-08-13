@@ -29,14 +29,15 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
     <section
       className={index !== undefined && index > 0 ? "print-sheet print-page-break" : "print-sheet"}
     >
-      <header className="print-header">
-        <div className="print-brand">
-          {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size mark at the top of a page bound for paper; next/image would defer the one element that should paint first. */}
-          <img src="/logo.png" alt="" className="print-logo" />
-        </div>
-        <span className="print-period">
-          {review.cycleName} · {review.periodLabel}
-        </span>
+      {/* -- CENTRED, at the owner's instruction, and the same treatment the
+            report sheet already had (FIX-37). Three columns — mark left, round
+            right — made the mark read as a corner logo rather than a
+            letterhead. The round moves down into the metadata, where it is one
+            fact among several. -- */}
+      <header className="print-header print-header-stacked">
+        {/* eslint-disable-next-line @next/next/no-img-element -- a fixed-size mark at the top of a page bound for paper; next/image would defer the one element that should paint first. */}
+        <img src="/logo.png" alt="" className="print-logo" />
+        <h1 className="print-title">Worker Performance Appraisal</h1>
       </header>
 
       {/* -- The metadata band, in the paper form's own order. -- */}
@@ -56,7 +57,11 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
           </tr>
           <tr>
             <th scope="row">Supervisor Name</th>
-            <td colSpan={3}>{review.supervisorName ?? "—"}</td>
+            <td>{review.supervisorName ?? "—"}</td>
+            {/* The round, moved out of the corner. Three rows of two now, so
+                every label starts at the same x and every value beside it. */}
+            <th scope="row">Round</th>
+            <td>{review.cycleName || "—"}</td>
           </tr>
         </tbody>
       </table>
@@ -97,57 +102,91 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
         </table>
       </div>
 
-      {/* -- The paper form repeats the overall beneath the table. Kept, because
-            it is what a reader signs against and because dropping a line from a
-            form people know is how they stop trusting the printed version. -- */}
-      <div className="print-block">
-        <p>
-          <strong>Overall Performance</strong>
-          {TICKS.map((t) => (
-            <span key={t} className="print-inline-tick">
-              {TICK_HEAD[t]} <span className="print-box">{review.overallTick === t ? "✓" : ""}</span>
+      {/* -- ONE LABEL COLUMN, so these three read as one block.
+
+            They were three separate paragraphs of inline runs, each starting
+            wherever its own text began: "Overall Performance" at the margin,
+            "Salary:" at the margin, "Training Required:" twelve millimetres
+            into a line, and the three figures wherever the words before them
+            ended. Nothing lined up with anything, which is most of what read as
+            unprofessional.
+
+            A 34mm label column fixes every row to the same edge. The paper
+            form's wording is untouched (§17) — only where it sits. -- */}
+      <div className="print-block print-fields">
+        {/* The overall, repeated beneath the table exactly as the paper form
+            repeats it. Dropping a line from a form people know is how they stop
+            trusting the printed version. */}
+        <div className="print-field">
+          <span className="print-field-label">Overall Performance</span>
+          <span className="print-field-body">
+            {TICKS.map((t) => (
+              <span key={t} className="print-inline-tick">
+                {TICK_HEAD[t]}{" "}
+                <span className="print-box">{review.overallTick === t ? "✓" : ""}</span>
+              </span>
+            ))}
+          </span>
+        </div>
+
+        <div className="print-field">
+          <span className="print-field-label">Salary</span>
+          <span className="print-field-body">
+            <span className="print-inline-tick">
+              Same{" "}
+              <span className="print-box">
+                {review.salary?.salaryChanged === false ? "✓" : ""}
+              </span>
             </span>
-          ))}
-        </p>
+            <span className="print-inline-tick">
+              New <span className="print-box">{review.salary?.salaryChanged ? "✓" : ""}</span>
+            </span>
+          </span>
+        </div>
+
+        <div className="print-field">
+          <span className="print-field-label">Training Required</span>
+          <span className="print-field-body">
+            <span className="print-inline-tick">
+              Yes{" "}
+              <span className="print-box">{review.trainingRequired === true ? "✓" : ""}</span>
+            </span>
+            <span className="print-inline-tick">
+              No <span className="print-box">{review.trainingRequired === false ? "✓" : ""}</span>
+            </span>
+          </span>
+        </div>
       </div>
 
-      <div className="print-block">
-        <p>
-          <strong>Supervisor Comment:</strong>
-        </p>
-        <p className="print-comment">{review.supervisorComment || " "}</p>
-      </div>
-
-      <div className="print-block">
-        <p>
-          <strong>Salary:</strong>
-          <span className="print-inline-tick">
-            Same <span className="print-box">{review.salary?.salaryChanged === false ? "✓" : ""}</span>
-          </span>
-          <span className="print-inline-tick">
-            New <span className="print-box">{review.salary?.salaryChanged ? "✓" : ""}</span>
-          </span>
-          <span className="print-inline-tick" style={{ marginLeft: "12mm" }}>
-            <strong>Training Required:</strong> Yes{" "}
-            <span className="print-box">{review.trainingRequired === true ? "✓" : ""}</span> / No{" "}
-            <span className="print-box">{review.trainingRequired === false ? "✓" : ""}</span>
-          </span>
-        </p>
-
-        {/* -- The three figures print only when there IS a change.
-              Blank rules under a "Same" tick invite somebody to fill them in by
-              hand afterwards, which is how a signed record acquires a number
-              nobody recorded. -- */}
-        <p className="print-salary">
-          Old Salary <span className="print-rule">{formatInr(review.salary?.oldCtc ?? null)}</span>
-          Salary Increment %{" "}
-          <span className="print-rule">
+      {/* -- THE THREE FIGURES, AS A ROW OF THREE.
+            They were an inline run — label, rule, label, rule — so each figure
+            landed wherever the words before it ended and the three rules were
+            different lengths. Equal columns, the caption above and the figure on
+            its own rule beneath: the shape a form actually uses. -- */}
+      <div className="print-block print-salary-row">
+        <div className="print-salary-cell">
+          <span className="print-salary-label">Old Salary</span>
+          <span className="print-salary-value">{formatInr(review.salary?.oldCtc ?? null)}</span>
+        </div>
+        <div className="print-salary-cell">
+          <span className="print-salary-label">Salary Increment %</span>
+          <span className="print-salary-value">
             {review.salary?.incrementPct === null || review.salary?.incrementPct === undefined
               ? "—"
               : `${review.salary.incrementPct}%`}
           </span>
-          New Salary <span className="print-rule">{formatInr(review.salary?.newCtc ?? null)}</span>
-        </p>
+        </div>
+        <div className="print-salary-cell">
+          <span className="print-salary-label">New Salary</span>
+          <span className="print-salary-value">{formatInr(review.salary?.newCtc ?? null)}</span>
+        </div>
+      </div>
+
+      {/* The comment last of the three, because it is the only one that needs
+          room rather than a line. */}
+      <div className="print-block">
+        <p className="print-comment-label">Supervisor Comment</p>
+        <p className="print-comment">{review.supervisorComment || " "}</p>
       </div>
 
       {/* -- Three signatures and the stamp, as printed. The form exists to be
@@ -196,11 +235,16 @@ export function WorkerSheet({ review, index }: { review: WorkerReview; index?: n
               : "Date: ____________"}
           </span>
         </div>
-        {/* -- WIDER, AND A BOX RATHER THAN A LINE.
-              A stamp is round and about 40mm across; a quarter of the row with
-              a rule to sit "on" is not how anybody stamps a document. The
-              dashed area says the space is reserved rather than empty, and it
-              carries no name or date line — a stamp is applied to the paper
+        {/* -- WIDER, AND THE DASHED BOX IS GONE at the owner's instruction.
+
+              It was a bordered area on the reasoning that a stamp is round and
+              about 40mm across, so a quarter of the row with a rule to sit "on"
+              is not how anybody stamps a document. The width stays for that
+              reason; the border does not — a dashed rectangle in a row of four
+              hairlines is the one element that does not belong to the set, and
+              it read as a placeholder rather than as part of the document.
+
+              Still no name and no date line: a stamp is applied to the paper
               after this is printed, so the system has nothing to record. -- */}
         <div className="print-sig print-sig--stamp">
           <span className="print-sig-line" />

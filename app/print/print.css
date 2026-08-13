@@ -992,3 +992,127 @@ dl.print-meta dd {
   max-height: 15mm;
   max-width: 54mm;
 }
+
+/* ============================================================================
+   The worker sheet, made to read as one document (FIX-54)
+   ========================================================================== */
+/*
+  Every rule here is black, white or a neutral grey, like the rest of §7a. The
+  request was that the labels be BLACK rather than the #555 they shared with the
+  report sheet, and that is what these do — hierarchy comes from size and
+  letter-spacing instead, which survives a monochrome laser where a grey does
+  not always.
+*/
+
+/* ---------- The metadata labels ---------- */
+/*
+  Black, at the owner's instruction. They stay small and letterspaced, so a
+  label still reads as a caption beside its value rather than as more data —
+  weight and size carry the hierarchy that colour used to.
+*/
+.print-sheet .print-meta th {
+  color: #000;
+  font-weight: 600;
+}
+
+/* ---------- One label column for the three tick rows ---------- */
+/*
+  They were three paragraphs of inline runs, each starting wherever its own text
+  began — "Overall Performance" at the margin, "Training Required" twelve
+  millimetres into a line, and every tick after them landing at a different x.
+  A fixed label column is the whole fix: one edge, three rows, and the options
+  beside them in the same place every time.
+*/
+.print-fields {
+  margin-top: 5mm;
+  border-top: 0.4pt solid #d0d0d0;
+}
+
+.print-field {
+  display: grid;
+  grid-template-columns: 38mm 1fr;
+  align-items: baseline;
+  gap: 0 3mm;
+  padding: 2mm 0;
+  border-bottom: 0.4pt solid #d0d0d0;
+  font-size: 9.5pt;
+}
+
+.print-field-label {
+  font-size: 7pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #000;
+}
+
+/* The options, evenly spaced rather than run together. */
+.print-field-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8mm;
+}
+
+/* ---------- The three salary figures, as three columns ---------- */
+/*
+  They were an inline run — label, rule, label, rule — so each figure landed
+  wherever the words before it ended and the three rules came out different
+  lengths. Equal columns, caption above, figure on its own rule beneath.
+*/
+.print-salary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0 8mm;
+  margin-top: 4mm;
+}
+
+.print-salary-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+}
+
+.print-salary-label {
+  font-size: 7pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #000;
+}
+
+.print-salary-value {
+  font-variant-numeric: tabular-nums;
+  font-size: 10pt;
+  font-weight: 600;
+  padding-bottom: 1.2mm;
+  border-bottom: 0.5pt solid #000;
+}
+
+/* ---------- The comment ---------- */
+
+.print-comment-label {
+  font-size: 7pt;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: #000;
+  margin-bottom: 1.2mm;
+}
+
+/* ---------- The signature block ---------- */
+/*
+  Black throughout, at the owner's instruction, and the stamp loses its dashed
+  border: a rectangle in a row of four hairlines was the one element that did
+  not belong to the set, and it read as a placeholder rather than as part of the
+  document. The extra WIDTH stays — a stamp is round and about 40mm across.
+*/
+.print-sheet .print-sig-label,
+.print-sheet .print-sig-when {
+  color: #000;
+}
+
+.print-sheet .print-sig--stamp .print-sig-line {
+  border: none;
+  border-bottom: 0.5pt solid #000;
+  height: 14mm;
+}

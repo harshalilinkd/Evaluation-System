@@ -134,9 +134,15 @@ export function WorkerBoard({
   const closedCount = rows.filter((r) => r.status === "CLOSED").length;
 
   /* -- The tiles are the filter, because a count above a list it describes
-        invites a press and there was nothing behind it. Three states and no
-        "All" tile: the ACTIVE one toggles off, which is one control rather than
-        four and means the row cannot end up with nothing selected. -- */
+        invites a press and there was nothing behind it.
+
+        THERE IS AN "ALL" TILE NOW, at the owner's instruction, and this comment
+        used to argue against one — that the active tile toggling off was one
+        control rather than four. That is still true and is still how the stage
+        tiles behave; what it missed is that toggling off is invisible. The
+        escape was a "Show all" link nobody reads until they need it, and a tile
+        is the same control where the eye already is. The row now reads as a
+        total and its parts, and exactly one card is lit at any moment. -- */
   const [filter, setFilter] = React.useState<
     "all" | "waiting" | "ready" | "md" | "closed"
   >("all");
@@ -430,6 +436,26 @@ export function WorkerBoard({
               would let rows vanish from every count, which is worse than a
               fourth card. -- */}
         <KpiRow>
+          {/* -- ALL, at the owner's instruction, and it is the way back.
+
+                The row was three stages with no total, and the escape from a
+                filtered board was a "Show all" link under it — discoverable
+                only by somebody who had already read it. A tile is the same
+                control in the place the eye already is, and it makes the row
+                read as a total and its parts rather than three stages that
+                happen to sit together.
+
+                It is `active` when nothing is filtered, so the row always has
+                exactly one card lit and there is never a state where the reader
+                cannot tell what they are looking at. -- */}
+          <KpiCard
+            label="All"
+            value={rows.length}
+            caption="every appraisal in view"
+            tone="plain"
+            onSelect={() => setFilter("all")}
+            active={filter === "all"}
+          />
           <KpiCard
             label="In progress"
             value={inProgress}
@@ -472,16 +498,13 @@ export function WorkerBoard({
               cards are stages rather than a total plus its parts, the escape
               has to be its own thing or a filtered board is a dead end
               (§13.4). -- */}
+        {/* The COUNT stays; the "Show all" button does not. The All card above
+            is that control now, and two controls doing one job is how they end
+            up looking and behaving differently. */}
         {filter !== "all" ? (
           <p className="font-sans text-body-sm text-ink-muted">
-            Showing {visible.length} of {rows.length}.{" "}
-            <button
-              type="button"
-              onClick={() => setFilter("all")}
-              className="font-medium text-primary underline underline-offset-2"
-            >
-              Show all
-            </button>
+            Showing {visible.length} of {rows.length}. Press{" "}
+            <span className="font-medium text-ink">All</span> to clear.
           </p>
         ) : null}
 
