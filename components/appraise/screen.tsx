@@ -233,7 +233,18 @@ export function KpiRow({ children }: { children: React.ReactNode }) {
           ? "grid-cols-3"
           : count === 4
             ? "grid-cols-2 sm:grid-cols-4"
-            : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
+            /* -- FIVE GETS ITS OWN ROW, at the owner's instruction.
+                  It fell into the catch-all below and capped at four columns,
+                  so the fifth tile dropped to a line of its own — a full-width
+                  card under four narrow ones, which reads as a different kind
+                  of thing rather than the fifth of five. Reports has five since
+                  "One side in" was added, and the production board has five
+                  whenever anything is with management.
+                  Still two-up on a phone and three at `sm`: five across 375px
+                  is 60px a tile, where the labels stop being readable. -- */
+            : count === 5
+              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+              : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
 
   return (
     <div

@@ -87,7 +87,13 @@ const TILE_STATUSES: Record<TileKey, string[]> = {
 
 export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: boolean }) {
   const [cycle, setCycle] = React.useState(ANY);
-  const [type, setType] = React.useState(ANY);
+  /* -- TWO TABS, at the owner's instruction, and so no "both".
+        One of the two is always active, which means the default HIDES the other
+        kind on first load. That is the one real risk in a two-tab filter, and
+        the tab counts below are what answers it: both numbers are always on
+        screen, so nothing is hidden-and-unknown — you can see there are three
+        increments waiting without switching to find out. -- */
+  const [type, setType] = React.useState<"Evaluation" | "Increment">("Evaluation");
   const [department, setDepartment] = React.useState(ANY);
   const [status, setStatus] = React.useState(ANY);
   const [flaggedOnly, setFlaggedOnly] = React.useState(false);
@@ -114,7 +120,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
     const threshold = Number(minGap);
     return queue.rows.filter((r) => {
       if (cycle !== ANY && r.cycleId !== cycle) return false;
-      if (type !== ANY && r.cycleType !== type) return false;
+      if (r.cycleType !== type) return false;
       if (department !== ANY && r.department !== department) return false;
       if (status !== ANY && r.status !== status) return false;
       if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
@@ -130,6 +136,34 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
       return true;
     });
   }, [queue.rows, cycle, type, department, status, tile, flaggedOnly, minGap, search]);
+
+  /* -- How many of each kind, under everything EXCEPT the type itself.
+        Counted against the same search, cycle, department and status the reader
+        has set, so the inactive tab answers "and how many of those are
+        increments" rather than a number from a different question. -- */
+  const typeCounts = React.useMemo(() => {
+    const threshold = Number(minGap);
+    const matches = queue.rows.filter((r) => {
+      if (cycle !== ANY && r.cycleId !== cycle) return false;
+      if (department !== ANY && r.department !== department) return false;
+      if (status !== ANY && r.status !== status) return false;
+      if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
+      if (flaggedOnly && r.flaggedCount === 0) return false;
+      if (minGap !== "" && Number.isFinite(threshold)) {
+        if (r.gap === null || Math.abs(r.gap) < threshold) return false;
+      }
+      if (search.trim()) {
+        const needle = search.trim().toLowerCase();
+        const haystack = `${r.employeeName} ${r.employeeCode ?? ""} ${r.department ?? ""}`.toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+      return true;
+    });
+    return {
+      Evaluation: matches.filter((r) => r.cycleType === "Evaluation").length,
+      Increment: matches.filter((r) => r.cycleType === "Increment").length,
+    };
+  }, [queue.rows, cycle, department, status, tile, flaggedOnly, minGap, search]);
 
   /* -- ONE GRID, and the cycle is a COLUMN.
         It was a card per cycle, each with its own header and its own <table>.
@@ -470,11 +504,36 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          <select value={type} onChange={(e) => setType(e.target.value)} aria-label="Filter by cycle type" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
-            <option value={ANY}>Both types</option>
-            <option value="Evaluation">Evaluation</option>
-            <option value="Increment">Increment</option>
-          </select>
+          {/* -- A SEGMENTED PAIR, not a select. Two options is the case a
+                select is worst at — it hides half the choice behind a click and
+                gives no hint that the other half exists. Side by side, with
+                their counts, the whole choice is one glance.
+
+                Real buttons with `aria-pressed`, so the state is announced and
+                not only drawn (§13.8), inside a `tablist`-shaped group. -- */}
+          <div
+            role="group"
+            aria-label="Cycle type"
+            className="flex shrink-0 rounded-control border border-rule bg-surface-mute p-0.5"
+          >
+            {(["Evaluation", "Increment"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setType(t)}
+                aria-pressed={type === t}
+                className={cn(
+                  "min-h-9 rounded-[6px] px-3 font-sans text-body-sm transition-colors",
+                  type === t
+                    ? "bg-surface font-medium text-ink shadow-sm"
+                    : "text-ink-muted hover:text-ink",
+                )}
+              >
+                {t}{" "}
+                <span className="tabular text-ink-faint">{typeCounts[t]}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid w-full grid-cols-3 gap-2 lg:contents">
