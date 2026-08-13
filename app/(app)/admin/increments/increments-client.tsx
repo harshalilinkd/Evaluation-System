@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Search, Upload } from "lucide-react";
+import { AlertTriangle, Rocket, Search, Upload } from "lucide-react";
 
 import { EmploymentImportDialog } from "@/app/(app)/admin/increments/import-panel";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
@@ -81,6 +81,22 @@ export function IncrementsClient({
       );
     });
   }, [calendar.rows, calendar.thisMonth, calendar.nextMonth, department, month, overdueOnly, tile, search]);
+
+  /* -- WHO A ROUND WOULD COVER: overdue, plus this month and next.
+        The same set the wizard selects for `?increment_for=due`, counted here
+        so the button can say how many people it is about rather than opening a
+        screen to find out. Both read the next-increment date against the
+        SERVER's month keys, never a browser clock (F50-3). -- */
+  const dueSoonCount = React.useMemo(
+    () =>
+      calendar.rows.filter(
+        (r) =>
+          r.daysRemaining < 0 ||
+          r.nextIncrementDate.startsWith(calendar.thisMonth) ||
+          r.nextIncrementDate.startsWith(calendar.nextMonth),
+      ).length,
+    [calendar.rows, calendar.thisMonth, calendar.nextMonth],
+  );
 
   /*
      ONE TABLE, not a section per month.
@@ -220,15 +236,40 @@ export function IncrementsClient({
         title="Increment calendar"
         subtitle={`${calendar.next90} ${calendar.next90 === 1 ? "increment is" : "increments are"} due in the next 90 days · overdue people first`}
         action={
-          /* §13.3: the one primary action on this screen. The import is a
-             write, so it exists for HR alone — and `import_employment`
-             re-checks `is_hr()` in SQL, because a hidden button is not a
-             permission. */
+          /* -- ONE BUTTON FOR THE WHOLE ROUND, at the owner's instruction:
+                "HR filters to due next month, then clicks a single button. That
+                button redirects her straight to the evaluation page with all
+                overdue + due-next-month employees already selected."
+
+                It was one "Start increment" per row, so a pay round of twelve
+                people meant twelve cycles — which is not what a round is. The
+                per-row button stays for the genuine single case (somebody
+                promoted off-cycle) and is now the secondary of the two.
+
+                No list of ids in the URL: `?increment_for=due` says WHAT to
+                select and the wizard works out WHO, from the same
+                `isIncrementDue` the counts above use. A URL carrying fifty
+                uuids is one that breaks at the browser's length limit and
+                cannot be typed, bookmarked or reasoned about. -- */
           canImport ? (
-            <Button className="ml-1 min-h-11" onClick={() => setImportOpen(true)}>
+            <div className="flex flex-wrap items-center gap-2">
+              {dueSoonCount > 0 ? (
+                <Button asChild className="min-h-11">
+                  <Link href="/admin/cycles/new?increment_for=due">
+                    <Rocket aria-hidden className="size-4" />
+                    Start an increment round ({dueSoonCount})
+                  </Link>
+                </Button>
+              ) : null}
+            <Button
+              variant={dueSoonCount > 0 ? "outline" : "default"}
+              className="ml-1 min-h-11"
+              onClick={() => setImportOpen(true)}
+            >
               <Upload aria-hidden className="size-4" />
               Import employment data
             </Button>
+            </div>
           ) : null
         }
       />

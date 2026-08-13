@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { listStaffProfiles } from "@/lib/cycles/queries";
+import { dueProfileIds } from "@/lib/due/queries";
 import { jobSkillCountsByDepartment } from "@/lib/cycles/validate";
 
 export const metadata: Metadata = { title: "New cycle" };
@@ -14,7 +15,7 @@ export const metadata: Metadata = { title: "New cycle" };
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ increment_for?: string }>;
+  searchParams: Promise<{ increment_for?: string; evaluate?: string }>;
 }) {
   // §9: the guard is the first statement.
   await requireRole(ADMIN_ROLES);
@@ -46,6 +47,22 @@ export default async function Page({
       jobSkillCounts={Object.fromEntries(counts.data)}
       initial={null}
       presetCycleType={startingAnIncrement ? "INCREMENT" : undefined}
+      /* ?increment_for=due means a whole ROUND, from the increment calendar:
+         everybody overdue or due within the month, ticked on arrival. Any other
+         value is one person and behaves as it always did. */
+      preselect={
+        params.increment_for === "due"
+          ? "increment-due"
+          : /* From Evaluation Due: everybody whose review is due or already
+               late, ticked on arrival, with the name and period prefilled. */
+            params.evaluate === "due"
+            ? "evaluation-due"
+            : undefined
+      }
+      /* The people whose evaluation is due, resolved on the server from the
+         same PENDING items the Evaluation Due screen lists — so the button's
+         count and the wizard's ticks cannot describe different sets. */
+      evaluationDueIds={params.evaluate === "due" ? await dueProfileIds() : undefined}
     />
   );
 }

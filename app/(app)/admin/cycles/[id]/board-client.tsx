@@ -6,7 +6,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Archive, CalendarClock, Check, MoreHorizontal, Printer, Rocket, Search, Send } from "lucide-react";
+import { Archive, CalendarClock, Check, MoreHorizontal, Pencil, Printer, Rocket, Search, Send } from "lucide-react";
 
 import { SegmentedLegend, SegmentedProgress } from "@/components/appraise/segmented-bar";
 import { StatusChip } from "@/components/appraise/status-chip";
@@ -393,12 +393,30 @@ export function BoardClient({
                   only one on the row that is: nothing else on a draft matters
                   until it is launched. -- */}
             {board.cycle.status === "DRAFT" ? (
-              <Button asChild size="sm" className="min-h-11 lg:min-h-9">
-                <Link href={`/admin/cycles/${board.cycle.id}/edit?step=4`}>
-                  <Rocket className="size-4" aria-hidden />
-                  Review and launch
-                </Link>
-              </Button>
+              <>
+                <Button asChild size="sm" className="min-h-11 lg:min-h-9">
+                  <Link href={`/admin/cycles/${board.cycle.id}/edit?step=4`}>
+                    <Rocket className="size-4" aria-hidden />
+                    Review and launch
+                  </Link>
+                </Button>
+                {/* -- KEEP EDITING, which had no way in from here.
+                      The only route into the wizard was the button above, and
+                      it goes straight to Review — so changing the dates or the
+                      roster of a half-finished draft meant landing on the last
+                      step and walking backwards. Reported alongside the
+                      readiness bug as "edit option is also missing".
+
+                      NO `?step=`, deliberately: without one the wizard resumes
+                      where this person left off. The button beside it names its
+                      destination and keeps it. -- */}
+                <Button asChild variant="outline" size="sm" className="min-h-11 lg:min-h-9">
+                  <Link href={`/admin/cycles/${board.cycle.id}/edit`}>
+                    <Pencil className="size-4" aria-hidden />
+                    Keep editing
+                  </Link>
+                </Button>
+              </>
             ) : null}
 
             {/* -- `disabled` on an asChild Button styles the SPAN and leaves the

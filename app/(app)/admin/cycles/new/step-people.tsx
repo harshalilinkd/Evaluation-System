@@ -72,6 +72,7 @@ export function StepPeople({
   state,
   onChange,
   preset = "all",
+  roundNote,
 }: {
   people: SelectablePerson[];
   state: Record<string, PersonState>;
@@ -84,6 +85,8 @@ export function StepPeople({
    * paid early is a real thing and a filter HR cannot clear would hide it.
    */
   preset?: "due" | "all";
+  /** Why some people arrive already ticked, when they do. */
+  roundNote?: string;
 }) {
   const byId = React.useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const mdCandidates = React.useMemo(() => people.filter((p) => p.isMd), [people]);
@@ -221,6 +224,22 @@ export function StepPeople({
             Showing people whose next increment has arrived or falls within the next month.
             Somebody already overdue is included — they are the ones most worth catching.
           </span>
+        </p>
+      ) : null}
+
+      {/* -- "ADD MORE", said rather than hidden behind a button.
+              The owner asked for an "Add more" control so HR can pull in
+              somebody the schedule did not catch. There is nothing for it to
+              DO: the full roster is already the table below, and a button whose
+              only effect is to scroll is a button that teaches people it does
+              nothing.
+              So the sentence names what is ticked and why, and points at the
+              list — which is the information the button was standing in
+              for. -- */}
+      {roundNote ? (
+        <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
+          {roundNote} Everybody else is listed below — tick anyone you want to add, or use the
+          search and department filter to find them.
         </p>
       ) : null}
 

@@ -59,8 +59,23 @@ export const DISCLOSURE_CHOICES: ReadonlyArray<{
 ];
 
 /** The default depends on the cycle type — an evaluation has no outcome to show. */
-export function defaultDisclosureFor(cycleType: "EVALUATION" | "INCREMENT") {
-  return cycleType === "INCREMENT" ? "SCORE_AND_DECISION" : "SCORE_ONLY";
+/**
+ * "Their own summary only", on both cycle types.
+ *
+ * AT THE OWNER'S INSTRUCTION. An increment cycle used to default to
+ * SCORE_AND_DECISION — their summary plus the pay outcome — on the reasoning
+ * that somebody whose salary has just been decided should be told. That is
+ * still available and is one click away; it is no longer what happens when
+ * nobody chooses.
+ *
+ * The narrower default is the safer one: it releases only what the employee
+ * themselves wrote and rated, and a pay figure reaching somebody before HR
+ * meant to release it is not a mistake that can be taken back. §9 leaves the
+ * choice with HR either way, and the option carries its own description on the
+ * screen.
+ */
+export function defaultDisclosureFor(_cycleType: "EVALUATION" | "INCREMENT") {
+  return "SCORE_ONLY";
 }
 
 /** P10-REV item 4. Two large cards, because this decides what happens at the end. */
