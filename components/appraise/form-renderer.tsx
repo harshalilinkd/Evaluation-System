@@ -407,7 +407,13 @@ function QuestionField({
       id={`q-${question.questionId}`}
       data-question-error={error ? "true" : undefined}
       className={cn(
-        "min-h-16 space-y-3 border-b border-rule py-5 first:pt-0 last:border-b-0 last:pb-0",
+        /* -- TIGHTER, at the owner's instruction: twenty-eight questions is a
+              lot of scrolling, and most of it was padding. py-5 → py-4 and
+              space-y-3 → space-y-2 is 20px a question, which is roughly a
+              screenful over a full form. The `min-h-16` floor goes with them:
+              it was set for a bare text row and a rating question is always
+              taller, so on those it did nothing but reserve height. -- */
+        "space-y-2 border-b border-rule py-4 first:pt-0 last:border-b-0 last:pb-0",
         // P12: mark the FIELD, never the whole card. A card washed rose makes
         // every question in it look wrong.
         error && "-mx-3 rounded-control border-b-0 border-l-2 border-l-critical bg-critical-tint/30 px-3",

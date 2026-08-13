@@ -7,7 +7,6 @@ import { useId, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   SCALE_0_5_LABELS,
-  SCALE_ANCHORS,
   TIER_CLASSES,
   type Tier,
 } from "@/components/appraise/tier";
@@ -119,12 +118,18 @@ export function RatingScale({
   }
 
   return (
-    <div className="space-y-2">
-      {/* §6.1: anchors sit OUTSIDE the group, in ink-faint, label token. */}
-      <div className="flex items-end justify-between gap-4">
-        <span className="type-label text-ink-muted">{SCALE_ANCHORS.low}</span>
-        <span className="type-label text-ink-muted">{SCALE_ANCHORS.high}</span>
-      </div>
+    <div className="space-y-1.5">
+      {/* -- THE ANCHOR ROW IS GONE, because every cell now carries its own word.
+
+            It printed "VERY DISSATISFIED … OUTSTANDING" above the group, which
+            is exactly what cells 0 and 5 say inside it — at every width, since
+            the 3×2 mobile layout shows the words too. Two lines restating two
+            cells, on twenty-eight questions, is most of a screenful of scroll
+            spent saying nothing new.
+
+            The scale is still stated in full ONCE, at the top of the form
+            (`ScaleLegend`), which is where somebody meeting it for the first
+            time reads it. -- */}
 
       <div
         role="radiogroup"
@@ -226,7 +231,12 @@ export function RatingScale({
           compact ? "hidden" : "hidden sm:block",
         )}
       >
-        {shown ? shown.full : "Not yet rated"}
+        {/* -- Empty rather than "Not yet rated". Six unfilled cells already
+              say that, and the required asterisk says it again — a third
+              statement of the same fact under every question is noise on a
+              form that has twenty-eight of them. The height is RESERVED
+              (`min-h-5`) so hovering does not shift the page. -- */}
+        {shown ? shown.full : " "}
       </p>
 
       {/* -- THE PER-QUESTION LEGEND IS GONE, and nothing here replaces it.

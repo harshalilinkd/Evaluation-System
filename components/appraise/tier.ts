@@ -91,6 +91,15 @@ export const SCALE_0_5_LABELS = [
 ] as const;
 
 /** §6.1: anchor words sit outside the group, in ink-faint. */
+/**
+ * The two ends of the scale, in §6's own words.
+ *
+ * UNUSED SINCE THE ANCHOR ROW WAS REMOVED, and kept deliberately rather than
+ * deleted: they are §6's fixed wording, they are derived from
+ * `SCALE_0_5_LABELS` in the same file, and a future surface that needs to state
+ * the ends without printing all six (a chart axis, a compact summary) should
+ * take them from here rather than retyping two strings §17 forbids paraphrasing.
+ */
 export const SCALE_ANCHORS = { low: "Very dissatisfied", high: "Outstanding" } as const;
 
 /* ---------- TICK_3 ---------- */
