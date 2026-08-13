@@ -245,6 +245,12 @@ async function deliverInvite(opts: {
   whatsappToken: string;
   template: TemplateKey;
   render: (link: string) => RenderedMessage;
+  /**
+   * The values `render` was given, minus the link — so HR's own wording can be
+   * filled in with the same ones (0073). The link is added per channel below,
+   * because each channel's is different and this is what mints them.
+   */
+  vars?: Record<string, unknown>;
   context: Record<string, string | number | null>;
 }): Promise<{ sent: number; failed: number }> {
   const out = { sent: 0, failed: 0 };
@@ -264,6 +270,7 @@ async function deliverInvite(opts: {
       recipient: opts.phone,
       template: opts.template,
       message: opts.render(inviteLink(opts.whatsappToken)),
+      vars: { ...(opts.vars ?? {}), link: inviteLink(opts.whatsappToken) },
       evaluationId: opts.evaluationId,
       profileId: opts.profileId,
       context: opts.context,
@@ -284,6 +291,7 @@ async function deliverInvite(opts: {
         recipient: opts.email,
         template: opts.template,
         message: opts.render(inviteUrl(issued.data.token)),
+        vars: { ...(opts.vars ?? {}), link: inviteUrl(issued.data.token) },
         evaluationId: opts.evaluationId,
         profileId: opts.profileId,
         context: opts.context,

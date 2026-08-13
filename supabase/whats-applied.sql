@@ -117,6 +117,8 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   -- one that must be right.
   ('0072_promotion_is_increment_only', 'q_scope', 'the promotion question is INCREMENT_ONLY',
      'Without it a plain EVALUATION cycle asks the manager to recommend a promotion and a percentage, on a cycle that has no pay decision at the end of it.'),
+  ('0073_notification_templates', 'table', 'notification_templates',
+     'Without it Settings > Messages cannot save a reworded message — the editor is there and the table it writes to is not.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',

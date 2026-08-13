@@ -829,6 +829,23 @@ export type Database = {
         Relationships: [];
       };
 
+      // 0073. HR's own wording for a message; a key with no row uses the
+      // default in lib/notify/templates.ts.
+      notification_templates: {
+        Row: {
+          key: string;
+          subject: string;
+          body: string;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        // No RLS policy admits a write — save_notification_template and
+        // reset_notification_template are the whole write path.
+        Insert: { key: string; subject: string; body: string };
+        Update: Partial<Database["public"]["Tables"]["notification_templates"]["Insert"]>;
+        Relationships: [];
+      };
+
       app_notifications: {
         Row: {
           id: string;
@@ -1436,6 +1453,16 @@ export type Database = {
       set_outbound_paused: {
         Args: { p_paused: boolean; p_reason?: string };
         Returns: boolean;
+      };
+      // 0073. The whole write path for message wording — HR-gated inside the
+      // function, and audited in the same statement.
+      save_notification_template: {
+        Args: { p_key: string; p_subject: string; p_body: string };
+        Returns: undefined;
+      };
+      reset_notification_template: {
+        Args: { p_key: string };
+        Returns: undefined;
       };
       // 0014 / P14. All-or-nothing finalise: MD layer, decisions, transition and
       // one audit row per override, in one transaction.

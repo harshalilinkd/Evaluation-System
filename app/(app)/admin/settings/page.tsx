@@ -18,7 +18,7 @@ import { BinnedRounds } from "@/app/(app)/admin/settings/binned-rounds";
 import { RecycleBinTab } from "@/app/(app)/admin/settings/recycle-bin-tab";
 import { listBinnedCycles } from "@/lib/cycles/queries";
 import { getMessageLog, getOutboundState } from "@/lib/notify/settings";
-import { templatePreviewList } from "@/lib/notify/preview";
+import { listTemplates } from "@/lib/notify/template-actions";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -62,7 +62,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const messageLog = logState.ok
     ? logState.data
     : { rows: [], total: 0, failed: 0, queued: 0, templates: [] };
-  const templatePreviews = templatePreviewList();
+  // 0073: HR’s own wording where they have written some, the shipped default
+  // where they have not. `listTemplates` reads both.
+  const templatePreviews = await listTemplates();
 
   // P21 stored these and P23 finally renders the editor.
   const { data: incrementSettings } = await supabase

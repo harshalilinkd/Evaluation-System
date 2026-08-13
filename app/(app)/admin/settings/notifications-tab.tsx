@@ -27,6 +27,8 @@ import {
   type MessageLog,
   type OutboundState,
 } from "@/lib/notify/settings";
+import type { EditableTemplate, TemplateProblem } from "@/lib/notify/overrides";
+import { resetTemplate, saveTemplate } from "@/lib/notify/template-actions";
 import { formatDateTime } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 
@@ -56,6 +58,170 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+/* ---------- The template editor ---------- */
+
+/**
+ * One template, editable.
+ *
+ * KEYED ON THE TEMPLATE KEY by the caller, so switching templates REMOUNTS this
+ * rather than syncing props into state — the pattern this codebase has settled
+ * on since P8-9, and the one the React compiler accepts. A reset effect would
+ * also render once with the previous template's words showing.
+ */
+function TemplateEditor({ template }: { template: EditableTemplate }) {
+  const router = useRouter();
+  const [subject, setSubject] = React.useState(template.subject);
+  const [body, setBody] = React.useState(template.body);
+  const [busy, setBusy] = React.useState(false);
+  const [problems, setProblems] = React.useState<TemplateProblem[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
+
+  const dirty = subject !== template.subject || body !== template.body;
+  const problemFor = (field: "subject" | "body") =>
+    problems.filter((p) => p.field === field).map((p) => p.message);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setProblems([]);
+    const result = await saveTemplate({ key: template.key, subject, body });
+    setBusy(false);
+    if (result.ok) {
+      setSaved(true);
+      router.refresh();
+      return;
+    }
+    setError(result.message);
+    setProblems(result.problems ?? []);
+  }
+
+  async function reset() {
+    setBusy(true);
+    setError(null);
+    const result = await resetTemplate(template.key);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.message);
+      return;
+    }
+    router.refresh();
+  }
+
+  /* -- READ-ONLY, AND IT SAYS WHY.
+        Four templates cannot be reworded — the three digests build a list when
+        they are sent, and the closing message changes with the cycle's
+        disclosure setting. A field that silently refuses to save reads as a
+        fault; a panel that names the reason reads as a decision (§13.4). -- */
+  if (!template.editable) {
+    return (
+      <div className="space-y-3 rounded-control border border-rule bg-surface-mute p-5">
+        <div>
+          <p className="type-label text-ink-muted">Subject</p>
+          <p className="font-sans text-body text-ink">{template.subject}</p>
+        </div>
+        <div>
+          <p className="type-label text-ink-muted">Message</p>
+          <p className="whitespace-pre-wrap font-sans text-body text-ink">{template.body}</p>
+        </div>
+        <p className="rounded-control border-l-2 border-warning bg-warning-tint p-3 font-sans text-body-sm text-ink">
+          This wording cannot be changed. {template.lockedBecause}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 rounded-control border border-rule bg-surface-mute p-5">
+      <div className="space-y-2">
+        <Label htmlFor="tpl_subject" className="type-label text-ink-muted">
+          Subject <span className="font-normal normal-case">(email only)</span>
+        </Label>
+        <Input
+          id="tpl_subject"
+          value={subject}
+          onChange={(event) => {
+            setSubject(event.target.value);
+            setSaved(false);
+          }}
+          className="min-h-11 bg-surface"
+        />
+        {problemFor("subject").map((message) => (
+          <p key={message} className="font-sans text-body-sm text-critical">
+            {message}
+          </p>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="tpl_body" className="type-label text-ink-muted">
+          Message
+        </Label>
+        <Textarea
+          id="tpl_body"
+          value={body}
+          onChange={(event) => {
+            setBody(event.target.value);
+            setSaved(false);
+          }}
+          rows={14}
+          className="bg-surface font-sans text-body"
+        />
+        {problemFor("body").map((message) => (
+          <p key={message} className="font-sans text-body-sm text-critical">
+            {message}
+          </p>
+        ))}
+      </div>
+
+      {/* -- WHAT MAY BE TYPED, listed rather than left to be guessed.
+            Anything else is refused at save, so naming them here is the
+            difference between a hint and a dead end. -- */}
+      <div className="rounded-control border border-rule bg-surface p-3">
+        <p className="type-label text-ink-muted">Things you can drop in</p>
+        <ul className="mt-2 space-y-1">
+          {template.placeholders.map((p) => (
+            <li key={p.token} className="font-sans text-body-sm text-ink-muted">
+              <code className="rounded bg-surface-mute px-1.5 py-0.5 text-ink">{p.token}</code>{" "}
+              — {p.describes}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 font-sans text-body-sm text-ink-muted">
+          Do not paste a web address — write <code>{"{their personal link}"}</code> where the link
+          should go and it is added when the message is sent. Wrap a line in *asterisks* to make it
+          bold on WhatsApp.
+        </p>
+      </div>
+
+      {error ? (
+        <p role="alert" className="font-sans text-body-sm text-critical">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" onClick={save} disabled={busy || !dirty}>
+          {busy ? "Saving…" : "Save wording"}
+        </Button>
+        {template.customised ? (
+          <Button type="button" variant="ghost" onClick={reset} disabled={busy}>
+            Back to the original
+          </Button>
+        ) : null}
+        {saved && !dirty ? (
+          <span className="font-sans text-body-sm text-ink-muted">Saved.</span>
+        ) : null}
+      </div>
+
+      <p className="font-sans text-body-sm text-ink-muted">
+        Your wording is used for both WhatsApp and email. The email keeps its header, button and
+        sign-off — only the words are yours.
+      </p>
+    </div>
+  );
+}
+
 export function NotificationsTab({
   state,
   log,
@@ -63,7 +229,7 @@ export function NotificationsTab({
 }: {
   state: OutboundState;
   log: MessageLog;
-  templates: Array<{ key: string; label: string; subject: string; body: string }>;
+  templates: EditableTemplate[];
 }) {
   const router = useRouter();
   const [dialog, setDialog] = React.useState(false);
@@ -286,7 +452,7 @@ export function NotificationsTab({
       {/* ---------- What each message says ---------- */}
       <SectionCard
         title="What each message says"
-        description="The exact wording that goes out. Read-only — §10 keeps every message string in one file, so a message is never edited beside the code that sends it."
+        description="The wording that goes out. Edit any of these to say it in your own words — names, dates and links are filled in when the message is sent."
       >
         <div className="grid gap-6 md:grid-cols-[16rem_1fr]">
           <ul className="space-y-1">
@@ -296,34 +462,28 @@ export function NotificationsTab({
                   type="button"
                   onClick={() => setPreview(t.key)}
                   className={cn(
-                    "min-h-11 w-full rounded-control px-3 text-left font-sans text-body-sm",
+                    "flex min-h-11 w-full items-center justify-between gap-2 rounded-control px-3 text-left font-sans text-body-sm",
                     preview === t.key
                       ? "bg-accent text-primary"
                       : "text-ink-muted hover:bg-surface-mute",
                   )}
                 >
-                  {t.label}
+                  <span>{t.label}</span>
+                  {/* -- A WORD, not a coloured dot (§13.8). "Edited" is the one
+                        thing somebody scanning this list needs to know, because
+                        it is what tells them why a message does not match the
+                        wording they remember. -- */}
+                  {t.customised ? (
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                      Edited
+                    </span>
+                  ) : null}
                 </button>
               </li>
             ))}
           </ul>
 
-          {shown ? (
-            <div className="space-y-3 rounded-control border border-rule bg-surface-mute p-5">
-              <div>
-                <p className="type-label text-ink-muted">Subject</p>
-                <p className="font-sans text-body text-ink">{shown.subject}</p>
-              </div>
-              <div>
-                <p className="type-label text-ink-muted">Message</p>
-                <p className="whitespace-pre-wrap font-sans text-body text-ink">{shown.body}</p>
-              </div>
-              <p className="font-sans text-body-sm text-ink-muted">
-                Names, dates and links are filled in when it is sent. The example above uses
-                placeholders.
-              </p>
-            </div>
-          ) : null}
+          {shown ? <TemplateEditor key={shown.key} template={shown} /> : null}
         </div>
       </SectionCard>
 

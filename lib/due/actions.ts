@@ -132,19 +132,22 @@ export async function createAndSend(dueItemId: string): Promise<
         one report should not have to find the queue. Each message describes only
         that person's own form (§5) — neither says anything about the other. -- */
   if (person.phone_e164 || person.email) {
-    const message = selfEvaluationInvite({
+    // Hoisted so the same values reach `vars`, which is what fills in HR's own
+    // wording where they have written some (0073).
+    const vars = {
       name: person.full_name,
       period: "your review",
       dueDate: formatDate(dueSelfOn),
       link: inviteUrl(selfToken),
-    });
+    };
+    const message = selfEvaluationInvite(vars);
     for (const [channel, recipient] of [
       ["WHATSAPP", person.phone_e164],
       ["EMAIL", person.email],
     ] as const) {
       if (!recipient) continue;
       const r = await sendNotification({
-        channel, recipient, template: "selfEvaluationInvite", message,
+        channel, recipient, template: "selfEvaluationInvite", message, vars,
         evaluationId, profileId: person.id,
         context: { milestone: item.milestone_type },
       });
@@ -153,21 +156,22 @@ export async function createAndSend(dueItemId: string): Promise<
   }
 
   if (lead && (lead.phone_e164 || lead.email)) {
-    const message = leadReviewInvite({
+    const vars = {
       leadName: lead.full_name,
       employeeName: person.full_name,
       department: dept?.name ?? "their department",
       period: "this review",
       dueDate: formatDate(dueLeadOn),
       link: inviteUrl(leadToken),
-    });
+    };
+    const message = leadReviewInvite(vars);
     for (const [channel, recipient] of [
       ["WHATSAPP", lead.phone_e164],
       ["EMAIL", lead.email],
     ] as const) {
       if (!recipient) continue;
       const r = await sendNotification({
-        channel, recipient, template: "leadReviewInvite", message,
+        channel, recipient, template: "leadReviewInvite", message, vars,
         evaluationId, profileId: lead.id,
         context: { milestone: item.milestone_type },
       });

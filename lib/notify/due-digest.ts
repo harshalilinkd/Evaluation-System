@@ -107,7 +107,14 @@ async function deliver(
   let failed = 0;
   for (const { channel, recipient } of channels) {
     const result = await sendNotification(
-      { channel, recipient, template, message, profileId: person.id, context },
+      {
+        channel, recipient, template, message, profileId: person.id, context,
+        // Not editable — a digest composes a LIST at send time, so there is no
+        // fixed wording to override (see NOT_EDITABLE_BECAUSE). Empty rather
+        // than omitted, because omitting it is what a caller that forgot would
+        // look like, and the type is required so neither can happen silently.
+        vars: {},
+      },
       supabase,
     );
     if (result.ok) sent += 1;

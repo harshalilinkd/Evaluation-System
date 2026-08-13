@@ -373,6 +373,21 @@ export async function GET(request: Request) {
 
       const subject = lead.subjectName ? (subjectNames.get(lead.subjectName) ?? "your report") : "";
 
+      /* -- ONE OBJECT for the template AND for HR's own wording (0073).
+            The four chase templates take the same values in two shapes — the
+            lead's names the employee, the employee's does not — so both are
+            here and each template takes what it needs. -- */
+      const chaseVars =
+        lead.layer === "LEAD"
+          ? {
+              leadName: person.full_name,
+              employeeName: subject,
+              period: lead.periodLabel,
+              dueDate,
+              link,
+            }
+          : { name: person.full_name, period: lead.periodLabel, dueDate, link };
+
       const message = lead.layer === "LEAD"
         ? overdue
           ? leadReviewOverdue({
@@ -391,7 +406,7 @@ export async function GET(request: Request) {
 
       const result = await sendNotification(
         {
-          channel, recipient, template, message,
+          channel, recipient, template, message, vars: chaseVars,
           evaluationId: lead.evaluationId,
           profileId,
           // Display context only — no link, no token (§10). `records` says how

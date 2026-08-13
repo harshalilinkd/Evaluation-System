@@ -218,6 +218,22 @@ export async function sendEvaluationLink(
     recipient,
     template: layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite",
     message,
+    vars:
+      layer === "LEAD"
+        ? {
+            leadName: person.full_name,
+            employeeName: evaluatee.full_name,
+            department: departmentName,
+            period: cycle.period_label,
+            dueDate: formatDate(evaluation.due_lead_on ?? cycle.lead_due_on),
+            link,
+          }
+        : {
+            name: person.full_name,
+            period: cycle.period_label,
+            dueDate: formatDate(evaluation.due_self_on ?? cycle.self_due_on),
+            link,
+          },
     evaluationId,
     profileId: person.id,
     // Display context only. No link, no token — the CHECK on notifications_log

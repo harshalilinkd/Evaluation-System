@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/notify/email";
 import { sendWhatsApp } from "@/lib/notify/maytapi";
 import { raiseInAppNotification } from "@/lib/notify/inapp";
 import { normaliseToE164, type PhoneFailure } from "@/lib/notify/phone";
+import { EDITABLE_TEMPLATES, applyOverride, loadOverrides } from "@/lib/notify/overrides";
 import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
@@ -18,6 +19,16 @@ export type DispatchInput = {
   recipient: string | null | undefined;
   template: TemplateKey;
   message: RenderedMessage;
+  /**
+   * The values the template was rendered from, so HR's own wording can be
+   * filled in with the same ones (0073).
+   *
+   * REQUIRED, not optional. Optional would compile at a call site that forgot
+   * it and silently send the default wording for a template HR had edited —
+   * discovered by nobody, because a message in the old voice looks fine.
+   * Pass `{}` for a template that takes no variables.
+   */
+  vars: Record<string, unknown>;
   evaluationId?: string | null;
   profileId?: string | null;
   /**
@@ -316,15 +327,36 @@ export async function sendNotification(
     };
   }
 
+  /* -- 2c. HR's own wording, where they have written some (0073) -- */
+  //
+  // APPLIED HERE, at the one chokepoint, rather than where each message is
+  // built. Fifteen render sites each remembering to check for an override is
+  // fourteen that do and one that does not — and the one that does not would be
+  // a template HR had edited that quietly kept sending the old words.
+  //
+  // `vars` is REQUIRED on DispatchInput for the same reason: a caller cannot
+  // forget to pass it, because it does not compile.
+  //
+  // Falls back to the built message on anything at all — an unreadable table, a
+  // template that is not editable, a body that no longer validates. A message
+  // going out in the default voice is a far better failure than no message.
+  let message = input.message;
+  if (EDITABLE_TEMPLATES.has(input.template)) {
+    const override = (await loadOverrides(supabase)).get(input.template);
+    if (override) {
+      message = applyOverride(override, input.vars, input.message);
+    }
+  }
+
   /* -- 3. Send -- */
   const result =
     input.channel === "WHATSAPP"
-      ? await sendWhatsApp(recipient, input.message.body)
+      ? await sendWhatsApp(recipient, message.body)
       : await sendEmail(
           recipient,
-          input.message.subject ?? "Your performance evaluation",
-          input.message.body,
-          input.message.html ?? `<pre>${input.message.body}</pre>`,
+          message.subject ?? "Your performance evaluation",
+          message.body,
+          message.html ?? `<pre>${message.body}</pre>`,
         );
 
   /* -- 4. Settle -- */

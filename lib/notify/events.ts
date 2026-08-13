@@ -101,6 +101,16 @@ async function deliver(opts: {
   audience: "employee" | "employee-no-link" | "staff";
   staffPath?: string;
   context?: Record<string, string | number | null>;
+  /**
+   * The same values `render` was given, minus the link — so HR's own wording
+   * can be filled in with them (0073).
+   *
+   * Everything HR may type into a template is here: a name, a period, a due
+   * date, a reason. Never a score and never a salary — §5 and §11 confine both
+   * to a screen behind a login, and there is no placeholder for either, so an
+   * edited template has nothing to reach for.
+   */
+  vars?: Record<string, unknown>;
 }): Promise<TransitionNotice> {
   const channels: Array<{ channel: Channel; recipient: string }> = [];
   if (opts.phone) channels.push({ channel: "WHATSAPP", recipient: opts.phone });
@@ -154,6 +164,11 @@ async function deliver(opts: {
       recipient,
       template: opts.template,
       message: opts.render(link),
+      /* -- The link is added HERE rather than asked of the caller, because this
+            is the function that made it — it differs per channel, and an
+            employee's is a fresh token. A caller passing its own would be
+            passing a value it does not have. -- */
+      vars: { ...(opts.vars ?? {}), link },
       evaluationId: opts.evaluationId,
       profileId: opts.profileId,
       context: opts.context,
@@ -293,6 +308,17 @@ async function run({
       const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
 
       if (lead) {
+        /* -- ONE OBJECT, used by the render AND by `vars`.
+              Writing the values out twice — once for the template, once for
+              HR's own wording — is two lists that must agree for ever, and the
+              one that drifts is the one nobody reads. (0073) -- */
+        const leadInviteVars = {
+          leadName: lead.full_name,
+          employeeName: employee.full_name,
+          department: employeeDepartment,
+          period: cycle.period_label,
+          dueDate: formatDate(cycle.lead_due_on),
+        };
         const forLead = await deliver({
           template: "leadReviewInvite",
           evaluationId,
@@ -308,14 +334,8 @@ async function run({
                   signal AMEND-3 removed. P10-REV wrote `leadReviewInvite` for
                   this moment and the call site was never switched, so every HOD
                   has been told their report already submitted. -- */
-            leadReviewInvite({
-              leadName: lead.full_name,
-              employeeName: employee.full_name,
-              department: employeeDepartment,
-              period: cycle.period_label,
-              dueDate: formatDate(cycle.lead_due_on),
-              link,
-            }),
+            leadReviewInvite({ ...leadInviteVars, link }),
+          vars: leadInviteVars,
           context: { cycle: cycle.name, employee: employee.full_name },
         });
         notice.sent += forLead.sent;
@@ -323,6 +343,11 @@ async function run({
         notice.problems.push(...forLead.problems);
       }
 
+      const selfInviteVars = {
+        name: employee.full_name,
+        period: cycle.period_label,
+        dueDate: formatDate(cycle.self_due_on),
+      };
       const forEmployee = await deliver({
         template: "selfEvaluationInvite",
         evaluationId,
@@ -331,13 +356,8 @@ async function run({
         email: employee.email,
         // Somebody who has never signed in needs a token, not a login form.
         audience: "employee",
-        render: (link) =>
-          selfEvaluationInvite({
-            name: employee.full_name,
-            period: cycle.period_label,
-            dueDate: formatDate(cycle.self_due_on),
-            link,
-          }),
+        render: (link) => selfEvaluationInvite({ ...selfInviteVars, link }),
+        vars: selfInviteVars,
         context: { cycle: cycle.name },
       });
       notice.sent += forEmployee.sent;
@@ -354,6 +374,11 @@ async function run({
       const returnedTo = evaluation.returned_to ?? "BOTH";
 
       if (returnedTo === "SELF" || returnedTo === "BOTH") {
+        const selfReturnVars = {
+          name: employee.full_name,
+          period: cycle.period_label,
+          reason: reason ?? "No reason was recorded.",
+        };
         const r = await deliver({
           template: "formReturned",
           evaluationId,
@@ -361,14 +386,8 @@ async function run({
           phone: employee.phone_e164,
           email: employee.email,
           audience: "employee",
-          render: (link) =>
-            formReturned({
-              name: employee.full_name,
-              period: cycle.period_label,
-              audience: "SELF",
-              reason: reason ?? "No reason was recorded.",
-              link,
-            }),
+          render: (link) => formReturned({ ...selfReturnVars, audience: "SELF", link }),
+          vars: selfReturnVars,
           context: { cycle: cycle.name },
         });
         notice.sent += r.sent;
@@ -377,6 +396,12 @@ async function run({
       }
 
       if ((returnedTo === "LEAD" || returnedTo === "BOTH") && lead) {
+        const leadReturnVars = {
+          name: lead.full_name,
+          period: cycle.period_label,
+          employeeName: employee.full_name,
+          reason: reason ?? "No reason was recorded.",
+        };
         const r = await deliver({
           template: "formReturned",
           evaluationId,
@@ -385,16 +410,9 @@ async function run({
           email: lead.email,
           audience: "staff",
           staffPath: `/team/${evaluationId}`,
-          render: (link) =>
-            formReturned({
-              name: lead.full_name,
-              period: cycle.period_label,
-              audience: "LEAD",
-              // Their RATING came back, not a form of their own.
-              employeeName: employee.full_name,
-              reason: reason ?? "No reason was recorded.",
-              link,
-            }),
+          // Their RATING came back, not a form of their own.
+          render: (link) => formReturned({ ...leadReturnVars, audience: "LEAD", link }),
+          vars: leadReturnVars,
           context: { cycle: cycle.name, employee: employee.full_name },
         });
         notice.sent += r.sent;
@@ -435,6 +453,11 @@ async function run({
           email: person.email,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
+          vars: {
+            employeeName: employee.full_name,
+            leadName: lead?.full_name ?? "their manager",
+            period: cycle.period_label,
+          },
           render: (link) =>
             reportReady({
               employeeName: employee.full_name,
@@ -489,6 +512,12 @@ async function run({
           email: person.email,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
+          vars: {
+            name: person.full_name,
+            period: cycle.period_label,
+            employeeName: employee.full_name,
+            reason: reason ?? "No reason was recorded.",
+          },
           render: (link) =>
             formReturned({
               name: person.full_name,
@@ -534,6 +563,12 @@ async function run({
           staffPath: `/reports/${evaluationId}`,
           // No score in the body: a rating in a WhatsApp message is a rating
           // disclosed on a channel with no access control around it (P13-13).
+          vars: {
+            employeeName: employee.full_name,
+            leadName: lead?.full_name ?? "their lead",
+            period: cycle.period_label,
+            dueDate: formatDate(cycle.md_due_on),
+          },
           render: (link) =>
             mdReviewPending({
               employeeName: employee.full_name,
@@ -579,6 +614,10 @@ async function run({
           email: person.email,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
+          vars: {
+            employeeName: employee.full_name,
+            period: cycle.period_label,
+          },
           render: (link) =>
             evaluationFinalised({
               employeeName: employee.full_name,
@@ -619,6 +658,9 @@ async function run({
         email: employee.email,
         // NONE renders no link at all, so no token is minted for one.
         audience: disclosure === "NONE" ? "employee-no-link" : "employee",
+        // Not editable — its wording changes with the disclosure policy (§9),
+        // so there is nothing for HR to override. See NOT_EDITABLE_BECAUSE.
+        vars: {},
         render: (link) =>
           evaluationClosed({
             name: employee.full_name,

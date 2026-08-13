@@ -6753,3 +6753,141 @@ averaged them.
 errors, lint 0 errors (10 pre-existing warnings), build clean. Nothing here was
 run against live data — every one of these was found by the owner using the
 product, which §18's STATUS has now had to record for the fifth time.
+
+---
+
+### P35 — HR writes the messages
+
+Migration `0073_notification_templates.sql`. `lib/notify/{overrides,template-actions}.ts`.
+The read-only preview panel on Settings › Messages becomes an editor.
+
+**NEW SCHEMA, AT THE OWNER'S EXPLICIT INSTRUCTION** ("make it editable so we can
+edit templates"). §0.4 forbids inventing a table without one, so it is named
+here rather than absorbed.
+
+#### §10 is not weakened, and it is worth being exact about why
+
+§10's rule was never "the wording must live in source". It is that a message
+string must not live **beside the code that sends it** — a body written next to
+a server action gets edited by whoever is touching that action, and the four
+places an employee is addressed drift into four different voices. One row per
+template, edited on one screen, keeps that intact: there is still exactly one
+place a message is written, and `templates.ts` still holds every default.
+
+What an editable body must not become is a way to send something §5 or §9
+forbids. Three things stop that, and only one is in the migration.
+
+| # | Decision | Why |
+|---|---|---|
+| P35-1 | **Four templates cannot be edited, and the set is a code constant** | Three of them do not have a wording so much as a SHAPE: the digests compose a list of names at send time, and fixed text with placeholders cannot express "one line per person, up to eight, then *and 4 more*". The fourth is `evaluationClosed`, the one message governed by a disclosure policy (§9) — its wording differs depending on whether the cycle releases a score, a decision or nothing, and a single editable body would flatten that into one text sent under all three. A column would make "may this be edited" something somebody could switch on for that template without meeting the reason it is off. |
+| P35-2 | **A body may only use placeholders the template actually supplies** | Anything else renders literally, so `{emplyee}` reaches a recipient. Refused at save, naming what may be used instead. |
+| P35-3 | …and it **must** carry the ones the message cannot work without | A reminder with no link is a reminder nobody can act on, and it would go out looking perfectly reasonable. A returned form with no reason is §8's return with the one thing it exists to carry removed. Deliberately short beyond that — everything else is HR's to phrase, including whether to name the person at all. |
+| P35-4 | **No placeholder carries a score or a salary** | §5 and §11 confine both to a screen behind a login (P13-13, P20-16). There is no token for either, so an edited template has nothing to reach for — the safest way to keep a figure out of a message is for the message to have no way to fetch one. |
+| P35-5 | A literal URL is refused, by a CHECK as well as by the form | The link reaches a message as a placeholder. A URL typed in would either be dead on every send or — far worse — somebody pasting a real invite, which is a live credential scoped to one person sent to everybody the template addresses. P11-2 put the same refusal on `notifications_log`; this is the other end of the same rule. |
+| P35-6 | **The override is applied in `sendNotification`, not at each render site** | Fifteen render sites each remembering to check is fourteen that do and one that does not — and the one that does not would be a template HR had edited that quietly kept sending the old words. §10 already makes this the one place a message leaves by. |
+| P35-7 | …and `vars` is **required** on `DispatchInput` | Optional would compile at a call site that forgot it and silently send the default. Making it required meant the compiler listed every sender, which is exactly what was wanted. |
+| P35-8 | The two funnels add the **link** themselves | `deliver` and `deliverInvite` mint it — per channel, and an employee's is a fresh token. A caller passing its own would be passing a value it does not have. |
+| P35-9 | One object feeds the render **and** `vars` | Writing the values out twice is two lists that must agree for ever, and the one that drifts is the one nobody reads. |
+| P35-10 | **HR's wording is used on BOTH channels** | The defaults deliberately say slightly different things over WhatsApp and email — the email has room for a details table and a button. An override cannot express that and should not try. The shell keeps the header, the button and the sign-off, so it still looks like the company sent it, and the screen says so. |
+| P35-11 | The editable text **is what the preview already showed** | `templatePreviewList()` renders each template with `{employee}`-shaped placeholders and never with a real person (P23-7 — that would put a live invite token on a settings screen). So HR starts from exactly the words the panel has always displayed. |
+| P35-12 | Reset **deletes the row** rather than blanking it | A row with an empty body would silence a message while the screen showed it as customised — and the failure is silence, which nobody reports. A CHECK refuses blank for the same reason. |
+| P35-13 | No insert, update or delete policy, for anyone | Two SECURITY DEFINER functions are the whole write path, each taking its actor from the session and writing the audit row in the same statement. Absence is the enforcement (P5-9), and it is what stops a template being edited without a trace. |
+| P35-14 | Readable by any signed-in user, deliberately | Every message is rendered inside `sendNotification`, which runs under whoever triggered it — an employee submitting their form raises a message to HR, so their session has to read the wording. It is not confidential: it is the text those same people receive. |
+| P35-15 | Anything at all wrong falls back to the default | An unreadable table, a template that is not editable, a body that no longer validates. A message going out in the default voice is a far better failure than no message. |
+
+#### Verification — 56 checks, 0 failed
+
+On real Postgres: RLS on with a read policy and **no write policy of any kind**;
+a body carrying a URL, a body carrying `/invite/`, a subject carrying one and a
+blank subject are each refused and the table is left empty; a non-HR caller is
+refused by the function itself; HR's wording stores with the actor taken from
+the **session**; the first edit audits as `template.customised` and the second
+as `template.edited` carrying what it replaced, with no duplicate row; reset
+deletes and audits, and resetting an untouched template is not an error.
+
+Source-level: the editable set is a code constant and `evaluationClosed` is not
+in it; every template that carries a link requires the link placeholder; no
+placeholder is a score or a salary; the override is applied at the chokepoint
+and only for an editable template; the send uses the resolved message and never
+`input.message`; **all six senders pass `vars`**; the defaults are untouched; the
+editor writes through the audited function and never the table.
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
+
+**A CRLF replacement silently did nothing, for the second time in this log.**
+`dispatch-launch.ts` is stored with CRLF line endings and a scripted
+LF-delimited replacement matched nothing and reported success — the same trap
+FIX-10's addendum recorded against a migration patch. The standing remedy holds
+and was not followed: **check that a replacement matched something.** It was
+caught by grepping for the field afterwards rather than by the script.
+
+**Action required.** `0073_notification_templates.sql` is **not applied**. Until
+it is, the editor renders and saving reports that the table is missing —
+`loadOverrides` swallows the read error, so nothing breaks and every message
+goes out in its default wording.
+
+---
+
+### FIX-56 — The org chart in one file, and three refusals a real payroll export earns
+
+No migration. `lib/auth/{csv,provisioning,schemas}.ts`.
+
+Prompted by the owner uploading their actual 52-row staff export and getting
+**52 failures** — one per row. Every one of them was the product being wrong
+about what a real spreadsheet looks like.
+
+#### The blocker: a manager who is three rows down
+
+`reports_to` was resolved against the DATABASE alone, so the message read
+"import their Manager first" — which assumes a file of reports and a separate
+file of managers. What HR exports is the **org chart**: one file where almost
+everybody's manager is another row in it. That file could never import at all.
+
+| # | Decision | Why |
+|---|---|---|
+| F56-1 | A manager is looked for in the database **and** in the file | The pre-pass collects every address the file will create, so a row can name somebody further down. A name in neither is still refused — that one genuinely has to be fixed before the file can go in, and the message now says both places were checked. |
+| F56-2 | **The commit creates managers before their reports** | `reports_to` is a profile id, so somebody whose manager is in the same file cannot be written until that manager exists. Rather than demanding HR sort the spreadsheet — which is asking a person to do a topological sort by hand — the work is done here. |
+| F56-3 | A loop until no progress, **not** a topological sort | Same result, with one useful difference: what is left when progress stops is exactly the set caught in a circle, so it can be reported rather than silently dropped or ordered arbitrarily. |
+| F56-4 | A circle is **created anyway**, with the one field named | A reports to B and B reports to A. Neither can be first, so both are written without a manager and told so. The accounts are real and usable, and one unresolvable field should not fail a whole row (P19B-8). |
+
+#### Three things a real export carries that the importer refused
+
+| # | Decision | Why |
+|---|---|---|
+| F56-5 | **A dash in the email column means "they have not got one"** | Twenty-five production workers carried `-`, which is exactly what a person means by that — and it was read as an address, failing every one of those rows. Blank, `-`, an en or em dash, `n/a` and `na` all mean the same thing. Applied to the person's own address AND to their manager's. |
+| F56-6 | **A zero increment is not a rise** | Thirty-two entries in the file were `0` — a joiner's first year, or a year somebody was reviewed and given nothing. Recording them would put a 0% increment in the pay ledger and move the increment clock to a date nothing happened on, so the next one would be counted from a rise that never was. Skipped, exactly as a blank is. |
+| F56-7 | …and a **date with no amount** is skipped rather than refused | Thirteen rows had one. "Both or neither" was the wrong rule: a real export carries a column for every year whether or not anything was given, and refusing those would mean deleting cells to describe something that did not happen. |
+| F56-8 | An **amount with no date** is still refused | It cannot be placed in the ledger at all, and guessing a date would put somebody's increment schedule months out with nothing on screen to show for it. |
+
+#### Two more, found in the same read
+
+| # | Decision | Why |
+|---|---|---|
+| F56-9 | **The template's `roles` hint named a value that does not exist** | It said "Manager"; the enum value is `HOD`. `roles` is filtered against `ROLE_VALUES`, so anything unrecognised was **silently dropped** — somebody following the hint imported as a plain employee with no error anywhere, discovered when a HOD could not review their team or a supervisor never appeared in a production round's rater list. `SUPERVISOR` was missing from the hint entirely, which is the one a production round needs. Both fixed, and an unrecognised value now stops the row with a message naming what to use (§0.7). The accepted and suggested lists are **derived from `ACCESS_LEVELS`**, so neither can drift from what the interface offers. |
+| F56-10 | **Several rises per person, not one** | `last_increment_*` records the newest rise and nothing before it, so a sheet carrying "Increment Amt 2025" and "Increment Amt 2026" lost one of them — and a percentage computed against a salary two rises old is wrong in a way nobody can see afterwards. Numbered `increment_N_date` / `increment_N_amount` pairs now compose a ledger; the reader takes **any** N, so a third year needs no code change. |
+| F56-11 | The chain is anchored on **today's salary** and walks backwards | Forward from `joining_ctc` was the obvious direction and the wrong one: joining 25,000 plus a recorded rise of 5,000 comes to 30,000, and if the record says 32,000 today the ledger's newest row would contradict the record beside it. Today's figure is the one thing known for certain. For a single entry this is byte-for-byte the arithmetic that was already there, which is what makes it safe to widen rather than a second algorithm. |
+| F56-12 | It **stops rather than writing a row it cannot stand behind** | Caught by the suite: rises adding to more than the salary produced a row saying somebody had been moved to ₹1,000 — a figure the loop derived, not one anybody typed. |
+| F56-13 | **The increment clock comes from the newest rise, whichever column carried it** | Found by the owner asking whether the newest rise has to be typed twice. It does not — but `employment_records.last_increment_date` was written from the `last_increment_date` COLUMN alone, so filling in only the numbered pairs would have written the history perfectly and left the person with no next-increment date: entered completely, and silently never chased. 0068 already made the ledger authoritative for that field; this is the same rule at the point of import. |
+| F56-14 | **Blank `salary_unit` now means MONTHLY on both tracks** | At the owner's instruction, reversing F53-7's split default. Their payroll sheet states both teams per month, so the split was wrong about the file it exists to read. The remaining risk points the safe way: an annual figure read as monthly is out by twelve UPWARDS, which nobody scrolls past; the reverse is out downwards and looks plausible. |
+
+#### Verification — 46 checks on the ledger, 61 on the template, 0 failed
+
+The chain, the ledger and the clock are all **lifted from `provisioning.ts` and
+run**, never retyped — FIX-12's rule, and the reason the earlier version of this
+suite carried its own copy of the multiply-by-twelve and would have gone on
+passing if the product's broke.
+
+The owner's real 52-row file was then run through the import's own rules: every
+`roles` cell resolves (including two carrying a mojibake non-breaking space,
+which the split treats as a separator); 25 people have no address and all 25 are
+Production Team with an employee code; no duplicate email or employee code; no
+amount is left without a date. The only remaining refusals were two managers
+genuinely absent from the file, which the owner added.
+
+**Three of my own assertions were wrong and were corrected.** Two were regexes
+escaped through a heredoc that lost a backslash — one would not even parse — and
+the third omitted a backslash the source actually contains. §18's standing
+remedy was ignored three times in one session and is restated here: **prefer a
+plain `indexOf` over a regex you had to escape through another language.**
+
+Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
