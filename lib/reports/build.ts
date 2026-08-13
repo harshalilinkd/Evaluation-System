@@ -79,8 +79,38 @@ export async function buildEvaluationReport(
   if (!selfForm.ok) return cycleError("FORM_FAILED", "Could not assemble the self layer.");
   if (!leadForm.ok) return cycleError("FORM_FAILED", "Could not assemble the lead layer.");
 
+  /* -- A LAYER THAT HAS NOT BEEN SUBMITTED CARRIES NO SCORE. Reported, and it
+        was wrong in the way that matters most on this screen.
+
+        `evaluation_responses.answers` is written by AUTOSAVE (0011), every
+        twenty seconds, from the moment somebody opens their form. So a manager
+        six questions into a twenty-eight-question form has six answers on the
+        row — and this file averaged them and printed "MANAGER 4.00" beside the
+        employee's finished 3.52, with a +0.48 gap computed against a draft.
+
+        Three separate untruths from one omission: a rating nobody has stood
+        behind, a gap measured against it, and section rows reading 4.00 for the
+        one section they happen to have reached and an em dash for the rest.
+
+        §8 is unambiguous — a layer is a draft until it is submitted, and its
+        scores are stored AT submission. §11 stores them for that reason. The
+        report was the one reader deriving its own from whatever happened to be
+        in the blob.
+
+        A SKIPPED layer counts as in: HR advanced past it deliberately, so what
+        is there is all there is going to be. -- */
+  const selfIn = Boolean(evaluation.self_submitted_at) || Boolean(evaluation.self_skipped);
+  const leadIn = Boolean(evaluation.lead_submitted_at) || Boolean(evaluation.lead_skipped);
+
   const selfAnswers = selfForm.data.answers;
   const leadAnswers = leadForm.data.answers;
+
+  /* Scored on what is SUBMITTED. The raw answers above still feed the narrative
+     bands and the per-question table, because a half-filled draft is exactly
+     what HR opened the report early to read (FIX-50) — what it must not do is
+     become a number. */
+  const scoredSelfAnswers = selfIn ? selfAnswers : {};
+  const scoredLeadAnswers = leadIn ? leadAnswers : {};
 
   const { data: responses } = await supabase
     .from("evaluation_responses")
@@ -112,10 +142,13 @@ export async function buildEvaluationReport(
   // needs the two side by side under one definition. They agree — the same
   // function produced both — but computing here means the report cannot show a
   // gap between two numbers derived by different code.
-  const selfScores = computeScores(selfForm.data, selfAnswers);
-  const leadScores = computeScores(leadForm.data, leadAnswers);
+  const selfScores = computeScores(selfForm.data, scoredSelfAnswers);
+  const leadScores = computeScores(leadForm.data, scoredLeadAnswers);
 
-  const variance = computeVariance(selfAnswers, leadAnswers, leadForm.data, threshold);
+  /* The gap needs BOTH sides in. Measured against a draft it is not a
+     disagreement, it is a reading of how far somebody has got — and §11 makes
+     the gap the figure the whole product exists to surface. */
+  const variance = computeVariance(scoredSelfAnswers, scoredLeadAnswers, leadForm.data, threshold);
   const varianceByQuestion = new Map(variance.map((v) => [v.questionId, v]));
   const flaggedCount = variance.filter((v) => v.flag !== "none").length;
 

@@ -195,7 +195,17 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
     const scores = scoreOf.get(e.id) ?? { self: null, lead: null };
     const threshold = cycle?.variance_threshold ?? DEFAULT_VARIANCE_THRESHOLD;
 
-    const answers = answersOf.get(e.id) ?? { self: {}, lead: {} };
+    /* -- SAME RULE AS THE REPORT: a draft is not a rating.
+          `answers` is autosaved from the first keystroke (0011), so counting a
+          flag against a half-filled lead layer reports a disagreement with
+          somebody who has not finished forming one. The stored `overall_score`
+          columns above are already correct — they are written at submission —
+          and this loop was the one place in the queue reading the raw blob.
+          A skipped layer counts as in (§8: HR advanced past it deliberately). -- */
+    const bothIn =
+      (Boolean(e.self_submitted_at) || e.self_skipped) &&
+      (Boolean(e.lead_submitted_at) || e.lead_skipped);
+    const answers = bothIn ? (answersOf.get(e.id) ?? { self: {}, lead: {} }) : { self: {}, lead: {} };
     let flagged = 0;
     for (const [questionId, selfValue] of Object.entries(answers.self)) {
       const leadValue = answers.lead[questionId];
