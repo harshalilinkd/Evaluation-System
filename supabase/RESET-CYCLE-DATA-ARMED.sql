@@ -93,6 +93,21 @@ do $$ begin delete from public.due_items;          exception when undefined_tabl
 -- evaluations no longer exist.
 delete from public.notifications_log;
 
+/* -- THE IN-APP BELL, AND IT IS THE ONE THAT MATTERS MOST HERE.
+
+      `app_notifications.evaluation_id` is a plain uuid with NO foreign key —
+      deliberately (P3-2: a reference that must outlive the row it points at
+      cannot be a constraint). The consequence is that NOTHING cascades these
+      rows away.
+
+      Run the reset without this and every employee opens the app to a bell
+      reading "Your evaluation is open", linking to a form that no longer
+      exists. That is the most confusing possible end state for a clean slate,
+      and it is exactly what FIX-17 found missing from the full reset.
+
+      This CYCLES-ONLY file was written before that and never had the line. -- */
+do $$ begin delete from public.app_notifications; exception when undefined_table then null; end; $$;
+
 delete from public.evaluations;
 
 /* -- The cycle guard (P10-8).
@@ -125,6 +140,15 @@ alter table public.evaluation_cycles enable trigger evaluation_cycles_guard_dele
 
 do $$
 begin
+  /* -- The salary block on a worker sheet: the supervisor's percentage and the
+        figures HR priced it at. CYCLE data, not pay — what somebody is actually
+        paid lives in `employment_records` and `salary_history`, and neither is
+        touched by this file.
+
+        It cascades from `worker_evaluations`, and is listed anyway for the
+        reason F17-9 gives: a table that ever loses its cascade must not quietly
+        survive a reset. It was the one worker table missing from this list. -- */
+  delete from public.worker_evaluation_decisions;
   delete from public.worker_evaluation_responses;
   delete from public.worker_evaluation_questions;
   delete from public.worker_evaluations;

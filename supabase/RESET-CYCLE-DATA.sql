@@ -121,6 +121,15 @@ begin;
   -- evaluations no longer exist.
   delete from public.notifications_log;
 
+  /* -- THE IN-APP BELL, AND IT IS THE ONE THAT MATTERS MOST HERE.
+        `app_notifications.evaluation_id` is a plain uuid with NO foreign key
+        (P3-2), so NOTHING cascades these away. Without this line every employee
+        opens the app to a bell reading "Your evaluation is open", linking to a
+        form that no longer exists — the most confusing possible end state for a
+        clean slate. FIX-17 found it missing from the full reset; this file was
+        written before that and never had it either. -- */
+  do $$ begin delete from public.app_notifications; exception when undefined_table then null; end; $$;
+
   delete from public.evaluations;
 
   /* -- The cycle guard (P10-8).
@@ -133,6 +142,27 @@ begin;
   alter table public.evaluation_cycles disable trigger evaluation_cycles_guard_delete;
   delete from public.evaluation_cycles;
   alter table public.evaluation_cycles enable trigger evaluation_cycles_guard_delete;
+
+  /* -- THE WORKER MODULE, in its own block because it shares no table (§7).
+        This file predates that module and left every production round behind —
+        a "reset" that cleared the staff cycles and nothing else.
+
+        `worker_evaluation_decisions` holds the supervisor's percentage and what
+        HR priced it at. That is CYCLE data, not pay: what somebody is actually
+        paid lives in `employment_records` and `salary_history`, and neither is
+        touched anywhere in this file. -- */
+  do $$
+  begin
+    delete from public.worker_evaluation_decisions;
+    delete from public.worker_evaluation_responses;
+    delete from public.worker_evaluation_questions;
+    delete from public.worker_evaluations;
+    delete from public.worker_cycles;
+  exception
+    when undefined_table then
+      raise notice 'Worker appraisal tables are not present (0047 not applied). Nothing to delete there.';
+  end;
+  $$;
 
 commit;
 */
@@ -150,9 +180,35 @@ select
   (select count(*) from public.evaluations)           as evaluations_left,
   (select count(*) from public.evaluation_responses)  as answers_left,
   (select count(*) from public.notifications_log)     as messages_left,
+  (select count(*) from public.app_notifications)     as bell_items_left,
   '|'                                                 as kept,
   (select count(*) from public.profiles)              as people,
   (select count(*) from public.user_roles)            as role_grants,
   (select count(*) from public.departments)           as departments,
   (select count(*) from public.questions)             as questions,
   (select count(*) from public.department_questions)  as question_mappings;
+
+/* -- PAY, CHECKED SEPARATELY AND DELIBERATELY.
+
+      "Salaries untouched" is the whole reason this file exists rather than
+      RESET-CYCLES-AND-PAY. Nothing above deletes from either table, but an
+      absence in a script is not something anybody can see — so it is asserted
+      here, with the numbers from before the run to compare against.
+
+      A NOTE ON WHAT THIS CANNOT UNDO. If a test INCREMENT cycle was confirmed
+      and closed, `confirm_increment` already appended a `salary_history` row
+      and moved `employment_records.current_ctc`. Deleting the cycle does not
+      reverse that, and this file will not try: `salary_history` is append-only
+      for every caller including a migration (P19-3), and the guarantee is worth
+      more than a tidy table. Check `pay_changes_from_a_cycle` below — if it is
+      not zero, those figures came from a test run and need correcting on the
+      person's Employment tab. -- */
+
+select
+  (select count(*) from public.employment_records)    as employment_records,
+  (select count(*) from public.salary_history)        as pay_history_rows,
+  (select count(*) from public.salary_history
+     where evaluation_id is not null)                 as pay_changes_from_a_cycle,
+  (select count(*) from public.increment_reminders)   as increment_reminders,
+  (select count(*) from public.employment_records
+     where current_ctc is not null)                   as people_with_a_salary;

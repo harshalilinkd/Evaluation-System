@@ -6940,3 +6940,48 @@ a real count of 2; it asserts the claim — exactly one implementation — inste
 of a number.
 
 Typecheck 0 errors, lint 0 errors (10 pre-existing warnings), build clean.
+
+---
+
+### FIX-58 — The cycles-only reset cleared the staff cycles and not much else
+
+No migration. `supabase/RESET-CYCLE-DATA.sql` and its armed twin.
+
+Prompted by the owner rolling the app out with real data and wanting the test
+cycles gone, salaries untouched. That file already existed; running it for real
+found two things it would have left behind.
+
+| # | Decision | Why |
+|---|---|---|
+| F58-1 | **The in-app bell was never cleared** | `app_notifications.evaluation_id` is a plain uuid with NO foreign key — deliberately (P3-2), because a reference that must outlive the row it points at cannot be a constraint. So nothing cascades those rows away, and every employee would have opened the app to a bell reading "Your evaluation is open" linking to a form that no longer exists: the most confusing possible end state for a clean slate. FIX-17 found this missing from the FULL reset and fixed it there; the cycles-only file was written earlier and never had the line. |
+| F58-2 | **The unarmed file predated the worker module entirely** | It cleared the staff cycles and left every production round, appraisal, tick and frozen sheet standing — a "reset" that reset half the product. `worker_evaluation_decisions` went in with the rest, listed explicitly although it cascades, for the reason F17-9 gives: a table that ever loses its cascade must not quietly survive a reset. |
+| F58-3 | STEP 3 now reports the PAY tables, separately and deliberately | "Salaries untouched" is the whole reason this file exists rather than RESET-CYCLES-AND-PAY. Nothing in it deletes from either table — but an absence in a script is not something anybody can see, so it is asserted with numbers to compare against. |
+| F58-4 | …including `pay_changes_from_a_cycle`, and what it means | A confirmed test INCREMENT already appended a `salary_history` row and moved `current_ctc`. Deleting the cycle does not reverse that and this file will not try: the table is append-only for every caller including a migration (P19-3), and the guarantee is worth more than a tidy table. If that count is not zero, those figures came from a test run and need correcting on the Employment tab. |
+
+**The existing guard was right and is now proved.** The script refuses to run
+at all when a pay row is tied to an evaluation it is about to delete, and
+`DETACH-PAY-FROM-EVALUATIONS.sql` is the narrow way past it — nulling the link
+and nothing else.
+
+#### Verification — 36 checks, 0 failed, on real Postgres
+
+The fixture is a database after a test run: a LAUNCHED cycle (so P10-8's delete
+guard is genuinely in the way), two evaluations with reports, a production
+round, bell entries with no foreign key behind them, and real pay including one
+row a confirmed test increment wrote. `salary_history`'s append-only triggers
+are reproduced, because the detach script switches them off and back on and a
+fixture without them would be testing a table that script never meets.
+
+The whole sequence runs as the owner would: the guard STOPS the reset and
+nothing is deleted; the detach removes the link and every pay row survives with
+its figures; the reset then clears all sixteen cycle tables including the bell
+and the worker module; employment records, pay history and reminders are
+unchanged; the delete guard is switched back ON.
+
+**Four of my own mistakes in the harness, all recorded shapes.** The runner
+printed PGlite's minified bundle instead of the error (P19B-9, for the second
+time). A `sed` inserted a literal newline into a JS string. A comment written
+with backticks INSIDE a template literal closed the string. And one assertion
+checked that the pay row still pointed at an evaluation — after the detach step
+had deliberately removed that link; it asserts the pay by value now, which is
+the claim.
