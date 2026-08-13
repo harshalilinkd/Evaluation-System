@@ -122,8 +122,18 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
   { key: "department", header: "department", hint: "matched by name or code" },
   { key: "phone", header: "phone", hint: "9876543210" },
   { key: "designation", header: "designation", hint: "Senior Designer" },
-  { key: "reports_to", header: "reports_to", hint: "their Manager's email" },
-  { key: "roles", header: "roles", hint: "Manager / HR_ADMIN / MD, separated by spaces" },
+  /* -- THE EMAIL, never the name. Two people can share a name; an email is what
+        the account is keyed on, and it is the only manager identifier a
+        spreadsheet reliably carries (P19C-14). -- */
+  { key: "reports_to", header: "reports_to", hint: "their manager's EMAIL, not their name" },
+  /* -- THE HINT SAID "Manager", AND THAT VALUE DOES NOT EXIST.
+        `roles` is filtered against ROLE_VALUES and anything unrecognised is
+        dropped — so somebody following this hint got a person with EMPLOYEE
+        alone and no error to show for it. The enum value is HOD, and SUPERVISOR
+        was missing entirely, which is the one a production round needs to find
+        a rater at all. Both fixed here; the silent drop is fixed in the import,
+        which now refuses an unrecognised value by name (§0.7). -- */
+  { key: "roles", header: "roles", hint: "HOD / SUPERVISOR / HR_ADMIN / MD — blank for most people" },
   { key: "date_of_joining", header: "date_of_joining", hint: "DD-MM-YYYY" },
   { key: "employment_type", header: "employment_type", hint: "PERMANENT / PROBATION / CONTRACT / TRAINEE" },
   { key: "last_increment_date", header: "last_increment_date", hint: "DD-MM-YYYY" },
@@ -137,22 +147,46 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         on every increment percentage, report and printed sheet, and low enough
         to look plausible rather than obviously wrong.
 
-        One column removes the whole class. Blank means ANNUAL, so a file
-        written before this existed imports exactly as it did. -- */
-  { key: "salary_unit", header: "salary_unit", hint: "MONTHLY or ANNUAL (blank = monthly for Production, annual for Backend)" },
-  { key: "joining_ctc", header: "joining_ctc", hint: "400000" },
-  { key: "current_ctc", header: "current_ctc", hint: "480000" },
-  { key: "last_increment_amount", header: "last_increment_amount", hint: "80000" },
+        One column removes the whole class. BLANK MEANS MONTHLY, on both tracks,
+        at the owner's instruction — their payroll sheet states both teams per
+        month, and the remaining risk points the safe way: an annual figure read
+        as monthly is out by twelve UPWARDS, which nobody scrolls past. See the
+        note beside `perMonth` in provisioning.ts. -- */
+  { key: "salary_unit", header: "salary_unit", hint: "MONTHLY or ANNUAL (blank = MONTHLY)" },
+  /* -- The three figures are exampled PER MONTH, matching the default above.
+        An example row is what people copy, so it has to state the same unit the
+        blank column means — a monthly default beside an annual example is the
+        column contradicting itself. -- */
+  { key: "joining_ctc", header: "joining_ctc", hint: "25000" },
+  { key: "current_ctc", header: "current_ctc", hint: "32000" },
+  { key: "last_increment_amount", header: "last_increment_amount", hint: "5000" },
+  /* -- EARLIER RISES, one numbered pair each.
+        `last_increment_*` records the newest rise and nothing before it, so a
+        sheet carrying "Increment Amt 2025" and "Increment Amt 2026" lost one of
+        them. Two pairs are exampled here because two years is what people have;
+        the READER takes any `increment_N_*`, so a third year needs no change to
+        this file — add the columns to the sheet and they are read. -- */
+  { key: "increment_1_date", header: "increment_1_date", hint: "DD-MM-YYYY — the OLDER rise" },
+  { key: "increment_1_amount", header: "increment_1_amount", hint: "3000" },
+  { key: "increment_2_date", header: "increment_2_date", hint: "DD-MM-YYYY" },
+  { key: "increment_2_amount", header: "increment_2_amount", hint: "4000" },
 ];
+
+/** `increment_7_date` / `increment_7_amount` — any year, without a code change. */
+export const INCREMENT_PAIR = /^increment_(\d+)_(date|amount)$/;
 
 /** The template HR downloads: the header row, then one filled example. */
 export function importTemplate(): string {
   const header = IMPORT_COLUMNS.map((c) => c.header).join(",");
   /* -- TWO example rows, not one.
-        The second is a production worker with no email, no password and a
-        MONTHLY salary — the shape most of a real payroll sheet is in, and the
-        one somebody would otherwise have to be told about in prose. An example
-        that only shows the easy case is an example that gets copied. -- */
+        The second is a production worker with no email and no password — the
+        shape most of a real payroll sheet is in, and the one somebody would
+        otherwise have to be told about in prose. An example that only shows the
+        easy case is an example that gets copied.
+
+        BOTH state MONTHLY. That is the owner's payroll sheet and it is now the
+        default, so the examples say out loud what a blank column would have
+        meant anyway — nobody has to infer it from the hint. -- */
   const rows = [
     [
       "Priya Sharma",
@@ -169,10 +203,17 @@ export function importTemplate(): string {
       "PERMANENT",
       "01-04-2025",
       "12",
-      "ANNUAL",
-      "400000",
-      "480000",
-      "80000",
+      "MONTHLY",
+      // Per month, matching the unit beside them. 40000 → 4,80,000 a year.
+      "33000",
+      "40000",
+      "7000",
+      // Two earlier rises: 33,000 → 36,000 → 40,000, the last of which is the
+      // `last_increment_*` pair above. The three agree, which is the point.
+      "01-04-2024",
+      "3000",
+      "01-04-2025",
+      "4000",
     ],
     [
       "Ramesh Kumar",
@@ -193,6 +234,13 @@ export function importTemplate(): string {
       "15000",
       "22000",
       "5000",
+      // One earlier rise: 15,000 → 17,000 → 22,000. Left deliberately shorter
+      // than the row above, so the columns read as optional rather than as a
+      // set that has to be filled.
+      "01-02-2023",
+      "2000",
+      "",
+      "",
     ],
   ]
     // Quote anything containing a comma, quote or newline, per RFC 4180.
@@ -257,7 +305,11 @@ export function toRecords(table: string[][]): {
     .map((cells) => {
       const record: Record<string, string> = {};
       headers.forEach((header, index) => {
-        if (known.has(header)) record[header] = (cells[index] ?? "").trim();
+        /* A numbered increment pair is kept whether or not the template names
+           it, so a sheet with a third or fourth year is read as it stands. */
+        if (known.has(header) || INCREMENT_PAIR.test(header)) {
+          record[header] = (cells[index] ?? "").trim();
+        }
       });
       return record;
     });

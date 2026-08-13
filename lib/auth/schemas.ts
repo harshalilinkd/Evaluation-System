@@ -167,6 +167,26 @@ export const createUserSchema = z.object({
   joining_ctc: money("Joining salary"),
   current_ctc: money("Current salary"),
   last_increment_amount: money("Last increment amount"),
+
+  /**
+   * Earlier rises, oldest first — one entry per `increment_N_date` /
+   * `increment_N_amount` pair on the import sheet.
+   *
+   * `last_increment_*` above records the newest rise and cannot describe the
+   * ones before it, so a sheet carrying two years of increments had one of them
+   * silently dropped. `provisionPerson` folds both into one ledger.
+   *
+   * Defaults to empty: the create form asks for a single figure, so only the
+   * importer ever fills this.
+   */
+  increments: z
+    .array(
+      z.object({
+        effective_from: z.string(),
+        amount: z.number().positive(),
+      }),
+    )
+    .default([]),
 });
 
 /** An optional rupee figure. Empty means "not recorded", never zero. */

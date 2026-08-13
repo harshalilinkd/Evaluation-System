@@ -4,16 +4,48 @@
 
 import { revalidatePath } from "next/cache";
 
-import { parseCsv, toIsoDate, toRecords } from "@/lib/auth/csv";
+import { INCREMENT_PAIR, parseCsv, toIsoDate, toRecords } from "@/lib/auth/csv";
 import { checkRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import {
+  ACCESS_LEVELS,
   createUserSchema,
   emailSchema,
   newPasswordSchema,
   type AppRole,
   type CreateUserInput,
 } from "@/lib/auth/schemas";
+
+/**
+ * The access levels a CSV row may ask for, by name.
+ *
+ * BOTH DERIVED FROM `ACCESS_LEVELS`, never listed here — a second list is a list
+ * that stops matching the first, and the failure would be a role the interface
+ * offers and the importer silently refuses.
+ *
+ * Accepted is every value, so a previous export carrying EMPLOYEE still
+ * imports. SUGGESTED drops it, because it is granted to everybody and cannot be
+ * withheld (P8-3) — naming it in an error message would tell HR to type a value
+ * that changes nothing.
+ */
+/**
+ * An email cell, or nothing.
+ *
+ * A SPREADSHEET WRITES "NOT APPLICABLE" AS A DASH. Twenty-odd production
+ * workers in a real payroll export carried `-` in the email column, which is
+ * exactly what a person means by "they have not got one" — and the importer read
+ * it as an address and refused every one of those rows. Blank, a dash, an en or
+ * em dash, "n/a" and "na" all mean the same thing and are all treated as empty.
+ *
+ * Lower-cased, because every lookup here is.
+ */
+function normaliseEmailCell(value: string | undefined): string {
+  const text = (value ?? "").trim().toLowerCase();
+  return /^(-{1,2}|–|—|n\/a|na)$/.test(text) ? "" : text;
+}
+
+const IMPORTABLE_ROLES = new Set<string>(ACCESS_LEVELS.map((level) => level.value));
+const SUGGESTED_ROLES = ACCESS_LEVELS.filter((level) => !level.always).map((level) => level.value);
 // The ONE implementation of "what a pay change is". Delegated to rather than
 // reimplemented — see the compensation block in `updatePerson`.
 import { addSalaryChange } from "@/lib/employment/actions";
@@ -350,6 +382,44 @@ async function provisionPerson(
     };
   }
 
+  /* -- SEVERAL RISES, NOT ONE. A sheet carrying "Increment Amt 2025" and
+        "Increment Amt 2026" describes a LEDGER — joining, then 2025, then 2026
+        — and one `last_increment_*` pair could only ever record the newest of
+        them. The rest were lost, and a percentage computed against a salary two
+        rises old is wrong in a way nobody can see afterwards.
+
+        ONE LIST, TWO WAYS TO WRITE INTO IT. `last_increment_date` /
+        `last_increment_amount` is folded in as simply another entry, so a file
+        that uses only those behaves exactly as it always did, and a file that
+        uses both gets the union rather than one silently ignoring the other.
+        A numbered entry wins a shared date, because it is the more specific
+        statement.
+
+        BUILT HERE, BEFORE THE EMPLOYMENT RECORD, because the record's
+        `last_increment_date` is derived from it — see below. -- */
+  const byDate = new Map<string, number | undefined>();
+  if (input.last_increment_date) {
+    byDate.set(input.last_increment_date, input.last_increment_amount);
+  }
+  for (const entry of input.increments ?? []) {
+    byDate.set(entry.effective_from, entry.amount);
+  }
+  const ledger = [...byDate.entries()]
+    .map(([effective_from, amount]) => ({ effective_from, amount }))
+    .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+
+  /* -- THE CLOCK COMES FROM THE NEWEST RISE, whichever column carried it.
+        0068 made the pay ledger authoritative for `last_increment_date` — "once
+        there is a recorded rise, that is when they were last given one" — and
+        this is the same rule at the point of import.
+
+        Without it, filling in only the numbered pairs and leaving
+        `last_increment_date` blank would write the history correctly and leave
+        the employment record with NO last increment date, so the increment
+        calendar would not know when the next one falls due. HR would have
+        entered everything and been silently dropped from the schedule. -- */
+  const lastIncrementOn = ledger.at(-1)?.effective_from ?? null;
+
   /* -- The employment record, when there is anything to put in it.
         Created here rather than on a second screen: the increment reminder is
         derived from these dates, and a person created without them is a person
@@ -362,7 +432,7 @@ async function provisionPerson(
   if (hasEmployment) {
     const { error: employmentError } = await supabase.from("employment_records").insert({
       profile_id: profileId,
-      last_increment_date: input.last_increment_date ? input.last_increment_date : null,
+      last_increment_date: lastIncrementOn,
       increment_frequency_months: input.increment_frequency_months,
       employment_type: input.employment_type,
       // The figure on the record is what they are paid TODAY. If HR gave only a
@@ -423,34 +493,59 @@ async function provisionPerson(
         received as a rise. A baseline that cannot be compared against anything
         cannot be got wrong that way. -- */
 
-  if (input.current_ctc !== undefined && input.last_increment_date) {
-    // The increment amount is what makes the previous figure knowable. Without
-    // it the row still stands as "this is the salary from this date", with the
-    // hike left null rather than invented.
-    /* -- The increment amount makes the previous figure knowable; failing
-          that, the baseline does. Falling back to `joining_ctc` is what makes
-          the FIRST revision measure against what somebody joined on, which is
-          the rule the ledger follows everywhere else. -- */
-    const hike = input.last_increment_amount;
-    const previous =
-      hike !== undefined
-        ? input.current_ctc - hike
-        : (input.joining_ctc ?? null);
+  /* -- THE CHAIN IS ANCHORED ON TODAY'S SALARY AND WALKS BACKWARDS.
+        Forward from `joining_ctc` was the obvious direction and is the wrong
+        one: joining 25,000 plus a recorded rise of 5,000 comes to 30,000, and
+        if the record says they are on 32,000 today the ledger's newest row
+        would contradict the record it sits beside. Today's figure is the one
+        thing known for certain, so each rise is subtracted from it in turn and
+        the oldest `previous_ctc` falls where it falls — which is honest about
+        there having been earlier rises nobody typed in.
 
-    salaryRows.push({
-      profile_id: profileId,
-      effective_from: input.last_increment_date,
-      previous_ctc: previous !== null && previous > 0 ? previous : null,
-      new_ctc: input.current_ctc,
-      hike_amount: hike ?? null,
-      hike_pct:
-        previous !== null && previous > 0 && hike !== undefined
-          ? Math.round((hike / previous) * 10000) / 100
-          : null,
-      reason: "ANNUAL_INCREMENT",
-      recorded_by: actorProfileId,
-      note: "Recorded when the account was created.",
-    });
+        For a single entry this is byte-for-byte the arithmetic that was here
+        before, which is what makes it safe to widen rather than a second
+        algorithm sitting beside the first. -- */
+  if (input.current_ctc !== undefined && ledger.length > 0) {
+    let newCtc = input.current_ctc;
+    let newest = true;
+
+    for (const entry of ledger.slice().reverse()) {
+      /* The increment amount is what makes the previous figure knowable.
+         Failing that, the baseline does — which is what makes the FIRST
+         revision measure against what somebody joined on. */
+      const hike = entry.amount;
+      const previous = hike !== undefined ? newCtc - hike : (input.joining_ctc ?? null);
+      const usable = previous !== null && previous > 0;
+
+      /* -- STOP BEFORE WRITING A ROW WE CANNOT STAND BEHIND.
+            The newest row's `new_ctc` is `current_ctc` — a figure on the
+            record. Every older row's is one this loop derived, and it is only
+            worth writing while the step above it worked out. Caught by the
+            suite: rises adding to more than the salary produced a row saying
+            somebody was moved to ₹1,000, which is not something anybody
+            typed. The newest row is still written with a null previous, which
+            is the long-standing behaviour for a rise with no amount. -- */
+      if (!usable && !newest) break;
+
+      salaryRows.push({
+        profile_id: profileId,
+        effective_from: entry.effective_from,
+        previous_ctc: usable ? previous : null,
+        new_ctc: newCtc,
+        hike_amount: hike ?? null,
+        hike_pct: usable && hike !== undefined ? Math.round((hike / previous) * 10000) / 100 : null,
+        reason: "ANNUAL_INCREMENT",
+        recorded_by: actorProfileId,
+        note: "Recorded when the account was created.",
+      });
+
+      /* Stop rather than guess. An entry with no amount leaves nothing to
+         subtract, and a previous figure at or below zero means the amounts do
+         not describe this salary — either way the older rows would be fiction. */
+      if (!usable || hike === undefined) break;
+      newCtc = previous;
+      newest = false;
+    }
   }
 
   if (salaryRows.length > 0) {
@@ -1043,6 +1138,13 @@ export type ImportRowResult = {
   error?: string;
   /** True when this row amended somebody already on the system. */
   updated?: boolean;
+  /**
+   * Landed, but with something worth saying — currently only a manager that
+   * could not be set because the file has people reporting to each other in a
+   * circle. Deliberately not an error: the account is real and usable, and one
+   * unresolved field should not fail a row (P19B-8's reasoning).
+   */
+  note?: string;
 };
 
 export type ImportState = {
@@ -1116,13 +1218,26 @@ export async function importUsers(
   // Leads are named by email, which is the only identifier a spreadsheet
   // reliably carries and the only one that is unique.
   const { data: existing } = await supabase.from("profiles").select("id, email");
+  /* -- Every address this FILE will create, so a manager three rows down can be
+        found. Read before the rows are validated, because a row cannot know
+        what is further down the file. -- */
+  const emailsInThisFile = new Set(
+    records.map((r) => normaliseEmailCell(r.email)).filter(Boolean),
+  );
+
   const profileByEmail = new Map<string, string>();
   for (const p of existing ?? []) {
     if (p.email) profileByEmail.set(p.email.trim().toLowerCase(), p.id);
   }
 
   /* -- Pass 1: validate everything. -- */
-  const prepared: Array<{ line: number; name: string; input: CreateUserInput }> = [];
+  const prepared: Array<{
+    line: number;
+    name: string;
+    input: CreateUserInput;
+    /** Set only when their manager is another row in this file. */
+    leadEmail?: string;
+  }> = [];
   const rows: ImportRowResult[] = [];
 
   records.forEach((record, index) => {
@@ -1143,15 +1258,27 @@ export async function importUsers(
       return;
     }
 
-    const leadEmail = (record.reports_to ?? "").trim().toLowerCase();
+    /* -- A MANAGER MAY BE IN THE SAME FILE.
+          The message used to say "import their manager first", which assumes a
+          file of reports and a separate file of managers. What HR actually
+          exports is the ORG CHART — one file where most people's manager is
+          three rows above them — and that file could never import at all,
+          because every `reports_to` was resolved against the database alone.
+
+          So a manager is now looked for in the database first and in this
+          file second, and the commit below creates people in dependency order.
+          A name that is in neither is still refused, because that one really
+          does have to be fixed before the file can go in. -- */
+    const leadEmail = normaliseEmailCell(record.reports_to);
     const leadId = leadEmail ? profileByEmail.get(leadEmail) : "";
-    if (leadEmail && !leadId) {
+    const leadIsInThisFile = Boolean(leadEmail) && !leadId && emailsInThisFile.has(leadEmail);
+
+    if (leadEmail && !leadId && !leadIsInThisFile) {
       rows.push({
         line,
         name,
         ok: false,
-        // Ordering is the usual cause, and it has a fix HR can act on.
-        error: `Nobody here has the email ${record.reports_to}. Import their Manager first, or leave this blank and set it afterwards.`,
+        error: `Nobody has the email ${record.reports_to} — not in the system, and not in this file either. Add them as a row, or leave this blank and set it afterwards.`,
       });
       return;
     }
@@ -1187,7 +1314,8 @@ export async function importUsers(
 
           The code is REQUIRED in that case, because it is the only thing
           keeping one worker's account distinct from another's. -- */
-    const emailText = (record.email ?? "").trim();
+    // A dash means "they have not got one" — see `normaliseEmailCell`.
+    const emailText = normaliseEmailCell(record.email);
     const codeText = (record.employee_code ?? "").trim();
     let email = emailText;
     if (!email) {
@@ -1221,20 +1349,116 @@ export async function importUsers(
           A payroll sheet is usually monthly, and 32000 read as a year is ₹2,667
           a month — out by twelve on every percentage, report and printed sheet,
           and low enough to look plausible. Stating the unit once per row is what
-          makes that impossible rather than careful. Blank is ANNUAL, so an older
-          file is unchanged. -- */
-    /* -- MONTHLY IS THE DEFAULT FOR THE PRODUCTION TEAM, at the owner's
-          instruction, and it is the honest default: a shop-floor wage is quoted
-          per month everywhere — on the payroll sheet, on the appraisal, in the
-          conversation. The Backend Team still defaults to ANNUAL, because a CTC
-          is quoted per year just as consistently.
+          makes that impossible rather than careful. -- */
+    /* -- BLANK MEANS MONTHLY, ON BOTH TRACKS, at the owner's instruction.
+          F53-7 made it monthly for Production and annual for Backend, on the
+          reasoning that a CTC is quoted per year as consistently as a wage is
+          quoted per month. The owner's own payroll sheet states BOTH per month,
+          so the split default was wrong about the file it exists to read — and
+          a split default is also the harder one to hold in your head while
+          filling twenty rows in.
 
-          Two defaults in one column is worth a second look and it is right
-          here: the column says what the FIGURE is, and the two teams genuinely
-          state it differently. Either value is still accepted on either team —
-          this decides only what a BLANK means. -- */
+          The DIRECTION of the remaining risk is what makes this safe. A monthly
+          figure read as annual is out by twelve DOWNWARDS — ₹32,000 becomes
+          ₹2,667 a month, which is low enough to look plausible on a screen and
+          is the incident this column was added to prevent. The reverse, an
+          annual figure read as monthly, is out by twelve UPWARDS — ₹4,80,000
+          becomes ₹57.6 lakh a year, which nobody scrolls past. Defaulting to
+          monthly puts the survivable mistake on the blank column.
+
+          Either value is still accepted on either track. This decides only what
+          a BLANK means. -- */
+    /* -- AN UNRECOGNISED ACCESS LEVEL IS REFUSED, not dropped.
+          `createUserSchema` filters `roles` against ROLE_VALUES, so a value it
+          does not know simply vanished — and the template's own hint said
+          "Manager", which is not one of them. Anybody following it imported as
+          a plain employee, with no error anywhere: a HOD who cannot review
+          their team, or a supervisor who never appears in a production round's
+          rater picker, discovered weeks later when somebody goes looking for
+          them. §0.7 — fail loudly.
+
+          Split on anything that is not a letter or underscore, so "HOD
+          HR_ADMIN", "HOD, HR_ADMIN" and "HOD/HR_ADMIN" all work. -- */
+    const askedRoles = (record.roles ?? "")
+      .split(/[^A-Za-z_]+/)
+      .map((r) => r.trim().toUpperCase())
+      .filter(Boolean);
+    const unknownRole = askedRoles.find((r) => !IMPORTABLE_ROLES.has(r));
+    if (unknownRole) {
+      rows.push({
+        line,
+        name,
+        ok: false,
+        error: `"${unknownRole}" is not an access level. Use ${SUGGESTED_ROLES.join(", ")}, or leave it blank.`,
+      });
+      return;
+    }
+
+    /* -- EARLIER RISES: every `increment_N_date` / `increment_N_amount` pair.
+          Read from the RECORD rather than from a fixed list of two, so a sheet
+          carrying a third or fourth year is imported without this file
+          changing. Sorted by date, not by N — the numbering is how a
+          spreadsheet lays columns out, and nothing stops somebody putting 2026
+          in the first pair. -- */
+    const incrementPairs = new Map<string, { date?: string; amount?: string }>();
+    for (const [header, value] of Object.entries(record)) {
+      const match = INCREMENT_PAIR.exec(header);
+      if (!match || value === "") continue;
+      const [, n, field] = match;
+      if (!n || !field) continue;
+      const pair = incrementPairs.get(n) ?? {};
+      if (field === "date") pair.date = value;
+      else pair.amount = value;
+      incrementPairs.set(n, pair);
+    }
+
+    const increments: Array<{ effective_from: string; amount: number }> = [];
+    for (const [n, pair] of incrementPairs) {
+      /* -- A DATE WITH NO AMOUNT IS NOT A RISE, so it is skipped rather than
+            refused. A real export carries a row for every year whether or not
+            anything was given — a joiner's first year, a year nobody was
+            reviewed — and refusing those would mean deleting cells to describe
+            something that did not happen. Nothing is recorded, which is the
+            truth: there was no rise that year. -- */
+      if (!pair.amount) continue;
+
+      /* -- An AMOUNT with no date is still refused. It cannot be placed in the
+            ledger at all, and guessing a date would put somebody's increment
+            schedule months out with nothing on screen to show for it. -- */
+      if (!pair.date) {
+        rows.push({
+          line, name, ok: false,
+          error: `increment_${n}_amount has no date beside it. Fill in increment_${n}_date, or clear the amount.`,
+        });
+        return;
+      }
+      const when = toIsoDate(pair.date);
+      if (!when) {
+        rows.push({
+          line, name, ok: false,
+          error: `increment_${n}_date is not DD-MM-YYYY.`,
+        });
+        return;
+      }
+      const figure = Number(pair.amount.replace(/[₹,\s]/g, ""));
+      if (!Number.isFinite(figure)) {
+        rows.push({
+          line, name, ok: false,
+          error: `increment_${n}_amount ("${pair.amount}") is not a rupee amount.`,
+        });
+        return;
+      }
+      /* -- ZERO IS NOT A RISE, and is very common: a joiner's first year, or a
+            year somebody was reviewed and given nothing. Recording it would put
+            a 0% increment in the pay ledger and move their increment clock to
+            that date, so the next one would be counted from a rise that never
+            happened. Skipped, exactly as a blank is. -- */
+      if (figure <= 0) continue;
+      increments.push({ effective_from: when, amount: figure });
+    }
+
     const unitText = (record.salary_unit ?? "").trim().toLowerCase();
-    const perMonth = unitText === "" ? track === "WORKER" : /^month/.test(unitText);
+    const perMonth = unitText === "" || /^month/.test(unitText);
     if (unitText && !perMonth && !/^annual|^year/.test(unitText)) {
       rows.push({
         line, name, ok: false,
@@ -1263,13 +1487,7 @@ export async function importUsers(
       password,
       track,
       department_id: departmentId ?? "",
-      // Split on anything that is not a letter or underscore, so "HOD HR_ADMIN",
-      // "HOD, HR_ADMIN" and "HOD/HR_ADMIN" all work.
-      roles: (record.roles ?? "")
-        .split(/[^A-Za-z_]+/)
-        .map((r) => r.trim().toUpperCase())
-        .filter(Boolean)
-        .concat("EMPLOYEE"),
+      roles: askedRoles.concat("EMPLOYEE"),
       employee_code: record.employee_code ?? "",
       phone: record.phone ?? "",
       designation: record.designation ?? "",
@@ -1281,6 +1499,15 @@ export async function importUsers(
       joining_ctc: annual(record.joining_ctc),
       current_ctc: annual(record.current_ctc),
       last_increment_amount: annual(record.last_increment_amount),
+      /* -- The SAME unit as the three figures above, because they describe the
+            same pay. A rise stated per month beside a salary stated per month
+            has to be scaled with it, or the ledger would subtract an annual
+            amount from a monthly one. Multiplied here rather than where the
+            pairs are read, because the unit is not resolved until below. -- */
+      increments: increments.map((entry) => ({
+        ...entry,
+        amount: perMonth ? entry.amount * 12 : entry.amount,
+      })),
     });
 
     if (!parsed.success) {
@@ -1288,7 +1515,14 @@ export async function importUsers(
       return;
     }
 
-    prepared.push({ line, name, input: parsed.data });
+    // `leadEmail` travels only when the manager is in this file — the commit
+    // resolves it once that person exists.
+    prepared.push({
+      line,
+      name,
+      input: parsed.data,
+      leadEmail: leadIsInThisFile ? leadEmail : undefined,
+    });
   });
 
   // A duplicate inside the file itself. The database would catch it on the
@@ -1340,20 +1574,74 @@ export async function importUsers(
     (alreadyHere.data ?? []).map((p) => [(p.email ?? "").toLowerCase(), p.id] as const),
   );
 
+  /* -- MANAGERS BEFORE THEIR REPORTS.
+
+        `reports_to` is a profile id, so somebody whose manager is also being
+        created by this file cannot be written until that manager exists. Rather
+        than demanding HR sort the spreadsheet, the work is done here: anybody
+        whose manager is already resolved goes next, and each person created
+        resolves themselves for the rows still waiting.
+
+        A LOOP UNTIL NO PROGRESS, not a topological sort. It is the same result
+        with one useful difference — what is left over when progress stops is
+        exactly the set caught in a cycle, so they can be reported rather than
+        silently dropped or ordered arbitrarily. -- */
+  const resolved = new Map(profileByEmail);
+  const waiting = [...prepared];
+
   let created = 0;
   let updated = 0;
-  for (const item of prepared) {
+  // Read out here: `auth` is a union, and its narrowing does not survive into a
+  // closure the compiler cannot prove runs after the guard.
+  const actorId = auth.session.profile.id;
+
+  async function write(item: (typeof prepared)[number], leadId: string | undefined) {
     const already = idByEmail.get(item.input.email.toLowerCase());
+    const input = leadId ? { ...item.input, reports_to: leadId } : item.input;
+
     const result = already
-      ? await amendPerson(already, item.input, auth.session.profile.id)
-      : await provisionPerson(item.input, auth.session.profile.id);
+      ? await amendPerson(already, input, actorId)
+      : await provisionPerson(input, actorId);
 
     if (result.ok) {
       if (already) updated += 1;
       else created += 1;
+      // What makes the next pass able to place their reports.
+      resolved.set(item.input.email.toLowerCase(), already ?? result.profileId);
       rows.push({ line: item.line, name: item.name, ok: true, updated: Boolean(already) });
     } else {
       rows.push({ line: item.line, name: item.name, ok: false, error: result.error });
+    }
+  }
+
+  let progress = true;
+  while (waiting.length > 0 && progress) {
+    progress = false;
+    for (let i = 0; i < waiting.length; ) {
+      const item = waiting[i]!;
+      const leadId = item.leadEmail ? resolved.get(item.leadEmail) : undefined;
+
+      if (item.leadEmail && !leadId) {
+        i += 1; // Their manager is not in yet. Come back to them.
+        continue;
+      }
+
+      waiting.splice(i, 1);
+      await write(item, leadId);
+      progress = true;
+    }
+  }
+
+  /* -- WHAT IS LEFT IS A CIRCLE: A reports to B and B reports to A, or a longer
+        ring of the same. Nobody in it can be created first, so each is written
+        WITHOUT a manager and told so — the account is real and usable, and the
+        one field that cannot be resolved is named rather than the whole row
+        being failed over it. -- */
+  for (const item of waiting) {
+    await write(item, undefined);
+    const row = rows.find((r) => r.line === item.line);
+    if (row?.ok) {
+      row.note = `Created, but their manager could not be set — this file has them reporting to each other in a circle. Set it from Team review.`;
     }
   }
 
