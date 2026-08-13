@@ -91,6 +91,15 @@ const KEY_STEP_LARGE = 40;
 /** The row-number gutter. Fixed, and never resizable — frozen offsets are measured from it. */
 const GUTTER_ID = "__row__";
 const GUTTER_WIDTH = 44;
+/* -- Wide enough for the HEADING, which is what sets it — not the values.
+      Every heading is `type-label`: 12px, uppercase, 0.05em tracking, bold. At
+      that treatment "EMPLOYEE ID" runs to about 97px, and the cell has 24px of
+      horizontal padding — so 104px clipped it to "EMPLOYEE I…" and the column
+      was, accurately, unreadable. The codes themselves need barely half this.
+      Headings are `truncate`, so a label longer than a caller's column does not
+      wrap or overflow: it silently disappears, which is why this is sized for
+      the text rather than left to be noticed. -- */
+const ROW_LABEL_WIDTH = 132;
 
 /* Widths are a personal preference, not data — they belong to the browser, not
    the database. localStorage is unavailable in some privacy modes and can hold
@@ -149,6 +158,28 @@ export type DataGridProps<TData> = {
    */
   rowTitle?: (row: TData) => string;
   /**
+   * Put a real identifier in the gutter instead of a row number.
+   *
+   * The gutter is not only decoration: it is the one focusable control per row
+   * and therefore the keyboard path to opening one. So "remove the # column"
+   * cannot be granted literally — what it means is "stop showing a counter
+   * beside a column that already numbers these people". This replaces the
+   * counter and keeps the control.
+   */
+  rowLabel?: {
+    header: string;
+    value: (row: TData) => string;
+    /**
+     * Render the gutter cell yourself — an editable field, in practice.
+     *
+     * The button is dropped when this is given, and that is safe for the reason
+     * `onRowClick` is documented as an enhancement: the row's ⋯ menu carries
+     * the same action and is the route a keyboard or screen-reader user takes
+     * anyway. A grid with no such menu must not pass this.
+     */
+    cell?: (row: TData) => React.ReactNode;
+  };
+  /**
    * Actions for the open row, rendered in the dialog footer.
    *
    * The dialog SHOWS; it does not decide what can be done. A screen that wants
@@ -182,6 +213,7 @@ export function DataGrid<TData>({
   onRowClick,
   rowNoun,
   rowTitle,
+  rowLabel,
   rowActions,
 }: DataGridProps<TData>) {
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
@@ -219,8 +251,15 @@ export function DataGrid<TData>({
     // A spreadsheet's row gutter: it gives every row a stable handle to refer to
     // out loud, and it is what makes a long list feel countable. Not resizable —
     // the frozen columns are offset from its width.
-    header: "#",
-    size: GUTTER_WIDTH,
+    /* -- OR A REAL IDENTIFIER, where the list has one.
+          A row number beside an employee code is two counters saying the same
+          thing, and the code is the one people use out loud. `rowLabel` lets a
+          caller put it here instead of adding a column and asking for the
+          gutter to be removed — which could not simply be granted, because the
+          gutter is also the KEYBOARD PATH to opening a row (see below) and
+          every grid in the product depends on it. -- */
+    header: rowLabel?.header ?? "#",
+    size: rowLabel ? ROW_LABEL_WIDTH : GUTTER_WIDTH,
     enableResizing: false,
     meta: { align: "right", frozen: true },
     /* -- THE KEYBOARD PATH TO OPENING A ROW.
@@ -232,7 +271,10 @@ export function DataGrid<TData>({
           So the row number is the control: one focusable button per row, in a
           column that already exists, with a real accessible name. It costs no
           width and adds no column. -- */
-    cell: ({ row }) => (
+    cell: ({ row }) =>
+      rowLabel?.cell ? (
+        rowLabel.cell(row.original)
+      ) : (
       <button
         type="button"
         onClick={() => {
@@ -240,11 +282,14 @@ export function DataGrid<TData>({
           else setOpenRowIndex(row.index);
         }}
         aria-label={`Open ${rowTitle ? rowTitle(row.original) : `row ${row.index + 1}`}`}
-        className="tabular w-full rounded-control text-right text-body-sm text-ink-muted hover:text-ink"
+        className={cn(
+          "tabular w-full rounded-control text-body-sm text-ink-muted hover:text-ink",
+          rowLabel ? "text-left" : "text-right",
+        )}
       >
-        {row.index + 1}
+        {rowLabel ? rowLabel.value(row.original) : row.index + 1}
       </button>
-    ),
+      ),
   };
 
   const table = useReactTable({

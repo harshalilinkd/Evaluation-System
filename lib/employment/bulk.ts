@@ -43,6 +43,30 @@ const cellPatchSchema = z.object({
   department_id: z.string().uuid().nullable().optional(),
   reports_to: z.string().uuid().nullable().optional(),
   employment_type: z.enum(["PERMANENT", "CONTRACT", "PROBATION", "INTERN"]).optional(),
+  /* -- The rest of what the import writes, so a mistake made in a spreadsheet
+        can be corrected on the screen that shows it rather than only by
+        re-uploading the file (F25-1 built the grid; these are the columns it
+        was missing).
+
+        `track` is §7's module, so changing it moves somebody between the staff
+        0-5 form and the shop-floor tick sheet. Editable because getting it
+        wrong on import is exactly the thing HR needs to fix, and history is
+        safe either way: a launched evaluation holds its own frozen questions.
+
+        `joining_ctc` is the BASELINE every stored percentage was computed
+        against (P19E-1), so it is written through 0069's function, which
+        refuses to overwrite one that already exists. The cell is read-only
+        where a baseline is already on record.
+
+        `last_increment_date` is NOT here. 0068 made the pay ledger
+        authoritative for it — "once there is a recorded rise, that is when they
+        were last given one" — so a hand-typed date would be silently overruled
+        by the next pay change. A cell that does not hold its value is worse
+        than no cell. -- */
+  track: z.enum(["STAFF", "WORKER"]).optional(),
+  date_of_joining: z.string().optional(),
+  increment_frequency_months: z.coerce.number().int().min(1).max(60).optional(),
+  joining_ctc: z.number().positive().max(100_000_000).optional(),
   /** Annual, as stored. The grid types monthly and converts before sending. */
   current_ctc: z.number().positive().max(100_000_000).optional(),
 });
@@ -107,11 +131,18 @@ export async function bulkUpdatePeople(
       designation?: string;
       department_id?: string | null;
       reports_to?: string | null;
+      track?: "STAFF" | "WORKER";
+      date_of_joining?: string;
     } = {};
     if (patch.employee_code !== undefined) profilePatch.employee_code = patch.employee_code;
     if (patch.designation !== undefined) profilePatch.designation = patch.designation;
     if (patch.department_id !== undefined) profilePatch.department_id = patch.department_id;
     if (patch.reports_to !== undefined) profilePatch.reports_to = patch.reports_to;
+    if (patch.track !== undefined) profilePatch.track = patch.track;
+    /* 0024: the ONE joining date, and it lives on `profiles`. Moving it fires
+       the trigger that recomputes the whole increment schedule (P19B-2), which
+       is why it is not also written to `employment_records` here. */
+    if (patch.date_of_joining !== undefined) profilePatch.date_of_joining = patch.date_of_joining;
 
     if (Object.keys(profilePatch).length > 0) {
       const { data, error } = await supabase
@@ -138,14 +169,52 @@ export async function bulkUpdatePeople(
       }
     }
 
-    /* ---------- Employment type ---------- */
-    if (employment_type !== undefined) {
-      const { error } = await supabase
+    /* ---------- The employment record ---------- */
+    const employmentPatch: {
+      employment_type?: "PERMANENT" | "CONTRACT" | "PROBATION" | "INTERN";
+      increment_frequency_months?: number;
+    } = {};
+    if (employment_type !== undefined) employmentPatch.employment_type = employment_type;
+    if (patch.increment_frequency_months !== undefined) {
+      employmentPatch.increment_frequency_months = patch.increment_frequency_months;
+    }
+
+    if (Object.keys(employmentPatch).length > 0) {
+      const { data, error } = await supabase
         .from("employment_records")
-        .update({ employment_type })
-        .eq("profile_id", profileId);
+        .update(employmentPatch)
+        .eq("profile_id", profileId)
+        // The zero-rows class again: somebody with no employment record yet
+        // matches nothing, and without this the row would report as saved.
+        .select("profile_id");
       if (error) {
         rows.push({ profileId, ok: false, error: `Employment could not be updated: ${error.message}` });
+        continue;
+      }
+      if (!data || data.length === 0) {
+        rows.push({
+          profileId,
+          ok: false,
+          error: "They have no employment record yet. Open their Employment tab and add their joining details first.",
+        });
+        continue;
+      }
+    }
+
+    /* ---------- The joining salary, through 0069's function ----------
+          NOT an update. It is the baseline every stored percentage was computed
+          against (P19E-1), so the function refuses to overwrite one that
+          already exists, seeds `current_ctc` only where there is no revision,
+          and records who entered it. All of that would have to be restated here
+          to write the column directly, and the copy that is never exercised is
+          the one that drifts. */
+    if (patch.joining_ctc !== undefined) {
+      const { error } = await supabase.rpc("set_joining_salary", {
+        p_profile_id: profileId,
+        p_amount: patch.joining_ctc,
+      });
+      if (error) {
+        rows.push({ profileId, ok: false, error: error.message });
         continue;
       }
     }

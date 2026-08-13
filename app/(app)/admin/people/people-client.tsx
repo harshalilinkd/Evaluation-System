@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { Enums } from "@/types/database";
+import { byEmployeeCode } from "@/lib/utils/employee-code";
 import { cn } from "@/lib/utils";
 import { TRACK_LABELS } from "@/lib/forms/labels";
 
@@ -81,6 +82,16 @@ export function PeopleClient({
   // staggering in is motion for its own sake, and DataGrid renders a table
   // rather than a stack of cards — framer-motion is no longer imported here.
 
+  /* -- ORDERED BY EMPLOYEE ID: 01, 02, 03.
+        The list came back alphabetically by name, which is a fine default and
+        not the one HR asked for — their codes run in joining order (NA-01,
+        KA-02, KE-03…), so sorting by them puts the roster in the sequence the
+        payroll sheet is already in.
+
+        `byEmployeeCode` is SHARED with Settings › Users, which shows the same
+        people. A roster that orders itself differently depending on which
+        screen you opened is the kind of difference nobody can explain later —
+        and the second copy is always the one that drifts. -- */
   const filtered = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -96,7 +107,7 @@ export function PeopleClient({
         (r.employeeCode ?? "").toLowerCase().includes(needle) ||
         (r.designation ?? "").toLowerCase().includes(needle)
       );
-    });
+    }).sort(byEmployeeCode);
   }, [rows, search, department, status, team, showInactive]);
 
   /*
@@ -167,12 +178,6 @@ export function PeopleClient({
             ) : null}
           </span>
         ),
-      },
-      {
-        accessorKey: "employeeCode",
-        header: "Code",
-        size: 110,
-        cell: ({ row }) => <GridCell value={dash(row.original.employeeCode)} className="tabular" />,
       },
       {
         accessorKey: "designation",
@@ -247,7 +252,7 @@ export function PeopleClient({
       },
       {
         id: "lead",
-        header: "Manager",
+        header: "HOD",
         size: 84,
         meta: { align: "right" },
         cell: ({ row }) =>
@@ -257,17 +262,38 @@ export function PeopleClient({
             <Score value={row.original.lead} className={TIER_CLASSES.lead.numeral} />
           ),
       },
+      /* -- AVERAGE, NOT "FINAL", and the difference is real rather than a
+            rename (AMEND-5, at the owner's instruction).
+
+            The column read `evaluations.final_overall`, which since 0046 is
+            written in exactly ONE place: `confirm_increment`, when an INCREMENT
+            cycle closes. On an evaluation cycle it is null for ever — so for
+            most of this roster the column was a permanent em dash, and where it
+            did fill in it was a settled increment score, not an average of
+            anything. Relabelling that "Average" would have put a wrong name on
+            a real number, which is worse than a column nobody reads.
+
+            So it now IS the average §11 permits: the mean of Self and HOD,
+            computed on read, stored nowhere.
+
+            BOTH OR NOTHING (A5-2). One side alone is not an average of two, and
+            printing the manager's figure there would say the two sides agreed
+            when only one of them has answered.
+
+            PLAIN INK, no tier colour (A5-4). Cyan means "the employee said
+            this" and pink "their HOD did"; an average belongs to neither, which
+            is exactly the objection §11 raised before the owner chose it. -- */
       {
-        id: "final",
-        header: "Final",
+        id: "average",
+        header: "Average",
         size: 84,
         meta: { align: "right" },
-        cell: ({ row }) =>
-          row.original.track === "WORKER" ? (
-            <span className="text-body-sm text-ink-faint">—</span>
-          ) : (
-            <Score value={row.original.final} className={TIER_CLASSES.final.numeral} />
-          ),
+        cell: ({ row }) => {
+          const { self, lead, track } = row.original;
+          if (track === "WORKER") return <span className="text-body-sm text-ink-faint">—</span>;
+          const mean = self !== null && lead !== null ? (self + lead) / 2 : null;
+          return <Score value={mean} className="text-ink" />;
+        },
       },
       {
         id: "actions",
@@ -426,6 +452,11 @@ export function PeopleClient({
         columns={columns}
         storageKey="appraise.team-review.column-widths"
         minWidth={1240}
+        /* -- The employee code IS the row number here, so it takes the gutter
+              rather than sitting in a column beside a counter that says the
+              same thing. The gutter keeps its job as the one focusable control
+              per row — "remove the #" could not be granted by deleting it. -- */
+        rowLabel={{ header: "Employee ID", value: (p) => p.employeeCode || "—" }}
         // Clicking a row opens that person's Employment & pay record. The ⋯
         // menu carries the same item and stays — a clickable <tr> is neither
         // focusable nor announced, so it is the enhancement and the menu is the

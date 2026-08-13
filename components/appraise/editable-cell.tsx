@@ -128,3 +128,76 @@ export function MoneyCell({
     </span>
   );
 }
+
+/**
+ * A date, in the browser's own picker.
+ *
+ * ISO IN AND OUT, because that is what the column stores and what a
+ * `type="date"` input speaks. §0.10 fixes DD-MM-YYYY as what a PERSON reads,
+ * and the native control already renders in the reader's locale — so the
+ * convention is honoured by the browser rather than by a parser here, and the
+ * value never round-trips through a format that could be read as the wrong
+ * month (P19C-12's concern, avoided rather than handled).
+ */
+export function DateCell({
+  value,
+  onChange,
+  label,
+  dirty,
+}: {
+  /** ISO `YYYY-MM-DD`, or "" for none. */
+  value: string;
+  onChange: (next: string) => void;
+  label: string;
+  dirty: boolean;
+}) {
+  return (
+    <input
+      type="date"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
+      className={cn(base, "tabular", dirty && "border-primary bg-primary/10")}
+    />
+  );
+}
+
+/**
+ * A small whole number — how often a salary is reviewed, in months.
+ *
+ * BLANK IS NOT ZERO. `Number("")` is 0, and a review frequency of zero months
+ * is not a thing anybody means; it is "not recorded". The empty string is
+ * carried through as `null` so the caller can leave the column alone rather
+ * than write a figure nobody typed (P19C-5's rule, applied to a count).
+ */
+export function NumberCell({
+  value,
+  onChange,
+  label,
+  dirty,
+  min,
+  max,
+}: {
+  value: number | null;
+  onChange: (next: number | null) => void;
+  label: string;
+  dirty: boolean;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      value={value === null ? "" : String(value)}
+      onChange={(e) => {
+        const raw = e.target.value.trim();
+        onChange(raw === "" ? null : Number(raw));
+      }}
+      aria-label={label}
+      className={cn(base, "tabular text-right", dirty && "border-primary bg-primary/10")}
+    />
+  );
+}
