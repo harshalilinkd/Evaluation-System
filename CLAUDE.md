@@ -6651,3 +6651,105 @@ eight other suites pass.
 **Action required.** `0071_worker_profile_without_email.sql` is **not applied**.
 Until it is, a production worker with no address cannot be imported at all —
 `profiles.email` refuses the null.
+
+---
+
+### FIX-54 — A promotion recommendation on a cycle with no pay decision at the end
+
+Migration `0072_promotion_is_increment_only.sql`.
+
+At the owner's explicit instruction, restating a distinction §1 already makes:
+*"in evaluation we just evaluate employees performance … but no salary
+discussion or salary part will be there. But in increment we have Evaluation +
+increment hike on current salary."*
+
+**The mechanism existed and two questions had been missed.** `cycle_scope` has
+been on `questions` since 0022 and assembly has filtered on it ever since
+(PR-2). The EMPLOYEE's two salary questions were seeded `INCREMENT_ONLY` at the
+time — 0022's expectation and 0030's note. The MANAGER's two never were, so they
+took the column default of `'BOTH'` and appeared on every form:
+
+- **Promotion recommendation** (0017, `mgr.promotion`)
+- **Recommended increment percentage** (0062, `mgr.hike_percent`)
+
+So a plain EVALUATION cycle asked a HOD to recommend a promotion and a
+percentage on a form whose cycle ends at CLOSED once the MD has read the report
+(§8) — only an INCREMENT cycle continues into salary. The answers had nowhere to
+go.
+
+| # | Decision | Why |
+|---|---|---|
+| F54-1 | **The two move together, and that is not tidiness** | 0062 makes the percentage conditional on the promotion answer being YES or CAN_BE_CONSIDERED. Scoping the parent alone would leave a child on the form that nothing could ever reveal. The migration checks the dependency still holds and raises a notice if it does not. |
+| F54-2 | Identified by the **deterministic id**, never by text | 0017 derives every id as `md5('linkd.q.' || key)` precisely so a later migration can find one without a lookup, and question text is editable in the Form Builder — a text match goes wrong the first time HR rewords something (F19-8, which is how the 0055 diagnostic row broke). |
+| F54-3 | **The snapshot rule is untouched, and the consequence is worth stating** | This edits the BANK. Every evaluation already launched keeps both questions frozen into `evaluation_questions` exactly as it asked them (§5) — so a cycle running right now still shows them, and only cycles launched from here on are affected. That is the rule working, not a gap in the fix. |
+| F54-4 | Nothing downstream needed changing, and it was checked rather than assumed | `getSalaryBand` reads the manager's answer as null-able and the screen already tells its three absences apart — no answer yet, answered No, left blank (P21). The salary band renders on INCREMENT cycles only in the first place (P20-3). |
+| F54-5 | One audit row per question, not one carrying an array | P14-5 / F5-4: somebody asking "why did this stop appearing" should find a row about that question. Carrying no figure, because 0013 lets a lead read `audit_log` for their own reports (§5, P19-10). |
+| F54-6 | The `whats-applied` row detects **the scope on the question**, not a token the file contains | 0056's failure was a `LIKE` over fragments the unpatched function already held. A detector has to match what the migration WROTE. |
+
+**Verification — 22 checks, 0 failed, on real Postgres.** The CHECK constraint
+and the column default are lifted from 0022's own text rather than retyped —
+they are the subject (FIX-12: a probe that reimplements what it checks is not a
+check of it).
+
+**The bug is reproduced before the fix**: an EVALUATION assembly returns the
+promotion question and the percentage, while the employee's expectation is
+already correctly excluded. After: the evaluation form is the rating question
+and nothing else, the increment form is unchanged at four questions, parent and
+child share a scope, both audit rows are written, a second run duplicates
+nothing, and the migration is proved to write to no table but `questions` and
+`audit_log`.
+
+Typecheck 0 errors; the reports, tabs and form suites all still pass.
+
+**Not changed, and noted.** The Form Builder shows both questions as it always
+did — it reads the bank unfiltered and does not display which cycle types a
+question appears on. The employee's expectation question has had the same gap
+since 0022. Surfacing `cycle_scope` in the question drawer is a real improvement
+and is a separate piece of work.
+
+**Action required.** `0072_promotion_is_increment_only.sql` is **not applied**.
+Until it is, an evaluation cycle launched today still asks both questions.
+
+---
+
+### FIX-55 — A draft counted as a rating, and the owner's UI pass
+
+No migration. Five pieces of work, four of them wording and geometry the owner
+asked for directly, one a correctness fault on the report.
+
+#### The one that was wrong rather than untidy
+
+Reported as *"manager just started rating but not submitted his form for
+employee then also reports showing rating this is not right."* Exactly right,
+and it was worse than a stray number.
+
+`evaluation_responses.answers` is written by AUTOSAVE (0011) every twenty
+seconds, from the moment somebody opens their form. So a manager six questions
+into a twenty-eight-question form has six answers on the row — and both reports
+averaged them.
+
+| # | Decision | Why |
+|---|---|---|
+| F55-1 | **A layer that has not been submitted carries no score** | Three untruths came out of one omission: a rating nobody had stood behind, a **gap measured against it**, and section rows reading 4.00 for the one section the manager happened to have reached with an em dash for the rest. §8 is unambiguous — a layer is a draft until it is submitted — and §11 stores the scores AT submission precisely so nothing has to re-derive them. This file was the one reader deriving its own from whatever was in the blob. |
+| F55-2 | The raw answers still feed the narrative bands and the per-question table | A half-filled draft is exactly what HR opened the report early to read (FIX-50). What it must not do is become a NUMBER. |
+| F55-3 | **The gap needs both sides in** | Measured against a draft it is not a disagreement — it is a reading of how far somebody has got, which is the readout blind rating exists to withhold. §11 makes the gap the figure the whole product exists to surface, so it is the last one to compute from a partial layer. |
+| F55-4 | A **skipped** layer counts as in | HR advanced past it deliberately (§8), so what is there is all there is going to be. |
+| F55-5 | The queue's flag count had the same fault, in one loop | Its `overall_score` columns were already correct — they are the stored ones — and only the per-question flag tally read the raw blob. Fixed with the identical predicate rather than a second rule. |
+
+#### The four the owner asked for
+
+| # | Decision | Why |
+|---|---|---|
+| F55-6 | **Two toggle tabs on `/reports`: Evaluation and Increment** | The two cycle types are two different exercises (§1) and were interleaved in one queue, so HR reading through a pay round kept meeting evaluations. The counts on each tab are computed under every OTHER filter, so a tab never reads zero because of a filter set on the tab you are not looking at. |
+| F55-7 | **Five KPI tiles get five columns** | They fell into the four-column catch-all, so the fifth dropped to a full-width card under four narrow ones — which reads as a different kind of thing rather than the fifth of five. Still two-up on a phone: five across 375px is 60px a tile, where the labels stop being readable. |
+| F55-8 | **The rating question lost 20px** | `py-5` → `py-4`, `space-y-3` → `space-y-2`, and the `min-h-16` floor removed — it was set for a bare text row, and a rating question is always taller, so on those it reserved height and nothing else. Twenty-eight questions makes that roughly a screenful. |
+| F55-9 | **The anchor row above each rating is gone** | It printed "VERY DISSATISFIED … OUTSTANDING", which is what cells 0 and 5 already say inside the group at every width. Two lines restating two cells, on twenty-eight questions. The scale is still stated in full once at the top of the form (`ScaleLegend`), where somebody meeting it for the first time reads it. |
+| F55-10 | `SCALE_ENDS` is **kept although unused** | §6's fixed wording, derived from `SCALE_0_5_LABELS` in the same file. A future surface needing the two ends without printing all six should take them from there rather than retyping two strings §17 forbids paraphrasing. |
+| F55-11 | The production board gained an **All** tile, and the "Show all" button went with it | Two controls doing one job. All is also what keeps exactly one card lit at all times, so the row always says what is being shown. |
+| F55-12 | **The worker print sheet: centred mark, black labels, aligned fields, no stamp box** | All at the owner's instruction. `.print-meta` is worn by three different elements across three sheets and every rule addressed `td`; the worker sheet uses `<th scope="row">`, so its labels matched nothing and took the browser default — bold and CENTRED, which is what put its two rows at different x positions (F47-4). |
+| F55-13 | **"Supervisor's recommendation" / "Which comes to" renamed, and a third figure added** | Reported as confusing, and they were: one is a percentage the supervisor chose and the other is what it would come to, neither saying who decided. Now Supervisor suggested · Which would make it · **What HR set** — the third being the figure actually stored, which had no card at all. |
+
+**Verification.** The KPI, reports, tabs and form suites all pass; typecheck 0
+errors, lint 0 errors (10 pre-existing warnings), build clean. Nothing here was
+run against live data — every one of these was found by the owner using the
+product, which §18's STATUS has now had to record for the fifth time.

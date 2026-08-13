@@ -111,6 +111,12 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it the MD CANNOT close a production appraisal at all — worker_evaluations admits only HR for UPDATE, so their close matches zero rows, and the screen wrongly reports that somebody else moved it.'),
   ('0071_worker_profile_without_email', 'nullable', 'profiles.email',
      'Without it a production worker cannot be imported at all — their profile needs an address they do not have, and the column refuses null.'),
+  -- Detects what the migration WROTE — the scope on the question itself — not a
+  -- token the file happens to contain. Both questions move together, so either
+  -- one answers for the pair; the promotion question is the parent and is the
+  -- one that must be right.
+  ('0072_promotion_is_increment_only', 'q_scope', 'the promotion question is INCREMENT_ONLY',
+     'Without it a plain EVALUATION cycle asks the manager to recommend a promotion and a percentage, on a cycle that has no pay decision at the end of it.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',
@@ -323,6 +329,10 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
          and pg_get_functiondef(p.oid) ~ 'when p_from_status = ''HR_APPROVED'' and p_to_status = ''MD_REVIEWED''\s+then\s+public\.is_hr\(\) or public\.is_md\(\)')
+    when 'q_scope' then exists (
+      select 1 from public.questions
+       where id = md5('linkd.q.mgr.promotion')::uuid
+         and cycle_scope = 'INCREMENT_ONLY')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'
