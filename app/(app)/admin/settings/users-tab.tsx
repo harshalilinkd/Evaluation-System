@@ -21,7 +21,7 @@ import {
 } from "@/lib/auth/provisioning";
 import { IMPORT_COLUMNS } from "@/lib/auth/csv";
 import { bulkUpdatePeople } from "@/lib/employment/bulk";
-import { MoneyCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
+import { DateCell, MoneyCell, NumberCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
 import { ACCESS_LEVELS } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,9 +54,14 @@ import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { EmptyState } from "@/components/appraise/states";
 import { ROLE_LABELS } from "@/components/appraise/nav-config";
 import { cn } from "@/lib/utils";
-import { formatDate, formatInr } from "@/lib/utils/date";
+// formatInr is gone from this file and that ABSENCE IS THE GUARANTEE: every
+// salary here now goes through moneyMonthly, so no cell can render an annual
+// figure without the compiler noticing. Same device F20-2 used.
+import { formatDate } from "@/lib/utils/date";
+import { moneyMonthly } from "@/components/appraise/money-input";
 import type { Enums } from "@/types/database";
 import { TRACK_FORM_LABELS, TRACK_LABELS } from "@/lib/forms/labels";
+import { byEmployeeCode } from "@/lib/utils/employee-code";
 
 export type PersonRow = {
   id: string;
@@ -78,6 +83,8 @@ export type PersonRow = {
   employment_type: string | null;
   /** §5: HR and the MD only. This screen is guarded to exactly those two. */
   current_ctc: number | null;
+  /** The baseline every stored percentage was measured from (P19E-1). */
+  joining_ctc: number | null;
   last_increment_date: string | null;
   next_increment_date: string | null;
   increment_frequency_months: number | null;
@@ -106,6 +113,19 @@ export type PersonPatch = {
   reports_to?: string | null;
   employment_type?: "PERMANENT" | "CONTRACT" | "PROBATION" | "INTERN";
   current_ctc?: number;
+  /* -- The rest of what the CSV import writes, so a mistake made in a
+        spreadsheet can be corrected on the screen that shows it.
+
+        `last_increment_date` is deliberately ABSENT. 0068 made the pay ledger
+        authoritative for it, so a hand-typed date would be overruled by the
+        next recorded rise — a cell that does not hold its value. It moves when
+        a salary change is recorded, and its column is read-only. -- */
+  track?: "STAFF" | "WORKER";
+  /** ISO. 0024's ONE joining date; moving it recomputes the whole schedule. */
+  date_of_joining?: string;
+  increment_frequency_months?: number;
+  /** Written through 0069, which refuses to overwrite an existing baseline. */
+  joining_ctc?: number;
 };
 
 type SalaryReason = "ANNUAL_INCREMENT" | "PROMOTION" | "CORRECTION" | "MARKET_ADJUSTMENT";
@@ -1252,7 +1272,7 @@ function EditPersonDialog({
               <div>
                 <p className="type-label text-ink-muted">Current salary</p>
                 <p className="tabular text-body-lg font-medium text-ink">
-                  {person.current_ctc === null ? "Not recorded" : formatInr(person.current_ctc)}
+                  {person.current_ctc === null ? "Not recorded" : moneyMonthly(person.current_ctc)}
                 </p>
               </div>
               <Link
@@ -1555,7 +1575,7 @@ export function UsersTab({
           (person.email ?? "").toLowerCase().includes(needle) ||
           (person.department ?? "").toLowerCase().includes(needle)
         );
-      }),
+      }).sort(byEmployeeCode),
     [people, search, status],
   );
 
@@ -1577,22 +1597,6 @@ export function UsersTab({
         /* An em dash, not "null" and not a fabricated address: a production
            worker genuinely has none (0071). */
         cell: ({ row }) => <GridCell value={row.original.email ?? "—"} className="tabular" />,
-      },
-      {
-        accessorKey: "employee_code",
-        header: "Code",
-        size: 110,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "employee_code", row.original.employee_code ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "employee_code", v)}
-              label={`Employee code for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "employee_code")}
-            />
-          ) : (
-            <GridCell value={dash(row.original.employee_code)} className="tabular" />
-          ),
       },
       {
         accessorKey: "designation",
@@ -1657,11 +1661,46 @@ export function UsersTab({
       {
         accessorKey: "date_of_joining",
         header: "Joined",
-        size: 120,
-        cell: ({ row }) => (
-          // §0.10: DD-MM-YYYY throughout.
-          <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
-        ),
+        size: 140,
+        cell: ({ row }) =>
+          tableEdit ? (
+            /* 0024: the ONE joining date. Moving it recomputes the whole
+               increment schedule through P19B-2's trigger, which is why it is
+               worth being able to correct here rather than only in a dialog. */
+            <DateCell
+              value={cellValue(row.original, "date_of_joining", row.original.date_of_joining ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "date_of_joining", v)}
+              label={`Joining date for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "date_of_joining")}
+            />
+          ) : (
+            // §0.10: DD-MM-YYYY throughout.
+            <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
+          ),
+      },
+      {
+        accessorKey: "track",
+        header: "Team",
+        size: 150,
+        /* §7's module: which appraisal they receive. Editable because getting
+           it wrong on import is exactly what HR needs to fix, and history is
+           safe either way — a launched evaluation holds its own frozen
+           questions (§5). */
+        cell: ({ row }) =>
+          tableEdit ? (
+            <SelectCell
+              value={cellValue(row.original, "track", (row.original.track ?? "STAFF") as "STAFF" | "WORKER") ?? "STAFF"}
+              onChange={(v) => setCell(row.original.id, "track", v as "STAFF" | "WORKER")}
+              label={`Team for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "track")}
+              options={[
+                { value: "STAFF", label: TRACK_LABELS.STAFF },
+                { value: "WORKER", label: TRACK_LABELS.WORKER },
+              ]}
+            />
+          ) : (
+            <GridCell value={row.original.track === "WORKER" ? TRACK_LABELS.WORKER : TRACK_LABELS.STAFF} />
+          ),
       },
       {
         accessorKey: "employment_type",
@@ -1681,9 +1720,52 @@ export function UsersTab({
           ),
       },
       {
+        id: "joining_ctc",
+        header: "Joining salary",
+        size: 165,
+        meta: { align: "right" },
+        /* -- THE BASELINE, AND HR MAY CORRECT IT (0074, at the owner's
+              instruction — it reverses 0069's once-only rule).
+
+              Safe because the ledger does not depend on it: `previous_ctc`,
+              `hike_amount` and `hike_pct` are STORED on each pay row when it is
+              written and are never recomputed, so fixing a typo here cannot
+              rewrite a single percentage.
+
+              Where somebody already has a rise on record the baseline and that
+              rise's stored `previous_ctc` can then read differently — a
+              disagreement for a person to interpret, not corrupted data. Before
+              any rise, which is the common case, there is no such effect at
+              all: today's salary moves with it. -- */
+        cell: ({ row }) =>
+          tableEdit ? (
+            <MoneyCell
+              annual={cellValue(row.original, "joining_ctc", row.original.joining_ctc ?? undefined) ?? null}
+              onChangeAnnual={(v) => setCell(row.original.id, "joining_ctc", v ?? undefined)}
+              label={`Joining salary for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "joining_ctc")}
+            />
+          ) : (
+            /* -- MONTHLY, because the cell beside it is typed monthly.
+                  This column read annual while `MoneyCell` two lines up takes a
+                  monthly figure, so one cell showed ₹1,80,000 until you clicked
+                  it and then showed ₹15,000. `moneyMonthly`'s own docstring
+                  names that as the bug it exists to remove, and this table was
+                  missed when the rest of the product moved (0061). -- */
+            <GridCell
+              value={moneyMonthly(row.original.joining_ctc)}
+              className="tabular"
+            />
+          ),
+      },
+      {
         id: "current_ctc",
-        header: "Current CTC",
-        size: 140,
+        /* -- "CTC" is an annual word — Cost To Company — and cannot head a
+              column of monthly figures without saying something untrue. The
+              noun changes; the column, its data and its edit behaviour do
+              not. -- */
+        header: "Current salary",
+        size: 165,
         meta: { align: "right" },
         // §5: salary is readable by HR_ADMIN and MD only, and this screen is
         // guarded to exactly those two. It appears here and nowhere a HOD or an
@@ -1699,8 +1781,48 @@ export function UsersTab({
               dirty={isDirty(row.original.id, "current_ctc")}
             />
           ) : (
+            // Monthly, matching the editable cell above and every other
+            // salary readout in the product.
+            <GridCell value={moneyMonthly(row.original.current_ctc)} className="tabular" />
+          ),
+      },
+      {
+        accessorKey: "last_increment_date",
+        header: "Last increment",
+        size: 140,
+        /* -- READ-ONLY, DELIBERATELY. 0068 made the pay ledger authoritative
+              for this: "once there is a recorded rise, that is when they were
+              last given one". A hand-typed date would be silently overruled by
+              the next pay change, and a cell that does not hold its value is
+              worse than no cell. It moves when a salary change is recorded. -- */
+        cell: ({ row }) => (
+          <GridCell value={row.original.last_increment_date ? formatDate(row.original.last_increment_date) : "—"} className="tabular" />
+        ),
+      },
+      {
+        accessorKey: "increment_frequency_months",
+        header: "Review every",
+        size: 130,
+        meta: { align: "right" },
+        cell: ({ row }) =>
+          tableEdit ? (
+            <NumberCell
+              value={
+                cellValue(
+                  row.original,
+                  "increment_frequency_months",
+                  row.original.increment_frequency_months ?? undefined,
+                ) ?? null
+              }
+              onChange={(v) => setCell(row.original.id, "increment_frequency_months", v ?? undefined)}
+              label={`Months between salary reviews for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "increment_frequency_months")}
+              min={1}
+              max={60}
+            />
+          ) : (
             <GridCell
-              value={row.original.current_ctc === null ? "—" : formatInr(row.original.current_ctc)}
+              value={row.original.increment_frequency_months === null ? "—" : `${row.original.increment_frequency_months} months`}
               className="tabular"
             />
           ),
@@ -1913,7 +2035,26 @@ export function UsersTab({
         data={rows}
         columns={columns}
         storageKey="appraise.people.column-widths"
-        minWidth={1060}
+        minWidth={1480}
+        /* -- The employee code IS the row number here (F58-style), so it takes
+              the gutter rather than sitting in a column beside a counter saying
+              the same thing. In EDIT MODE the gutter renders the field instead
+              of the open-button — safe because the row's ⋯ menu carries the
+              same action and is what a keyboard user reaches anyway. -- */
+        rowLabel={{
+          header: "Employee ID",
+          value: (p) => p.employee_code || "—",
+          cell: tableEdit
+            ? (p) => (
+                <TextCell
+                  value={cellValue(p, "employee_code", p.employee_code ?? "") ?? ""}
+                  onChange={(v) => setCell(p.id, "employee_code", v)}
+                  label={`Employee ID for ${p.full_name}`}
+                  dirty={isDirty(p.id, "employee_code")}
+                />
+              )
+            : undefined,
+        }}
         // Clicking anywhere on a row opens that person's record. The ⋯ menu's
         // "Edit details" is the same action and stays — it is what a keyboard
         // or screen-reader user reaches, since a clickable <tr> is neither
