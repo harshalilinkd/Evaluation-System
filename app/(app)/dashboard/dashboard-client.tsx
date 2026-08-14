@@ -24,7 +24,13 @@ import {
 } from "lucide-react";
 
 import {
+  BucketBarChart,
+  CHART_COLORS,
+  ChartLegend,
+  GroupedBarChart,
+  RATING_BANDS,
   RadialGauge,
+  StackedBarChart,
   TIER_CHART_COLORS,
   TrendAreaChart,
 } from "@/components/appraise/charts";
@@ -32,6 +38,7 @@ import { MetricStrip, type Metric } from "@/components/appraise/metric-strip";
 import { CycleShapeChart } from "@/components/appraise/cycle-shape-chart";
 import { HistoryTrendChart } from "@/components/appraise/history-trend-chart";
 import { ChartFigure } from "@/components/appraise/chart-figure";
+import { useSectionLabels } from "@/components/appraise/section-labels";
 import { HeroCard } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import type { Analytics } from "@/lib/analytics/queries";
@@ -111,6 +118,54 @@ function PanelEmpty({ children }: { children: React.ReactNode }) {
   return <p className="font-sans text-body-sm text-ink-muted">{children}</p>;
 }
 
+/**
+ * One outstanding thing, and the way to it.
+ *
+ * A count on a dashboard that cannot be pressed is a fact somebody then has to
+ * go and find. Each line is the whole row, so the target is a thumb's width
+ * rather than a number (§13.8).
+ */
+function WorkLine({
+  href,
+  count,
+  label,
+  critical,
+}: {
+  href: string;
+  count: number;
+  label: string;
+  critical?: boolean;
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="group flex items-baseline gap-2 py-1 font-sans text-body-sm text-ink-muted"
+      >
+        <span
+          className={cn(
+            "tabular font-sans text-body font-semibold",
+            critical ? "text-critical" : "text-ink",
+          )}
+        >
+          {count}
+        </span>
+        <span className="group-hover:underline">{label}</span>
+        {/* -- VISIBLE ON TOUCH, and it was not.
+              It was `opacity-0 … group-hover:opacity-100`, so on a phone the
+              one mark saying this line goes somewhere did not exist and the
+              row read as plain text. P31-8's rule: there is no hover on a
+              touch screen, so an affordance that only appears on hover is an
+              affordance half the readers never get. Caught by the audit. -- */}
+        <ArrowRight
+          aria-hidden
+          className="ml-auto size-3.5 shrink-0 opacity-40 transition-opacity duration-hover group-hover:opacity-100"
+        />
+      </Link>
+    </li>
+  );
+}
+
 /** A label over a figure. Used in the greeting card's footing row. */
 function Figure({ label, value }: { label: string; value: string }) {
   return (
@@ -173,6 +228,18 @@ export function DashboardClient({
 }) {
   const { audience, activeCycle, activeCycles, progress } = analytics;
   const isAdmin = audience === "hr" || audience === "md";
+
+  /* -- EVERYTHING ACTUALLY WAITING ON THIS PERSON, whether or not a cycle is
+        running. Summed once so the headline, the sentence beneath it and the
+        list cannot disagree about whether there is work — three places reading
+        three expressions is how a card ends up saying "nothing is waiting"
+        above a list of five things. -- */
+  const outstanding =
+    (due?.overdue ?? 0) +
+    (due?.dueSoon ?? 0) +
+    (pulse?.awaitingHr ?? 0) +
+    (pulse?.worker.awaitingHr ?? 0) +
+    (pulse ? pulse.incrementsDue.backend + pulse.incrementsDue.production : 0);
 
   return (
     /* -- EDGE TO EDGE. The dashboard is a GRID, and UI2-9 gave it full bleed for
@@ -262,14 +329,72 @@ export function DashboardClient({
               <p className="type-label text-ink-muted">
                 {greeting}, {firstName}
               </p>
+              {/* -- "NOTHING IS WAITING ON YOU" WAS FALSE, and it is the one
+                    sentence on the page nobody should have to check.
+                    It keyed off the CYCLE alone, so with no cycle running the
+                    card said nothing was waiting while twenty evaluations were
+                    overdue, five people were owed a rise and the shop floor had
+                    sheets to price. A dashboard that reports quiet while the
+                    work is elsewhere on the same page is worse than one that
+                    reports nothing.
+                    A cycle is one source of work, not the definition of it. -- */}
               <p className="font-sans text-display-sm text-ink">
-                {activeCycle ? activeCycle.name : "No cycle is running"}
+                {activeCycle
+                  ? activeCycle.name
+                  : outstanding > 0
+                    ? `${outstanding} ${outstanding === 1 ? "thing needs" : "things need"} you`
+                    : "Nothing is waiting on you"}
               </p>
               <p className="font-sans text-body-sm text-ink-muted">
                 {activeCycle
-                  ? `${activeCycle.periodLabel} · nothing is waiting on you`
-                  : "Nothing is waiting on you."}
+                  ? `${activeCycle.periodLabel}${outstanding > 0 ? ` · ${outstanding} outstanding elsewhere` : " · nothing else is waiting"}`
+                  : outstanding > 0
+                    ? "No cycle is running — this is work that does not need one."
+                    : "No cycle is running."}
               </p>
+
+              {/* Each line only where it counts for something, so this is a list
+                  of work rather than a row of zeros. */}
+              {outstanding > 0 ? (
+                <ul className="mt-4 space-y-1.5 border-t border-rule pt-4">
+                  {due && due.overdue > 0 ? (
+                    <WorkLine
+                      href="/admin/due"
+                      count={due.overdue}
+                      label={due.overdue === 1 ? "evaluation overdue" : "evaluations overdue"}
+                      critical
+                    />
+                  ) : null}
+                  {due && due.dueSoon > 0 ? (
+                    <WorkLine
+                      href="/admin/due"
+                      count={due.dueSoon}
+                      label="due in the next 30 days"
+                    />
+                  ) : null}
+                  {pulse && pulse.awaitingHr > 0 ? (
+                    <WorkLine
+                      href="/reports"
+                      count={pulse.awaitingHr}
+                      label={pulse.awaitingHr === 1 ? "report to read" : "reports to read"}
+                    />
+                  ) : null}
+                  {pulse && pulse.worker.awaitingHr > 0 ? (
+                    <WorkLine
+                      href="/admin/worker-appraisals"
+                      count={pulse.worker.awaitingHr}
+                      label="production sheets to price"
+                    />
+                  ) : null}
+                  {pulse && pulse.incrementsDue.backend + pulse.incrementsDue.production > 0 ? (
+                    <WorkLine
+                      href="/admin/increments"
+                      count={pulse.incrementsDue.backend + pulse.incrementsDue.production}
+                      label="people due a rise"
+                    />
+                  ) : null}
+                </ul>
+              ) : null}
 
               {activeCycle && progress ? (
                 <dl className="mt-auto grid grid-cols-3 gap-4 pt-5">
@@ -664,7 +789,69 @@ function adminMetrics(analytics: Analytics): Metric[] {
 }
 
 function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPulse | null }) {
-  const { departments, needsAttention, timeline, progress } = analytics;
+  const { departments, needsAttention, timeline, progress, distribution, sections } = analytics;
+  const sectionLabels = useSectionLabels();
+
+  /* -- THE SPREAD OF SCORES.
+        `v_rating_distribution` has been queried on every dashboard load since
+        P16 and rendered nowhere — so the cycle's actual OUTPUT, the one thing
+        an appraisal exercise produces, was invisible. It answers the question
+        nobody asks until the review meeting: is this a real distribution, or
+        is everybody a 4?
+
+        Built from `RATING_BANDS` rather than from the query result, so a band
+        with nobody in it renders as a gap on the axis instead of vanishing and
+        silently shifting every other band along — which would also break
+        `BucketBarChart`'s ordinal ramp, since it takes its step from the bar's
+        POSITION. Padding is what keeps position and band the same fact. -- */
+  const bands = RATING_BANDS.map((bucket) => ({
+    bucket,
+    people: Number(distribution.find((d) => d.bucket === bucket)?.people ?? 0),
+  }));
+  const ratedPeople = bands.reduce((sum, b) => sum + b.people, 0);
+
+  /* -- WHERE THE COMPANY IS STRONG, AND WHERE IT IS NOT.
+        `v_section_scores` was the second slice fetched and discarded. It is
+        per (cycle, department, section, layer) and already filtered to the
+        comparable sections — Job Specific Skills is a different set of
+        questions per department, so it never shares an axis with another's
+        (P16-4).
+
+        WEIGHTED BY `answer_count`, never a mean of the department means: a
+        team of two and a team of thirty do not carry the same weight in a
+        company figure, and averaging averages quietly says they do.
+
+        Both layers, side by side, because that is the one comparison this
+        product exists to draw (§1) — a section where the two sides agree and
+        one where they are a point apart are different findings, and a single
+        company average hides exactly that. -- */
+  const sectionRows = (() => {
+    const acc = new Map<string, { self: number; selfN: number; lead: number; leadN: number }>();
+    for (const row of sections) {
+      if (row.avg_score === null) continue;
+      const n = Number(row.answer_count ?? 0);
+      if (n <= 0) continue;
+      const at = acc.get(row.section) ?? { self: 0, selfN: 0, lead: 0, leadN: 0 };
+      if (row.layer === "SELF") {
+        at.self += Number(row.avg_score) * n;
+        at.selfN += n;
+      } else if (row.layer === "LEAD") {
+        at.lead += Number(row.avg_score) * n;
+        at.leadN += n;
+      }
+      acc.set(row.section, at);
+    }
+    return [...acc.entries()]
+      .map(([section, a]) => ({
+        section,
+        label: sectionLabels[section as keyof typeof sectionLabels] ?? section,
+        self: a.selfN > 0 ? Number((a.self / a.selfN).toFixed(2)) : null,
+        lead: a.leadN > 0 ? Number((a.lead / a.leadN).toFixed(2)) : null,
+      }))
+      /* -- WEAKEST FIRST, on the manager's figure. The panel is read to decide
+            what to do next, and what to do next starts at the bottom. -- */
+      .sort((a, b) => (a.lead ?? a.self ?? 9) - (b.lead ?? b.self ?? 9));
+  })();
 
   /* -- IS THERE A CURVE TO DRAW, or just a rule?
         `timeline.length < 2` was the wrong test. A cycle with one participant
@@ -820,7 +1007,156 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                 </span>
               </p>
             </div>
+
+            {/* -- AND WHO IS STILL OWED ONE.
+                  The line above counts what has already been recorded, which is
+                  a report on the past. This is the work — and it is split by
+                  team because the two rounds start from different screens: a
+                  staff increment cycle cannot hold a production worker (§7), so
+                  one number would send HR to the wrong place for half of them.
+                  Counted by the increment calendar's own predicate, so the two
+                  screens cannot disagree. -- */}
+            {pulse.incrementsDue.backend + pulse.incrementsDue.production > 0 ? (
+              <div className="mt-4 border-t border-rule pt-4">
+                <p className="type-label text-ink-muted">Due a rise</p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  <Link
+                    href="/admin/increments"
+                    className="tabular font-sans text-body text-ink underline-offset-2 hover:underline"
+                  >
+                    {pulse.incrementsDue.backend}{" "}
+                    <span className="font-sans text-body-sm text-ink-muted">backend team</span>
+                  </Link>
+                  <Link
+                    href="/admin/increments"
+                    className="tabular font-sans text-body text-ink underline-offset-2 hover:underline"
+                  >
+                    {pulse.incrementsDue.production}{" "}
+                    <span className="font-sans text-body-sm text-ink-muted">production team</span>
+                  </Link>
+                  {/* Late is a word as well as a colour (§13.8). */}
+                  {pulse.incrementsDue.overdue > 0 ? (
+                    <span className="tabular font-sans text-body-sm font-medium text-critical">
+                      {pulse.incrementsDue.overdue} overdue
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
           </Panel>
+
+          {/* ---------- The three months ahead ----------
+                Everything above answers "what is happening now", and with no
+                cycle running it all reads zero — which is exactly when this
+                question matters. Two series because they are two different
+                jobs: a review is a form to send, an increment is a pay
+                decision, and a single bar would tell HR to prepare for the
+                wrong one.
+
+                Indigo for reviews and amber for increments — the diverging pair
+                UI2-10 assigns by MEANING, and neither is a tier hue, so nothing
+                here claims to say who rated whom (§13.1). */}
+          {pulse.workload.some((m) => m.reviews + m.increments > 0) ? (
+            <Panel
+              title="The next three months"
+              subtitle="Scheduled work, by the month it falls in. Anything already late counts as this month."
+              action={
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/admin/due">Open</Link>
+                </Button>
+              }
+            >
+              {/* The table view is not optional decoration: the validator
+                  warns that these fills fall below 3:1 on this surface, and
+                  that obligates visible labels OR a table — it is not
+                  dismissable. `ChartFigure` is the product's one toggle for
+                  it, so both charts behave the same way. */}
+              <ChartFigure
+                caption="Reviews and increments falling due over the next three months."
+                rows={pulse.workload}
+                columns={[
+                  { header: "Month", cell: (m) => m.label },
+                  { header: "Reviews", cell: (m) => String(m.reviews), align: "right" },
+                  { header: "Increments", cell: (m) => String(m.increments), align: "right" },
+                ]}
+              >
+                <StackedBarChart
+                  data={pulse.workload}
+                  xKey="label"
+                  height={200}
+                  series={[
+                    { key: "reviews", label: "Reviews", fill: CHART_COLORS.primary },
+                    { key: "increments", label: "Increments", fill: CHART_COLORS.amber },
+                  ]}
+                />
+              </ChartFigure>
+              {/* Identity is never left to colour alone (§13.8). */}
+              <ChartLegend
+                items={[
+                  { label: "Reviews", fill: CHART_COLORS.primary },
+                  { label: "Increments", fill: CHART_COLORS.amber },
+                ]}
+              />
+            </Panel>
+          ) : null}
+
+          {/* ---------- The production module ----------
+                It was invisible here. Every count on this screen reads
+                `evaluations`, and §5's module boundary keeps a worker row out of
+                that table entirely — so a shop floor with six sheets waiting for
+                HR showed a dashboard reading "nothing awaiting you".
+
+                Its own panel rather than folded into the pipeline above, for
+                §7's reason: the two are different appraisals with different
+                stages, and one number over both answers neither. Rendered only
+                when there is a production round at all, so a company that does
+                not use the module never sees an empty panel. */}
+          {pulse.worker.inProgress +
+            pulse.worker.awaitingHr +
+            pulse.worker.withMd +
+            pulse.worker.closedThisMonth >
+          0 ? (
+            <Panel
+              title="Production appraisals"
+              subtitle="The shop floor's own rounds — a tick sheet, filled in by their supervisor."
+              action={
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/admin/worker-appraisals">Open</Link>
+                </Button>
+              }
+            >
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <PipelineTile
+                  label="Being filled in"
+                  value={pulse.worker.inProgress}
+                  caption="with the supervisor"
+                  href="/admin/worker-appraisals"
+                  tone="primary"
+                />
+                <PipelineTile
+                  label="Waiting for HR"
+                  value={pulse.worker.awaitingHr}
+                  caption="price it and send it up"
+                  href="/admin/worker-appraisals"
+                  tone="amber"
+                />
+                <PipelineTile
+                  label="With management"
+                  value={pulse.worker.withMd}
+                  caption="waiting on approval"
+                  href="/admin/worker-appraisals"
+                  tone="primary"
+                />
+                <PipelineTile
+                  label="Closed"
+                  value={pulse.worker.closedThisMonth}
+                  caption="finished rounds"
+                  href="/admin/worker-appraisals"
+                  tone="green"
+                />
+              </div>
+            </Panel>
+          ) : null}
 
           {/* ---------- Coming up ---------- */}
           <Panel
@@ -959,6 +1295,85 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           behind AND disagreeing with itself is a different problem from one
           that is merely late, and reading the two facts off separate panels is
           how the combination gets missed. */}
+      {/* ---------- What the cycle is actually producing ----------
+            Two panels, side by side, on data this screen has been fetching and
+            discarding since P16. Everything above is a count of PROGRESS — how
+            many forms are in, who is late. Neither says anything about the
+            answers, which is what the exercise is for. */}
+      {ratedPeople > 0 || sectionRows.length > 0 ? (
+        <section className="grid gap-6 xl:grid-cols-2">
+          {ratedPeople > 0 ? (
+            <Panel
+              title="The spread of scores"
+              subtitle="Every rated person, by their manager's overall. A healthy cycle has a shape; a cycle where everybody is a 4 has not been rated."
+            >
+              <ChartFigure
+                caption="How many people fall in each rating band"
+                rows={bands}
+                columns={[
+                  { header: "Band", cell: (b) => b.bucket },
+                  { header: "People", cell: (b) => String(b.people), align: "right" },
+                  {
+                    header: "Share",
+                    cell: (b) => `${Math.round((b.people / ratedPeople) * 100)}%`,
+                    align: "right",
+                  },
+                ]}
+              >
+                {/* One hue in five steps, light to dark — 0-1 through 4-5 is a
+                    single scale, not five kinds of thing. The step comes from
+                    the band's position, which `bands` guarantees is the band
+                    (P29-3). No tier hue: a rating band says nothing about who
+                    gave it (§13.1). */}
+                <BucketBarChart data={bands} labelKey="bucket" valueKey="people" height={200} />
+              </ChartFigure>
+            </Panel>
+          ) : null}
+
+          {sectionRows.length > 0 ? (
+            <Panel
+              title="Strongest and weakest, company-wide"
+              subtitle="Weighted by how many answers each team gave, so a large department is not outvoted by a small one. Weakest first."
+            >
+              <ChartFigure
+                caption="Average score by section, employee against manager"
+                rows={sectionRows}
+                columns={[
+                  { header: "Section", cell: (s) => s.label },
+                  { header: "Employee", cell: (s) => score(s.self), align: "right" },
+                  { header: "Manager", cell: (s) => score(s.lead), align: "right" },
+                  {
+                    header: "Difference",
+                    cell: (s) =>
+                      s.self === null || s.lead === null ? "—" : signedScore(s.lead - s.self),
+                    align: "right",
+                  },
+                ]}
+              >
+                {/* The documented exception to keeping tiers out of a chart
+                    (UI2-12): these two series ARE the layers, so they take the
+                    reserved hues and the legend beside them cannot disagree
+                    with the marks (P33-3). */}
+                <GroupedBarChart
+                  data={sectionRows}
+                  labelKey="label"
+                  series={[
+                    { key: "self", label: "Employee", color: TIER_CHART_COLORS.self },
+                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
+                  ]}
+                />
+              </ChartFigure>
+              <ChartLegend
+                items={[
+                  { label: "Employee", fill: TIER_CHART_COLORS.self },
+                  { label: "Manager", fill: TIER_CHART_COLORS.lead },
+                ]}
+              />
+            </Panel>
+          ) : null}
+        </section>
+      ) : null}
+
       {departments.length > 0 ? (
         <section>
           <Panel

@@ -3,6 +3,7 @@
 import "server-only";
 
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
+import { milestoneLabel } from "@/lib/due/queries";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -76,14 +77,56 @@ export type SystemPulse = {
   topPerformers: PulsePerformer[];
   /** True when a performer list would name fewer than two people. */
   performersThin: boolean;
+
+  /* -- THE PRODUCTION MODULE, which this screen could not see at all.
+        WORKER-1 built the whole appraisal — rounds, the supervisor's sheet,
+        HR's review, the MD's approval — and every count on this dashboard reads
+        `evaluations`, which by §5's module boundary holds no worker row. So a
+        shop floor with six sheets waiting for HR showed a dashboard reading
+        "nothing awaiting you".
+
+        Counted separately rather than folded in, for the same reason §7 keeps
+        the two modules apart: one number over two different appraisals answers
+        neither. -- */
+  worker: {
+    /** The supervisor has not submitted their sheet yet. */
+    inProgress: number;
+    /** Filled in, waiting for HR to price and review it. */
+    awaitingHr: number;
+    /** Sent up; the MD has not approved it. */
+    withMd: number;
+    closedThisMonth: number;
+  };
+
+  /* -- WHO IS DUE A RISE, split the way the increment calendar splits it.
+        `incrementsThisMonth` counts what has ALREADY been recorded, which is a
+        report on the past. This is the work: overdue, plus this month and next,
+        by team — because a staff increment cycle cannot hold a production
+        worker and the two rounds start from different screens. -- */
+  incrementsDue: { backend: number; production: number; overdue: number };
+
+  /* -- THE WORKLOAD AHEAD, by month.
+        The panels above answer "what is happening now", and when no cycle is
+        running they all read zero — which is exactly when HR most needs to know
+        what is coming. This is the next three months of scheduled work, split
+        into the two kinds because they are two different jobs: a review is a
+        form to send, an increment is a pay decision.
+        From the SAME `due_items` rows the list above renders, so a bar and the
+        list beneath it cannot describe different work. -- */
+  workload: Array<{ month: string; label: string; reviews: number; increments: number }>;
 };
 
-const MILESTONE_WORDS: Record<string, string> = {
-  MONTH_1: "First month review",
-  MONTH_6: "Six month review",
-  ANNUAL: "Annual evaluation",
-  INCREMENT: "Increment due",
-};
+/* -- THE MILESTONE'S NAME COMES FROM ONE PLACE.
+      This file kept its own four-entry map — MONTH_1, MONTH_6, ANNUAL,
+      INCREMENT — with the raw value as its fallback. 0076 made the review
+      schedule a SETTING and opened the vocabulary to `MONTH_<n>`, so the
+      company's own answer (three and nine months after each increment) has been
+      rendering on the dashboard as "MONTH_3" and "MONTH_9" ever since: a stored
+      enum on a screen, which §13.5 forbids outright.
+
+      `milestoneLabel` already handles any `MONTH_<n>` and is what Evaluation
+      Due renders. Two maps for one vocabulary is how one of them goes stale,
+      and this is that having happened. -- */
 
 function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -128,6 +171,8 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     doneLastMonth,
     increments,
     dueRows,
+    workerRows,
+    incrementRows,
     history,
   ] = await Promise.all([
     /* -- `!inner` on the cycle throughout, so a BINNED cycle is excluded.
@@ -173,6 +218,30 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
       .lte("due_on", horizon)
       .order("due_on", { ascending: true })
       .limit(25),
+
+    /* -- The production module's own four states.
+          `worker_evaluations` has its own status vocabulary (0047) — OPEN,
+          PENDING_REVIEW, REVIEWED, CLOSED — and none of the counts above can
+          see it, because they read `evaluations` and §5 keeps a worker row out
+          of that table entirely.
+          One query, grouped in TypeScript: four HEAD counts would be four round
+          trips for four numbers off one small table. -- */
+    supabase
+      .from("worker_evaluations")
+      .select("status, worker_cycles!inner(deleted_at)")
+      .is("excluded_at", null)
+      .is("worker_cycles.deleted_at", null),
+
+    /* -- Who is due a rise, and on which team.
+          `track` decides which round they belong in, so it is selected: a staff
+          increment cycle cannot hold a production worker (§7), and a single
+          number would send HR to the wrong screen for half of them. Dates only,
+          never a figure (§5). -- */
+    supabase
+      .from("employment_records")
+      .select("profile_id, next_increment_date, profiles!inner(track, is_active)")
+      .not("next_increment_date", "is", null)
+      .eq("profiles.is_active", true),
 
     /* -- Who scored well. Read from the history view, which is
           `security_invoker` — so this is subject to the same policies as a
@@ -248,7 +317,7 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     .map((r) => ({
       profileId: r.profile_id,
       name: nameOf.get(r.profile_id) ?? "",
-      milestone: MILESTONE_WORDS[r.milestone_type] ?? r.milestone_type,
+      milestone: milestoneLabel(r.milestone_type),
       dueOn: r.due_on,
       daysAway: daysBetween(today, r.due_on),
     }));
@@ -272,6 +341,76 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
+  /* -- The production module's four states, grouped here rather than in four
+        queries. `closedThisMonth` cannot use `closed_at` the way the staff
+        count does — `worker_evaluations` has no such column — so it is the
+        count at CLOSED, and the field says "closed" rather than "completed
+        this month" would. Naming it accurately is cheaper than adding a
+        column nobody asked for (§0.4). -- */
+  const workerStatuses = (workerRows.data ?? []).map((r) => r.status);
+  const worker = {
+    inProgress: workerStatuses.filter((s) => s === "OPEN").length,
+    awaitingHr: workerStatuses.filter((s) => s === "PENDING_REVIEW").length,
+    withMd: workerStatuses.filter((s) => s === "REVIEWED").length,
+    closedThisMonth: workerStatuses.filter((s) => s === "CLOSED").length,
+  };
+
+  /* -- Who is due a rise: overdue, this month, next month — the increment
+        calendar's own predicate, so a number here cannot disagree with the one
+        on that screen. Calendar months rather than a rolling window, for the
+        reason FIX-27 had to unpick: the two must bucket alike. -- */
+  const monthKey = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  const thisKey = monthKey(now);
+  const nextKey = monthKey(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)));
+
+  const incrementsDue = { backend: 0, production: 0, overdue: 0 };
+  for (const row of incrementRows.data ?? []) {
+    const on = row.next_increment_date;
+    if (!on) continue;
+    const late = on < today;
+    if (!late && !on.startsWith(thisKey) && !on.startsWith(nextKey)) continue;
+
+    // PostgREST returns an embedded to-one as an object; normalise defensively.
+    const p = row.profiles as unknown;
+    const track = Array.isArray(p)
+      ? ((p[0] as { track?: string } | undefined)?.track ?? "STAFF")
+      : ((p as { track?: string } | null)?.track ?? "STAFF");
+
+    if (track === "WORKER") incrementsDue.production += 1;
+    else incrementsDue.backend += 1;
+    if (late) incrementsDue.overdue += 1;
+  }
+
+  /* -- The next three months of scheduled work.
+        Built from `upcomingRaw` — every pending due item inside the ninety-day
+        horizon — rather than from the twenty-five the list renders, so the bars
+        count the whole workload and not the top of it.
+        Anything already overdue is folded into the current month: it is work
+        this month whatever date it carries, and a bar labelled with a month
+        that has passed is a bar nobody can act on. -- */
+  const workloadBy = new Map<string, { reviews: number; increments: number }>();
+  for (let i = 0; i < 3; i += 1) {
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+    workloadBy.set(d.toISOString().slice(0, 7), { reviews: 0, increments: 0 });
+  }
+  for (const row of upcomingRaw) {
+    const key = row.due_on < today ? today.slice(0, 7) : row.due_on.slice(0, 7);
+    const bucket = workloadBy.get(key);
+    if (!bucket) continue; // beyond the three months this chart covers
+    if (row.milestone_type === "INCREMENT") bucket.increments += 1;
+    else bucket.reviews += 1;
+  }
+  const workload = [...workloadBy.entries()].map(([month, counts]) => ({
+    month,
+    // §0.10's locale. A bar axis wants the short form; the panel says the year.
+    label: new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-IN", {
+      month: "short",
+      timeZone: "UTC",
+    }),
+    ...counts,
+  }));
+
   return {
     ok: true,
     data: {
@@ -289,6 +428,9 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
             score under a heading that implies competition. The panel says so
             instead of drawing a podium for a single person. -- */
       performersThin: topPerformers.length < 2,
+      worker,
+      incrementsDue,
+      workload,
     },
   };
 }
