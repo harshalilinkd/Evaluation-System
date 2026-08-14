@@ -7,15 +7,18 @@ import { useRouter } from "next/navigation";
 
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket, Search } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
   KpiCard,
   KpiRow,
+  SCREEN_SELECT_CLASS,
   ScreenHeader,
+  ScreenToolbar,
   TableScreen,
 } from "@/components/appraise/screen";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +35,9 @@ import { createAndSend, refreshDueItems, skipDueItem } from "@/lib/due/actions";
 import type { DueList, DueRow } from "@/lib/due/queries";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+
+/** "Any department" — a sentinel, because "" is a legitimate select value. */
+const ANY = "__any__";
 
 /** "August 2026" — HR thinks in months on this screen. */
 function monthLabel(iso: string): string {
@@ -60,15 +66,39 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   const toggleTile = (next: "milestone" | "soon" | "overdue") =>
     setTile((current) => (current === next ? null : next));
 
+  const [search, setSearch] = React.useState("");
+  const [department, setDepartment] = React.useState(ANY);
+
+  /* Only the departments PRESENT on this list — an option that matches nothing
+     is a filter that looks broken when it is pressed. */
+  const departments = React.useMemo(
+    () =>
+      [...new Set(list.rows.map((r) => r.department).filter((d): d is string => Boolean(d)))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
+    [list.rows],
+  );
+
   const visible = React.useMemo(() => {
-    if (tile === "overdue") return list.rows.filter((r) => r.daysRemaining < 0);
-    /* Thirty days AND not already late — the same predicate the count uses, so
-       a tile can never disagree with its own number (F50-3). */
-    if (tile === "soon")
-      return list.rows.filter((r) => r.daysRemaining >= 0 && r.daysRemaining <= 30);
-    if (tile === "milestone") return list.rows;
-    return list.rows;
-  }, [list.rows, tile]);
+    const needle = search.trim().toLowerCase();
+    return list.rows.filter((r) => {
+      if (tile === "overdue" && r.daysRemaining >= 0) return false;
+      /* Thirty days AND not already late — the same predicate the count uses,
+         so a tile can never disagree with its own number (F50-3). */
+      if (tile === "soon" && !(r.daysRemaining >= 0 && r.daysRemaining <= 30)) return false;
+      if (department !== ANY && r.department !== department) return false;
+      if (!needle) return true;
+      /* Name, employee ID and designation — the three things somebody has in
+         front of them when they come looking for one person. Their manager too:
+         "who is Mahesh waiting on" is a real question on this screen. */
+      return (
+        r.name.toLowerCase().includes(needle) ||
+        (r.employeeCode ?? "").toLowerCase().includes(needle) ||
+        (r.designation ?? "").toLowerCase().includes(needle) ||
+        (r.leadName ?? "").toLowerCase().includes(needle)
+      );
+    });
+  }, [list.rows, tile, department, search]);
 
   /* -- WHO A ROUND WOULD COVER: everybody due or already late.
         The same set "Start evaluations for everyone due" preselects, counted
@@ -410,6 +440,63 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
           active={tile === "overdue"}
         />
       </KpiRow>
+
+      {/* -- Search and a department filter, at the owner's request.
+            Twenty-one rows is already past the point where finding one person
+            means reading the column, and it grows with the company. -- */}
+      <ScreenToolbar>
+        <div className="relative min-w-56 flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+          />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search by name, employee ID, designation or manager"
+            title="Search by name, employee ID, designation or manager"
+            /* Short, because at a third of 375px the long form arrives as
+               "Search by nam" and reads as a truncated label rather than a
+               hint (F13-8). The full sentence is in the aria-label. */
+            placeholder="Search"
+            className="min-h-11 pl-9"
+          />
+        </div>
+
+        <select
+          value={department}
+          onChange={(e) => setDepartment(e.target.value)}
+          aria-label="Department"
+          className={cn(SCREEN_SELECT_CLASS, "min-h-11 min-w-0")}
+        >
+          <option value={ANY}>All departments</option>
+          {departments.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+
+        {/* The match count, ON A PHONE TOO: `DataGrid`'s own status bar is
+            below the list, and somebody who has just narrowed it needs to know
+            it narrowed (F13-7). */}
+        <span className="tabular text-body-sm text-ink-muted">
+          {visible.length === list.rows.length
+            ? `${list.rows.length} ${list.rows.length === 1 ? "item" : "items"}`
+            : `${visible.length} of ${list.rows.length}`}
+        </span>
+      </ScreenToolbar>
+
+      {/* -- WHY SOMEBODY IS NOT ON THIS LIST.
+            It is the milestones still WAITING, not the staff roster — an item
+            leaves the moment it is created or skipped, which is why the count
+            falls as HR works through it. Reported as "all employee names are
+            not showing here", and the screen said nothing either way. -- */}
+      <p className="px-4 pb-1 text-body-sm text-ink-muted lg:px-0">
+        Reviews still waiting. Somebody drops off this list once their evaluation
+        has been created or the milestone skipped — the whole staff list is under
+        Team review.
+      </p>
 
       {message ? (
         <p
