@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { checkRole } from "@/lib/auth/guards";
 import { generateToken, hashToken, inviteUrl } from "@/lib/auth/invite-token";
+import { toSnapshotRow } from "@/lib/cycles/launch";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { assembleForDepartment } from "@/lib/forms/assemble";
 import { sendNotification } from "@/lib/notify/dispatch";
@@ -45,7 +46,11 @@ function inDays(days: number): string {
  * an evaluation that is already durable and audited.
  */
 export async function createAndSend(dueItemId: string): Promise<
-  CycleResult<{ evaluationId: string; sent: number; failed: number }>
+  /* `blocked` is advisory, never a failure: the evaluation is created and
+     durable whether or not a message could leave. It carries the reason so the
+     screen can say the record exists and the links still have to go out — the
+     same shape `launchCycle` returns as `messagesBlocked`. */
+  CycleResult<{ evaluationId: string; sent: number; failed: number; blocked: string | null }>
 > {
   const auth = await requireHr();
   if (!auth.ok) return auth;
@@ -98,9 +103,27 @@ export async function createAndSend(dueItemId: string): Promise<
   const dueSelfOn = inDays(SELF_DAYS);
   const dueLeadOn = inDays(LEAD_DAYS);
 
+  /* -- MAPPED TO THE COLUMN NAMES, through the launch path's own mapper.
+        `assembleForDepartment` returns camelCase — `questionId`, `helpText`,
+        `responseType` — and `create_milestone_evaluation` reads
+        `question_id`, `help_text`, `response_type` off the JSON. This passed
+        the raw array, so EVERY column arrived null and the insert died on the
+        first NOT NULL one:
+
+          null value in column "question_id" of relation "evaluation_questions"
+
+        `as unknown as Json` is what let it compile — the double cast erased the
+        mismatch rather than reporting it, the same silence that let four cycle
+        fields be dropped (see CycleDraftInput). Narrowed to a single cast on a
+        correctly-shaped array, so the next rename is a compile error.
+
+        `toSnapshotRow` is now exported rather than copied: it also assigns
+        `sort_order` in steps of ten, which is what makes a frozen form read
+        back in the order it was shown (P3-3). A second mapper would drift from
+        that, and a snapshot is frozen for years. -- */
   const { data: created, error } = await supabase.rpc("create_milestone_evaluation", {
     p_due_item_id: dueItemId,
-    p_questions: assembled.data as unknown as Json,
+    p_questions: assembled.data.map(toSnapshotRow) as unknown as Json,
     p_lead_id: person.reports_to,
     p_due_self_on: dueSelfOn,
     p_due_lead_on: dueLeadOn,
@@ -128,9 +151,23 @@ export async function createAndSend(dueItemId: string): Promise<
   let sent = 0;
   let failed = 0;
 
-  /* -- The employee gets a token; the lead gets one too, because a HOD chasing
-        one report should not have to find the queue. Each message describes only
-        that person's own form (§5) — neither says anything about the other. -- */
+  /* -- EVERY SEND IS INSIDE THE TRY, and nothing below may throw out of it.
+        The evaluation is COMMITTED by this point — the row exists, the snapshot
+        is frozen, the due item is marked CREATED and the whole thing is
+        audited. A failure to message must not present that as a crash.
+
+        It did. `inviteUrl` throws when the app URL would point at localhost
+        (P28's guard, and it is right to refuse — WhatsApp will not even make
+        such a link tappable). But the throw escaped the action, so HR pressing
+        "Create and send" on a local build got a Next.js runtime error overlay
+        for an evaluation that had been created perfectly. Reported exactly
+        that way.
+
+        This is PW-2's rule and `dispatchLaunchInvites`'s shape: the send is
+        advisory, the outcome carries WHY nothing went out, and the record
+        stands either way. -- */
+  let blocked: string | null = null;
+  try {
   if (person.phone_e164 || person.email) {
     // Hoisted so the same values reach `vars`, which is what fills in HR's own
     // wording where they have written some (0073).
@@ -178,10 +215,19 @@ export async function createAndSend(dueItemId: string): Promise<
       r.ok ? (sent += 1) : (failed += 1);
     }
   }
+  } catch (cause) {
+    /* The message is P28's own, which names the variable, what it does to the
+       link and the exact change to make. Passed through rather than
+       paraphrased — a paraphrase is what would send somebody to me (§0.7). */
+    blocked =
+      cause instanceof Error && cause.message
+        ? cause.message
+        : "The invite links could not be sent.";
+  }
 
   revalidatePath("/admin/due");
   revalidatePath("/admin/cycles");
-  return { ok: true, data: { evaluationId, sent, failed } };
+  return { ok: true, data: { evaluationId, sent, failed, blocked } };
 }
 
 /** Skip an item. A reason is required — a silent dismissal explains nothing later. */

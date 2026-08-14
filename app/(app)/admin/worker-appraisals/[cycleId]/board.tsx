@@ -89,6 +89,8 @@ export function WorkerBoard({
   rows,
   workers,
   raters,
+  startDue,
+  startWorkerId,
 }: {
   /* -- ABSENT MEANS EVERY ROUND, and that is now the ordinary case.
         The rounds LIST is gone at the owner's instruction: Production
@@ -108,9 +110,21 @@ export function WorkerBoard({
   rows: BoardRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
+  /**
+   * `?start=due` from the increment calendar's "Start for Production team".
+   * Resolved on the server so the client never has to parse a query string, and
+   * so a stray value cannot open a dialog in a state nobody chose.
+   */
+  startDue?: boolean;
+  /** One worker, from "Start increment" on a single calendar row. */
+  startWorkerId?: string;
 }) {
   const allRounds = cycle === null;
-  const [starting, setStarting] = React.useState(false);
+  /* -- Opens on arrival when the calendar sent us. The dialog is gated on
+        `open`, so it MOUNTS with the flag set and reads it in its own state
+        initialisers — no effect copying props into state, and nothing to keep
+        in step once HR starts ticking (F4-5's reasoning, one layer up). -- */
+  const [starting, setStarting] = React.useState(Boolean(startDue || startWorkerId));
   const [adding, setAdding] = React.useState(false);
   /* -- Binning moved here with the rounds list, because deleting that list
         would otherwise have removed the only way to bin a round: Settings ›
@@ -552,6 +566,8 @@ export function WorkerBoard({
         onOpenChange={setStarting}
         workers={workers}
         raters={raters}
+        preselect={startDue ? "increment-due" : startWorkerId ? "these-people" : undefined}
+        preselectIds={startWorkerId ? [startWorkerId] : undefined}
       />
     </div>
   );

@@ -121,6 +121,12 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it Settings > Messages cannot save a reworded message — the editor is there and the table it writes to is not.'),
   ('0075_correct_joining_salary', 'function', 'set_joining_salary',
      'Without it HR cannot CORRECT a joining salary — 0069 refuses to overwrite one, so a figure typed wrong at import stays wrong.'),
+  ('0076_evaluation_schedule', 'table', 'evaluation_schedule',
+     'Without it the review schedule is not a setting: evaluations are computed from the old fixed 1-and-6-months-from-joining rule, and Settings > Evaluation periods cannot save.'),
+  ('0078_due_items_second_constraint', 'one_milestone_check', 'no constraint still enumerates MONTH_1',
+     'Without it every MONTH_3 and MONTH_9 is refused by 0042''s constraint, which 0076 never widened — so "Check again" errors and Evaluation Due stays empty however many people are due. 0078 also carries 0077''s fix, so it is sufficient on its own.'),
+  ('0077_due_sweep_count', 'sweep_count', 'compute_due_items counts all three branches',
+     'Without it "Check again" reports only the new-joiner half. In a company where everybody has had an increment that is ZERO, so a sweep that created a dozen items says "Nothing new is due" — the button stating the opposite of what it just did.'),
   ('0039_hr_close_evaluation',   'close_ok',   'HR may close an EVALUATION cycle without the MD',
      'Without it an evaluation cycle can only reach CLOSED through the MD, so HR cannot finish one on their own.'),
   ('0046_increment_final_score', 'final_score','confirm_increment records a final score',
@@ -337,6 +343,23 @@ select
       select 1 from public.questions
        where id = md5('linkd.q.mgr.promotion')::uuid
          and cycle_scope = 'INCREMENT_ONLY')
+    -- Anchored to what 0077 WROTE — the accumulator — not to a token 0076's
+    -- body already contains. That was 0056's failure and this row does not
+    -- repeat it: 0076 has exactly one `get diagnostics`, 0077 has three
+    -- followed by `v_created := v_created + v_batch`.
+    -- By DEFINITION, not by name: two constraint names have drifted across
+    -- three migrations here, and asking after either one is how 0076 missed the
+    -- second. Anything still enumerating MONTH_1 is stale, whatever it is
+    -- called; 0076's regex reads '^MONTH_[0-9]{1,3}$' and cannot match this.
+    when 'one_milestone_check' then not exists (
+      select 1 from pg_constraint c
+       where c.contype = 'c'
+         and c.conrelid in ('public.due_items'::regclass, 'public.evaluations'::regclass)
+         and pg_get_constraintdef(c.oid) like '%''MONTH_1''%')
+    when 'sweep_count' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'compute_due_items'
+         and pg_get_functiondef(p.oid) like '%v_created := v_created + v_batch%')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'

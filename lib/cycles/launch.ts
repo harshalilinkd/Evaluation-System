@@ -10,7 +10,7 @@ import type { AssembledQuestion } from "@/lib/forms/types";
 import type { Enums, Json } from "@/types/database";
 
 /** What launch_cycle() receives for one person. Snake_case: it is read by SQL. */
-type SnapshotRow = {
+export type SnapshotRow = {
   question_id: string;
   text: string;
   help_text: string | null;
@@ -58,7 +58,7 @@ export type LaunchPlan = {
   totalQuestions: number;
 };
 
-function toSnapshotRow(question: AssembledQuestion, index: number): SnapshotRow {
+export function toSnapshotRow(question: AssembledQuestion, index: number): SnapshotRow {
   return {
     question_id: question.questionId,
     text: question.text,

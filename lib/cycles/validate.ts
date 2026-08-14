@@ -174,8 +174,125 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
 
   const participantsResult = await loadCycleParticipants(cycleId);
   if (!participantsResult.ok) return participantsResult;
-  const participants = participantsResult.data;
 
+  return assessReadiness({
+    cycle,
+    participants: participantsResult.data,
+    editHref: `/admin/cycles/${cycleId}/edit`,
+  });
+}
+
+/**
+ * The same report, for a roster that is still only on screen.
+ *
+ * Builds the identical `ParticipantSnapshot[]` from profiles rather than from
+ * draft evaluations, then hands it to the SAME checks. Nothing is written.
+ *
+ * `departmentId` comes from the profile here, where `loadCycleParticipants`
+ * takes it from the evaluation — and that difference is right rather than an
+ * approximation: 0003 copies the department onto the evaluation AT CREATION, so
+ * before creation the profile IS where it would be copied from.
+ */
+export async function readinessForRoster(
+  cycle: ReadinessCycle,
+  roster: Array<{ profileId: string; leadId: string | null }>,
+): Promise<CycleResult<ReadinessReport>> {
+  if (roster.length === 0) {
+    return assessReadiness({ cycle, participants: [], editHref: null });
+  }
+
+  const supabase = await createClient();
+
+  const ids = [
+    ...new Set(roster.flatMap((r) => [r.profileId, r.leadId]).filter((v): v is string => Boolean(v))),
+  ];
+
+  const [{ data: profiles, error }, { data: departments }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164")
+      .in("id", ids),
+    supabase.from("departments").select("id, name"),
+  ]);
+
+  if (error) return cycleError("QUERY_FAILED", `Could not read people: ${error.message}`);
+
+  const byProfile = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));
+
+  const participants: ParticipantSnapshot[] = [];
+  for (const row of roster) {
+    const person = byProfile.get(row.profileId);
+    // Somebody deleted between the wizard loading and this call. Skipping them
+    // is right: they cannot be launched either, and the count below reports one
+    // fewer rather than the report describing a person who is gone.
+    if (!person) continue;
+    const lead = row.leadId ? byProfile.get(row.leadId) : undefined;
+
+    participants.push({
+      // No row exists yet. Nothing in the checks reads this.
+      evaluationId: "",
+      profileId: row.profileId,
+      name: person.full_name,
+      employeeCode: person.employee_code,
+      designation: person.designation,
+      departmentId: person.department_id,
+      departmentName: person.department_id ? (byDepartment.get(person.department_id) ?? null) : null,
+      leadId: row.leadId,
+      leadName: lead?.full_name ?? null,
+      track: person.track,
+      isActive: person.is_active,
+      email: person.email,
+      phone: person.phone_e164,
+      leadEmail: lead?.email ?? null,
+      leadPhone: lead?.phone_e164 ?? null,
+    });
+  }
+
+  participants.sort((a, b) => a.name.localeCompare(b.name));
+  return assessReadiness({ cycle, participants, editHref: null });
+}
+
+/** The cycle fields the checks below actually read. */
+export type ReadinessCycle = {
+  /** Absent while the cycle is still only on screen. */
+  id?: string;
+  name: string;
+  starts_on: string | null;
+  self_due_on: string | null;
+  lead_due_on: string | null;
+  md_due_on: string | null;
+};
+
+/**
+ * THE CHECKS, over a roster — wherever the roster came from.
+ *
+ * This body used to be inside `buildReadinessReport`, which reads the roster
+ * out of `evaluations`. That made the report available only to a cycle that
+ * already EXISTS, and so the wizard had to write a DRAFT row before it could
+ * tell HR whether a launch would work — leaving a cycle behind every time
+ * somebody looked at the review step and walked away. Reported twice, as
+ * "nothing should get saved as draft".
+ *
+ * Splitting it is the P9-2 pattern: one implementation of the rule, two ways in.
+ * `buildReadinessReport` is unchanged in behaviour and is still what
+ * `launchCycle` re-validates with, so the server-side guard §9 requires is the
+ * same code the wizard previewed with — they cannot disagree, because there is
+ * only one of them.
+ *
+ * `editHref` is null for a cycle that does not exist yet: the fix for every one
+ * of these is on the screen HR is already standing on, and a link to
+ * `/admin/cycles/undefined/edit` is worse than no link.
+ */
+export async function assessReadiness({
+  cycle,
+  participants,
+  editHref,
+}: {
+  cycle: ReadinessCycle;
+  participants: ParticipantSnapshot[];
+  editHref: string | null;
+}): Promise<CycleResult<ReadinessReport>> {
   const skillCounts = await jobSkillCountsByDepartment();
   if (!skillCounts.ok) return skillCounts;
 
@@ -188,7 +305,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "NO_PARTICIPANTS",
       message: "This cycle has nobody in it. Add people before launching.",
       subjects: [],
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Add people",
     });
   }
@@ -200,7 +317,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "NO_LEAD",
       message: `${plural(leaderless.length, "person")} ${leaderless.length === 1 ? "has" : "have"} no lead assigned.`,
       subjects: leaderless.map((p) => p.name),
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Assign leads",
     });
   }
@@ -212,7 +329,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "INACTIVE_PARTICIPANT",
       message: `${plural(inactive.length, "person")} in this cycle ${inactive.length === 1 ? "is" : "are"} no longer active.`,
       subjects: inactive.map((p) => p.name),
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Remove them",
     });
   }
@@ -227,7 +344,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "WORKER_IN_STAFF_CYCLE",
       message: `${plural(workers.length, "person")} ${workers.length === 1 ? "is" : "are"} on the worker track. Workers are appraised in their own module.`,
       subjects: workers.map((p) => p.name),
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Remove them",
     });
   }
@@ -298,7 +415,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "DATES_INVALID",
       message: "The dates do not work.",
       subjects: dateIssues,
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Fix the dates",
     });
   }
@@ -341,7 +458,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       code: "LEAD_OVERLOADED",
       message: "Some leads are reviewing a lot of people. Reviews tend to arrive late, or thin.",
       subjects: overloaded.map((l) => `${l.name} — ${plural(l.count, "review")}`),
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Rebalance",
     });
   }
@@ -359,7 +476,7 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
       message:
         "Some people are recorded as their own Manager. Under blind rating nobody can rate themselves — assign a different rater.",
       subjects: selfLed.map((p) => p.name),
-      href: `/admin/cycles/${cycleId}/edit`,
+      href: editHref ?? undefined,
       hrefLabel: "Assign a rater",
     });
   }
@@ -404,7 +521,10 @@ export async function buildReadinessReport(cycleId: string): Promise<CycleResult
   return {
     ok: true,
     data: {
-      cycleId,
+      /* Empty for a cycle that does not exist yet. The wizard's Launch button
+         is the only consumer and it uses the roster it holds, not this — the
+         field stays for `/admin/cycles/[id]`'s own report. */
+      cycleId: cycle.id ?? "",
       participantCount: participants.length,
       blocking,
       warnings,

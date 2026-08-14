@@ -17,8 +17,21 @@ export type DueRow = {
   what: string;
   dueOn: string;
   daysRemaining: number;
+  designation: string | null;
   leadId: string | null;
   leadName: string | null;
+  /**
+   * When their last evaluation was CLOSED — §8's terminal state.
+   *
+   * Deliberately not the cycle roster's "last evaluated", which is the most
+   * recent evaluation's `created_at`: that answers "when were they last asked",
+   * and this answers "when were they last reviewed". Both are useful and they
+   * are not the same date, so they carry different labels rather than one name
+   * meaning two things on two screens.
+   *
+   * Null for everybody today, and honestly so — nothing has been closed yet.
+   */
+  lastCompletedOn: string | null;
   /** Why "Create and send" cannot run yet, if it cannot. */
   blockedBecause: string | null;
 };
@@ -107,13 +120,13 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
   const ids = [...new Set(list.map((i) => i.profile_id))];
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, department_id, reports_to, is_active")
+    .select("id, full_name, employee_code, designation, department_id, reports_to, is_active")
     .in("id", ids);
 
   const leadIds = [...new Set((people ?? []).map((p) => p.reports_to).filter(Boolean))] as string[];
   const deptIds = [...new Set((people ?? []).map((p) => p.department_id).filter(Boolean))] as string[];
 
-  const [{ data: leads }, { data: departments }, { data: mapped }] = await Promise.all([
+  const [{ data: leads }, { data: departments }, { data: mapped }, { data: closed }] = await Promise.all([
     leadIds.length
       ? supabase.from("profiles").select("id, full_name").in("id", leadIds)
       : Promise.resolve({ data: [] }),
@@ -123,9 +136,26 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
     deptIds.length
       ? supabase.from("department_questions").select("department_id").in("department_id", deptIds)
       : Promise.resolve({ data: [] }),
+    /* -- When each of these people was last REVIEWED, not last asked.
+          `closed_at` is §8's terminal state, so a cycle somebody was added to
+          and never finished does not count as a review. Newest first, so the
+          first row seen for a person is the one that matters. -- */
+    supabase
+      .from("evaluations")
+      .select("evaluatee_id, closed_at")
+      .in("evaluatee_id", ids)
+      .not("closed_at", "is", null)
+      .is("excluded_at", null)
+      .order("closed_at", { ascending: false }),
   ]);
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
+  const lastClosed = new Map<string, string>();
+  for (const row of closed ?? []) {
+    if (row.closed_at && !lastClosed.has(row.evaluatee_id)) {
+      lastClosed.set(row.evaluatee_id, row.closed_at);
+    }
+  }
   const leadName = new Map((leads ?? []).map((p) => [p.id, p.full_name]));
   const deptName = new Map((departments ?? []).map((d) => [d.id, d.name]));
   // P9-7: a department with no Job Specific Skills questions cannot be launched
@@ -163,6 +193,8 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
       what: milestoneLabel(item.milestone_type),
       dueOn: item.due_on,
       daysRemaining: daysUntil(item.due_on),
+      designation: person.designation,
+      lastCompletedOn: lastClosed.get(item.profile_id) ?? null,
       leadId: person.reports_to,
       leadName: person.reports_to ? (leadName.get(person.reports_to) ?? null) : null,
       blockedBecause: blocked,

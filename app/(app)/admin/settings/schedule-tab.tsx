@@ -103,6 +103,19 @@ export function ScheduleTab({ schedule }: { schedule: EvaluationSchedule }) {
 
   return (
     <div className="space-y-6">
+      {/* -- WHO THIS GOVERNS, said once at the top.
+            The two cards below read "a new joiner" and "everybody else", which
+            sounds like the whole company. It is the office team: the production
+            team is not reviewed on intervals at all — one increment a year, and
+            an appraisal on their own rounds (§7, WORKER-1). Without this the
+            fields look like they set a rule for people they do not reach, and
+            changing them looks like it has done nothing. -- */}
+      <p className="rounded-control border border-rule bg-surface-mute px-4 py-3 font-sans text-body-sm text-ink-muted">
+        This is the office team&rsquo;s review schedule. The production team is not reviewed on
+        intervals — they take one increment a year and are appraised on their own rounds, started
+        from Production Appraisals.
+      </p>
+
       <SectionCard
         title="When a new joiner is reviewed"
         description="Counted from their joining date. This is the schedule until their first increment."

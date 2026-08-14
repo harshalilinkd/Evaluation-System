@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { SelectablePerson } from "@/lib/cycles/queries";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
+import { isIncrementDue } from "@/lib/utils/increment-due";
 
 export type PersonState = {
   included: boolean;
@@ -49,23 +50,10 @@ function ContactIcons({
   );
 }
 
-/** How many days ahead still counts as "coming up". A month, near enough. */
-const DUE_WINDOW_DAYS = 31;
-
-/**
- * Is their next increment due now, or within the window?
- *
- * Anything in the PAST counts too — somebody whose increment was due last month
- * and has not had it is the most important person on this list, and a filter
- * that only looked forward would hide exactly them.
- */
-export function isIncrementDue(nextOn: string | null, today = new Date()): boolean {
-  if (!nextOn) return false;
-  const due = new Date(`${nextOn}T00:00:00`);
-  if (Number.isNaN(due.getTime())) return false;
-  const days = Math.round((due.getTime() - today.getTime()) / 86_400_000);
-  return days <= DUE_WINDOW_DAYS;
-}
+/* -- The rule moved to `lib/utils/increment-due.ts`, unchanged, when the
+      production round started needing it too. Re-exported so every existing
+      caller keeps working. -- */
+export { isIncrementDue } from "@/lib/utils/increment-due";
 
 export function StepPeople({
   people,
@@ -84,7 +72,16 @@ export function StepPeople({
    * A DEFAULT, not a lock — the toggle below stays live, because an increment
    * paid early is a real thing and a filter HR cannot clear would hide it.
    */
-  preset?: "due" | "all";
+  /**
+   * Which list step 1 asked for.
+   *
+   * "chosen" is the row-level "Start increment": the link names ONE person, so
+   * the list opens as that one person rather than twenty-eight with one ticked.
+   * "Add someone" widens it — a filter HR cannot clear would be a restriction,
+   * and adding a second person to a round they are already starting should not
+   * mean going back.
+   */
+  preset?: "due" | "all" | "chosen";
   /** Why some people arrive already ticked, when they do. */
   roundNote?: string;
 }) {
@@ -107,6 +104,9 @@ export function StepPeople({
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState<string>("all");
   const [dueOnly, setDueOnly] = React.useState(preset === "due");
+  /* Shows only the people who arrived ticked. Cleared by "Add someone", never
+     by anything else — it is the opening view, not a lock. */
+  const [chosenOnly, setChosenOnly] = React.useState(preset === "chosen");
 
   const departments = React.useMemo(() => {
     const map = new Map<string, string>();
@@ -114,9 +114,22 @@ export function StepPeople({
     return [...map.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [appraisable]);
 
+  /* -- WHO WAS TICKED WHEN THIS OPENED.
+        Captured once, in a state initialiser, and never updated — the order
+        below is frozen against it.
+
+        Frozen rather than live for the reason the production dialog needed the
+        same treatment: sorting on the CURRENT ticks sends a row to the bottom
+        the instant it is unticked, pulling the next row up under the pointer,
+        so one deliberate untick becomes an accidental second one. -- */
+  const [tickedAtOpen] = React.useState<Set<string>>(
+    () => new Set(Object.entries(state).filter(([, row]) => row.included).map(([id]) => id)),
+  );
+
   const visible = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return appraisable.filter((p) => {
+    const matching = appraisable.filter((p) => {
+      if (chosenOnly && !tickedAtOpen.has(p.id)) return false;
       if (department !== "all" && p.departmentId !== department) return false;
       if (dueOnly && !isIncrementDue(p.nextIncrementOn)) return false;
       if (!needle) return true;
@@ -126,7 +139,24 @@ export function StepPeople({
         (p.designation ?? "").toLowerCase().includes(needle)
       );
     });
-  }, [appraisable, search, department, dueOnly]);
+
+    /* -- TICKED FIRST, so what HR is being asked to review is on the first
+          screenful.
+          A round from the increment calendar ticks three people out of
+          twenty-eight, and a single "Start increment" ticks one — placed
+          alphabetically, so the whole point of the screen was below the fold
+          and the header read "1 of 28 included" with nothing to show for it.
+
+          A stable partition, not a sort: `filter` preserves order, so within
+          each group the list stays exactly as it was. Where everybody is ticked
+          — an ordinary evaluation cycle — the second group is empty and nothing
+          moves at all. -- */
+    if (tickedAtOpen.size === 0 || tickedAtOpen.size === appraisable.length) return matching;
+    return [
+      ...matching.filter((p) => tickedAtOpen.has(p.id)),
+      ...matching.filter((p) => !tickedAtOpen.has(p.id)),
+    ];
+  }, [appraisable, search, department, dueOnly, chosenOnly, tickedAtOpen]);
 
   const dueCount = React.useMemo(
     () => appraisable.filter((p) => isIncrementDue(p.nextIncrementOn)).length,
@@ -148,6 +178,27 @@ export function StepPeople({
   const visibleIncluded = visible.filter(
     (p) => (state[p.id]?.included ?? true) === true,
   ).length;
+
+  /* -- IS THE LIST NARROWED?
+        Three controls can narrow it and any one of them is enough to make
+        "everybody else is listed below" untrue. -- */
+  const narrowed = chosenOnly || dueOnly || department !== "all" || search.trim() !== "";
+
+  /* -- "ADD SOMEONE" — a real action now, and it was not before.
+        I argued the owner out of this button on the grounds that the full
+        roster is already the table below, so it would have nothing to do but
+        scroll. That was wrong in the case it was asked about: arriving from
+        "Start an increment round" turns the due filter ON, so the table is
+        three rows, and the sentence beneath it told HR to tick somebody from a
+        list of everybody that was not on screen.
+        Clearing all three filters is the thing HR wants and cannot easily work
+        out — the due filter looks like a heading, not a control. -- */
+  const showEveryone = () => {
+    setChosenOnly(false);
+    setDueOnly(false);
+    setDepartment("all");
+    setSearch("");
+  };
 
   const setAllVisible = (included: boolean) => {
     const next = { ...state };
@@ -210,6 +261,16 @@ export function StepPeople({
           <span className="tabular ml-1.5 opacity-80">{dueCount}</span>
         </Button>
 
+        {/* Only where it can do something. A button that clears filters none of
+            which are set is the empty gesture I refused to build the first
+            time — the objection was right, the scope was not. */}
+        {narrowed ? (
+          <Button type="button" variant="outline" className="min-h-11" onClick={showEveryone}>
+            Add someone
+            <span className="tabular ml-1.5 opacity-80">{appraisable.length}</span>
+          </Button>
+        ) : null}
+
         <Button type="button" variant="outline" className="min-h-11" onClick={() => setAllVisible(true)}>
           {department === "all" && !dueOnly ? "Select all" : "Select all shown"}
         </Button>
@@ -218,28 +279,21 @@ export function StepPeople({
         </Button>
       </div>
 
-      {dueOnly ? (
-        <p className="flex flex-wrap items-center gap-x-2 rounded-control border border-rule bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
-          <span>
-            Showing people whose next increment has arrived or falls within the next month.
-            Somebody already overdue is included — they are the ones most worth catching.
-          </span>
-        </p>
-      ) : null}
+      {/* -- BOTH EXPLANATORY BLOCKS REMOVED, at the owner's instruction.
+              They said three things — what the filter shows, why some people are
+              ticked, where the production team's round is started — stacked into
+              two paragraphs above a table that already shows all of it: the
+              "Increment due 3" button names the filter and its count, the ticks
+              are visible, and "Add someone" says what it does.
+              A screen that narrates itself is a screen somebody stops reading,
+              and these sat between HR and the work.
 
-      {/* -- "ADD MORE", said rather than hidden behind a button.
-              The owner asked for an "Add more" control so HR can pull in
-              somebody the schedule did not catch. There is nothing for it to
-              DO: the full roster is already the table below, and a button whose
-              only effect is to scroll is a button that teaches people it does
-              nothing.
-              So the sentence names what is ticked and why, and points at the
-              list — which is the information the button was standing in
-              for. -- */}
-      {roundNote ? (
+              `roundNote` stays on the props: the wizard composes it and a future
+              surface may want it. Unused here rather than deleted, so the
+              reversal is one line either way. -- */}
+      {false ? (
         <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
-          {roundNote} Everybody else is listed below — tick anyone you want to add, or use the
-          search and department filter to find them.
+          {roundNote}
         </p>
       ) : null}
 

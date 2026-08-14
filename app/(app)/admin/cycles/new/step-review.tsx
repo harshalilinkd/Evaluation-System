@@ -12,6 +12,7 @@ import type { ReadinessReport } from "@/lib/cycles/schema";
 import type { InviteRecipients } from "@/lib/cycles/dispatch-launch";
 import { plural } from "@/lib/cycles/schema";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date";
 import type { PersonState } from "@/app/(app)/admin/cycles/new/step-people";
 
 /* -- Three, not a pair of checkboxes.
@@ -74,6 +75,10 @@ export function StepReview({
           <h3 className="text-display-sm text-ink">People</h3>
           <p className="tabular mt-1 text-body-sm text-ink-muted">
             {plural(included.length, "participant")}
+            {/* The excluded COUNT keeps its place; the twenty-seven names do
+                not. "27 left out" is worth checking before a launch; reading
+                them back one per line was not. */}
+            {excluded.length > 0 ? ` · ${excluded.length} left out` : ""}
           </p>
 
           <ul className="mt-4 space-y-3">
@@ -152,30 +157,49 @@ export function StepReview({
           </ul>
         </section>
 
-        {/* -- Excluded, with the reason -- */}
-        <section className="card-surface p-5">
-          <h3 className="text-display-sm text-ink">Not included</h3>
-          <p className="tabular mt-1 text-body-sm text-ink-muted">{plural(excluded.length, "person")}</p>
+        {/* -- WHO IS IN IT, at the owner's instruction, replacing "Not
+              included".
+              That card listed twenty-seven people against one repeated phrase —
+              "Unticked by you" — which is HR reading back their own decision
+              twenty-seven times, and it crowded out the one list this step is
+              for. Review means checking who WILL be appraised.
 
-          <ul className="mt-4 space-y-2">
-            {excluded.length === 0 ? (
-              <li className="text-body-sm text-ink-muted">Everyone is in.</li>
+              The count of excluded people survives as a line under the
+              participants card: it is worth knowing that twenty-seven were left
+              out, and worth nothing to name them. -- */}
+        <section className="card-surface p-5">
+          <h3 className="text-display-sm text-ink">Who is in it</h3>
+          <p className="tabular mt-1 text-body-sm text-ink-muted">
+            {plural(included.length, "person")} · about to be appraised
+          </p>
+
+          <ul className="mt-4 space-y-2.5">
+            {included.length === 0 ? (
+              <li className="text-body-sm text-ink-muted">Nobody is included yet.</li>
             ) : (
-              excluded.slice(0, 12).map((p) => (
-                <li key={p.id} className="flex items-baseline justify-between gap-3">
-                  <span className="truncate text-body-sm text-ink">{p.name}</span>
-                  {/* The only reason available before launch is HR's own choice.
-                      Post-launch withdrawals carry a typed reason instead. */}
-                  <span className="shrink-0 text-body-sm text-ink-muted">Unticked by you</span>
+              included.map((p) => (
+                <li key={p.id} className="border-b border-rule pb-2.5 last:border-b-0 last:pb-0">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="truncate text-body-sm font-medium text-ink">{p.name}</span>
+                    {/* §5: a DATE, never a figure. The amount is HR-and-MD-only
+                        and does not belong on a launch screen at all. */}
+                    <span className="tabular shrink-0 text-body-sm text-ink-muted">
+                      {p.lastIncrementOn ? formatDate(p.lastIncrementOn) : "No rise on record"}
+                    </span>
+                  </div>
+                  <p className="truncate text-body-sm text-ink-muted">
+                    {[p.designation, p.departmentName].filter(Boolean).join(" · ") || "—"}
+                  </p>
                 </li>
               ))
             )}
-            {excluded.length > 12 ? (
-              <li className="text-body-sm text-ink-muted">
-                and {plural(excluded.length - 12, "more")}.
-              </li>
-            ) : null}
           </ul>
+
+          {included.length > 0 ? (
+            <p className="mt-3 text-body-sm text-ink-faint">
+              Last increment shown on the right. Go back to People to add or remove somebody.
+            </p>
+          ) : null}
         </section>
       </div>
 

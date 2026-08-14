@@ -103,6 +103,12 @@ export type IncrementDue = {
   lastIncrementDate: string | null;
   nextIncrementDate: string;
   daysRemaining: number;
+  /* -- §7's module. A staff increment CYCLE can only include Backend Team —
+        production workers are appraised on their own rounds — so a screen
+        offering to start one has to know which of these people it could
+        actually put in it. Without this the calendar counted 8 and the wizard
+        could select 3, and the button over-promised by five. -- */
+  track: string;
   currentCtc: number | null;
   monthsSinceLast: number | null;
 };
@@ -175,7 +181,7 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
   const [{ data: people }, { data: departments }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, department_id, is_active, date_of_joining")
+      .select("id, full_name, employee_code, department_id, is_active, date_of_joining, track")
       .in("id", ids),
     supabase.from("departments").select("id, name"),
   ]);
@@ -198,6 +204,7 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
       dateOfJoining: p.date_of_joining ?? "",
       lastIncrementDate: r.last_increment_date,
       nextIncrementDate: r.next_increment_date,
+      track: p.track ?? "STAFF",
       daysRemaining: daysUntil(r.next_increment_date),
       currentCtc: r.current_ctc,
       monthsSinceLast: monthsBetween(r.last_increment_date ?? p.date_of_joining),
@@ -218,4 +225,29 @@ export async function getIncrementCalendar(): Promise<CycleResult<IncrementCalen
       nextMonth,
     },
   };
+}
+
+/**
+ * How many people whose increment is due are on the PRODUCTION team.
+ *
+ * A staff increment cycle cannot include them — §7 gives the worker module its
+ * own rounds, its own tick sheet and its own salary block — so the wizard shows
+ * fewer people than the button that opened it promised. This is what lets it
+ * SAY so, with a number, instead of leaving HR to work out where five people
+ * went.
+ *
+ * Counted from the same calendar and the same predicate the button uses, so the
+ * two cannot drift apart into a sentence that does not add up.
+ */
+export async function workersDueForIncrement(): Promise<number> {
+  const calendar = await getIncrementCalendar();
+  if (!calendar.ok) return 0;
+  const { rows, thisMonth, nextMonth } = calendar.data;
+  return rows.filter(
+    (r) =>
+      r.track === "WORKER" &&
+      (r.daysRemaining < 0 ||
+        r.nextIncrementDate.startsWith(thisMonth) ||
+        r.nextIncrementDate.startsWith(nextMonth)),
+  ).length;
 }

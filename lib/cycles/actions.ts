@@ -20,7 +20,7 @@ import {
   type ParticipantRow,
   type ReadinessReport,
 } from "@/lib/cycles/schema";
-import { buildReadinessReport } from "@/lib/cycles/validate";
+import { buildReadinessReport, readinessForRoster } from "@/lib/cycles/validate";
 import { createClient } from "@/lib/supabase/server";
 import type { Json, TablesUpdate } from "@/types/database";
 
@@ -493,6 +493,39 @@ export async function validateCycleForLaunch(cycleId: string): Promise<CycleResu
   return buildReadinessReport(cycleId);
 }
 
+/**
+ * The same report, for a cycle nobody has saved.
+ *
+ * READS ONLY. This is what lets the wizard show its review step without first
+ * writing a DRAFT row — which is what left a cycle behind every time somebody
+ * looked at that step and walked away ("nothing should get saved as draft",
+ * twice). It runs the identical checks: `readinessForRoster` and
+ * `buildReadinessReport` differ only in where the roster comes from.
+ *
+ * It does not authorise a launch and is not relied on to. `launchCycle`
+ * re-validates from the database after the rows exist (§9 — client code is
+ * never the only guard), so this can only ever tell HR what they are about to
+ * meet.
+ */
+export async function previewCycleReadiness(
+  basics: { name: string; startsOn: string; selfDueOn: string; leadDueOn: string; mdDueOn: string },
+  roster: Array<{ profileId: string; leadId: string | null }>,
+): Promise<CycleResult<ReadinessReport>> {
+  const auth = await guard();
+  if (!auth.ok) return auth;
+
+  return readinessForRoster(
+    {
+      name: basics.name,
+      starts_on: basics.startsOn || null,
+      self_due_on: basics.selfDueOn || null,
+      lead_due_on: basics.leadDueOn || null,
+      md_due_on: basics.mdDueOn || basics.leadDueOn || null,
+    },
+    roster,
+  );
+}
+
 /* ============================================================ launchCycle == */
 
 export type LaunchOutcome = {
@@ -622,6 +655,61 @@ export async function launchCycle(
       messagesBlocked: dispatched.blocked ?? null,
     },
   };
+}
+
+/* ======================================================== launchNewCycle == */
+
+/**
+ * Create and launch in one press, leaving nothing behind if it does not work.
+ *
+ * THE POINT OF IT: a cycle no longer exists until HR has decided it should.
+ * The wizard used to write a DRAFT row as soon as somebody pressed Continue,
+ * because participants ARE draft evaluations (P10-1) and the readiness report
+ * read them back — so looking at the review step and walking away left a cycle
+ * on the list. Reported twice, and the second time as a rule: "nothing should
+ * get saved as draft."
+ *
+ * `previewCycleReadiness` removed the reason to write early; this removes the
+ * last one. Save as draft still exists and is now the ONLY way to deliberately
+ * keep an unlaunched cycle.
+ *
+ * ROLLED BACK BY HAND, and it has to be: the create, the roster and the launch
+ * are three PostgREST calls and cannot share a transaction (P19C-9 drew the
+ * same line for the employee import). So a failure deletes the cycle it just
+ * made. That is safe precisely because it has not launched — 0009's trigger
+ * refuses to delete a cycle that has, which is the guarantee that this cleanup
+ * can never take a frozen snapshot with it (P10-8).
+ */
+export async function launchNewCycle(
+  input: CycleDraftInput,
+  rows: ParticipantRow[],
+  recipients: InviteRecipients = ["SELF", "LEAD"],
+): Promise<CycleResult<LaunchOutcome>> {
+  const auth = await guard();
+  if (!auth.ok) return auth;
+
+  const created = await createCycle(input);
+  if (!created.ok) return created;
+  const cycleId = created.data.id;
+
+  /* Anything from here on leaves a DRAFT cycle nobody asked for, so every exit
+     goes through `abandon`. */
+  const abandon = async <T>(failure: CycleResult<T>): Promise<CycleResult<T>> => {
+    const supabase = await createClient();
+    await supabase.from("evaluation_cycles").delete().eq("id", cycleId);
+    revalidateCycles();
+    return failure;
+  };
+
+  const participants = await setCycleParticipants(cycleId, rows);
+  if (!participants.ok) return abandon(participants);
+
+  /* `launchCycle` re-validates from the database (§9), so the roster is checked
+     as WRITTEN and not as sent — the preview HR read is never the authority. */
+  const launched = await launchCycle(cycleId, recipients);
+  if (!launched.ok) return abandon(launched);
+
+  return launched;
 }
 
 /* =========================================================== archiveCycle == */

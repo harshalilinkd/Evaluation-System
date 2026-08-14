@@ -18,6 +18,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   createCycle,
   launchCycle,
+  launchNewCycle,
+  previewCycleReadiness,
   setCycleParticipants,
   updateCycle,
   validateCycleForLaunch,
@@ -59,6 +61,43 @@ function isoDaysFromToday(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * What to call a cycle, and the period it covers.
+ *
+ * ALWAYS FILLED IN, at the owner's instruction: "doesn't matter [whether] we
+ * are starting evaluation round or increment round and from which screen
+ * redirecting — Cycle name and Period label always should be pre filled."
+ *
+ * They were placeholders — grey text in an empty box — so every route into this
+ * screen except one left HR to type the same two strings, and Continue sat
+ * disabled with "Give the cycle a name" underneath. A placeholder that shows
+ * what to type is a worse version of typing it in for them.
+ *
+ * The name says which kind of cycle it is and when it was run, because those
+ * are the two things that tell one apart from the next in a list. Both stay
+ * editable and still required — nothing is decided that HR cannot see.
+ */
+function defaultCycleNames(type: "EVALUATION" | "INCREMENT"): {
+  name: string;
+  period: string;
+} {
+  const month = thisMonthLabel();
+  return {
+    name: `${type === "INCREMENT" ? "Increment" : "Evaluation"} round · ${month}`,
+    period: month,
+  };
+}
+
+/** Is this still a name the system wrote, or has somebody typed over it? */
+function isGeneratedName(value: string): boolean {
+  const trimmed = value.trim();
+  return (
+    trimmed === "" ||
+    trimmed === defaultCycleNames("EVALUATION").name ||
+    trimmed === defaultCycleNames("INCREMENT").name
+  );
 }
 
 /**
@@ -154,7 +193,8 @@ export function WizardClient({
   initialStep,
   presetCycleType,
   preselect,
-  evaluationDueIds,
+  preselectIds,
+  workersDue,
 }: {
   people: SelectablePerson[];
   jobSkillCounts: Record<string, number>;
@@ -170,13 +210,30 @@ export function WizardClient({
    * than being handed a list of ids: a URL carrying fifty uuids breaks at the
    * browser length limit and cannot be typed, bookmarked or reasoned about.
    */
-  preselect?: "increment-due" | "evaluation-due";
+  preselect?: "increment-due" | "evaluation-due" | "these-people";
   /**
-   * Whose evaluation is due, resolved on the SERVER from the same pending items
-   * the Evaluation Due screen lists — so its count and these ticks cannot
-   * describe different sets. Only sent for an evaluation round.
+   * Exactly who arrives ticked, when the caller knows.
+   *
+   * Two callers, one mechanism. An evaluation round resolves the list on the
+   * SERVER from the same pending items the Evaluation Due screen counts, so
+   * that count and these ticks cannot describe different sets. "Start
+   * increment" on one row of the increment calendar sends a list of one.
+   *
+   * That second case used to fall through to `undefined` — so the wizard opened
+   * with EVERYBODY ticked, on a link whose whole meaning is "this person". A
+   * third mechanism would have been the wrong fix: the list is the general
+   * shape and one person is a list.
    */
-  evaluationDueIds?: string[];
+  preselectIds?: string[];
+  /**
+   * How many people whose increment is due are on the production team.
+   *
+   * A staff increment cycle cannot include them (§7), so this screen shows
+   * fewer than the button that opened it counted. The number is here so the
+   * People step can SAY where they went — an unexplained drop from eight to
+   * three reads as a fault.
+   */
+  workersDue?: number;
 }) {
   const router = useRouter();
 
@@ -199,16 +256,39 @@ export function WizardClient({
     if (initialStep === undefined || !Number.isFinite(initialStep)) return 0;
     return Math.min(Math.max(initialStep, 0), STEPS.length - 1);
   });
-  const [furthest, setFurthest] = React.useState(initial ? STEPS.length - 1 : 0);
+  /* -- A LINK THAT OPENS PAST STEP 1 UNLOCKS THE STEPS IT SKIPPED.
+        `furthest` is what the rail lets somebody click back to. Landing on
+        People with `furthest` still 0 would strand them there — Basics is
+        filled in and they could not get to it to change a thing. -- */
+  const [furthest, setFurthest] = React.useState(
+    initial ? STEPS.length - 1 : Math.max(0, Math.min(initialStep ?? 0, STEPS.length - 1)),
+  );
 
   /* -- Which list step 3 opens on.
         UI state, not a column: it is a default filter, and both increment
         options store the same `cycle_kind`. Persisting it would be storing a
         thing the launch does not read (§0.4 — no schema without a reason). -- */
-  const [peoplePreset, setPeoplePreset] = React.useState<"due" | "all">(
+  const [peoplePreset, setPeoplePreset] = React.useState<"due" | "all" | "chosen">(
     /* An increment cycle opens on the due list, matching what is ticked. A
-       filter showing fifty-two people while five are selected reads as a bug. */
-    (presetCycleType ?? "EVALUATION") === "INCREMENT" ? "due" : "all",
+       filter showing fifty-two people while five are selected reads as a bug.
+
+       NOT for a named list, though: "Start increment" on one row is often
+       somebody being paid early — off-cycle is the reason that button exists —
+       and the due filter would then hide the one person it just ticked. */
+    /* -- ONE PERSON MEANS A LIST OF ONE.
+          "Start increment" on a single calendar row names somebody, so the
+          People step opens as that person rather than twenty-eight rows with
+          one tick somewhere in them.
+
+          Not the DUE filter, though: a worker paid early is exactly why that
+          button exists, and the due rule would hide the very person it just
+          ticked. "Add someone" clears it, so adding a second person to a round
+          being started does not mean going back. -- */
+    preselect === "these-people"
+      ? "chosen"
+      : (presetCycleType ?? "EVALUATION") === "INCREMENT"
+        ? "due"
+        : "all",
   );
 
   // Null until the draft is first saved. Everything after step 1 needs a cycle
@@ -218,25 +298,15 @@ export function WizardClient({
   const [cycleId, setCycleId] = React.useState<string | null>(initial?.id ?? null);
 
   const [basics, setBasics] = React.useState({
-    /* -- PREFILLED FOR A ROUND, at the owner's instruction: "the system then
-          prefills the Cycle name and Period label automatically."
-
-          "Increment round · August 2026" and "August 2026" — the month it is
-          being run in, which is the one thing that distinguishes one round from
-          the next. Both fields stay editable and are still required, so nothing
-          is decided that HR cannot see; what is removed is typing the same two
-          strings every month.
-
-          Only when a round is being started from the calendar. A cycle created
-          from scratch still opens blank, because there is nothing to guess. -- */
-    name:
-      initial?.name ??
-      (preselect === "increment-due"
-        ? `Increment round · ${thisMonthLabel()}`
-        : preselect === "evaluation-due"
-          ? `Evaluation round · ${thisMonthLabel()}`
-          : ""),
-    period_label: initial?.periodLabel ?? (preselect ? thisMonthLabel() : ""),
+    /* -- ALWAYS PREFILLED, whatever the type and whatever route got here.
+          It used to be conditional on arriving from a round link, so the per-row
+          "Start increment" and a cycle created from scratch both opened with
+          empty fields and a disabled Continue.
+          An EXISTING draft keeps what it was saved with — a query string must
+          never overwrite what is stored. -- */
+    name: initial?.name ?? defaultCycleNames(initial?.cycleType ?? presetCycleType ?? "EVALUATION").name,
+    period_label:
+      initial?.periodLabel ?? defaultCycleNames(initial?.cycleType ?? presetCycleType ?? "EVALUATION").period,
     variance_threshold: String(initial?.varianceThreshold ?? 2),
     disclosure: initial?.disclosure ?? "SCORE_ONLY",
     /* -- `presetCycleType` is for a NEW cycle arriving from a link that already
@@ -291,8 +361,11 @@ export function WizardClient({
             A cycle created from scratch: everybody — P10's default, and the
             right one when nothing else is known. -- */
       const startsIncluded =
-        preselect === "evaluation-due"
-          ? (evaluationDueIds ?? []).includes(person.id)
+        /* A named list wins over any rule: it is the caller saying exactly who,
+           and that covers both an evaluation round and a single person started
+           from one row of the increment calendar. */
+        preselect === "evaluation-due" || preselect === "these-people"
+          ? (preselectIds ?? []).includes(person.id)
           : preselect === "increment-due" || (presetCycleType ?? "EVALUATION") === "INCREMENT"
             ? isIncrementDue(person.nextIncrementOn)
             : true;
@@ -436,18 +509,55 @@ export function WizardClient({
     }
   }, []);
 
-  // §13.6: "Autosave visible: 'Saved HH:MM', never lose a half-filled form."
+  /* -- §13.6: "Autosave visible: 'Saved HH:MM', never lose a half-filled form."
+        AN EXISTING DRAFT ONLY. This timer keeps a row up to date; it must never
+        be the thing that creates one.
+        It used to call `save()` unconditionally, which was harmless while the
+        name started empty — `save` returns early without one. Prefilling the
+        name changed that silently: every visit to the wizard now had a valid
+        payload from the first frame, so opening it and reading for twenty
+        seconds wrote a cycle. Four identical "Increment round · August 2026"
+        drafts, one per look. Reported as "nothing should get saved as draft".
+        A draft is now created only by a deliberate act — pressing Continue, or
+        Save as draft. -- */
   React.useEffect(() => {
     const timer = setInterval(() => {
-      void save();
+      if (cycleIdRef.current) void save();
     }, 20_000);
     return () => clearInterval(timer);
   }, [save]);
 
   /* ---------- readiness ---------- */
 
-  const refreshReport = React.useCallback(async (id: string) => {
-    const result = await validateCycleForLaunch(id);
+  /* -- READINESS WITHOUT A ROW.
+        A saved cycle is checked from the database; one that exists only on this
+        screen is checked from the roster in state. Both go through the same
+        rules — `readinessForRoster` and `buildReadinessReport` differ only in
+        where the participants come from — so the preview cannot promise
+        something the launch then refuses.
+
+        This is what removed the last reason to write a DRAFT early. The report
+        used to read participants back out of `evaluations`, so the wizard had
+        to create the row before it could tell HR whether a launch would work,
+        and a look at the review step left a cycle behind. -- */
+  const refreshReport = React.useCallback(async (id: string | null) => {
+    const { basics: b, dates: d, state: s } = latest.current;
+
+    const result = id
+      ? await validateCycleForLaunch(id)
+      : await previewCycleReadiness(
+          {
+            name: b.name,
+            startsOn: d.starts_on,
+            selfDueOn: d.self_due_on,
+            leadDueOn: d.lead_due_on,
+            mdDueOn: d.md_due_on || d.lead_due_on,
+          },
+          Object.entries(s)
+            .filter(([, row]) => row.included)
+            .map(([profileId, row]) => ({ profileId, leadId: row.leadId })),
+        );
+
     setReport(result.ok ? result.data : null);
     if (!result.ok) setError(result.error.message);
   }, []);
@@ -467,10 +577,22 @@ export function WizardClient({
         null — deliberately, so the screen never shows a stale verdict — and
         without the guard this would retry in a loop against a server that has
         just said no. -- */
+  /* -- NOTHING HERE CREATES A CYCLE ANY MORE.
+        It used to happen twice: on arrival past Basics, so the roster had a row
+        to attach to, and on every Continue, because the review step read its
+        participants back out of the database. Each was defensible on its own
+        and together they meant a cycle appeared on the list whenever somebody
+        opened this screen and walked away. Reported twice, the second time as
+        a rule: "nothing should get saved as draft."
+
+        A cycle is now written by exactly two deliberate acts — Launch, and
+        Save as draft. -- */
   const checkedOnArrival = React.useRef(false);
   React.useEffect(() => {
     if (checkedOnArrival.current) return;
-    if (step !== STEPS.length - 1 || !cycleId) return;
+    // No `cycleId` requirement any more — an unsaved cycle is checked from its
+    // roster, which is the whole point of the split above.
+    if (step !== STEPS.length - 1) return;
     checkedOnArrival.current = true;
     /* -- DEFERRED BY A TIMEOUT, F4-7's device. `refreshReport` only sets state
           after an await, so nothing here is synchronous — but the compiler
@@ -518,13 +640,20 @@ export function WizardClient({
   }
 
   const goTo = async (next: number) => {
-    // Every step change saves first, so the roster the report is computed from
-    // is the roster on screen.
-    const id = await save();
-    if (next === STEPS.length - 1 && id) await refreshReport(id);
+    /* -- A STEP CHANGE SAVES ONLY WHAT IS ALREADY SAVED.
+          It used to call `save()` unconditionally, which CREATED the cycle —
+          so pressing Continue was enough to put a draft on the list whether or
+          not it was ever launched. An existing draft is still kept up to date,
+          because that one HR asked for.
+
+          The roster is not lost by waiting: it lives in `state`, `refreshReport`
+          reads it from there, and Launch sends it. -- */
+    const id = cycleIdRef.current ? await save() : null;
+    if (next === STEPS.length - 1) await refreshReport(id);
     setStep(next);
     setFurthest((f) => Math.max(f, next));
-    // A later arrival at step 4 goes through `goTo`, which has just refreshed.
+    // A later arrival at the last step goes through `goTo`, which has just
+    // refreshed.
     checkedOnArrival.current = true;
     rememberStep(cycleId ?? id, next);
   };
@@ -544,11 +673,10 @@ export function WizardClient({
         irreversible act, so it asks rather than assumes. -- */
   const [recipients, setRecipients] = React.useState<InviteRecipients | null>(null);
 
+  /* No `cycleId` requirement: Launch is what CREATES it now, so demanding one
+     first would disable the only button that can produce it. */
   const canOpenDialog =
-    Boolean(report?.canLaunch) &&
-    warningsOutstanding === 0 &&
-    recipients !== null &&
-    Boolean(cycleId);
+    Boolean(report?.canLaunch) && warningsOutstanding === 0 && recipients !== null;
 
   const disabledReason = !report
     ? "Readiness has not been checked yet."
@@ -561,8 +689,6 @@ export function WizardClient({
           : null;
 
   const onLaunch = async () => {
-    if (!cycleId) return;
-
     /* -- The "already launched, do not launch again" guard now lives in
           `onConfirm`, which routes to `launchDestination` whenever one is set.
           That covers BOTH endings — the success panel and the no-links-went-out
@@ -572,17 +698,52 @@ export function WizardClient({
     setLaunching(true);
     setLaunchError(null);
 
-    const result = await launchCycle(cycleId, recipients ?? []);
+    const { basics: b, dates: d, state: s } = latest.current;
+    const rows = Object.entries(s).map(([profileId, row]) => ({
+      profileId,
+      leadId: row.leadId,
+      included: row.included,
+    }));
+
+    /* -- TWO PATHS, and which one runs is decided by whether HR has saved.
+          An existing draft — resumed from the board, or one they chose to keep
+          — launches as it always did. A cycle that has only ever been on this
+          screen is created and launched in one press, and cleaned up if the
+          launch is refused, so a blocked attempt leaves nothing behind. -- */
+    const result = cycleId
+      ? await launchCycle(cycleId, recipients ?? [])
+      : await launchNewCycle(
+          {
+            name: b.name,
+            period_label: b.period_label,
+            variance_threshold: Number(b.variance_threshold) || 2,
+            disclosure: b.disclosure,
+            cycle_type: b.cycle_type,
+            cycle_kind: b.cycle_kind,
+            default_self_days: b.default_self_days,
+            default_lead_days: b.default_lead_days,
+            starts_on: d.starts_on || undefined,
+            self_due_on: d.self_due_on || undefined,
+            lead_due_on: d.lead_due_on || undefined,
+            md_due_on: d.md_due_on || d.lead_due_on || undefined,
+          },
+          rows,
+          recipients ?? [],
+        );
 
     setLaunching(false);
     if (!result.ok) {
       setLaunchError(result.error.message);
-      // The report may be stale — something changed between step 4 rendering
-      // and the button being pressed, which is exactly what the server-side
-      // re-check exists to catch.
-      void refreshReport(cycleId);
+      // The report may be stale — something changed between the review step
+      // rendering and the button being pressed, which is exactly what the
+      // server-side re-check exists to catch.
+      void refreshReport(cycleIdRef.current);
       return;
     }
+
+    // Whatever it was created as, everything below is about a real cycle.
+    cycleIdRef.current = result.data.cycleId;
+    setCycleId(result.data.cycleId);
 
     /* -- Launched. If nothing could be SENT, hold here and say so rather than
           navigating past it: the cycle is live and nobody has been told, which
@@ -648,8 +809,15 @@ export function WizardClient({
       ...b,
       cycle_type: next,
       disclosure: defaultDisclosureFor(next),
-      name: b.name.trim() || (next === "INCREMENT" ? `Increment round · ${thisMonthLabel()}` : ""),
-      period_label: b.period_label.trim() || (next === "INCREMENT" ? thisMonthLabel() : ""),
+      /* -- THE NAME FOLLOWS THE TYPE, unless somebody has written their own.
+            `isGeneratedName` is what tells those apart: a field still holding
+            "Evaluation round · August 2026" is one nobody has touched, so
+            switching to Increment should rename it. A field holding "Q3 FY26"
+            is somebody's own words and is left exactly as it is — prefilling
+            an empty field is a convenience, overwriting one loses their
+            work. -- */
+      name: isGeneratedName(b.name) ? defaultCycleNames(next).name : b.name,
+      period_label: b.period_label.trim() || defaultCycleNames(next).period,
     }));
 
     /* The roster default follows the type: an increment round is about the
@@ -679,12 +847,18 @@ export function WizardClient({
         explanation is a dead end (§13.4), and two separate conditions is how
         one ends up saying nothing.
 
-        THE MANAGER RULE IS AN INCREMENT RULE, at the owner's instruction: "HR
-        must not be able to move past the setup step of an increment cycle until
-        an HOD has been added." It is caught at LAUNCH for every cycle already —
-        the readiness report refuses one — but on an increment that is three
-        screens too late, because the whole point of the pay round is that
-        somebody rates the person whose salary is being decided. -- */
+        THE MANAGER RULE APPLIES TO EVERY CYCLE, at the owner's instruction:
+        "if a person has no lead then they should not be able to continue to
+        review."
+
+        It was scoped to INCREMENT cycles when it was added — also on their
+        instruction, and worded as a pay rule. Widened rather than reworded:
+        blind parallel rating means an evaluation needs a rater exactly as much
+        as a pay round does (§1), and the readiness report refuses BOTH at
+        launch. So the narrow version was not a different rule, only the same
+        one caught two screens later on half the cycles — which is what put
+        "1 person has no lead assigned" in a red panel at the end of Review
+        instead of beside the row that could fix it. -- */
   const includedWithoutLead = people.filter(
     (p) => state[p.id]?.included && !state[p.id]?.leadId,
   );
@@ -694,11 +868,11 @@ export function WizardClient({
     if (!basics.period_label.trim()) return "Give the cycle a period to continue.";
     if (step === 1) {
       if (includedCount === 0) return "Include at least one person to continue.";
-      if (basics.cycle_type === "INCREMENT" && includedWithoutLead.length > 0) {
+      if (includedWithoutLead.length > 0) {
         const [first] = includedWithoutLead;
         return includedWithoutLead.length === 1
-          ? `${first?.name ?? "One person"} has no manager. A pay decision needs somebody to rate them — set one in the row, or untick them.`
-          : `${includedWithoutLead.length} people have no manager. A pay decision needs somebody to rate them — set one in each row, or untick them.`;
+          ? `${first?.name ?? "One person"} has no manager. Somebody has to rate them — set one in the row, or untick them.`
+          : `${includedWithoutLead.length} people have no manager. Somebody has to rate them — set one in each row, or untick them.`;
       }
     }
     return null;
@@ -890,7 +1064,7 @@ export function WizardClient({
                 className="mt-1.5"
                 value={basics.name}
                 onChange={(e) => setBasics({ ...basics, name: e.target.value })}
-                placeholder="Q3 FY26"
+                placeholder="Evaluation round · August 2026"
                 required
               />
             </div>
@@ -902,7 +1076,7 @@ export function WizardClient({
                 className="mt-1.5"
                 value={basics.period_label}
                 onChange={(e) => setBasics({ ...basics, period_label: e.target.value })}
-                placeholder="Oct-Dec 25 (Q3)"
+                placeholder="August 2026"
                 required
               />
             </div>
@@ -976,7 +1150,10 @@ export function WizardClient({
               preselect === "evaluation-due"
                 ? `${includedCount} ${includedCount === 1 ? "person is" : "people are"} ticked because their evaluation is due or already late.`
                 : preselect === "increment-due"
-                  ? `${includedCount} ${includedCount === 1 ? "person is" : "people are"} ticked because their increment is due.`
+                  ? `${includedCount} ${includedCount === 1 ? "person is" : "people are"} ticked because their increment is due.` +
+                    (workersDue
+                      ? ` ${workersDue} more ${workersDue === 1 ? "person is" : "people are"} also due but ${workersDue === 1 ? "is" : "are"} on the production team — start theirs from Production Appraisals, where the tick sheet and the supervisor's recommendation live.`
+                      : "")
                   : undefined
             }
           />
@@ -998,7 +1175,27 @@ export function WizardClient({
       ) : null}
 
       {/* ---------- Footer ---------- */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* -- STICKY, because the People step is a twenty-eight row table and
+            Continue sat under all of it.
+            Reported as "Continue gets buried at the end of the rows". Somebody
+            arriving to tick one person had to scroll the whole roster to press
+            the button — on the step whose entire job is one decision.
+
+            `bottom` clears the mobile navigation, which is `fixed bottom-0` at
+            a higher stacking level: raising this above it instead would bury
+            the nav, and somebody who cannot leave a form is no better off than
+            somebody who cannot submit one (F15-2). The variable is 0 above
+            `lg`, where no bottom bar exists.
+
+            The negative margins let it span the card's padding, so the bar
+            reads as an edge rather than a floating strip. -- */}
+      <div
+        className={cn(
+          "sticky z-20 -mx-6 -mb-6 flex flex-wrap items-center justify-between gap-4",
+          "border-t border-rule bg-surface/95 px-6 py-4 backdrop-blur",
+          "bottom-[var(--bottom-nav-h,0px)]",
+        )}
+      >
         <div className="flex gap-3">
           <Button
             type="button"

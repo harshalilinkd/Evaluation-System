@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Rocket, Search, Upload } from "lucide-react";
+import { AlertTriangle, HardHat, Rocket, Search, Upload } from "lucide-react";
 
 import { EmploymentImportDialog } from "@/app/(app)/admin/increments/import-panel";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
@@ -87,16 +87,34 @@ export function IncrementsClient({
         so the button can say how many people it is about rather than opening a
         screen to find out. Both read the next-increment date against the
         SERVER's month keys, never a browser clock (F50-3). -- */
-  const dueSoonCount = React.useMemo(
+  /* -- ONE BUTTON BECAME TWO, at the owner's instruction: "give two different
+        buttons, one for the production team and one for the backend team, so it
+        will not create confusion."
+
+        This settles an argument that went round twice. A staff increment CYCLE
+        cannot hold a production worker — §7 gives them their own rounds, their
+        own tick sheet and their own salary block — so a single button either
+        over-promised (reading 8 and selecting 3) or disagreed with the tiles
+        beside it (reading 3 under "3 overdue · 5 due"). Both were reported.
+
+        Splitting it removes the choice between those two wrongs: each button
+        counts its own team, each says which team it is for, and each lands on
+        the screen that can actually start that round. Nothing needs explaining
+        after the fact, because nothing drops. -- */
+  const dueSoon = React.useMemo(
     () =>
       calendar.rows.filter(
         (r) =>
           r.daysRemaining < 0 ||
           r.nextIncrementDate.startsWith(calendar.thisMonth) ||
           r.nextIncrementDate.startsWith(calendar.nextMonth),
-      ).length,
+      ),
     [calendar.rows, calendar.thisMonth, calendar.nextMonth],
   );
+
+  /* Split by §7's module. `track` is on the row for exactly this. */
+  const productionDue = dueSoon.filter((r) => r.track === "WORKER").length;
+  const backendDue = dueSoon.length - productionDue;
 
   /*
      ONE TABLE, not a section per month.
@@ -134,6 +152,21 @@ export function IncrementsClient({
         header: "Code",
         size: 110,
         cell: ({ row }) => <GridCell value={dash(row.original.employeeCode)} className="tabular" />,
+      },
+      {
+        /* -- WHICH MODULE APPRAISES THEM.
+              The two round buttons above split by exactly this, and the table
+              underneath said nothing about it — so "Start for Production team
+              (5)" named a group nobody could pick out of the list. Department
+              does not answer it either: Nandkishor is in "production
+              Coordinator" and is Backend Team.
+              A word, not a colour: §13.8, and neither team is a state. -- */
+        accessorKey: "track",
+        header: "Team",
+        size: 130,
+        cell: ({ row }) => (
+          <GridCell value={row.original.track === "WORKER" ? "Production" : "Backend"} />
+        ),
       },
       {
         accessorKey: "departmentName",
@@ -218,7 +251,27 @@ export function IncrementsClient({
         enableResizing: false,
         cell: ({ row }) => (
           <Button asChild variant="outline" size="sm" className="min-h-11 whitespace-nowrap lg:h-8">
-            <Link href={`/admin/cycles/new?increment_for=${row.original.profileId}`}>
+            {/* -- ROUTED BY TRACK, and this was a real defect.
+                  Every row linked to the staff wizard, so pressing it on a
+                  production worker opened the office 0–5 form for somebody who
+                  is appraised on a tick sheet by their supervisor. §7 gives the
+                  worker module its own rounds, its own questions and its own
+                  salary block; there is no staff form for them at all.
+
+                  The two round buttons above already split this way. This is the
+                  same split, one row at a time.
+
+                  STEP 2 on the staff path, like both round buttons: the type,
+                  the name and the period are all decided before the link is
+                  followed, so landing on Basics made HR press Continue through
+                  a form nobody had to fill in. -- */}
+            <Link
+              href={
+                row.original.track === "WORKER"
+                  ? `/admin/worker-appraisals?start=${row.original.profileId}`
+                  : `/admin/cycles/new?increment_for=${row.original.profileId}&step=2`
+              }
+            >
               Start increment
             </Link>
           </Button>
@@ -253,16 +306,37 @@ export function IncrementsClient({
                 cannot be typed, bookmarked or reasoned about. -- */
           canImport ? (
             <div className="flex flex-wrap items-center gap-2">
-              {dueSoonCount > 0 ? (
+              {backendDue > 0 ? (
                 <Button asChild className="min-h-11">
-                  <Link href="/admin/cycles/new?increment_for=due">
+                  {/* STEP 2, because step 1 is already answered: the type,
+                      the name and the period are all filled in before this
+                      screen opens. Landing on Basics made HR press Continue
+                      through a form nobody had to fill in. */}
+                  <Link href="/admin/cycles/new?increment_for=due&step=2">
                     <Rocket aria-hidden className="size-4" />
-                    Start an increment round ({dueSoonCount})
+                    Start for Backend team ({backendDue})
                   </Link>
                 </Button>
               ) : null}
+
+              {/* -- The production half. It lands on the round dialog rather
+                    than the staff wizard, because a worker is appraised on a
+                    tick sheet by their supervisor — there is no form for them
+                    on the other screen at all.
+                    `?start=due` says WHAT to tick, not who: the same rule this
+                    button counts by resolves the list on arrival, so a URL
+                    never carries a page of uuids (PR-8's reasoning). -- */}
+              {productionDue > 0 ? (
+                <Button asChild variant={backendDue > 0 ? "outline" : "default"} className="min-h-11">
+                  <Link href="/admin/worker-appraisals?start=due">
+                    <HardHat aria-hidden className="size-4" />
+                    Start for Production team ({productionDue})
+                  </Link>
+                </Button>
+              ) : null}
+
             <Button
-              variant={dueSoonCount > 0 ? "outline" : "default"}
+              variant={dueSoon.length > 0 ? "outline" : "default"}
               className="ml-1 min-h-11"
               onClick={() => setImportOpen(true)}
             >

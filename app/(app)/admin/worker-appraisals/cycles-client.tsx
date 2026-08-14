@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isIncrementDue } from "@/lib/utils/increment-due";
 import {
   addWorkersToRound,
   createWorkerCycle,
@@ -33,7 +34,32 @@ export type WorkerRow = {
   /** Their `reports_to`. The DEFAULT rater, not the only possible one. */
   supervisorId: string | null;
   supervisorName: string | null;
+  /**
+   * `employment_records.next_increment_date`, so the dialog can tick the people
+   * an increment is owed to when it is opened from the calendar.
+   *
+   * Null where no employment record exists — which is not "not due", it is "we
+   * do not know", and the two must not be conflated (§11's missing-is-not-zero,
+   * applied to a date).
+   */
+  nextIncrementOn?: string | null;
 };
+
+/** A week out, ISO. The round's reminder deadline, derived rather than typed. */
+function inAWeek(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "August 2026" — §0.10's timezone, so a late-evening press names today's month. */
+function thisMonthLabel(): string {
+  return new Date().toLocaleDateString("en-IN", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+}
 
 export type RaterRow = {
   id: string;
@@ -71,18 +97,69 @@ export function StartRoundDialog({
   onOpenChange,
   workers,
   raters,
+  preselect,
+  preselectIds,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   workers: WorkerRow[];
   raters: RaterRow[];
+  /**
+   * "increment-due" arrives from the increment calendar's "Start for Production
+   * team" button: the name and period are filled in and everybody an increment
+   * is owed to is ticked, so HR reviews and starts.
+   *
+   * WHAT to tick, never who — the list is resolved here from the same rule the
+   * button counts by, so the URL carries a word rather than a page of uuids
+   * (PR-8), and the two cannot report different people.
+   */
+  preselect?: "increment-due" | "these-people";
+  /**
+   * Exactly who arrives ticked, when the caller names them.
+   *
+   * "Start increment" on one row of the increment calendar. That button used to
+   * send EVERY worker to the staff wizard — the office 0–5 form, for somebody
+   * appraised on a tick sheet by their supervisor (§7). One person is this same
+   * round with one tick, which is why it is a list rather than a third mode.
+   */
+  preselectIds?: string[];
 }) {
   const router = useRouter();
-  const [name, setName] = React.useState("");
-  const [period, setPeriod] = React.useState("");
-  const [selfDue, setSelfDue] = React.useState("");
-  const [supervisorDue, setSupervisorDue] = React.useState("");
-  const [chosen, setChosen] = React.useState<Set<string>>(new Set());
+
+  /* -- KEYED TO THE DIALOG'S OWN INITIAL STATE, not synced by an effect.
+        A `useState` initialiser reads `preselect` on the mount that opens the
+        dialog, and the board mounts it fresh (`open` gates the render), so
+        there is nothing to keep in step afterwards. An effect copying props
+        into state is the cascading-render shape the compiler rejects — and it
+        would also fight HR the moment they unticked somebody. -- */
+  const dueNow = React.useMemo(() => {
+    /* A named list wins over the rule: it is the caller saying exactly who.
+       "Start increment" on one calendar row sends one id — and a worker paid
+       early is precisely why that button exists, so the due rule must not be
+       allowed to overrule it. */
+    if (preselect === "these-people") {
+      const wanted = new Set(preselectIds ?? []);
+      return workers.filter((w) => wanted.has(w.id));
+    }
+    if (preselect === "increment-due") {
+      return workers.filter((w) => isIncrementDue(w.nextIncrementOn ?? null));
+    }
+    return [];
+  }, [preselect, preselectIds, workers]);
+
+  /* -- ALWAYS PREFILLED, whichever way in.
+        "Appraisal · August 2026", at the owner's instruction, and unconditional
+        for the reason they gave about the staff wizard: "doesn't matter [if] we
+        are starting evaluation round or increment round and from which screen
+        redirecting — cycle name and period label always should be pre filled."
+        It was tied to `preselect`, so pressing "Start a round" on the board got
+        two empty fields and two placeholders in a different format again.
+        `preselect` now decides only who is TICKED, which is all it was ever
+        about. The middle dot is the separator every other generated name in the
+        product uses. -- */
+  const [name, setName] = React.useState(() => `Appraisal · ${thisMonthLabel()}`);
+  const [period, setPeriod] = React.useState(() => thisMonthLabel());
+  const [chosen, setChosen] = React.useState<Set<string>>(() => new Set(dueNow.map((w) => w.id)));
 
   /* -- Who rates each worker, seeded from their Reports-to and CHANGEABLE here.
         Inheriting it silently is what put "Rated by test MD" on a shop-floor
@@ -94,13 +171,25 @@ export function StartRoundDialog({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  /* Nobody is ticked to begin with. Starting a round opens a real appraisal for
-     real people, and a pre-ticked list is a decision the app made that HR is
-     presumed to have agreed with. The header checkbox is one press away. */
-  /* Everybody is listed now. A worker with no Reports-to is not excluded — they
+  /* Everybody is listed. A worker with no Reports-to is not excluded — they
      simply start with no rater chosen, which is a thing HR can fix here instead
      of being told to go and edit a profile. */
-  const eligible = workers;
+  /* -- TICKED FIRST, and the order is FROZEN at open.
+        The list is alphabetical, so five ticked people out of twenty-eight were
+        scattered down a scrolling box and the first screenful was four unticked
+        names — HR could not see what they were being asked to review without
+        scrolling the whole list.
+
+        Frozen rather than live: sorting on the CURRENT ticks would make a row
+        jump to the bottom the instant it was unticked, moving the next row up
+        under the pointer. That turns one deliberate untick into an accidental
+        second one. The `useMemo` depends on `dueNow`, which is computed from
+        props, so nothing HR does afterwards re-orders it. -- */
+  const eligible = React.useMemo(() => {
+    if (dueNow.length === 0) return workers;
+    const first = new Set(dueNow.map((w) => w.id));
+    return [...workers.filter((w) => first.has(w.id)), ...workers.filter((w) => !first.has(w.id))];
+  }, [workers, dueNow]);
   const allChosen = eligible.length > 0 && chosen.size === eligible.length;
 
   async function submit() {
@@ -123,10 +212,12 @@ export function StartRoundDialog({
       const created = await createWorkerCycle({
         name,
         periodLabel: period,
-        selfDueOn: selfDue,
-        supervisorDueOn: supervisorDue,
-        // No longer collected — the field was removed at the owner's
-        // instruction. The column is nullable and the action coerces "" to null.
+        /* Workers do not rate themselves in this module (WORKER-1), so there is
+           no self stage to give a deadline to. Left null rather than filled in
+           with a date nothing works towards. */
+        selfDueOn: "",
+        supervisorDueOn: inAWeek(),
+        // Removed earlier, same instruction. Nullable; the action coerces "".
         mdDueOn: "",
       });
       if (!created.ok) {
@@ -174,7 +265,25 @@ export function StartRoundDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] w-[min(96vw,720px)] max-w-none flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        tabIndex={-1}
+        /* -- DO NOT AUTOFOCUS A PREFILLED NAME.
+              Radix focuses the first focusable child on open and SELECTS its
+              text when it is an input — which is helpful on an empty field and
+              destructive on a correct one: the name arrives right, highlighted,
+              and the next keystroke replaces it. Reported as "why is Production
+              increment · August 2026 selected".
+              Focus moves to the dialog itself instead, so the trap and the
+              announcement are unaffected — Escape, Tab and the screen-reader
+              title all behave as before. Only when there IS something to
+              protect; an empty round still opens with the cursor in Name. -- */
+        onOpenAutoFocus={(event) => {
+          if (!name) return;
+          event.preventDefault();
+          (event.currentTarget as HTMLElement | null)?.focus();
+        }}
+        className="flex max-h-[92vh] w-[min(96vw,720px)] max-w-none flex-col gap-0 overflow-hidden p-0"
+      >
         <DialogHeader className="shrink-0 border-b border-rule px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
             <HardHat className="size-4 text-ink-muted" aria-hidden />
@@ -188,6 +297,12 @@ export function StartRoundDialog({
         {/* The action bar is a sibling of the scroll region, never inside it —
             a sticky bar within a scroller floats over the content. */}
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+          {/* -- The placeholders are gone with the empty fields.
+                "Production Q3" and "Oct-Dec 25" showed a convention neither
+                field is ever filled with now, so the only time they could
+                appear is after somebody clears one — where they would suggest
+                the wrong format. The staff wizard dropped its own for the same
+                reason. -- */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="wc_name">Name</Label>
@@ -195,7 +310,6 @@ export function StartRoundDialog({
                 id="wc_name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Production Q3"
                 className="min-h-11"
               />
             </div>
@@ -205,40 +319,28 @@ export function StartRoundDialog({
                 id="wc_period"
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
-                placeholder="Oct-Dec 25"
                 className="min-h-11"
               />
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="wc_self">Worker due</Label>
-              <Input
-                id="wc_self"
-                type="date"
-                value={selfDue}
-                onChange={(e) => setSelfDue(e.target.value)}
-                className="min-h-11 tabular"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="wc_sup">Supervisor due</Label>
-              <Input
-                id="wc_sup"
-                type="date"
-                value={supervisorDue}
-                onChange={(e) => setSupervisorDue(e.target.value)}
-                className="min-h-11 tabular"
-              />
-            </div>
-            {/* -- "Final due" REMOVED, at the owner's instruction.
-                  A production round is filled by the supervisor and reviewed by
-                  HR; a third deadline was a date nobody worked to and a third
-                  thing to fill in on a phone. `md_due_on` STAYS on the table —
-                  it is nullable, and dropping a column nobody asked to drop is a
-                  schema change (§0.2) — it is simply no longer collected. -- */}
-          </div>
+          {/* -- ALL THREE DATE FIELDS ARE GONE.
+                "Final due" went first, at the owner's instruction — a
+                production round is filled by the supervisor and reviewed by HR,
+                so a third deadline was a date nobody worked to. "Worker due"
+                and "Supervisor due" now follow, on the same instruction and for
+                a sharper reason: workers do not rate themselves at all in this
+                module, so "Worker due" was a deadline for something that never
+                happens, and the remaining one was a date HR typed the same way
+                every time.
+
+                The round opens today and runs a week — P36's rule for the staff
+                cycle, applied here so the two behave alike. It is a REMINDER
+                schedule and not a lock: nothing in §8's worker table reads a due
+                date, so a sheet does not close when the week is up.
+
+                All three COLUMNS stay. They are nullable, and dropping one
+                nobody asked to drop is a schema change (§0.2). -- */}
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
@@ -247,6 +349,27 @@ export function StartRoundDialog({
                 {chosen.size} of {eligible.length} chosen
               </p>
             </div>
+
+            {/* -- WHY some people arrive ticked.
+                  A pre-ticked list with no explanation is a decision the app
+                  made that HR is presumed to have agreed with. Naming the rule
+                  turns it into one they can check.
+                  Everybody is listed either way, so adding somebody the
+                  calendar did not catch is a tick rather than a trip back — the
+                  "add" the staff roster needed a button for is already the list
+                  below, and here that is true rather than a claim, because
+                  nothing filters it. -- */}
+            {preselect ? (
+              <p className="mb-2 rounded-control border border-rule bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
+                {preselect === "these-people"
+                  ? dueNow.length === 0
+                    ? "That person is not on the production team, so they are not listed here. Tick whoever you meant."
+                    : `${dueNow[0]?.name ?? "One person"} is ticked because you started an increment for them. Everybody on the production team is listed, so add anyone else here rather than opening a second round.`
+                  : dueNow.length === 0
+                    ? "Nobody on the production team has an increment due this month or next. Tick anyone you want to appraise anyway."
+                    : `${dueNow.length} ${dueNow.length === 1 ? "person is" : "people are"} ticked because their increment is due — this month, next month, or already overdue. Everybody on the production team is listed, so tick anyone else you want to add, or untick somebody.`}
+              </p>
+            ) : null}
 
             {raters.length === 0 ? (
               /* -- A dropdown reading "Nobody chosen" and nothing else states a
@@ -278,7 +401,11 @@ export function StartRoundDialog({
                   <span className="font-sans text-body-sm text-ink">Everyone on the Production Team</span>
                 </label>
 
-                <ul className="max-h-64 overflow-y-auto">
+                {/* 320px rather than 256px: five rows is the common preselected
+                    round, and a box that cuts the fifth in half reads as though
+                    something is missing. Still bounded, so twenty-eight people
+                    do not push the footer off a laptop screen. */}
+                <ul className="max-h-80 overflow-y-auto">
                   {eligible.map((w) => {
                     /* A default seeded from Reports-to only counts if that
                        person is actually on the supervisor list — otherwise the
@@ -402,7 +529,11 @@ export function StartRoundDialog({
             className="min-h-11"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Start for {chosen.size} {chosen.size === 1 ? "worker" : "workers"}
+            {/* -- "Start for Production team", at the owner's instruction, so it
+                  reads back the button that opened it. The count stays: this is
+                  the last press before real sheets go live for real people, and
+                  how many is the one thing worth confirming (§13.3). -- */}
+            Start for Production team ({chosen.size})
           </Button>
         </DialogFooter>
       </DialogContent>

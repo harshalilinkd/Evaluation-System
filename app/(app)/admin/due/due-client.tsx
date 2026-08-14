@@ -44,7 +44,12 @@ function monthLabel(iso: string): string {
 export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) {
   const router = useRouter();
   const [busyId, setBusyId] = React.useState<string | null>(null);
-  const [message, setMessage] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  /* Three tones, because there are three outcomes: it worked, it failed, or it
+     worked and something still needs doing. Collapsing the third into "ok"
+     would report a successful send that never happened. */
+  const [message, setMessage] = React.useState<
+    { tone: "ok" | "warn" | "error"; text: string } | null
+  >(null);
   const [skipping, setSkipping] = React.useState<DueRow | null>(null);
   const [reason, setReason] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
@@ -102,10 +107,26 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
     setBusyId(null);
     if (!result.ok) setMessage({ tone: "error", text: result.error.message });
     else {
-      setMessage({
-        tone: "ok",
-        text: `${row.name}'s ${row.what.toLowerCase()} is open. ${result.data.sent} message${result.data.sent === 1 ? "" : "s"} sent${result.data.failed ? `, ${result.data.failed} failed` : ""}.`,
-      });
+      /* -- CREATED IS NOT SENT, and the two are reported separately.
+            The evaluation is durable by now — row, frozen snapshot, audit — so
+            a message that could not leave is not a failure of the action. But
+            saying "is open, 0 messages sent" and nothing else leaves HR to work
+            out why, and the reason is usually one setting away.
+
+            `blocked` carries P28's own sentence, which names the variable and
+            the fix. The tone is a warning rather than an error: the record
+            stands, and the links still have to go out. -- */
+      setMessage(
+        result.data.blocked
+          ? {
+              tone: "warn",
+              text: `${row.name}'s ${row.what.toLowerCase()} is open, but nothing was sent. ${result.data.blocked} Send their links from the cycle's distribution screen once that is set.`,
+            }
+          : {
+              tone: "ok",
+              text: `${row.name}'s ${row.what.toLowerCase()} is open. ${result.data.sent} message${result.data.sent === 1 ? "" : "s"} sent${result.data.failed ? `, ${result.data.failed} failed` : ""}.`,
+            },
+      );
       router.refresh();
     }
   }
@@ -146,17 +167,51 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
           </span>
         ),
       },
+      /* The Code column is gone: it is the gutter now, headed Employee ID. */
       {
-        accessorKey: "employeeCode",
-        header: "Code",
-        size: 100,
-        cell: ({ row }) => <GridCell value={row.original.employeeCode ?? "—"} className="tabular" />,
+        accessorKey: "designation",
+        header: "Designation",
+        size: 170,
+        cell: ({ row }) => <GridCell value={row.original.designation ?? "—"} />,
       },
       {
         accessorKey: "department",
         header: "Department",
         size: 160,
         cell: ({ row }) => <GridCell value={row.original.department ?? "—"} />,
+      },
+      {
+        /* -- WHO WILL RATE THEM. Already on the row and never rendered.
+              It is the thing HR chases when a review stalls, and the one field
+              whose absence BLOCKS the primary action — "Nobody is set to rate
+              them" was reported in a tooltip beside a disabled button while the
+              column that would have shown it was not on screen. -- */
+        accessorKey: "leadName",
+        header: "Reports to",
+        size: 170,
+        cell: ({ row }) => (
+          <GridCell
+            value={row.original.leadName ?? "Nobody set"}
+            className={row.original.leadName ? undefined : "text-critical"}
+          />
+        ),
+      },
+      {
+        /* -- LAST REVIEWED, from `closed_at`.
+              Empty for everybody today and honestly so: nothing has been closed
+              in this system yet. It fills in as cycles finish, which is what
+              makes "when were they last actually reviewed" answerable at all —
+              until now it lived only in whoever remembered. -- */
+        id: "lastCompleted",
+        accessorFn: (row) => row.lastCompletedOn ?? "",
+        header: "Last completed",
+        size: 140,
+        cell: ({ row }) =>
+          row.original.lastCompletedOn ? (
+            <GridCell value={formatDate(row.original.lastCompletedOn)} className="tabular" />
+          ) : (
+            <span className="text-body-sm text-ink-faint">Not yet</span>
+          ),
       },
       {
         accessorKey: "what",
@@ -250,9 +305,17 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
       <ScreenHeader
         title="Evaluation Due"
         subtitle={
+          /* -- THE OFFICE TEAM, and the screen now SAYS so.
+                It always has been: all three branches of `compute_due_items`
+                filter `track = 'STAFF'`, because the production team is not
+                reviewed on intervals at all — they take one increment a year
+                and are appraised on their own rounds (§7, WORKER-1).
+                Nothing said it, so the owner reasonably expected to find them
+                here and asked for them to be removed. There was nothing to
+                remove; there was a sentence missing. -- */
           list.rows.length === 0
-            ? "No evaluations are waiting. Each person's reviews are worked out from their joining date and their last increment — they appear here as the dates approach. If you have just added somebody, press Check again."
-            : `${list.thisMonth} ${list.thisMonth === 1 ? "thing needs" : "things need"} your attention this month · ${list.rows.length} in total`
+            ? "No evaluations are waiting. Reviews are worked out from each person's joining date and their last increment, and appear here as the dates approach. Office team only — the production team is not reviewed on intervals. If you have just added somebody, press Check again."
+            : `${list.thisMonth} ${list.thisMonth === 1 ? "thing needs" : "things need"} your attention this month · ${list.rows.length} in total · office team`
         }
         /* -- ON DEMAND, because the sweep used to run only overnight.
               Somebody entered this morning did not appear until tomorrow, and
@@ -282,7 +345,9 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                     length limit. -- */}
               {dueOrOverdueCount > 0 ? (
                 <Button asChild className="min-h-11">
-                  <Link href="/admin/cycles/new?evaluate=due">
+                  {/* Step 2 — the basics are prefilled, so Basics has
+                      nothing left to ask. */}
+                  <Link href="/admin/cycles/new?evaluate=due&step=2">
                     <Rocket aria-hidden className="size-4" />
                     Start evaluations for everyone due ({dueOrOverdueCount})
                   </Link>
@@ -333,12 +398,17 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
 
       {message ? (
         <p
-          role={message.tone === "error" ? "alert" : "status"}
+          /* A warning is announced like an error — it says something still has
+             to be done, and a `status` is not read out promptly enough for
+             that to land (§13.8). */
+          role={message.tone === "ok" ? "status" : "alert"}
           className={cn(
             "shrink-0 border-b px-4 py-2 font-sans text-body-sm",
             message.tone === "error"
               ? "border-critical/40 bg-critical-tint text-critical"
-              : "border-final/40 bg-final-tint text-final",
+              : message.tone === "warn"
+                ? "border-warning/40 bg-warning-tint text-ink"
+                : "border-final/40 bg-final-tint text-final",
           )}
         >
           {message.text}
@@ -350,6 +420,12 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         columns={columns}
         storageKey="appraise.due.column-widths"
         rowNoun="item"
+        /* -- EMPLOYEE ID IN THE GUTTER, the treatment Team review and Settings ›
+              Users already have.
+              The `#` it replaces was a row counter, which says nothing about
+              the person — and the gutter is the one focusable control per row,
+              so it could not simply be deleted (F59-4). -- */
+        rowLabel={{ header: "Employee ID", value: (r) => r.employeeCode ?? "—" }}
         rowTitle={(r) => `${r.name} · ${r.what}`}
         // §13.4: the reason a control is unavailable sits beside it, never in a
         // tooltip — and the dialog is where somebody reads the whole row, so it
@@ -373,7 +449,13 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         empty={
           <EmptyState
             title="Nothing is due"
-            body="A new joiner appears here a month after they start, and again at six months. An increment appears as its date approaches."
+            /* -- "An increment appears as its date approaches" was FALSE.
+                  `getDueList` filters INCREMENT out at source, deliberately —
+                  increments have their own menu section — so this promised the
+                  one thing the screen is guaranteed never to show. It sat under
+                  a heading reading "Nothing is due", which is where somebody
+                  goes looking for why. -- */
+            body="A new joiner appears here a month after they start, and again at six months. After an increment, again at three and nine months. Office team only — the production team takes one increment a year and is appraised on its own rounds. Increments live under Increments."
           />
         }
         status={

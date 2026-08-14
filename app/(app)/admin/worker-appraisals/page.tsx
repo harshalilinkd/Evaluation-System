@@ -9,9 +9,25 @@ import { listWorkerRaters } from "@/lib/worker/raters";
 
 export const metadata: Metadata = { title: "Production appraisals" };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string }>;
+}) {
   // §9: the guard is the first statement.
   await requireRole(["HR_ADMIN", "MD"]);
+
+  /* -- `?start=due` — the increment calendar's "Start for Production team". A
+        word, never a list of ids: the dialog resolves WHO from the same rule
+        the button counted by, so the two cannot report different people and the
+        URL stays short enough to type, bookmark and reason about (PR-8).
+
+        `?start=<uuid>` — "Start increment" on ONE row of that calendar. That
+        button used to send every worker to the STAFF wizard, which has no form
+        for them at all (§7). One person is the same round with one tick. -- */
+  const params = await searchParams;
+  const startDue = params.start === "due";
+  const startWorkerId = params.start && params.start !== "due" ? params.start : undefined;
 
   const supabase = await createClient();
 
@@ -60,7 +76,17 @@ export default async function Page() {
   const raters = await listWorkerRaters();
 
   const evaluationIds = (rows ?? []).map((r) => r.id);
-  const workerIds = (rows ?? []).map((r) => r.worker_id);
+  /* -- THE WHOLE POOL, not only the people already in a round.
+        The table needs a figure per appraised worker; the Start-a-round dialog
+        needs a next-increment date for everybody it might tick, and most of
+        those have no appraisal yet. Deduped into one query rather than a second
+        round trip for the overlap. -- */
+  const workerIds = [
+    ...new Set([
+      ...(rows ?? []).map((r) => r.worker_id),
+      ...(workerPool ?? []).map((w) => w.id),
+    ]),
+  ];
 
   /* -- The detail columns. Every one is HR-and-MD-only data (§5), and all three
         go through the authenticated client — so 0050's and 0051's policies
@@ -143,8 +169,14 @@ export default async function Page() {
         employeeCode: w.employee_code,
         supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
+        /* Undefined where there is no employment record, which is "we do not
+           know" and not "not due" — the dialog ticks on due, so the two must
+           not collapse into one. */
+        nextIncrementOn: employmentOf.get(w.id)?.next_increment_date ?? null,
       }))}
       raters={raters}
+      startDue={startDue}
+      startWorkerId={startWorkerId}
     />
   );
 }
