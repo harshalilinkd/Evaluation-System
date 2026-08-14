@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket, Search } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket, Search, Send } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
@@ -137,27 +137,34 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
     setBusyId(null);
     if (!result.ok) setMessage({ tone: "error", text: result.error.message });
     else {
-      /* -- CREATED IS NOT SENT, and the two are reported separately.
-            The evaluation is durable by now — row, frozen snapshot, audit — so
-            a message that could not leave is not a failure of the action. But
-            saying "is open, 0 messages sent" and nothing else leaves HR to work
-            out why, and the reason is usually one setting away.
+      /* -- CREATED, THEN REVIEWED, THEN SENT — at the owner's instruction.
+            This used to create the evaluation and message both people on the
+            same press. A cycle launch shows a roster, a readiness report and a
+            recipient choice before anything leaves; this was the one path in
+            the product where an appraisal opened for a real person and the
+            links went out with nothing in between.
 
-            `blocked` carries P28's own sentence, which names the variable and
-            the fix. The tone is a warning rather than an error: the record
-            stands, and the links still have to go out. -- */
-      setMessage(
-        result.data.blocked
-          ? {
-              tone: "warn",
-              text: `${row.name}'s ${row.what.toLowerCase()} is open, but nothing was sent. ${result.data.blocked} Send their links from the cycle's distribution screen once that is set.`,
-            }
-          : {
-              tone: "ok",
-              text: `${row.name}'s ${row.what.toLowerCase()} is open. ${result.data.sent} message${result.data.sent === 1 ? "" : "s"} sent${result.data.failed ? `, ${result.data.failed} failed` : ""}.`,
-            },
-      );
-      router.refresh();
+            So it hands over to the round's distribution screen, which already
+            has the link status, the contact details, the retry and the choice
+            of who gets messaged. Nothing is sent here.
+
+            `router.push`, not `replace`: Back returns to the due list, which is
+            where somebody working through several of these wants to be. -- */
+      setMessage({
+        tone: "ok",
+        text: `${row.name}'s ${row.what.toLowerCase()} is open. Review and send their links.`,
+      });
+      if (result.data.cycleId) {
+        router.push(`/admin/cycles/${result.data.cycleId}/distribute`);
+      } else {
+        // No cycle came back — the evaluation exists, so say so rather than
+        // navigating nowhere (§13.4).
+        setMessage({
+          tone: "warn",
+          text: `${row.name}'s ${row.what.toLowerCase()} is open, but the round could not be opened. Find it under Evaluation Cycles to send their links.`,
+        });
+        router.refresh();
+      }
     }
   }
 
@@ -291,7 +298,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             // tooltip — each of these has a different fix.
             <span className="flex items-center gap-2">
               <Button size="sm" className="min-h-11 lg:h-8" disabled>
-                Create and send
+                Create · review links
               </Button>
               {/* -- THE FIX, IN THE ROW, replacing a sentence the column was
                     too narrow to show. It read "Nobody is s…" beside a dead
@@ -323,7 +330,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                 disabled={busyId === row.original.id}
                 onClick={() => onCreate(row.original)}
               >
-                {busyId === row.original.id ? "Working…" : "Create and send"}
+                {busyId === row.original.id ? "Working…" : "Create · review links"}
               </Button>
               <Button
                 size="sm"
@@ -406,6 +413,27 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               >
                 <RotateCcw aria-hidden className={cn("size-4", refreshing && "animate-spin")} />
                 {refreshing ? "Checking…" : "Check again"}
+              </Button>
+
+              {/* -- WHERE THE RECORD OF EVERY SENT LINK ALREADY LIVES.
+                    Asked for as "I should have a track of all evaluation forms
+                    sent." There are two answers and both existed; neither was
+                    reachable from here, which is where the question is asked.
+
+                    Per round: the distribution screen, which this screen now
+                    hands over to after Create — link status, last sent, the
+                    channels used and a per-row history.
+
+                    Across everything: the message log, every message with its
+                    provider outcome and a retry. Linked rather than rebuilt —
+                    a second view of `notifications_log` would be a second
+                    answer to "did it go", and P11-3 made that table the one
+                    record of a send. -- */}
+              <Button asChild variant="ghost" className="min-h-11">
+                <Link href="/admin/settings?tab=messages">
+                  <Send aria-hidden className="size-4" />
+                  Sent links
+                </Link>
               </Button>
             </div>
           ) : undefined
@@ -559,7 +587,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               disabled={busyId === r.id}
               onClick={() => onCreate(r)}
             >
-              {busyId === r.id ? "Working…" : "Create and send"}
+              {busyId === r.id ? "Working…" : "Create · review links"}
             </Button>
           )
         }

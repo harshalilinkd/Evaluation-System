@@ -45,12 +45,39 @@ function inDays(days: number): string {
  * Dispatch happens AFTER the commit (PW-2): a provider outage must not roll back
  * an evaluation that is already durable and audited.
  */
-export async function createAndSend(dueItemId: string): Promise<
+export async function createAndSend(
+  dueItemId: string,
+  /**
+   * Whether to message anybody.
+   *
+   * DEFAULTS TO FALSE, at the owner's instruction: "after clicking Create and
+   * send, links are directly getting sent without redirecting to review."
+   *
+   * They were, and the button said so — but a milestone evaluation is the one
+   * place in the product where an appraisal opens for a real person WITHOUT HR
+   * seeing a roster first. A cycle launch shows the People step, the Review
+   * step and a recipient choice before anything leaves; this sent on the first
+   * press. The evaluation is still created here, because that is what makes the
+   * distribution screen have something to show; the sending moves there, where
+   * the link status, the contact details and the retry already live.
+   *
+   * The parameter stays rather than being deleted so the nightly chase and any
+   * future caller can still send at creation if that is ever wanted.
+   */
+  send = false,
+): Promise<
   /* `blocked` is advisory, never a failure: the evaluation is created and
      durable whether or not a message could leave. It carries the reason so the
      screen can say the record exists and the links still have to go out — the
-     same shape `launchCycle` returns as `messagesBlocked`. */
-  CycleResult<{ evaluationId: string; sent: number; failed: number; blocked: string | null }>
+     same shape `launchCycle` returns as `messagesBlocked`.
+     `cycleId` is what lets the screen send HR to the round to review it. */
+  CycleResult<{
+    evaluationId: string;
+    cycleId: string;
+    sent: number;
+    failed: number;
+    blocked: string | null;
+  }>
 > {
   const auth = await requireHr();
   if (!auth.ok) return auth;
@@ -135,6 +162,27 @@ export async function createAndSend(dueItemId: string): Promise<
 
   const result = (created ?? {}) as { evaluation_id?: string };
   const evaluationId = result.evaluation_id ?? "";
+
+  /* Which round it landed in. `ensure_rolling_cycle` picks one per milestone
+     per financial year (0079), so the caller cannot work this out — and it is
+     where HR goes to review and send. */
+  const { data: created_row } = await supabase
+    .from("evaluations")
+    .select("cycle_id")
+    .eq("id", evaluationId)
+    .maybeSingle();
+  const cycleId = created_row?.cycle_id ?? "";
+
+  /* -- NOTHING IS SENT UNLESS ASKED.
+        The evaluation is durable and audited by this point; the links are a
+        separate, reviewable act. `revalidatePath` still runs below either way,
+        because the due item has moved to CREATED and the list has to lose it. -- */
+  if (!send) {
+    revalidatePath("/admin/due");
+    revalidatePath("/admin/cycles");
+    if (cycleId) revalidatePath(`/admin/cycles/${cycleId}/distribute`);
+    return { ok: true, data: { evaluationId, cycleId, sent: 0, failed: 0, blocked: null } };
+  }
 
   /* ---------- Dispatch, after the commit ---------- */
 
@@ -227,7 +275,8 @@ export async function createAndSend(dueItemId: string): Promise<
 
   revalidatePath("/admin/due");
   revalidatePath("/admin/cycles");
-  return { ok: true, data: { evaluationId, sent, failed, blocked } };
+  if (cycleId) revalidatePath(`/admin/cycles/${cycleId}/distribute`);
+  return { ok: true, data: { evaluationId, cycleId, sent, failed, blocked } };
 }
 
 /** Skip an item. A reason is required — a silent dismissal explains nothing later. */
