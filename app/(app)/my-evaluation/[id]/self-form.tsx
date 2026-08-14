@@ -5,12 +5,21 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, Lock, RotateCcw, Send } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronRight,
+  Loader2,
+  Lock,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
+import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
 import { useSectionLabel } from "@/components/appraise/section-labels";
@@ -543,14 +552,37 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       ) : null}
 
       {/* ---------- Metadata, read-only ---------- */}
-      <section className="card-surface mb-4 p-5">
+      {/* -- FOLDED AWAY ON A PHONE, open on a laptop.
+            Six labelled reference fields, none of them an answer and none of
+            them editable (P12-14) — and about a screenful of a 375px page,
+            sitting between the reader and question one on the form §13.2 makes
+            the first case rather than the fallback.
+
+            A `<details>` rather than a breakpoint that hides it: nothing is
+            taken away, it is one tap, and the summary still names the section
+            so somebody looking for their department knows where it went.
+
+            CLOSED AT EVERY WIDTH, which is the call `ScaleLegend` already
+            made about §6's six sentences. Opening it from `sm` up would be
+            nicer on a laptop and cannot be done in CSS — `open` is an
+            attribute, not a style — so it would take an effect, which either
+            flashes the wrong way on first paint or is the setState-in-effect
+            shape the compiler rejects. Not worth either for a card a laptop
+            has room to scroll past anyway. -- */}
+      <details className="card-surface mb-4 p-5 [&[open]_svg]:rotate-90">
         {/* HR's own name for it (P25), never retyped. This was the shipped
             default, so renaming the section changed every OTHER heading on the
             form and left this one behind — the one case where the mismatch
             appears twice on the same page.
             of section names (§0.2), and P8-PATCH's test fails the build for any
             component that restates one. */}
-        <h2 className="text-display-sm text-ink">{metadataSection}</h2>
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 text-display-sm text-ink marker:hidden">
+          <ChevronRight
+            aria-hidden
+            className="size-5 shrink-0 text-ink-muted transition-transform"
+          />
+          {metadataSection}
+        </summary>
         {/* A definition list, not inputs. These come from the profile and the
             evaluation record; letting somebody type a name here would let it
             disagree with the record it is drawn from. */}
@@ -582,8 +614,17 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
             For a self-evaluation these are the same person.
           </p>
         ) : null}
+      </details>
 
-        {/* -- What they are on now. Increment cycles only. --
+      {/* -- OUTSIDE THE FOLD, and that is the point of separating them.
+            The six fields above are reference — who is evaluating you, which
+            period — and folding them away on a phone costs nothing. This is
+            not reference: the expectation question further down asks what
+            somebody thinks is fair, and asking that while hiding what they are
+            currently on invites a number anchored on nothing. It was inside
+            the card, so collapsing the card would have hidden it — the 733%
+            incident reintroduced by a layout change rather than a unit one. -- */}
+      {/* -- What they are on now. Increment cycles only. --
               READ-ONLY, and not a question. P12-14: metadata is a definition
               list rather than inputs, because a field here would let somebody
               type a salary that disagrees with the record it is drawn from —
@@ -599,8 +640,9 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               §5 is relaxed for this one figure and no further (0040): their
               own, today's, on an increment form. Not their pay history, not
               anybody else's, and not on an ordinary evaluation. */}
-        {meta.isIncrement ? (
-          <div className="mt-4 border-t border-rule pt-4">
+      {meta.isIncrement ? (
+        <dl className="card-surface mb-4 p-5">
+          <div>
             {/* -- SHOWN PER MONTH, because that is what the form now ASKS FOR.
                   0061 moved the expectation question to a monthly figure. This
                   block sat directly above it showing the ANNUAL package — so
@@ -623,8 +665,8 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
                 : `${formatInr(meta.currentCtc)} a year. From your employment record, so it cannot be edited here. Your expectation is asked further down, per month.`}
             </p>
           </div>
-        ) : null}
-      </section>
+        </dl>
+      ) : null}
 
       {/* §6's wording, once — not under all 33 questions. See ScaleLegend. */}
       <ScaleLegend form={form} className="mb-4" />
@@ -757,21 +799,21 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
             stacking order: `z-50` would fix the button by burying the
             navigation, and somebody who cannot leave a form is no better off
             than somebody who cannot submit one. */}
-        <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
-          <Button
-            variant="ghost"
-            className="min-h-11 flex-1"
-            onClick={() => void flush()}
-            disabled={saveState === "saving"}
-          >
-            {saveState === "saving" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Save draft
-          </Button>
-          <Button className="min-h-11 flex-1" onClick={attemptSubmit}>
-            <Send className="size-4" aria-hidden />
-            Submit
-          </Button>
-        </div>
+        {/* -- IT CARRIES THE PROGRESS NOW, and that is the mobile fix.
+              The count, the bar and the "saved 15:58" all lived in the header
+              at the top of the page — one swipe up and every one of them is
+              gone, on a form that is about twenty swipes long. So from question
+              five onwards the screen could answer neither of the two questions
+              somebody actually has: how many are left, and did that save. -- */}
+        <FormActionBar
+          answered={answered}
+          total={total}
+          saveState={saveState}
+          savedAt={savedAt}
+          onSave={() => void flush()}
+          onSubmit={attemptSubmit}
+          tier="self"
+        />
         </>
       ) : null}
 

@@ -24,6 +24,7 @@ import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
+import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -578,23 +579,20 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
             </div>
           ) : null}
 
-          <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:hidden">
-            <Button
-              variant="ghost"
-              className="min-h-11 flex-1"
-              onClick={() => void flush()}
-              disabled={saveState === "saving"}
-            >
-              {saveState === "saving" ? (
-                <Loader2 aria-hidden className="size-4 animate-spin" />
-              ) : null}
-              Save draft
-            </Button>
-            <Button className="min-h-11 flex-1" onClick={askToSubmit} disabled={busy}>
-              <Send aria-hidden className="size-4" />
-              Submit
-            </Button>
-          </div>
+          {/* The same bar the employee's form uses — one component, so the two
+              cannot drift apart in their spacing or their disabled rules. The
+              tier is what differs, because the progress is the manager's own
+              and §13.1 reserves the hue for exactly that. */}
+          <FormActionBar
+            answered={answered}
+            total={total}
+            saveState={saveState}
+            savedAt={savedAt}
+            onSave={() => void flush()}
+            onSubmit={askToSubmit}
+            busy={busy}
+            tier="lead"
+          />
         </>
       ) : null}
 
