@@ -381,7 +381,16 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               same window creates nothing. -- */
         action={
           canAct ? (
-            <div className="flex flex-wrap items-center gap-2">
+            /* -- THREE BUTTONS, ONE ROW, at the owner's instruction.
+                  `flex-wrap` gave the first one a line of its own on a phone —
+                  it is the longest label on the screen — so the header ran to
+                  two rows before the counts were reached.
+                  A three-column grid below `lg`, dissolving above it, so the
+                  desktop header is untouched. Each label gives up its long form
+                  rather than wrapping: at a third of 375px there is room for a
+                  verb and a number, and the number is the half worth
+                  keeping. -- */
+            <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-3">
               {/* -- ONE PRESS FOR THE WHOLE ROUND, at the owner's instruction:
                     "Add a button that redirects HR to the evaluation cycle
                     screen with everything pre-filled."
@@ -396,23 +405,39 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                     and a URL carrying fifty uuids breaks at the browser's
                     length limit. -- */}
               {dueOrOverdueCount > 0 ? (
-                <Button asChild className="min-h-11">
+                <Button asChild className="min-h-11 min-w-0">
                   {/* Step 2 — the basics are prefilled, so Basics has
                       nothing left to ask. */}
-                  <Link href="/admin/cycles/new?evaluate=due&step=2">
-                    <Rocket aria-hidden className="size-4" />
-                    Start evaluations for everyone due ({dueOrOverdueCount})
+                  <Link
+                    href="/admin/cycles/new?evaluate=due&step=2"
+                    title={`Start evaluations for everyone due (${dueOrOverdueCount})`}
+                  >
+                    <Rocket aria-hidden className="size-4 shrink-0" />
+                    <span className="truncate">
+                      Start<span className="hidden lg:inline"> evaluations for everyone due</span> (
+                      {dueOrOverdueCount})
+                    </span>
                   </Link>
                 </Button>
               ) : null}
               <Button
                 variant="outline"
-                className="min-h-11"
+                className="min-h-11 min-w-0"
                 disabled={refreshing}
                 onClick={() => void onRefresh()}
+                title="Check again for anybody newly due"
               >
-                <RotateCcw aria-hidden className={cn("size-4", refreshing && "animate-spin")} />
-                {refreshing ? "Checking…" : "Check again"}
+                <RotateCcw
+                  aria-hidden
+                  className={cn("size-4 shrink-0", refreshing && "animate-spin")}
+                />
+                <span className="truncate">
+                  {refreshing ? "Checking…" : (
+                    <>
+                      Check<span className="hidden lg:inline"> again</span>
+                    </>
+                  )}
+                </span>
               </Button>
 
               {/* -- WHERE THE RECORD OF EVERY SENT LINK ALREADY LIVES.
@@ -429,10 +454,12 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                     a second view of `notifications_log` would be a second
                     answer to "did it go", and P11-3 made that table the one
                     record of a send. -- */}
-              <Button asChild variant="ghost" className="min-h-11">
-                <Link href="/admin/settings?tab=messages">
-                  <Send aria-hidden className="size-4" />
-                  Sent links
+              <Button asChild variant="ghost" className="min-h-11 min-w-0">
+                <Link href="/admin/settings?tab=messages" title="Every link that has been sent">
+                  <Send aria-hidden className="size-4 shrink-0" />
+                  <span className="truncate">
+                    Sent<span className="hidden lg:inline"> links</span>
+                  </span>
                 </Link>
               </Button>
             </div>
@@ -473,42 +500,53 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             Twenty-one rows is already past the point where finding one person
             means reading the column, and it grows with the company. -- */}
       <ScreenToolbar>
-        <div className="relative min-w-56 flex-1">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search by name, employee ID, designation or manager"
-            title="Search by name, employee ID, designation or manager"
-            /* Short, because at a third of 375px the long form arrives as
-               "Search by nam" and reads as a truncated label rather than a
-               hint (F13-8). The full sentence is in the aria-label. */
-            placeholder="Search"
-            className="min-h-11 pl-9"
-          />
+        {/* -- SEARCH AND DEPARTMENT SHARE A ROW, at the owner's instruction.
+              Two columns below `lg`, dissolving above it so the desktop toolbar
+              keeps its 224px search and its natural flow.
+              `min-w-0` on both: a select's intrinsic minimum is its longest
+              OPTION, so one long department name would otherwise push the
+              search out of the row (F13-4). -- */}
+        <div className="grid w-full grid-cols-2 items-center gap-2 lg:contents">
+          <div className="relative min-w-0 lg:min-w-56 lg:flex-1">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search by name, employee ID, designation or manager"
+              title="Search by name, employee ID, designation or manager"
+              /* Short, because at half of 375px the long form arrives as
+                 "Search by nam" and reads as a truncated label rather than a
+                 hint (F13-8). The full sentence is in the aria-label. */
+              placeholder="Search"
+              className="min-h-11 pl-9"
+            />
+          </div>
+
+          <select
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            aria-label="Department"
+            className={cn(SCREEN_SELECT_CLASS, "min-h-11 min-w-0 px-2 lg:px-3")}
+          >
+            <option value={ANY}>All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <select
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          aria-label="Department"
-          className={cn(SCREEN_SELECT_CLASS, "min-h-11 min-w-0")}
-        >
-          <option value={ANY}>All departments</option>
-          {departments.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-
-        {/* The match count, ON A PHONE TOO: `DataGrid`'s own status bar is
-            below the list, and somebody who has just narrowed it needs to know
-            it narrowed (F13-7). */}
-        <span className="tabular text-body-sm text-ink-muted">
+        {/* -- The match count, above `lg` ONLY.
+              It was added because `DataGrid`'s status bar sat at the foot of a
+              horizontally scrolling table, off screen on a phone (F13-7). The
+              cards changed that: the status bar is now visible at the bottom of
+              the list and already reads "24 items · soonest first", so a second
+              count here is the same fact twice and costs the row it is in. -- */}
+        <span className="tabular hidden text-body-sm text-ink-muted lg:inline">
           {visible.length === list.rows.length
             ? `${list.rows.length} ${list.rows.length === 1 ? "item" : "items"}`
             : `${visible.length} of ${list.rows.length}`}

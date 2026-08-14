@@ -3,7 +3,7 @@
 /** Wizard step 3 — who is in the cycle, and who reviews them. P10 screen 2. */
 
 import * as React from "react";
-import { AlertTriangle, Mail, Phone, Search } from "lucide-react";
+import { AlertTriangle, ChevronDown, Mail, Phone, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -620,7 +620,25 @@ export function StepPeople({
                 </span>
               </label>
 
-              <dl className="mt-3 space-y-1.5 border-t border-rule pt-3">
+              {/* -- THE THREE DATES FOLD; THE DECISIONS DO NOT.
+                    A collapsible card is right for a list somebody reads, and
+                    this is a list somebody ACTS on — the tick decides whether
+                    an appraisal happens and the manager picker decides who
+                    rates it. Hiding either behind a tap would put the work one
+                    press further away on every row.
+                    So what folds is the reference: when they were last
+                    evaluated, last paid more, and when the next rise is due.
+                    Those answer "should this person be in it", which is asked
+                    once and then not again. -- */}
+              <details className="group mt-3 border-t border-rule pt-3">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-body-sm text-ink-muted">
+                  Dates
+                  <ChevronDown
+                    aria-hidden
+                    className="size-4 shrink-0 transition-transform duration-hover group-open:rotate-180"
+                  />
+                </summary>
+                <dl className="mt-1.5 space-y-1.5">
                 <div className="flex items-baseline justify-between gap-3">
                   <dt className="type-label text-ink-muted">Last evaluated</dt>
                   <dd className="tabular text-body-sm text-ink-muted">
@@ -653,7 +671,8 @@ export function StepPeople({
                     )}
                   </dd>
                 </div>
-              </dl>
+                </dl>
+              </details>
 
               <div className="mt-3 border-t border-rule pt-3">
                 <span className="type-label mb-1.5 block text-ink-muted">

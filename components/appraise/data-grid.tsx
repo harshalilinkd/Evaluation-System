@@ -3,6 +3,7 @@
 /** The spreadsheet grid. One implementation, shared by every table-first screen. */
 
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import {
   flexRender,
   getCoreRowModel,
@@ -225,6 +226,23 @@ export function DataGrid<TData>({
         screen whose actions change the row is exactly wrong. -- */
   const [openRowIndex, setOpenRowIndex] = useState<number | null>(null);
 
+  /* -- WHICH PHONE CARDS ARE OPEN.
+        By row id rather than index, so a refetch that reorders the list does
+        not leave a different person expanded — the same reasoning that made
+        `openRowIndex` an index for the dialog is inverted here, because a card
+        is identified by WHO it is rather than by where it sits.
+
+        A Set rather than one id: HR comparing two people should not have to
+        keep closing one to see the other. -- */
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) =>
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   // Read after mount rather than during render: the server has no localStorage,
   // so seeding state from it directly would render one width on the server and
   // another on the first client pass, and React would tear.
@@ -374,60 +392,118 @@ export function DataGrid<TData>({
           <ul className="space-y-3">
             {table.getRowModel().rows.map((row) => {
               const fields = fieldCells(row);
-              const [lead, ...rest] = fields;
+              const [lead, second, ...rest] = fields;
+              const open = expandedRows.has(row.id);
+              const bodyId = `card-${row.id}`;
+
               return (
                 <li key={row.id} className="card-surface overflow-hidden">
-                  {/* The whole card opens the row, exactly as the `<tr>` does.
-                      A button rather than a div: it is the keyboard path, and
-                      the gutter that normally provides one is not rendered
-                      here. */}
+                  {/* -- COLLAPSED BY DEFAULT, at the owner's instruction: "make
+                        each card collapsible — it shows basic info, the user
+                        taps to expand and see all details."
+
+                        Every field was on every card, so a fourteen-column grid
+                        became a fourteen-line card and a list of twenty was a
+                        very long scroll. The name and one more fact identify
+                        somebody; the rest is what you open a person FOR.
+
+                        Tapping toggles rather than navigating. The screens that
+                        navigate keep their route in the expanded actions below,
+                        because a tap that sometimes expands and sometimes leaves
+                        the page is a tap nobody trusts. -- */}
                   <button
                     type="button"
-                    className="w-full px-4 pb-2 pt-3 text-left"
-                    onClick={() => {
-                      if (onRowClick) onRowClick(row.original);
-                      else setOpenRowIndex(row.index);
-                    }}
+                    aria-expanded={open}
+                    aria-controls={bodyId}
+                    className="flex w-full items-start gap-3 px-4 py-3 text-left"
+                    onClick={() => toggleRow(row.id)}
                   >
-                    <span className="flex items-start justify-between gap-3">
-                      <span className="min-w-0 font-sans text-body font-medium text-ink">
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-sans text-body font-medium text-ink">
                         {lead ? flexRender(lead.column.columnDef.cell, lead.getContext()) : null}
                       </span>
+                      {/* The second field as a subtitle — a designation, a
+                          department, a status. A name on its own identifies
+                          nobody in a company with two Kumars. */}
+                      {second ? (
+                        <span className="mt-0.5 flex flex-wrap items-baseline gap-x-2 font-sans text-body-sm text-ink-muted">
+                          <span className="type-label shrink-0">
+                            {headingFor(second.column.id)}
+                          </span>
+                          <span className="min-w-0">
+                            {flexRender(second.column.columnDef.cell, second.getContext())}
+                          </span>
+                        </span>
+                      ) : null}
+                    </span>
+
+                    <span className="flex shrink-0 items-center gap-2">
                       {/* The row's own identifier — an employee code where the
                           screen supplies one. A row NUMBER is not worth a line
                           on a card, so the plain gutter is dropped. */}
                       {rowLabel ? (
-                        <span className="tabular shrink-0 font-sans text-body-sm text-ink-muted">
+                        <span className="tabular font-sans text-body-sm text-ink-muted">
                           {rowLabel.value(row.original)}
                         </span>
                       ) : null}
+                      {/* §13.8: the state is a shape, not only a position. The
+                          `aria-expanded` above carries it to assistive tech. */}
+                      <ChevronDown
+                        aria-hidden
+                        className={cn(
+                          "size-4 text-ink-muted transition-transform duration-hover",
+                          open && "rotate-180",
+                        )}
+                      />
                     </span>
                   </button>
 
-                  <dl className="px-4 pb-3">
-                    {rest.map((cell) => (
-                      <div
-                        key={cell.id}
-                        className="flex items-baseline justify-between gap-3 border-t border-rule py-2 first:border-t-0"
-                      >
-                        <dt className="type-label shrink-0 text-ink-muted">
-                          {headingFor(cell.column.id)}
-                        </dt>
-                        <dd className="min-w-0 text-right font-sans text-body-sm text-ink">
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
+                  {/* Unmounted rather than hidden: twenty collapsed cards each
+                      rendering fourteen cells is the cost this change exists to
+                      remove. */}
+                  {open ? (
+                    <div id={bodyId}>
+                      <dl className="px-4 pb-3">
+                        {rest.map((cell) => (
+                          <div
+                            key={cell.id}
+                            className="flex items-baseline justify-between gap-3 border-t border-rule py-2 first:border-t-0"
+                          >
+                            <dt className="type-label shrink-0 text-ink-muted">
+                              {headingFor(cell.column.id)}
+                            </dt>
+                            <dd className="min-w-0 text-right font-sans text-body-sm text-ink">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
 
-                  {/* -- The row's actions, at the bottom where a thumb is.
-                        `rowActions` is what the details dialog puts in its
-                        footer; the headingless action COLUMNS are dropped,
-                        because a screen that has both would show the same
-                        buttons twice. -- */}
-                  {rowActions ? (
-                    <div className="flex flex-wrap items-center gap-2 border-t border-rule bg-surface-mute px-4 py-3">
-                      {rowActions(row.original)}
+                      {/* -- The row's actions, at the bottom where a thumb is.
+                            `rowActions` is what the details dialog puts in its
+                            footer; the headingless action COLUMNS are dropped,
+                            because a screen that has both would show the same
+                            buttons twice.
+
+                            `onRowClick` gets a button of its own: the card tap
+                            is the toggle now, so the screens that navigate — the
+                            roster to a scorecard, Settings › Users to its edit
+                            dialog — would otherwise have lost their only way
+                            in on a phone. -- */}
+                      {rowActions || onRowClick ? (
+                        <div className="flex flex-wrap items-center gap-2 border-t border-rule bg-surface-mute px-4 py-3">
+                          {rowActions ? rowActions(row.original) : null}
+                          {onRowClick ? (
+                            <button
+                              type="button"
+                              onClick={() => onRowClick(row.original)}
+                              className="inline-flex min-h-11 items-center rounded-control border border-rule bg-surface px-3 font-sans text-body-sm font-medium text-ink"
+                            >
+                              Open{rowNoun ? ` ${rowNoun}` : ""}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </li>

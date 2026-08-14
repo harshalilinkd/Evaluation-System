@@ -314,7 +314,7 @@ export function IncrementsClient({
                   split legible.
                   Import goes underneath: it is a different job, and it is the
                   one of the three that is not about starting a round. -- */
-            <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-2">
+            <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-3">
               {backendDue > 0 ? (
                 <Button asChild className="min-h-11 min-w-0">
                   {/* STEP 2, because step 1 is already answered: the type,
@@ -360,12 +360,12 @@ export function IncrementsClient({
                   a grid, so it is only applied where the flex row exists. */}
               <Button
                 variant={dueSoon.length > 0 ? "outline" : "default"}
-                className="min-h-11 max-lg:col-span-2 lg:ml-1"
+                className="min-h-11 min-w-0 lg:ml-1"
                 onClick={() => setImportOpen(true)}
               >
                 <Upload aria-hidden className="size-4 shrink-0" />
                 <span className="truncate">
-                  Import<span className="hidden sm:inline"> employment data</span>
+                  Import<span className="hidden lg:inline"> employment data</span>
                 </span>
               </Button>
             </div>
