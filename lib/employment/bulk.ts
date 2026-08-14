@@ -65,6 +65,13 @@ const cellPatchSchema = z.object({
         than no cell. -- */
   track: z.enum(["STAFF", "WORKER"]).optional(),
   date_of_joining: z.string().optional(),
+  /* -- When probation ends (0023's `confirmation_date`).
+        NULLABLE where the others are not: it is optional, so clearing the cell
+        has to mean "there is no such date" rather than being ignored. An empty
+        string is what an emptied date input sends, and it is normalised to null
+        below. Nothing is derived from it, so moving or clearing it changes no
+        schedule and no figure. -- */
+  confirmation_date: z.string().nullable().optional(),
   increment_frequency_months: z.coerce.number().int().min(1).max(60).optional(),
   joining_ctc: z.number().positive().max(100_000_000).optional(),
   /** Annual, as stored. The grid types monthly and converts before sending. */
@@ -173,10 +180,16 @@ export async function bulkUpdatePeople(
     const employmentPatch: {
       employment_type?: "PERMANENT" | "CONTRACT" | "PROBATION" | "INTERN";
       increment_frequency_months?: number;
+      confirmation_date?: string | null;
     } = {};
     if (employment_type !== undefined) employmentPatch.employment_type = employment_type;
     if (patch.increment_frequency_months !== undefined) {
       employmentPatch.increment_frequency_months = patch.increment_frequency_months;
+    }
+    if (patch.confirmation_date !== undefined) {
+      /* An emptied date input sends "", and Postgres will not take that for a
+         `date`. Empty means "no such date", which is null. */
+      employmentPatch.confirmation_date = patch.confirmation_date || null;
     }
 
     if (Object.keys(employmentPatch).length > 0) {

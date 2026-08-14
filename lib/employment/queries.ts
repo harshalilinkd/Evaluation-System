@@ -77,10 +77,36 @@ export async function getEmployment(profileId: string): Promise<CycleResult<Empl
     : { data: [] };
   const nameOf = new Map((recorders ?? []).map((p) => [p.id, p.full_name]));
 
+  /* -- SINCE WHEN THEY HAVE BEEN ON TODAY'S FIGURE.
+        `employment_records.salary_effective_from` is the stored answer and is
+        maintained by every write path — 0066 backfilled it, 0068 keeps it in
+        step with the ledger, and `apply_salary_to_record` sets it whenever a
+        change is recorded.
+
+        It can still be NULL: a record imported before those landed, or one
+        whose pay history was written by a path that predates them. And a null
+        there renders an em dash directly above a table that plainly shows the
+        date — a screen contradicting itself.
+
+        So it falls back to the ledger, which is the authoritative record and is
+        already loaded here. Same rows, so the readout and the table below it
+        cannot disagree. JOINING is excluded because it is the baseline rather
+        than a change (P19E-1), and the newest by DATE wins, so a backdated
+        correction does not claim to be today's figure (P19-9). -- */
+  const newestRise = [...rows]
+    .filter((r) => r.reason !== "JOINING")
+    .sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+
   return {
     ok: true,
     data: {
-      record: record ?? null,
+      record: record
+        ? {
+            ...record,
+            salary_effective_from:
+              record.salary_effective_from ?? newestRise?.effective_from ?? null,
+          }
+        : null,
       dateOfJoining: profile?.date_of_joining ?? null,
       joiningRecordedByName: record?.joining_ctc_recorded_by
         ? (nameOf.get(record.joining_ctc_recorded_by) ?? null)

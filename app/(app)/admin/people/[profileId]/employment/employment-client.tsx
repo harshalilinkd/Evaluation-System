@@ -161,17 +161,6 @@ export function EmploymentClient({
             that phrase — the label just no longer makes a reader guess what is
             being confirmed.
           */}
-          <Field
-            label="Probation ends"
-            hint="Optional. Also called the confirmation date — the day probation ends and they become permanent. Nothing is worked out from it."
-          >
-            <Input
-              type="date"
-              value={form.confirmationDate}
-              disabled={!canEditRecord}
-              onChange={(e) => setForm({ ...form, confirmationDate: e.target.value })}
-            />
-          </Field>
           <Field label="Employment type">
             <select
               value={form.employmentType}
@@ -184,6 +173,18 @@ export function EmploymentClient({
               ))}
             </select>
           </Field>
+          {/* -- THE SCHEDULE, IN THE ORDER IT IS READ: when they were last paid
+                more, how often that happens, and therefore when the next one
+                falls. "Increment every" sat FIRST, which put the cause after
+                the effect and orphaned "Next increment" on a row of its own. -- */}
+          <Field label="Last increment">
+            <Input
+              type="date"
+              value={form.lastIncrementDate}
+              disabled={!canEditRecord}
+              onChange={(e) => setForm({ ...form, lastIncrementDate: e.target.value })}
+            />
+          </Field>
           <Field label="Increment every (months)">
             <Input
               type="number"
@@ -192,14 +193,6 @@ export function EmploymentClient({
               value={form.incrementFrequencyMonths}
               disabled={!canEditRecord}
               onChange={(e) => setForm({ ...form, incrementFrequencyMonths: e.target.value })}
-            />
-          </Field>
-          <Field label="Last increment">
-            <Input
-              type="date"
-              value={form.lastIncrementDate}
-              disabled={!canEditRecord}
-              onChange={(e) => setForm({ ...form, lastIncrementDate: e.target.value })}
             />
           </Field>
 
@@ -217,6 +210,43 @@ export function EmploymentClient({
               </p>
             ) : null}
           </Field>
+
+          {/* -- LAST, because it is the only optional field here.
+                It sat second, so hiding it for a permanent employee left a hole
+                at the top right and the form read as though something had
+                failed to render. An optional field at the END simply shortens
+                the form when it is absent, which is what a form is expected to
+                do — and no slot has to be reserved, so nothing jumps when it
+                appears.
+
+                ONLY WHERE IT MEANS SOMETHING. Reported as "if employment type
+                is permanent, why are we showing a probation date?" — for
+                somebody permanent with nothing recorded it asks for a date that
+                does not exist.
+
+                NOT hidden whenever permanent, though: a recorded date on a
+                permanent employee is the day they BECAME permanent, which is a
+                real fact and this screen is the only place it is kept.
+
+                `form.employmentType`, not the stored value, so switching the
+                select reveals it at once rather than after a save. -- */}
+          {form.employmentType === "PROBATION" || form.confirmationDate ? (
+            <Field
+              label={form.employmentType === "PROBATION" ? "Probation ends" : "Confirmed on"}
+              hint={
+                form.employmentType === "PROBATION"
+                  ? "Optional. Also called the confirmation date — the day probation ends and they become permanent. Nothing is worked out from it."
+                  : "The day they became permanent. Kept as a record; nothing is worked out from it."
+              }
+            >
+              <Input
+                type="date"
+                value={form.confirmationDate}
+                disabled={!canEditRecord}
+                onChange={(e) => setForm({ ...form, confirmationDate: e.target.value })}
+              />
+            </Field>
+          ) : null}
         </div>
 
         {canEditRecord ? (

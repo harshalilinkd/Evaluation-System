@@ -81,6 +81,14 @@ export type PersonRow = {
   reports_to: string | null;
   reports_to_name: string | null;
   employment_type: string | null;
+  /**
+   * When probation ends — 0023's `confirmation_date`.
+   *
+   * Optional, and nothing is derived from it: the increment schedule runs off
+   * the joining date and the pay ledger. It is a fact HR keeps about somebody,
+   * and it was reachable only one person at a time on their Employment tab.
+   */
+  confirmation_date: string | null;
   /** §5: HR and the MD only. This screen is guarded to exactly those two. */
   current_ctc: number | null;
   /** The baseline every stored percentage was measured from (P19E-1). */
@@ -123,6 +131,14 @@ export type PersonPatch = {
   track?: "STAFF" | "WORKER";
   /** ISO. 0024's ONE joining date; moving it recomputes the whole schedule. */
   date_of_joining?: string;
+  /**
+   * ISO. When probation ends (0023's `confirmation_date`).
+   *
+   * Optional, so `""` is a real value meaning "no such date" — the action
+   * normalises it to null. Nothing is derived from it, so unlike the joining
+   * date above, moving it moves nothing else.
+   */
+  confirmation_date?: string;
   increment_frequency_months?: number;
   /** Written through 0069, which refuses to overwrite an existing baseline. */
   joining_ctc?: number;
@@ -1685,6 +1701,39 @@ export function UsersTab({
           ) : (
             // §0.10: DD-MM-YYYY throughout.
             <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
+          ),
+      },
+      {
+        /* -- WHEN PROBATION ENDS — 0023's `confirmation_date`.
+              Optional, and nothing is derived from it: the increment schedule
+              runs off the joining date and the pay ledger, so moving this moves
+              nothing else. It is a fact HR keeps, and it was reachable only one
+              person at a time on their own Employment tab — which is the wrong
+              shape for "who is still on probation". -- */
+        accessorKey: "confirmation_date",
+        header: "Probation ends",
+        size: 150,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <DateCell
+              value={
+                cellValue(row.original, "confirmation_date", row.original.confirmation_date ?? "") ??
+                ""
+              }
+              onChange={(v) => setCell(row.original.id, "confirmation_date", v)}
+              label={`Probation end date for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "confirmation_date")}
+            />
+          ) : (
+            <GridCell
+              // §0.10: DD-MM-YYYY. An em dash rather than a blank, because
+              // optional-and-unset is a fact and a blank cell reads as a
+              // rendering fault.
+              value={
+                row.original.confirmation_date ? formatDate(row.original.confirmation_date) : "—"
+              }
+              className="tabular"
+            />
           ),
       },
       {

@@ -108,7 +108,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     supabase
       .from("employment_records")
       .select(
-        "profile_id, employment_type, current_ctc, joining_ctc, last_increment_date, next_increment_date, increment_frequency_months",
+        "profile_id, employment_type, confirmation_date, current_ctc, joining_ctc, last_increment_date, next_increment_date, increment_frequency_months",
       ),
   ]);
 
@@ -150,6 +150,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       reports_to: p.reports_to,
       reports_to_name: p.reports_to ? (nameById.get(p.reports_to) ?? null) : null,
       employment_type: job?.employment_type ?? null,
+      confirmation_date: job?.confirmation_date ?? null,
       current_ctc: job?.current_ctc ?? null,
       joining_ctc: job?.joining_ctc ?? null,
       last_increment_date: job?.last_increment_date ?? null,
