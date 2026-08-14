@@ -55,6 +55,89 @@ function ContactIcons({
       caller keeps working. -- */
 export { isIncrementDue } from "@/lib/utils/increment-due";
 
+/**
+ * Who will rate this person.
+ *
+ * Extracted so the table and the phone cards render the SAME control. It is the
+ * one thing on this screen that must be used — a cycle cannot launch without it
+ * (§8) — and two copies is how one of them stops offering the MD, or stops
+ * excluding the person themselves, which is a §5 breach rather than a slip.
+ */
+function ManagerSelect({
+  person,
+  row,
+  people,
+  mdCandidates,
+  mdIds,
+  onPick,
+}: {
+  person: SelectablePerson;
+  row: PersonState;
+  people: SelectablePerson[];
+  mdCandidates: SelectablePerson[];
+  mdIds: Set<string>;
+  onPick: (leadId: string | null) => void;
+}) {
+  return (
+    <select
+      value={row.leadId ?? ""}
+      onChange={(e) => onPick(e.target.value || null)}
+      disabled={!row.included}
+      aria-label={`Manager for ${person.name}`}
+      className="h-11 w-full rounded-input border border-rule bg-surface px-2 text-body-sm text-ink disabled:opacity-50"
+    >
+      <option value="">No Manager</option>
+      {/* The MD first, as the default alternative for somebody with nobody
+          above them — a department head still needs a rater who is not
+          themselves. */}
+      {mdCandidates.map((candidate) => (
+        <option key={candidate.id} value={candidate.id}>
+          {candidate.name} (MD)
+        </option>
+      ))}
+      {people
+        // Themselves is not offered at all: an option that always blocks the
+        // launch is not a choice.
+        .filter((c) => c.id !== person.id && !mdIds.has(c.id))
+        .map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.name}
+          </option>
+        ))}
+    </select>
+  );
+}
+
+/**
+ * Both sides' reachability: the person, a divider, then their manager.
+ *
+ * Item 9 — a manager with no contact details BLOCKS the launch rather than
+ * warning, because they cannot receive their half of the form.
+ */
+function Reachability({
+  person,
+  lead,
+}: {
+  person: SelectablePerson;
+  lead: SelectablePerson | undefined;
+}) {
+  const leadUnreachable = lead ? !lead.hasEmail && !lead.hasPhone : false;
+  return (
+    <div className="flex items-center gap-2 whitespace-nowrap">
+      <ContactIcons who={person.name} hasEmail={person.hasEmail} hasPhone={person.hasPhone} />
+      <span aria-hidden className="h-4 w-px bg-rule" />
+      {lead ? (
+        <ContactIcons who={lead.name} hasEmail={lead.hasEmail} hasPhone={lead.hasPhone} />
+      ) : (
+        <span className="text-body-sm text-ink-muted">—</span>
+      )}
+      {leadUnreachable ? (
+        <span className="text-[11px] font-medium text-critical">Manager unreachable</span>
+      ) : null}
+    </div>
+  );
+}
+
 export function StepPeople({
   people,
   state,
@@ -322,7 +405,10 @@ export function StepPeople({
         shadcn components unmodified (P0-6), and this is one screen's density
         rather than a change to every table in the product.
       */}
-      <div className="overflow-x-auto rounded-card border border-rule [&_td]:border-r [&_td]:border-rule [&_td]:py-2 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-rule [&_th]:bg-surface-mute [&_th]:py-2 [&_th:last-child]:border-r-0">
+      {/* `lg:block` — below that the cards beneath render instead. The table is
+          the right shape once there is room for nine columns and the wrong one
+          when there is not. */}
+      <div className="hidden overflow-x-auto rounded-card border border-rule lg:block [&_td]:border-r [&_td]:border-rule [&_td]:py-2 [&_td:last-child]:border-r-0 [&_th]:border-r [&_th]:border-rule [&_th]:bg-surface-mute [&_th]:py-2 [&_th:last-child]:border-r-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -452,32 +538,14 @@ export function StepPeople({
                   </TableCell>
 
                   <TableCell>
-                    <select
-                      value={row.leadId ?? ""}
-                      onChange={(e) => patch(person.id, { leadId: e.target.value || null })}
-                      disabled={!row.included}
-                      aria-label={`Manager for ${person.name}`}
-                      className="h-11 w-full rounded-input border border-rule bg-surface px-2 text-body-sm text-ink disabled:opacity-50"
-                    >
-                      <option value="">No Manager</option>
-                      {/* The MD first, as the default alternative for somebody
-                          with nobody above them — a department head still needs
-                          a rater who is not themselves. */}
-                      {mdCandidates.map((candidate) => (
-                        <option key={candidate.id} value={candidate.id}>
-                          {candidate.name} (MD)
-                        </option>
-                      ))}
-                      {people
-                        // Themselves is no longer offered at all: an option that
-                        // always blocks the launch is not a choice.
-                        .filter((c) => c.id !== person.id && !mdIds.has(c.id))
-                        .map((candidate) => (
-                          <option key={candidate.id} value={candidate.id}>
-                            {candidate.name}
-                          </option>
-                        ))}
-                    </select>
+                    <ManagerSelect
+                      person={person}
+                      row={row}
+                      people={people}
+                      mdCandidates={mdCandidates}
+                      mdIds={mdIds}
+                      onPick={(leadId) => patch(person.id, { leadId })}
+                    />
                     {missingLead ? (
                       <p className="mt-1 text-body-sm font-medium text-critical">Assign a Manager</p>
                     ) : selfRated ? (
@@ -492,35 +560,10 @@ export function StepPeople({
                       details BLOCKS the launch rather than warning, because
                       they cannot receive their half of the form. */}
                   <TableCell>
-                    {(() => {
-                      const lead = row.leadId ? byId.get(row.leadId) : undefined;
-                      const leadUnreachable = lead ? !lead.hasEmail && !lead.hasPhone : false;
-
-                      return (
-                        <div className="flex items-center gap-2 whitespace-nowrap">
-                          <ContactIcons
-                            who={person.name}
-                            hasEmail={person.hasEmail}
-                            hasPhone={person.hasPhone}
-                          />
-                          <span aria-hidden className="h-4 w-px bg-rule" />
-                          {lead ? (
-                            <ContactIcons
-                              who={lead.name}
-                              hasEmail={lead.hasEmail}
-                              hasPhone={lead.hasPhone}
-                            />
-                          ) : (
-                            <span className="text-body-sm text-ink-muted">—</span>
-                          )}
-                          {leadUnreachable ? (
-                            <span className="text-[11px] font-medium text-critical">
-                              Manager unreachable
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })()}
+                    <Reachability
+                      person={person}
+                      lead={row.leadId ? byId.get(row.leadId) : undefined}
+                    />
                   </TableCell>
                 </TableRow>
               );
@@ -528,6 +571,119 @@ export function StepPeople({
           </TableBody>
         </Table>
       </div>
+
+      {/* -- ONE CARD PER PERSON ON A PHONE.
+            Nine columns inside `overflow-x-auto` is a desktop table you pan:
+            the manager picker — the one control on this screen that has to be
+            used — sits off the right-hand edge, and the tick that decides
+            whether somebody is in the cycle sits off the left. Neither is
+            reachable without dragging.
+
+            The SAME cells, re-laid out. `ManagerSelect` and `Reachability` are
+            rendered by both, so the picker a phone gets is the picker a laptop
+            gets — a second copy is how one of them stops offering the MD. -- */}
+      <ul className="space-y-3 lg:hidden">
+        {visible.map((person) => {
+          const row = state[person.id] ?? { included: true, leadId: person.reportsTo };
+          const missingLead = row.included && !row.leadId;
+          const selfRated = row.included && row.leadId === person.id;
+          const blocked = missingLead || selfRated;
+
+          return (
+            <li
+              key={person.id}
+              className={cn(
+                "card-surface p-4",
+                blocked && "border-l-2 border-l-critical bg-critical-tint/30",
+              )}
+            >
+              {/* The tick and the name together: whether somebody is in the
+                  cycle is the decision this screen exists for, so it is the
+                  first thing on the card and a 44px target. */}
+              <label className="flex items-start gap-3">
+                <Checkbox
+                  checked={row.included}
+                  onCheckedChange={(checked) => patch(person.id, { included: checked === true })}
+                  aria-label={`Include ${person.name}`}
+                  className="mt-0.5"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-sans text-body font-medium text-ink">
+                    {person.name}
+                  </span>
+                  <span className="block text-body-sm text-ink-muted">
+                    {[person.designation, person.departmentName].filter(Boolean).join(" · ") || "—"}
+                  </span>
+                </span>
+                <span className="tabular shrink-0 text-body-sm text-ink-muted">
+                  {person.employeeCode ?? "—"}
+                </span>
+              </label>
+
+              <dl className="mt-3 space-y-1.5 border-t border-rule pt-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="type-label text-ink-muted">Last evaluated</dt>
+                  <dd className="tabular text-body-sm text-ink-muted">
+                    {formatDate(person.lastEvaluationOn)}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="type-label text-ink-muted">Last increment</dt>
+                  <dd className="tabular text-body-sm text-ink-muted">
+                    {formatDate(person.lastIncrementOn)}
+                  </dd>
+                </div>
+                <div className="flex items-baseline justify-between gap-3">
+                  <dt className="type-label text-ink-muted">Next increment</dt>
+                  <dd
+                    className={cn(
+                      "tabular text-body-sm",
+                      person.nextIncrementOn && isIncrementDue(person.nextIncrementOn)
+                        ? "font-medium text-critical"
+                        : "text-ink-muted",
+                    )}
+                  >
+                    {person.nextIncrementOn ? (
+                      <>
+                        {formatDate(person.nextIncrementOn)}
+                        {isIncrementDue(person.nextIncrementOn) ? " · due" : ""}
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="mt-3 border-t border-rule pt-3">
+                <span className="type-label mb-1.5 block text-ink-muted">
+                  Manager who will rate them
+                </span>
+                <ManagerSelect
+                  person={person}
+                  row={row}
+                  people={people}
+                  mdCandidates={mdCandidates}
+                  mdIds={mdIds}
+                  onPick={(leadId) => patch(person.id, { leadId })}
+                />
+                {missingLead ? (
+                  <p className="mt-1 text-body-sm font-medium text-critical">Assign a Manager</p>
+                ) : selfRated ? (
+                  <p className="mt-1 text-body-sm font-medium text-critical">
+                    Needs a different rater — this person cannot rate themselves
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="mt-3 flex items-center gap-2 border-t border-rule pt-3">
+                <span className="type-label text-ink-muted">Reachable</span>
+                <Reachability person={person} lead={row.leadId ? byId.get(row.leadId) : undefined} />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
 
       {visible.length === 0 ? (
         <p className="py-8 text-center text-body-sm text-ink-muted">Nobody matches that search.</p>

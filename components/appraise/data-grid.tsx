@@ -9,8 +9,10 @@ import {
   getFilteredRowModel,
   getSortedRowModel,
   useReactTable,
+  type Cell,
   type ColumnDef,
   type ColumnSizingState,
+  type Row,
   type RowData,
 } from "@tanstack/react-table";
 
@@ -334,9 +336,108 @@ export function DataGrid<TData>({
       ? null
       : (table.getRowModel().rows.find((r) => r.index === openRowIndex) ?? null);
 
+  /* -- WHICH COLUMNS ARE FIELDS.
+        The gutter is a row handle and a column with no heading is an actions
+        column — neither is a value with a name. The details dialog has drawn
+        this distinction since it was written; the cards below use the SAME
+        rule, because a card and that dialog are the same information and two
+        rules would eventually disagree about what a field is. -- */
+  const fieldCells = (row: Row<TData>): Cell<TData, unknown>[] =>
+    row
+      .getVisibleCells()
+      .filter((c) => c.column.id !== GUTTER_ID && hasHeading(c.column.columnDef));
+
+  const headingFor = (columnId: string) => {
+    const header = table.getFlatHeaders().find((h) => h.column.id === columnId);
+    return header ? flexRender(header.column.columnDef.header, header.getContext()) : columnId;
+  };
+
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-auto bg-surface">
+      {/* -- ONE CARD PER ROW ON A PHONE, instead of a table you pan sideways.
+            A fourteen-column grid inside `overflow-x` is a desktop table with a
+            scrollbar, not a mobile screen: the columns that matter are off the
+            right-hand edge, and reading one person means dragging back and
+            forth with no header to anchor to.
+
+            Built from the SAME columns — no second set of definitions, no
+            per-screen mobile markup. Every grid in the product gets this at
+            once, and a column added anywhere appears here without being
+            mentioned twice.
+
+            Below `lg` only. Above it the table is the right shape and the
+            frozen panes, resizing and gridlines all still apply. -- */}
+      <div className="min-h-0 flex-1 overflow-y-auto bg-canvas p-3 lg:hidden">
+        {!hasRows && empty ? (
+          <div className="p-3">{empty}</div>
+        ) : (
+          <ul className="space-y-3">
+            {table.getRowModel().rows.map((row) => {
+              const fields = fieldCells(row);
+              const [lead, ...rest] = fields;
+              return (
+                <li key={row.id} className="card-surface overflow-hidden">
+                  {/* The whole card opens the row, exactly as the `<tr>` does.
+                      A button rather than a div: it is the keyboard path, and
+                      the gutter that normally provides one is not rendered
+                      here. */}
+                  <button
+                    type="button"
+                    className="w-full px-4 pb-2 pt-3 text-left"
+                    onClick={() => {
+                      if (onRowClick) onRowClick(row.original);
+                      else setOpenRowIndex(row.index);
+                    }}
+                  >
+                    <span className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 font-sans text-body font-medium text-ink">
+                        {lead ? flexRender(lead.column.columnDef.cell, lead.getContext()) : null}
+                      </span>
+                      {/* The row's own identifier — an employee code where the
+                          screen supplies one. A row NUMBER is not worth a line
+                          on a card, so the plain gutter is dropped. */}
+                      {rowLabel ? (
+                        <span className="tabular shrink-0 font-sans text-body-sm text-ink-muted">
+                          {rowLabel.value(row.original)}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+
+                  <dl className="px-4 pb-3">
+                    {rest.map((cell) => (
+                      <div
+                        key={cell.id}
+                        className="flex items-baseline justify-between gap-3 border-t border-rule py-2 first:border-t-0"
+                      >
+                        <dt className="type-label shrink-0 text-ink-muted">
+                          {headingFor(cell.column.id)}
+                        </dt>
+                        <dd className="min-w-0 text-right font-sans text-body-sm text-ink">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+
+                  {/* -- The row's actions, at the bottom where a thumb is.
+                        `rowActions` is what the details dialog puts in its
+                        footer; the headingless action COLUMNS are dropped,
+                        because a screen that has both would show the same
+                        buttons twice. -- */}
+                  {rowActions ? (
+                    <div className="flex flex-wrap items-center gap-2 border-t border-rule bg-surface-mute px-4 py-3">
+                      {rowActions(row.original)}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="hidden min-h-0 flex-1 overflow-auto bg-surface lg:block">
         {!hasRows && empty ? (
           <div className="p-6">{empty}</div>
         ) : (

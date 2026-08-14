@@ -338,7 +338,11 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
       </div>
 
       {summary.sections.length > 0 ? (
-        <div className="overflow-x-auto">
+        /* Two renderings of one set of figures — the table above `lg`, cards
+           below — so the ternary now yields a fragment rather than a single
+           element. */
+        <>
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full min-w-[520px] border-collapse">
             <thead>
               <tr className="border-b border-rule">
@@ -404,6 +408,54 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             </tbody>
           </table>
         </div>
+
+        {/* -- THE SAME FIGURES AS CARDS ON A PHONE.
+              A 520px table in a 375px window is panned, and the two columns
+              that matter most — Average and Gap — are the ones off the right.
+              Section per card, the four figures in a row beneath it: they are
+              short numbers, so they fit where the table's own padding did not.
+
+              Self is cyan and Manager pink here as everywhere (§13.1); Average
+              and Gap stay in ink, because an average belongs to neither layer
+              and a gap is a reporting figure rather than a verdict. -- */}
+        <ul className="divide-y divide-rule lg:hidden">
+          {summary.sections.map((s) => {
+            const wide = s.gap !== null && Math.abs(s.gap) >= summary.flagThreshold;
+            return (
+              <li key={s.section} className="px-4 py-3">
+                <p className="font-sans text-body text-ink">{s.label}</p>
+                <dl className="mt-2 grid grid-cols-4 gap-2">
+                  <div>
+                    <dt className="type-label text-self">Self</dt>
+                    <dd className="tabular text-body font-semibold text-ink">{score(s.self)}</dd>
+                  </div>
+                  <div>
+                    <dt className="type-label text-lead">Manager</dt>
+                    <dd className="tabular text-body font-semibold text-ink">{score(s.lead)}</dd>
+                  </div>
+                  <div>
+                    <dt className="type-label text-ink-muted">Average</dt>
+                    <dd className="tabular text-body font-semibold text-ink">
+                      {average(s.self, s.lead)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="type-label text-ink-muted">Gap</dt>
+                    <dd
+                      className={cn(
+                        "tabular text-body font-semibold",
+                        wide ? "text-critical" : "text-ink-muted",
+                      )}
+                    >
+                      {gapText(s.gap)}
+                    </dd>
+                  </div>
+                </dl>
+              </li>
+            );
+          })}
+        </ul>
+        </>
       ) : null}
     </section>
   );
@@ -450,7 +502,7 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
               <h3 className="font-sans text-body font-semibold text-ink">{section.label}</h3>
             </header>
 
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto lg:block">
               {/* `table-fixed` with explicit widths: the two answer columns hold
                   wording like "4 · Effective (Exceeds objective)", and with auto
                   layout one long question text squeezed them to nothing. */}
@@ -553,6 +605,57 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                 </tbody>
               </table>
             </div>
+
+            {/* -- THE SAME ROWS AS CARDS ON A PHONE.
+                  A 900px table in a 375px window is the worst case on this
+                  screen: the question is readable and both answers — the whole
+                  reason the report exists — are off the right-hand edge, so
+                  comparing them means panning back and forth for every row.
+
+                  Stacked instead. The question, then Self and Manager as two
+                  labelled halves, with the gap where the flag already is. Both
+                  answers are on screen at once, which is the comparison. -- */}
+            <ul className="divide-y divide-rule lg:hidden">
+              {section.rows.map((row) => (
+                <li key={row.questionId} className="px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 font-sans text-body text-ink">{row.text}</span>
+                    {row.flag !== "none" ? (
+                      <span className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-critical-tint px-2.5 py-1 text-body-sm font-semibold text-critical">
+                        <Flag aria-hidden className="size-3 shrink-0" />
+                        {gapText(row.gap)}
+                        <span className="sr-only">Flagged difference.</span>
+                      </span>
+                    ) : (
+                      <span className="tabular shrink-0 text-body-sm text-ink-muted">
+                        {gapText(row.gap)}
+                      </span>
+                    )}
+                  </div>
+
+                  <dl className="mt-2 grid grid-cols-2 gap-3">
+                    <div className="min-w-0">
+                      <dt className="type-label text-self">Self</dt>
+                      <dd className="font-sans text-body-sm text-ink">
+                        {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
+                      </dd>
+                    </div>
+                    <div className="min-w-0">
+                      <dt className="type-label text-lead">Manager</dt>
+                      <dd className="font-sans text-body-sm text-ink">
+                        {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {row.leadComment ? (
+                    <p className="mt-2 border-l-2 border-lead/50 pl-3 font-sans text-body-sm italic text-ink-muted">
+                      {row.leadComment}
+                    </p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
           </article>
         ))
       )}

@@ -458,7 +458,7 @@ export function DistributeClient({
 
         {/* ---------- Table ---------- */}
         <section className="card-surface overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto lg:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -624,6 +624,123 @@ export function DistributeClient({
               </TableBody>
             </Table>
           </div>
+
+          {/* -- ONE CARD PER PERSON ON A PHONE.
+                Six columns inside `overflow-x-auto` puts the ⋯ menu — the only
+                way to send one person their link — off the right-hand edge, and
+                the tick that selects them for a bulk send off the left. The
+                whole screen is about pressing those two things.
+
+                The same cells re-laid out. Every control is the one the table
+                renders, `RowMenu` included, so a phone can do everything a
+                laptop can. -- */}
+          <ul className="space-y-3 p-3 lg:hidden">
+            {visible.map((row) => (
+              <li
+                key={row.evaluationId}
+                className={cn("card-surface p-4", !row.sendable && "bg-surface-mute/50")}
+              >
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={selected.has(row.evaluationId)}
+                    disabled={!row.sendable}
+                    aria-label={`Select ${row.name}`}
+                    onCheckedChange={() => toggle(row.evaluationId)}
+                    className="mt-1"
+                  />
+                  <span
+                    aria-hidden
+                    className="flex size-8 shrink-0 items-center justify-center rounded-pill bg-accent text-body-sm font-medium text-primary"
+                  >
+                    {row.initials}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-ink">{row.name}</p>
+                    <p className="tabular truncate text-body-sm text-ink-muted">
+                      {row.employeeCode ?? "—"} · {row.departmentName ?? "No department"}
+                    </p>
+                  </div>
+                  <RowMenu
+                    row={row}
+                    configured={configured}
+                    disabled={running}
+                    onSend={(channel) => void sendOne(row, channel)}
+                    onSendBoth={() => void run([row.evaluationId], ["WHATSAPP", "EMAIL"], ["SELF"])}
+                    onSendLead={() => void sendOne(row, "WHATSAPP", "LEAD")}
+                    onCopy={() => setCopyWarning(row)}
+                    onHistory={() => setHistory(row)}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule pt-3">
+                  <span className="flex items-center gap-2">
+                    <ContactIcon
+                      kind="phone"
+                      present={Boolean(row.phoneE164)}
+                      problem={row.phoneRaw && !row.phoneE164 ? row.phoneError?.message ?? null : null}
+                      value={row.phoneE164 ?? row.phoneRaw}
+                    />
+                    <ContactIcon kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
+                    {row.phoneRaw && !row.phoneE164 ? (
+                      <button
+                        type="button"
+                        onClick={() => setFixing(row)}
+                        className="min-h-11 text-body-sm font-medium text-critical underline underline-offset-2"
+                      >
+                        Fix number
+                      </button>
+                    ) : null}
+                  </span>
+
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-pill px-2.5 py-1 text-body-sm font-medium",
+                      LINK_STATUS[row.linkStatus].classes,
+                    )}
+                  >
+                    {LINK_STATUS[row.linkStatus].label}
+                  </span>
+
+                  {row.lastSentAt ? (
+                    <span className="tabular flex items-center gap-2 text-body-sm text-ink-muted">
+                      {formatDateTime(row.lastSentAt)}
+                      {row.lastChannels.map((c) =>
+                        c === "WHATSAPP" ? (
+                          <MessageCircle key={c} aria-label="WhatsApp" className="size-3.5" />
+                        ) : (
+                          <Mail key={c} aria-label="Email" className="size-3.5" />
+                        ),
+                      )}
+                    </span>
+                  ) : null}
+                </div>
+
+                {/* The result, on its own line: it is a sentence — a provider
+                    error, or the reason this row cannot be sent at all — and
+                    §13.4 keeps that beside the control it explains. */}
+                {!row.sendable ? (
+                  <p className="mt-2 text-body-sm text-ink-muted">{row.blockedReason}</p>
+                ) : row.lastResult?.status === "FAILED" ? (
+                  <p className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="rounded-pill bg-critical-tint px-2 py-0.5 text-body-sm font-medium text-critical">
+                      Failed
+                    </span>
+                    <span className="text-body-sm text-ink-muted">{row.lastResult.error}</span>
+                    <button
+                      type="button"
+                      disabled={running}
+                      onClick={() => void sendOne(row, "WHATSAPP")}
+                      className="min-h-11 text-body-sm font-medium text-primary underline underline-offset-2"
+                    >
+                      Retry
+                    </button>
+                  </p>
+                ) : row.lastResult?.status === "SENT" ? (
+                  <p className="mt-2 text-body-sm text-ink-muted">Accepted by provider</p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
 
           {visible.length === 0 ? (
             <p className="py-10 text-center text-body-sm text-ink-muted">
