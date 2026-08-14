@@ -123,6 +123,8 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it HR cannot CORRECT a joining salary — 0069 refuses to overwrite one, so a figure typed wrong at import stays wrong.'),
   ('0076_evaluation_schedule', 'table', 'evaluation_schedule',
      'Without it the review schedule is not a setting: evaluations are computed from the old fixed 1-and-6-months-from-joining rule, and Settings > Evaluation periods cannot save.'),
+  ('0079_rolling_cycle_per_milestone', 'cycle_per_milestone', 'a rolling cycle per milestone, not one per year',
+     'Without it a person can hold only ONE milestone evaluation per financial year — the yearly cycle plus unique (cycle_id, evaluatee_id) — so their second review of the year fails with "duplicate key value violates constraint evaluations_cycle_evaluatee_unique". Under the company schedule everybody has two.'),
   ('0078_due_items_second_constraint', 'one_milestone_check', 'no constraint still enumerates MONTH_1',
      'Without it every MONTH_3 and MONTH_9 is refused by 0042''s constraint, which 0076 never widened — so "Check again" errors and Evaluation Due stays empty however many people are due. 0078 also carries 0077''s fix, so it is sufficient on its own.'),
   ('0077_due_sweep_count', 'sweep_count', 'compute_due_items counts all three branches',
@@ -351,6 +353,13 @@ select
     -- three migrations here, and asking after either one is how 0076 missed the
     -- second. Anything still enumerating MONTH_1 is stale, whatever it is
     -- called; 0076's regex reads '^MONTH_[0-9]{1,3}$' and cannot match this.
+    -- The ARGUMENT LIST is what 0079 wrote: it drops the one-argument form and
+    -- creates (date, text). Detecting the milestone words in the body would go
+    -- false the moment somebody rewords a cycle name.
+    when 'cycle_per_milestone' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'ensure_rolling_cycle'
+         and pg_get_function_identity_arguments(p.oid) = 'date, text')
     when 'one_milestone_check' then not exists (
       select 1 from pg_constraint c
        where c.contype = 'c'
