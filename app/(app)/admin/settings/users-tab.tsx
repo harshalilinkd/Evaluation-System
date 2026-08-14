@@ -1449,10 +1449,19 @@ export function UsersTab({
   people,
   departments,
   currentProfileId,
+  initialSearch,
 }: {
   people: PersonRow[];
   departments: DepartmentOption[];
   currentProfileId: string;
+  /**
+   * Seeds the roster search, so a link can land on one person.
+   *
+   * Evaluation Due says "Nobody is set to rate them" and now offers the way to
+   * fix it; arriving at a roster of fifty-five and being left to find them
+   * again is most of the work the link was supposed to save (§13.4).
+   */
+  initialSearch?: string;
 }) {
   const router = useRouter();
   const [activeState, activeAction] = useActionState<ProvisionState, FormData>(setUserActive, {});
@@ -1460,7 +1469,7 @@ export function UsersTab({
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<PersonRow | null>(null);
   const [deleting, setDeleting] = useState<PersonRow | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [status, setStatus] = useState("ALL");
 
   /* -- TABLE EDIT MODE.

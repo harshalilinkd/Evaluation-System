@@ -29,14 +29,15 @@ export const metadata: Metadata = { title: "Settings" };
 
 const TABS = ["general", "users", "departments", "messages", "recycle-bin"] as const;
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; find?: string }> }) {
   // §9: the guard is the first statement. A non-HR user is redirected before
   // any markup is produced, never shown and then hidden.
   const { profile } = await requireRole(ADMIN_ROLES);
 
   // `searchParams` is a promise in Next 16. Unknown values fall back rather
   // than rendering a Tabs with no panel showing.
-  const requested = (await searchParams).tab;
+  const params = await searchParams;
+  const requested = params.tab;
   const activeTab = TABS.includes(requested as (typeof TABS)[number]) ? requested! : "users";
 
   const supabase = await createClient();
@@ -240,7 +241,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </TabsContent>
 
       <TabsContent value="users">
-        <UsersTab people={people} departments={departmentOptions} currentProfileId={profile.id} />
+        <UsersTab
+          people={people}
+          departments={departmentOptions}
+          currentProfileId={profile.id}
+          /* `?find=` seeds the roster search, so a link from another screen
+             lands on the one person it is about. */
+          initialSearch={params.find}
+        />
       </TabsContent>
 
       <TabsContent value="departments">

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 
 import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
-import { AlertTriangle, RotateCcw, Rocket } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
@@ -263,12 +263,27 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               <Button size="sm" className="min-h-11 lg:h-8" disabled>
                 Create and send
               </Button>
-              <span
-                title={row.original.blockedBecause}
-                className="truncate text-body-sm text-critical"
-              >
-                {row.original.blockedBecause}
-              </span>
+              {/* -- THE FIX, IN THE ROW, replacing a sentence the column was
+                    too narrow to show. It read "Nobody is s…" beside a dead
+                    button, which is worse than saying nothing: it looks like a
+                    fault rather than a task. The full sentence stays in the
+                    `title` and is spelled out in the row's dialog, where there
+                    is room; here it is a short label that goes somewhere. -- */}
+              {row.original.blockedFix ? (
+                <Button asChild size="sm" variant="outline" className="min-h-11 whitespace-nowrap lg:h-8">
+                  <Link href={row.original.blockedFix.href} title={row.original.blockedBecause ?? undefined}>
+                    {row.original.blockedFix.label}
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              ) : (
+                <span
+                  title={row.original.blockedBecause}
+                  className="truncate text-body-sm text-critical"
+                >
+                  {row.original.blockedBecause}
+                </span>
+              )}
             </span>
           ) : (
             <span className="flex items-center gap-1.5">
@@ -434,7 +449,23 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
           !canAct ? (
             <span className="text-body-sm text-ink-muted">HR acts on this</span>
           ) : r.blockedBecause ? (
-            <span className="text-body-sm text-critical">{r.blockedBecause}</span>
+            /* -- THE REASON AND THE WAY TO FIX IT, together.
+                  The sentence alone was a dead end: "Nobody is set to rate
+                  them" in a dialog whose only other control is Close, and each
+                  of the four causes is fixed on a different screen. The link
+                  carries `?find=` so the roster opens on that person rather
+                  than on the whole company (§13.4). -- */
+            <span className="flex flex-col items-start gap-1.5">
+              <span className="text-body-sm text-critical">{r.blockedBecause}</span>
+              {r.blockedFix ? (
+                <Button asChild variant="outline" size="sm" className="min-h-11">
+                  <Link href={r.blockedFix.href}>
+                    {r.blockedFix.label}
+                    <ArrowUpRight className="size-3.5" aria-hidden />
+                  </Link>
+                </Button>
+              ) : null}
+            </span>
           ) : (
             <Button
               className="min-h-11"

@@ -34,6 +34,18 @@ export type DueRow = {
   lastCompletedOn: string | null;
   /** Why "Create and send" cannot run yet, if it cannot. */
   blockedBecause: string | null;
+  /**
+   * Where to go and fix it.
+   *
+   * Each of the four causes has a DIFFERENT fix and a different screen, so the
+   * sentence alone left HR to work out which — "Nobody is set to rate them" in
+   * a dialog with no way out is the dead end §13.4 forbids, and it was reported
+   * as one.
+   *
+   * The Users link carries `?find=` so the roster opens on that person rather
+   * than on fifty-five of them.
+   */
+  blockedFix: { href: string; label: string } | null;
 };
 
 export type DueList = {
@@ -172,14 +184,30 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
           §13.4: a disabled control with no explanation is a dead end, and each
           of these has a different fix. -- */
     let blocked: string | null = null;
+    let fix: DueRow["blockedFix"] = null;
+    /* The person's own record is what the Users roster is searched by. Their
+       code is the precise handle; the name is the fallback for somebody who has
+       not been given one yet. */
+    const findMe = encodeURIComponent(person.employee_code || person.full_name);
+    const onUsers = { href: `/admin/settings?tab=users&find=${findMe}`, label: "Open their record" };
+
     if (!person.department_id) {
       blocked = "No department, so there is no form to give them.";
+      fix = { ...onUsers, label: "Set their department" };
     } else if (!deptHasQuestions.has(person.department_id)) {
       blocked = "Their department has no Job Specific Skills questions yet.";
+      // Not the Users roster: this one is fixed on the department, and it is
+      // fixed once for everybody in it rather than per person.
+      fix = {
+        href: `/admin/departments/${person.department_id}`,
+        label: `Map questions for ${deptName.get(person.department_id) ?? "their department"}`,
+      };
     } else if (!person.reports_to) {
       blocked = "Nobody is set to rate them.";
+      fix = { ...onUsers, label: "Set who they report to" };
     } else if (person.reports_to === person.id) {
       blocked = "They are set to rate themselves, which blind rating does not allow.";
+      fix = { ...onUsers, label: "Change who they report to" };
     }
 
     rows.push({
@@ -198,6 +226,7 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
       leadId: person.reports_to,
       leadName: person.reports_to ? (leadName.get(person.reports_to) ?? null) : null,
       blockedBecause: blocked,
+      blockedFix: fix,
     });
   }
 
