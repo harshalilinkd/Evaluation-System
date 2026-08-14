@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { IncrementCalendar, IncrementDue } from "@/lib/employment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
+import { cn } from "@/lib/utils";
 
 const ANY = "__any__";
 
@@ -305,16 +306,29 @@ export function IncrementsClient({
                 uuids is one that breaks at the browser's length limit and
                 cannot be typed, bookmarked or reasoned about. -- */
           canImport ? (
-            <div className="flex flex-wrap items-center gap-2">
+            /* -- THE TWO ROUND BUTTONS SHARE A ROW, at the owner's instruction.
+                  `flex-wrap` gave each one a line of its own on a phone, so the
+                  header ran to three stacked full-width buttons before the
+                  counts were even visible. They are a pair — one per team, same
+                  decision — and reading them side by side is what makes the
+                  split legible.
+                  Import goes underneath: it is a different job, and it is the
+                  one of the three that is not about starting a round. -- */
+            <div className="flex flex-wrap items-center gap-2 max-lg:grid max-lg:grid-cols-2">
               {backendDue > 0 ? (
-                <Button asChild className="min-h-11">
+                <Button asChild className="min-h-11 min-w-0">
                   {/* STEP 2, because step 1 is already answered: the type,
                       the name and the period are all filled in before this
                       screen opens. Landing on Basics made HR press Continue
                       through a form nobody had to fill in. */}
                   <Link href="/admin/cycles/new?increment_for=due&step=2">
-                    <Rocket aria-hidden className="size-4" />
-                    Start for Backend team ({backendDue})
+                    <Rocket aria-hidden className="size-4 shrink-0" />
+                    {/* Two labels, one control. At half of 375px "Start for
+                        Backend team (3)" wraps to three lines and the count —
+                        the thing worth reading — lands last. */}
+                    <span className="truncate">
+                      <span className="hidden lg:inline">Start for </span>Backend ({backendDue})
+                    </span>
                   </Link>
                 </Button>
               ) : null}
@@ -327,22 +341,33 @@ export function IncrementsClient({
                     button counts by resolves the list on arrival, so a URL
                     never carries a page of uuids (PR-8's reasoning). -- */}
               {productionDue > 0 ? (
-                <Button asChild variant={backendDue > 0 ? "outline" : "default"} className="min-h-11">
+                <Button
+                  asChild
+                  variant={backendDue > 0 ? "outline" : "default"}
+                  className="min-h-11 min-w-0"
+                >
                   <Link href="/admin/worker-appraisals?start=due">
-                    <HardHat aria-hidden className="size-4" />
-                    Start for Production team ({productionDue})
+                    <HardHat aria-hidden className="size-4 shrink-0" />
+                    <span className="truncate">
+                      <span className="hidden lg:inline">Start for </span>Production ({productionDue})
+                    </span>
                   </Link>
                 </Button>
               ) : null}
 
-            <Button
-              variant={dueSoon.length > 0 ? "outline" : "default"}
-              className="ml-1 min-h-11"
-              onClick={() => setImportOpen(true)}
-            >
-              <Upload aria-hidden className="size-4" />
-              Import employment data
-            </Button>
+              {/* Full width beneath the pair on a phone: it is not one of them.
+                  `ml-1` was spacing for a flex row and becomes a stray inset in
+                  a grid, so it is only applied where the flex row exists. */}
+              <Button
+                variant={dueSoon.length > 0 ? "outline" : "default"}
+                className="min-h-11 max-lg:col-span-2 lg:ml-1"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload aria-hidden className="size-4 shrink-0" />
+                <span className="truncate">
+                  Import<span className="hidden sm:inline"> employment data</span>
+                </span>
+              </Button>
             </div>
           ) : null
         }
@@ -375,57 +400,79 @@ export function IncrementsClient({
 
       {/* ---------- Toolbar ---------- */}
       <ScreenToolbar>
-        <div className="relative min-w-0 flex-1 sm:w-[300px] sm:flex-none">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or code"
-            aria-label="Search people"
-            className="min-h-11 border-rule bg-surface pl-9"
-          />
+        {/* -- FOUR CONTROLS, ONE ROW, at the owner's instruction.
+              `ScreenToolbar` is `flex-wrap`, which takes its breaks from
+              whatever each control happens to measure — fine on a wide screen
+              and no behaviour at all on a narrow one, which is why "Overdue
+              only" was dropping to a line of its own.
+              A four-column grid states it instead, and `lg:contents` dissolves
+              the wrapper above that width so the controls rejoin the original
+              flex line unchanged.
+              `min-w-0` on every child: a select's intrinsic minimum is its
+              longest OPTION, so without it one department name blows the row
+              out and the grid stops being four equal columns (F13-4). -- */}
+        <div className="grid w-full grid-cols-4 items-center gap-2 lg:contents">
+          <div className="relative min-w-0 lg:w-[300px]">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
+            />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              /* At a quarter of 375px the field is ~80px and the icon takes 36
+                 of it, so a long placeholder arrives as "Search by " — which
+                 reads as a truncated label rather than a hint (F13-8). The
+                 full sentence is on the aria-label. */
+              placeholder=""
+              aria-label="Search by name or code"
+              title="Search by name or code"
+              className="min-h-11 border-rule bg-surface pl-9 lg:placeholder-shown:pl-9"
+            />
+          </div>
+
+          <select
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+            aria-label="Filter by department"
+            className={cn(SELECT_CLASS, "min-w-0 px-2 lg:px-3")}
+          >
+            <option value={ANY}>All departments</option>
+            {departments.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            aria-label="Filter by month"
+            className={cn(SELECT_CLASS, "min-w-0 px-2 lg:px-3")}
+          >
+            <option value={ANY}>Any month</option>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {monthLabel(m)}
+              </option>
+            ))}
+          </select>
+
+          <label className="flex min-h-11 min-w-0 cursor-pointer items-center gap-1.5 rounded-control border border-rule bg-surface px-2 text-body-sm text-ink lg:gap-2 lg:px-3">
+            <input
+              type="checkbox"
+              checked={overdueOnly}
+              onChange={(e) => setOverdueOnly(e.target.checked)}
+              className="size-4 shrink-0 accent-critical"
+            />
+            {/* One word where there is no room for two. The control is the same
+                one; only the label gives ground. */}
+            <span className="truncate">
+              Overdue<span className="hidden lg:inline"> only</span>
+            </span>
+          </label>
         </div>
-
-        <select
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          aria-label="Filter by department"
-          className={SELECT_CLASS}
-        >
-          <option value={ANY}>All departments</option>
-          {departments.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          aria-label="Filter by month"
-          className={SELECT_CLASS}
-        >
-          <option value={ANY}>Any month</option>
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {monthLabel(m)}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-control border border-rule bg-surface px-3 text-body-sm text-ink">
-          <input
-            type="checkbox"
-            checked={overdueOnly}
-            onChange={(e) => setOverdueOnly(e.target.checked)}
-            className="size-4 accent-critical"
-          />
-          Overdue only
-        </label>
       </ScreenToolbar>
 
       {/* ---------- The calendar ---------- */}
