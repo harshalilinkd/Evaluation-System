@@ -6,6 +6,7 @@ import { BuilderClient } from "@/app/(app)/admin/form-builder/builder-client";
 import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
+import { getSectionConfig } from "@/lib/forms/section-config";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Form builder" };
@@ -43,8 +44,28 @@ export default async function Page() {
     if (p.department_id) headcount[p.department_id] = (headcount[p.department_id] ?? 0) + 1;
   }
 
+  /* -- HR'S OWN SECTION NAMES AND ORDER, WHICH THIS SCREEN NEVER FETCHED.
+        `StructurePane` has taken an optional `sections` prop since P25 and
+        nothing ever passed it, so it fell back to the shipped names and the
+        shipped order — on the very screen that carries the Edit sections
+        button. Rename a section and every form changed while the list you
+        renamed it in went on calling it the old thing.
+
+        Order and active-state come with it: a section HR has parked no longer
+        appears here, and one they moved appears where they put it. -- */
+  const sectionConfig = await getSectionConfig();
+  const sections = sectionConfig.order.map((section) => ({
+    section,
+    label: sectionConfig.labels[section],
+    isActive: true,
+    // Counted from the live bank rather than from `form_sections`, which does
+    // not carry a count — and the pane recomputes it per department anyway.
+    questionCount: (questions ?? []).filter((q) => q.section === section).length,
+  }));
+
   return (
     <BuilderClient
+      sections={sections}
       questions={(questions ?? []).map((q) => ({
         id: q.id,
         text: q.text,

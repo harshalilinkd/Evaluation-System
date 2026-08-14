@@ -13,6 +13,7 @@ import {
   Plus,
   Search,
   Settings2,
+  SlidersHorizontal,
   Trash2,
   UserCog,
   Users,
@@ -20,7 +21,8 @@ import {
 } from "lucide-react";
 
 import type { BuilderQuestion } from "@/app/(app)/admin/form-builder/use-builder";
-import { DEPARTMENT_SECTION, SECTION_LABELS, SECTION_ORDER } from "@/lib/forms/labels";
+import { useSectionLabels } from "@/components/appraise/section-labels";
+import { DEPARTMENT_SECTION, SECTION_ORDER } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { FillEstimate } from "@/lib/questions/estimate";
 import { SectionsDialog, type SectionRow } from "@/app/(app)/admin/form-builder/sections-dialog";
@@ -88,29 +90,41 @@ export function StructurePane({
 }) {
   const [sectionsOpen, setSectionsOpen] = React.useState(false);
 
-  /* -- HR's names and order if they have been loaded, the shipped ones if not.
-        Falling back rather than waiting keeps the builder rendering before
-        0036 is applied, and a section with no name is a blank heading. -- */
+  /* -- THE FALLBACK IS THE PROVIDER'S, NOT A SECOND COPY HERE.
+        This read `SECTION_LABELS` in two places as its own safety net, which
+        is the drift FIX-51 closed everywhere else — and it mattered, because
+        the page never passed `sections` at all, so the fallback WAS the
+        behaviour: renaming a section changed every form and left this list,
+        on the screen carrying the Edit sections button, calling it the old
+        thing.
+
+        `useSectionLabels` already falls back to the shipped defaults when the
+        provider has nothing (P25-4), so deferring to it keeps a section from
+        ever rendering nameless without holding a second answer to what it is
+        called. The ORDER still falls back to `SECTION_ORDER` — that is a
+        different constant and a different question. -- */
+  const sectionNames = useSectionLabels();
+
   const rows: SectionRow[] = React.useMemo(
     () =>
       sections && sections.length > 0
         ? sections
         : SECTION_ORDER.map((section) => ({
             section,
-            label: SECTION_LABELS[section],
+            label: sectionNames[section],
             isActive: true,
             // `draft` only ever holds live questions — the builder never loads
             // retired ones — so this is already the count HR cares about.
             questionCount: draft.filter((q) => q.section === section).length,
           })),
-    [sections, draft],
+    [sections, draft, sectionNames],
   );
 
   const order = React.useMemo(() => rows.filter((r) => r.isActive).map((r) => r.section), [rows]);
   const labelFor = React.useCallback(
     (section: QuestionSection) =>
-      rows.find((r) => r.section === section)?.label ?? SECTION_LABELS[section],
-    [rows],
+      rows.find((r) => r.section === section)?.label ?? sectionNames[section],
+    [rows, sectionNames],
   );
 
   const [dragId, setDragId] = React.useState<string | null>(null);
@@ -168,23 +182,49 @@ export function StructurePane({
   }
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-card-lg bg-ink">
-      <header className="shrink-0 space-y-2.5 px-4 pb-3 pt-4">
+    /* -- THE PANE IS A SURFACE, NOT A SLAB.
+          It was `bg-ink` — the primary TEXT colour used as a background. Two
+          things followed, and both are why this screen did not read as one
+          application.
+
+          The visible one: a near-black panel beside two white cards, with
+          every tint inside it hand-mixed from `white/10`, `black/25` and
+          `ink-invert/70` because none of the app's own surface tokens work on
+          a dark ground. P31 had to raise all of those to 70% and recess the
+          open section to stop the type reading as grey — every one of those
+          fixes was a symptom of the ground, not of the type.
+
+          The invisible one, and it is a real defect: in dark mode `--ink` IS
+          the light text colour (#CCD0CF) and `--ink-invert` is near-black. So
+          this pane FLIPPED to a pale slab between two dark cards, and every
+          `bg-white/10` and `border-white/30` inside it — all computed for a
+          dark ground — collapsed to invisible. P33-4 refused to ship exactly
+          this on the scorecard hero and it was already shipped here.
+
+          `surface-mute` is the app's own secondary-panel token. It reads as a
+          rail against the white cards either side, and because every token
+          keeps its role in both themes (UI2-3), the pane cannot invert. -- */
+    <aside className="flex min-h-0 flex-col overflow-hidden rounded-card-lg bg-surface-mute">
+      <header className="shrink-0 space-y-3 border-b border-rule px-4 pb-3.5 pt-4">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-body font-semibold text-ink-invert">Form structure</h2>
+          <h2 className="text-body font-semibold text-ink">Form structure</h2>
           {/* The way in to renaming and reordering. Beside the heading it
               describes, rather than in a settings menu two screens away —
               this is where somebody is looking when they decide a section is
-              called the wrong thing. */}
+              called the wrong thing.
+
+              A button rather than an underlined link: it opens a dialog, and
+              underlined text on a panel of headings reads as navigation. */}
           <button
             type="button"
             onClick={() => setSectionsOpen(true)}
-            className="min-h-11 rounded-control px-2 py-1 text-body-sm font-medium text-ink-invert underline underline-offset-2 hover:text-ink-invert sm:min-h-0"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-control px-2.5 py-1 text-body-sm font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink sm:min-h-0 sm:py-1.5"
           >
+            <SlidersHorizontal aria-hidden className="size-3.5" />
             Edit sections
           </button>
         </div>
-        <p className="text-body-sm leading-snug text-ink-invert/80">
+        <p className="text-body-sm leading-snug text-ink-muted">
           Every employee answers the same form. Only {labelFor(DEPARTMENT_SECTION)} changes
           by department.
         </p>
@@ -198,7 +238,7 @@ export function StructurePane({
         <div className="relative">
           <Search
             aria-hidden
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-invert/60"
+            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-ink-muted"
           />
           <input
             type="search"
@@ -206,14 +246,14 @@ export function StructurePane({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a question…"
             aria-label="Find a question"
-            className="h-11 w-full rounded-control bg-black/30 pl-8 pr-8 text-body-sm text-ink-invert placeholder:text-ink-invert/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="h-11 w-full rounded-control border border-rule bg-surface pl-8 pr-8 text-body-sm text-ink placeholder:text-ink-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           {query ? (
             <button
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear the search"
-              className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-control text-ink-invert/70 hover:bg-white/10 hover:text-ink-invert"
+              className="absolute right-1 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-control text-ink-muted transition-colors hover:bg-surface-mute hover:text-ink"
             >
               <X aria-hidden className="size-4" />
             </button>
@@ -221,7 +261,7 @@ export function StructurePane({
         </div>
 
         {searching ? (
-          <p aria-live="polite" className="text-body-sm text-ink-invert/80">
+          <p aria-live="polite" className="text-body-sm text-ink-muted">
             {matchCount === 0
               ? "Nothing matches that."
               : `${matchCount} ${matchCount === 1 ? "question" : "questions"} match`}
@@ -253,11 +293,15 @@ export function StructurePane({
             <section
               key={section}
               className={cn(
-                "overflow-hidden rounded-card transition-colors",
-                // A darker well rather than a lighter one: an open section used
-                // to lift AWAY from the panel, which washed the whole pane out.
-                // Recessing it keeps the ground dark and the type on top of it.
-                isOpen ? "bg-black/25" : "bg-transparent",
+                "overflow-hidden rounded-card transition-shadow",
+                /* -- The open section LIFTS now, and that reverses P31-7 on
+                      purpose. Recessing it was right on a dark ground: a
+                      lighter well there pulled the section away from the panel
+                      and washed the whole pane toward grey. On a light ground
+                      the reasoning inverts — a white card on the muted rail is
+                      the app's own open-drawer idiom, and it is what makes the
+                      open section read as the one you are working in. -- */
+                isOpen ? "bg-surface shadow-dashboard" : "bg-transparent",
               )}
             >
               <button
@@ -266,17 +310,17 @@ export function StructurePane({
                 aria-expanded={isOpen}
                 className={cn(
                   "group flex min-h-11 w-full items-center gap-2.5 px-2.5 py-2.5 text-left transition-colors",
-                  isOpen ? "text-ink-invert" : "text-ink-invert/85 hover:bg-white/[0.06]",
+                  isOpen ? "text-ink" : "text-ink-muted hover:bg-surface/70 hover:text-ink",
                 )}
               >
                 <span
                   className={cn(
                     "grid size-6 shrink-0 place-items-center rounded-[8px] text-[11px] font-bold transition-colors",
                     isOpen
-                      ? "bg-ink-invert text-ink"
+                      ? "bg-primary text-white"
                       : isDept
                         ? "bg-gradient-to-br from-primary to-accent-cyan text-white"
-                        : "bg-white/10 text-ink-invert/70",
+                        : "bg-surface text-ink-muted ring-1 ring-inset ring-rule",
                   )}
                 >
                   {i + 1}
@@ -295,7 +339,7 @@ export function StructurePane({
                   </span>
                   {/* The count in words, not a bare numeral. An "8" beside a
                       section name reads as an index as easily as a total. */}
-                  <span className="mt-0.5 block truncate text-body-sm text-ink-invert/70">
+                  <span className="mt-0.5 block truncate text-body-sm text-ink-muted">
                     {isAuto
                       ? "Filled in from the person's record"
                       : isEmpty
@@ -307,7 +351,7 @@ export function StructurePane({
                 </span>
 
                 {isAuto ? (
-                  <Lock aria-hidden className="size-4 shrink-0 text-ink-invert/60" />
+                  <Lock aria-hidden className="size-4 shrink-0 text-ink-muted" />
                 ) : (
                   <motion.span
                     animate={{ rotate: isOpen ? 90 : 0 }}
@@ -316,7 +360,7 @@ export function StructurePane({
                     }
                     className="shrink-0"
                   >
-                    <ChevronRight aria-hidden className="size-4 text-ink-invert/70" />
+                    <ChevronRight aria-hidden className="size-4 text-ink-muted" />
                   </motion.span>
                 )}
               </button>
@@ -341,7 +385,7 @@ export function StructurePane({
                       ) : null}
 
                       {isEmpty ? (
-                        <p className="rounded-control bg-white/[0.06] px-2.5 py-2.5 text-body-sm leading-snug text-ink-invert/80">
+                        <p className="rounded-control bg-surface-mute px-2.5 py-2.5 text-body-sm leading-snug text-ink-muted">
                           {isDept
                             ? "This team has no questions of its own yet. It cannot be launched until it has at least one."
                             : "Nothing here yet. Add the first question below."}
@@ -383,7 +427,7 @@ export function StructurePane({
                                 "group/row relative flex items-start gap-1.5 rounded-control transition-colors",
                                 dragId === q.id && "opacity-40",
                                 overId === q.id && dragId && dragId !== q.id && "ring-1 ring-primary",
-                                isSelected ? "bg-primary/25" : "hover:bg-white/[0.07]",
+                                isSelected ? "bg-primary/10 ring-1 ring-inset ring-primary/30" : "hover:bg-surface",
                               )}
                             >
                               {/* A bar rather than only a fill, so the selected
@@ -401,7 +445,7 @@ export function StructurePane({
                                   space is better spent on the question. */}
                               <span
                                 aria-hidden
-                                className="hidden cursor-grab pl-2 pt-2.5 text-ink-invert/60 opacity-0 transition-opacity active:cursor-grabbing group-hover/row:opacity-100 lg:block"
+                                className="hidden cursor-grab pl-2 pt-2.5 text-ink-muted opacity-0 transition-opacity active:cursor-grabbing group-hover/row:opacity-100 lg:block"
                               >
                                 <GripVertical className="size-4" />
                               </span>
@@ -413,12 +457,12 @@ export function StructurePane({
                                 className={cn(
                                   "min-w-0 flex-1 py-2 pl-2 pr-1 text-left lg:pl-0",
                                   isSelected
-                                    ? "text-ink-invert"
-                                    : "text-ink-invert/85 group-hover/row:text-ink-invert",
+                                    ? "text-ink"
+                                    : "text-ink-muted group-hover/row:text-ink",
                                 )}
                               >
                                 <span className="flex items-baseline gap-1.5">
-                                  <span className="tabular shrink-0 text-[11px] text-ink-invert/55">
+                                  <span className="tabular shrink-0 text-[11px] text-ink-muted">
                                     {index + 1}
                                   </span>
                                   {/* Two lines, not one truncated one. A
@@ -429,8 +473,26 @@ export function StructurePane({
                                     {q.text}
                                   </span>
                                 </span>
-                                <span className="mt-1 flex flex-wrap items-center gap-1">
-                                  <Tag>{TYPE_TAG[q.responseType] ?? "Text"}</Tag>
+                                {/* -- THE TYPE IS A WORD, NOT A CHIP.
+                                      Every row carried a boxed "Rating" on a
+                                      line of its own, so a section of eight
+                                      questions spent eight lines and eight
+                                      boxes saying the same thing — the loudest
+                                      repeated element in the pane, restating
+                                      what is nearly always identical.
+
+                                      Plain muted text keeps it readable and
+                                      stops it competing with the question. The
+                                      chips that remain are the EXCEPTIONS —
+                                      answered by one side only, conditional,
+                                      optional — which is what a chip is for:
+                                      something true of this row and not the
+                                      others (P31-11's rule, applied to the
+                                      type as well as to the audience). -- */}
+                                <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[1.15rem]">
+                                  <span className="text-[11px] font-medium text-ink-muted">
+                                    {TYPE_TAG[q.responseType] ?? "Text"}
+                                  </span>
                                   {who ? <Tag title={who.title}>{who.short}</Tag> : null}
                                   {q.dependsOn ? (
                                     <Tag title="Only shown when an earlier answer matches">If…</Tag>
@@ -447,7 +509,7 @@ export function StructurePane({
                                 // Always reachable on a touch screen: there is
                                 // no hover there, and a control that only
                                 // appears on hover simply does not exist.
-                                className="mr-1 mt-1.5 grid size-9 shrink-0 place-items-center rounded-control text-ink-invert/55 transition-all hover:bg-critical/25 hover:text-critical focus-visible:opacity-100 lg:size-8 lg:opacity-0 lg:group-hover/row:opacity-100"
+                                className="mr-1 mt-1.5 grid size-9 shrink-0 place-items-center rounded-control text-ink-muted transition-all hover:bg-critical/10 hover:text-critical focus-visible:opacity-100 lg:size-8 lg:opacity-0 lg:group-hover/row:opacity-100"
                               >
                                 <Trash2 aria-hidden className="size-4" />
                               </button>
@@ -462,7 +524,7 @@ export function StructurePane({
                         <button
                           type="button"
                           onClick={() => onAdd(section)}
-                          className="mt-1 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-white/30 py-2 text-body-sm font-medium text-ink-invert/80 transition-colors hover:border-white/50 hover:bg-white/[0.06] hover:text-ink-invert"
+                          className="mt-1 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-control border border-dashed border-border py-2 text-body-sm font-medium text-ink-muted transition-colors hover:border-primary hover:bg-primary/5 hover:text-primary"
                         >
                           <Plus aria-hidden className="size-4" />
                           Add question
@@ -482,15 +544,15 @@ export function StructurePane({
         layout={!reduced}
         className={cn(
           "m-2.5 shrink-0 rounded-card p-3.5 transition-colors",
-          estimate.tooLong ? "bg-critical/25" : "bg-black/25",
+          estimate.tooLong ? "bg-critical/10 ring-1 ring-inset ring-critical/30" : "bg-surface",
         )}
       >
         <div className="grid grid-cols-2 gap-2">
           <Stat icon={Users} label="Employee answers" value={estimate.employeeQuestions} />
           <Stat icon={UserCog} label="Manager answers" value={estimate.leadQuestions} />
         </div>
-        <div className="mt-2 flex items-center justify-between border-t border-white/20 pt-2">
-          <span className="flex items-center gap-1.5 text-body-sm text-ink-invert/80">
+        <div className="mt-2 flex items-center justify-between border-t border-rule pt-2">
+          <span className="flex items-center gap-1.5 text-body-sm text-ink-muted">
             <Clock aria-hidden className="size-4" />
             Est. time to fill
           </span>
@@ -499,7 +561,7 @@ export function StructurePane({
             initial={reduced ? false : { opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
-            className="tabular text-body font-semibold text-ink-invert"
+            className="tabular text-body font-semibold text-ink"
           >
             {estimate.employeeMinutes} min
           </motion.span>
@@ -522,7 +584,7 @@ function Tag({ children, title }: { children: React.ReactNode; title?: string })
   return (
     <span
       title={title}
-      className="rounded-[5px] bg-white/20 px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-invert/90"
+      className="rounded-[5px] bg-surface-mute px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-rule"
     >
       {children}
     </span>
@@ -540,11 +602,11 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1 text-body-sm text-ink-invert/80">
+      <div className="flex items-center gap-1 text-body-sm text-ink-muted">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         {label}
       </div>
-      <div className="tabular text-body-lg font-semibold text-ink-invert">{value}</div>
+      <div className="tabular text-body-lg font-semibold text-ink">{value}</div>
     </div>
   );
 }
@@ -562,10 +624,10 @@ function DepartmentPicker({
 }) {
   const people = headcount[value] ?? 0;
   return (
-    <div className="mb-1.5 rounded-control bg-white/[0.08] p-2">
+    <div className="mb-1.5 rounded-control bg-surface-mute p-2 ring-1 ring-inset ring-rule">
       <label
         htmlFor="builder-department"
-        className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-invert/75"
+        className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-muted"
       >
         Showing
       </label>
@@ -573,7 +635,7 @@ function DepartmentPicker({
         id="builder-department"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-control border border-white/25 bg-white/10 px-2 text-body-sm text-ink-invert"
+        className="h-11 w-full rounded-control border border-border bg-surface px-2 text-body-sm text-ink"
       >
         {departments.map((d) => (
           <option key={d.id} value={d.id} className="text-ink">
@@ -581,7 +643,7 @@ function DepartmentPicker({
           </option>
         ))}
       </select>
-      <p className="mt-1.5 flex items-center gap-1 text-body-sm text-ink-invert/75">
+      <p className="mt-1.5 flex items-center gap-1 text-body-sm text-ink-muted">
         <Users aria-hidden className="size-3.5 shrink-0" />
         {people === 0
           ? "Nobody is in this team right now"
@@ -593,7 +655,7 @@ function DepartmentPicker({
           stale department survives another cycle. */}
       <Link
         href="/admin/settings?tab=departments"
-        className="mt-1 flex min-h-11 items-center gap-1 text-body-sm font-medium text-ink-invert/80 underline-offset-2 transition-colors hover:text-ink-invert hover:underline sm:min-h-0"
+        className="mt-1 flex min-h-11 items-center gap-1 text-body-sm font-medium text-primary underline-offset-2 transition-colors hover:underline sm:min-h-0"
       >
         <Settings2 aria-hidden className="size-3.5 shrink-0" />
         Add, rename or retire a team

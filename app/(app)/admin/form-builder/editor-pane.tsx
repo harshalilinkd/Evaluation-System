@@ -4,13 +4,14 @@
 
 import * as React from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { GripVertical, PencilLine, Plus, Trash2 } from "lucide-react";
 
 import type { BuilderOption, BuilderQuestion } from "@/app/(app)/admin/form-builder/use-builder";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DEPARTMENT_SECTION, SECTION_LABELS } from "@/lib/forms/labels";
+import { useSectionLabels } from "@/components/appraise/section-labels";
+import { DEPARTMENT_SECTION } from "@/lib/forms/labels";
 import type { ResponseType } from "@/lib/forms/types";
 import { cn } from "@/lib/utils";
 
@@ -46,6 +47,8 @@ export function EditorPane({
   onRemove,
   onOptionsChange,
   onDepartmentsChange,
+  onAdd,
+  addSectionLabel,
 }: {
   question: BuilderQuestion | null;
   options: BuilderOption[];
@@ -56,15 +59,60 @@ export function EditorPane({
   onRemove: () => void;
   onOptionsChange: (next: Array<{ label: string; value: string }>) => void;
   onDepartmentsChange: (ids: string[]) => void;
+  /* -- The zero state carries the action rather than describing it. Both
+        optional, so a caller with no section open gets the explanation and no
+        button — better than a button that cannot say where the question would
+        land. -- */
+  onAdd?: () => void;
+  addSectionLabel?: string;
 }) {
   const reduced = useReducedMotion();
+  // HR's live naming (FIX-51), never the shipped defaults. Read before the
+  // early return, because a hook cannot sit behind a conditional.
+  const sectionNames = useSectionLabels();
+  const sectionName = question ? sectionNames[question.section] : null;
 
+  /* -- NOTHING SELECTED IS THE COMMONEST STATE, and it was the emptiest thing
+        on the screen: one grey sentence centred in about 480 by 780 pixels,
+        telling the reader to go and do something in a different pane.
+
+        §13.4 calls that a dead end — an instruction is not an action. It is
+        also, on a three-pane screen, the largest single element competing for
+        attention while saying the least. So it says what this pane is FOR, and
+        carries the action somebody would otherwise go looking for. -- */
   if (!question) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center rounded-card-lg bg-surface p-8">
-        <p className="max-w-[24ch] text-center text-body-sm leading-relaxed text-ink-muted">
-          Pick a question on the left to edit it, or add a new one.
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center rounded-card-lg bg-surface p-8 text-center">
+        <span
+          aria-hidden
+          className="grid size-12 place-items-center rounded-card bg-surface-mute text-ink-muted"
+        >
+          <PencilLine className="size-5" />
+        </span>
+        <h2 className="mt-4 text-body font-semibold text-ink">Nothing open</h2>
+        <p className="mt-1.5 max-w-[34ch] text-body-sm leading-relaxed text-ink-muted">
+          Choose a question from the structure on the left and its wording, answer
+          type and settings appear here.
         </p>
+
+        {onAdd && addSectionLabel ? (
+          <>
+            <button
+              type="button"
+              onClick={onAdd}
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-control bg-primary px-4 text-body-sm font-semibold text-white transition-colors hover:bg-primary/90"
+            >
+              <Plus aria-hidden className="size-4" />
+              Add a question to {addSectionLabel}
+            </button>
+            {/* Naming the section the question would land in, because "Add a
+                question" on a form with eight of them is a button whose result
+                you cannot predict before pressing it. */}
+            <p className="mt-2 text-[11px] text-ink-muted">
+              It lands at the end of that section and opens here.
+            </p>
+          </>
+        ) : null}
       </div>
     );
   }
@@ -88,9 +136,13 @@ export function EditorPane({
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-5 py-4">
         <div className="min-w-0">
           <h2 className="truncate text-body font-semibold text-ink">Edit question</h2>
-          <p className="mt-0.5 truncate text-[11px] text-ink-muted">
-            {SECTION_LABELS[question.section]}
-          </p>
+          {/* -- HR's own name for the section, not the shipped default.
+                This read `SECTION_LABELS` directly — the drift FIX-51 closed
+                everywhere else, still here, so renaming a section changed every
+                form and left this header calling it the old thing. It survived
+                because the guard written to catch it tested `/^"use client"/`
+                against the whole file, and this one opens with a docblock. -- */}
+          <p className="mt-0.5 truncate text-[11px] text-ink-muted">{sectionName}</p>
         </div>
         <button
           type="button"

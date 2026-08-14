@@ -10,12 +10,14 @@ import { BuilderTabs } from "@/app/(app)/admin/form-builder/builder-tabs";
 import { EditorPane } from "@/app/(app)/admin/form-builder/editor-pane";
 import { PreviewPane } from "@/app/(app)/admin/form-builder/preview-pane";
 import { StructurePane } from "@/app/(app)/admin/form-builder/structure-pane";
+import type { SectionRow } from "@/app/(app)/admin/form-builder/sections-dialog";
 import {
   useBuilder,
   type BuilderOption,
   type BuilderQuestion,
 } from "@/app/(app)/admin/form-builder/use-builder";
 import { ResizablePanes, usePaneLayout } from "@/components/appraise/resizable-panes";
+import { useSectionLabels } from "@/components/appraise/section-labels";
 import { DEPARTMENT_SECTION, SECTION_ORDER } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { FormDefinition, FormQuestion } from "@/lib/forms/types";
@@ -31,12 +33,16 @@ const DEFAULT_LAYOUT = [0.22, 0.31, 0.47] as const;
 type MobilePane = "structure" | "editor" | "preview";
 
 export function BuilderClient({
+  sections,
   questions,
   departments,
   mappings,
   options,
   headcount,
 }: {
+  /* HR's own names and order (P25). Optional so the builder still renders
+     before 0036 is applied — a section with no name is a blank heading. */
+  sections?: SectionRow[];
   questions: BuilderQuestion[];
   departments: Array<{ id: string; name: string; code: string }>;
   mappings: Array<{ departmentId: string; questionId: string; sortOrder: number }>;
@@ -54,6 +60,8 @@ export function BuilderClient({
   /** Which pane is on screen below 1150px. Ignored above it — all three show. */
   const [mobilePane, setMobilePane] = React.useState<MobilePane>("structure");
   const reduced = useReducedMotion();
+  // HR's own section names (FIX-51), for the zero state to name its target.
+  const sectionNames = useSectionLabels();
 
   const builder = useBuilder({
     initialQuestions: questions,
@@ -142,6 +150,15 @@ export function BuilderClient({
   const selected = builder.draft.find((q) => q.id === builder.selectedId) ?? null;
   const departmentName = departments.find((d) => d.id === departmentId)?.name ?? "";
 
+  /* -- The zero state's action, and the section it would act on.
+        METADATA is excluded because it is not authored — it comes from the
+        profile and the evaluation record, so "add a question" there would offer
+        something the form does not accept (P12-14). With no section open there
+        is nothing to name, and the pane shows the explanation alone rather than
+        a button whose destination the reader cannot predict. -- */
+  const addTarget = openSection && openSection !== "METADATA" ? openSection : null;
+  const addTargetLabel = addTarget ? sectionNames[addTarget] : undefined;
+
   async function handleRemove(id: string) {
     const removed = await builder.removeQuestion(id);
     if (removed) setUndo(removed);
@@ -198,6 +215,7 @@ export function BuilderClient({
           className="flex-1"
         >
           <StructurePane
+            sections={sections}
             draft={builder.draft}
             mappedIds={mappedIds}
             departments={departments}
@@ -230,6 +248,8 @@ export function BuilderClient({
             onRemove={() => selected && void handleRemove(selected.id)}
             onOptionsChange={(next) => selected && builder.setQuestionOptions(selected.id, next)}
             onDepartmentsChange={(ids) => selected && builder.setDepartments(selected.id, ids)}
+            onAdd={addTarget ? () => builder.addQuestion(addTarget) : undefined}
+            addSectionLabel={addTargetLabel}
           />
 
           <PreviewPane
@@ -268,6 +288,7 @@ export function BuilderClient({
         <div className="flex min-h-0 flex-1 flex-col">
           {mobilePane === "structure" ? (
             <StructurePane
+              sections={sections}
               draft={builder.draft}
               mappedIds={mappedIds}
               departments={departments}
