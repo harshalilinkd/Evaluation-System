@@ -196,7 +196,7 @@ export function SectionsDialog({
                             type="submit"
                             variant="ghost"
                             size="icon"
-                            className="size-8"
+                            className="size-11 lg:size-8"
                             disabled={!next}
                             aria-label={`Move ${row.label} ${direction === -1 ? "up" : "down"}`}
                           >
@@ -226,7 +226,7 @@ export function SectionsDialog({
                         type="submit"
                         variant="ghost"
                         size="icon"
-                        className="size-8 text-ink-muted"
+                        className="size-11 text-ink-muted lg:size-8"
                         aria-label={row.isActive ? `Park ${row.label}` : `Restore ${row.label}`}
                         title={row.isActive ? "Take off the form" : "Put back on the form"}
                       >

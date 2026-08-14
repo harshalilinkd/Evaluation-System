@@ -197,7 +197,7 @@ function RowMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-ink-muted hover:text-ink"
+          className="size-11 text-ink-muted hover:text-ink lg:size-8"
           aria-label={`Actions for ${person.full_name}`}
         >
           <MoreHorizontal className="size-4" aria-hidden />
@@ -453,8 +453,8 @@ function ImportDialog({
         </details>
 
         {failed.length > 0 ? (
-          <div className="overflow-hidden rounded-control border border-critical/40">
-            <table className="w-full border-collapse">
+          <div className="overflow-x-auto rounded-control border border-critical/40">
+            <table className="w-full min-w-[28rem] border-collapse">
               <thead>
                 <tr className="border-b border-critical/30 bg-critical-tint">
                   {["Row", "Name", "What is wrong"].map((h) => (

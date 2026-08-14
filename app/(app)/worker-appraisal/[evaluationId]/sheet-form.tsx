@@ -6,6 +6,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
 
+import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { TickScale } from "@/components/appraise/tick-scale";
@@ -558,25 +559,52 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           handset — this bar being hidden is indistinguishable from the form
           refusing to save. */}
       {!readOnly ? (
-        <div className="glass fixed inset-x-0 bottom-[var(--bottom-nav-h)] z-20 flex h-16 items-center gap-3 border-t border-rule px-4 lg:static lg:h-auto lg:border-0 lg:bg-transparent lg:px-0 lg:py-0">
-          <Button
-            variant="ghost"
-            className="min-h-11 flex-1 lg:flex-none"
-            onClick={() => void save()}
-            disabled={busy}
-          >
-            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Save draft
-          </Button>
-          <Button
-            className="min-h-11 flex-1 lg:ml-auto lg:flex-none"
-            onClick={() => void submit()}
-            disabled={busy}
-          >
-            <Send className="size-4" aria-hidden />
-            Submit
-          </Button>
-        </div>
+        <>
+          {/* -- THE PHONE'S BAR CARRIES THE COUNT NOW.
+                A supervisor fills this ON the shop floor, on a handset — and
+                the "6 of 8 ticked · saved 15:58" lived in the header at the
+                top of the page, gone after the first swipe. This is the same
+                component the employee's and the manager's forms use, so the
+                three cannot drift apart in spacing or in when Save is
+                disabled.
+
+                The tier is `lead`: this sheet is filled in by the supervisor,
+                who is this module's lead, and §13.1 reserves the hue for whose
+                rating it is. A worker filling their own is the retired
+                hand-over path (WORKER-1) and still reads correctly — the
+                progress is theirs either way, and the alternative would be a
+                third tier this module does not have. -- */}
+          <FormActionBar
+            answered={answered}
+            total={sheet.questions.length}
+            saveState={saveState}
+            savedAt={saved}
+            onSave={() => void save()}
+            onSubmit={() => void submit()}
+            busy={busy}
+            tier="lead"
+          />
+
+          {/* The laptop keeps an inline bar in the flow rather than a fixed
+              strip: there is no bottom navigation to clear and nothing to
+              scroll past, so a floating bar there is chrome over a page that
+              has room for it. */}
+          <div className="hidden gap-3 lg:flex">
+            <Button
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => void save()}
+              disabled={busy}
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              Save draft
+            </Button>
+            <Button className="ml-auto min-h-11" onClick={() => void submit()} disabled={busy}>
+              <Send className="size-4" aria-hidden />
+              Submit
+            </Button>
+          </div>
+        </>
       ) : null}
 
       <SubmittedDialog

@@ -58,6 +58,11 @@ export function WorkerFormClient({
   const [editing, setEditing] = React.useState<WorkerQuestion | null>(null);
   const [adding, setAdding] = React.useState(false);
 
+  /* -- Which pane is on screen below `lg`. Ignored above it — both show.
+        Defaults to the qualities: this screen is opened to EDIT the form, and
+        the preview is what tells you whether the edit worked. -- */
+  const [pane, setPane] = React.useState<"qualities" | "preview">("qualities");
+
   const active = questions.filter((q) => q.isActive);
   const retired = questions.filter((q) => !q.isActive);
 
@@ -76,15 +81,28 @@ export function WorkerFormClient({
 
   return (
     <div className="space-y-4">
-      {/* ---------- What this form is ---------- */}
-      <div className="flex items-start gap-2 rounded-card border-l-2 border-l-accent bg-accent-tint/40 px-4 py-3 text-body-sm text-ink">
-        <Info aria-hidden className="mt-0.5 size-4 shrink-0" />
-        <span>
-          <span className="font-medium">This is the Production Team form, and it is not the Backend Team one.</span>{" "}
-          The Production Team is appraised on a three-tick sheet — Excellent, Satisfactory, Needs Improvement —
-          filled in by their supervisor. It shares nothing with the staff form: no 0-5 ratings, no
-          Job Specific Skills, no department mapping. Changing one never changes the other.
-        </span>
+      {/* ---------- What this form is ----------
+            FOUR LINES OF DENSE TINTED TEXT became two. It listed everything the
+            worker form does NOT share with the staff one — no 0-5 ratings, no
+            Job Specific Skills, no department mapping — which is three ways of
+            saying the one thing that matters: editing this changes nothing over
+            there. The rest is visible in the preview beside it, where the three
+            ticks are drawn rather than described.
+
+            A banner that has to be read is a banner that gets skipped, and this
+            one sat above every visit (P9B-6 keeps it returning, which is right
+            — it is the thing most often misunderstood — but returning is
+            exactly why it has to be short). */}
+      <div className="flex items-start gap-2.5 rounded-card border-l-2 border-l-accent bg-accent-tint/40 px-4 py-3 text-ink">
+        <Info aria-hidden className="mt-0.5 size-4 shrink-0 text-accent" />
+        <div className="min-w-0">
+          <p className="text-body-sm font-medium">
+            This is the Production Team&rsquo;s sheet — their supervisor fills it in.
+          </p>
+          <p className="mt-0.5 text-body-sm text-ink-muted">
+            Separate from the Backend Team form. Editing one never changes the other.
+          </p>
+        </div>
       </div>
 
       {message ? (
@@ -101,9 +119,53 @@ export function WorkerFormClient({
         </p>
       ) : null}
 
+      {/* ---------- Two panes, one at a time on a phone ----------
+            Stacked, this is eight qualities followed by the whole supervisor's
+            sheet — one long scroll where the second half is a preview of the
+            first. Somebody editing quality six has to scroll past everything
+            twice to see the effect.
+
+            Tabs rather than hiding the preview: it is the point of the screen,
+            and P31-1 settled the same question for the staff builder. Above
+            `lg` both panes show and the switcher is gone, so nothing changes
+            for a laptop. */}
+      <div role="tablist" aria-label="Worker form panes" className="grid grid-cols-2 gap-1 rounded-card bg-surface-mute p-1 lg:hidden">
+        {(
+          [
+            { value: "qualities" as const, label: "Qualities", hint: `${active.length} on the form` },
+            { value: "preview" as const, label: "Preview", hint: "What the supervisor sees" },
+          ]
+        ).map((tab) => {
+          const isOn = pane === tab.value;
+          return (
+            <button
+              key={tab.value}
+              type="button"
+              role="tab"
+              aria-selected={isOn}
+              onClick={() => setPane(tab.value)}
+              className={cn(
+                "flex min-h-11 flex-col items-center justify-center rounded-control px-2 py-1.5 transition-colors",
+                isOn ? "bg-surface shadow-dashboard" : "hover:bg-surface/60",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-body-sm font-semibold",
+                  isOn ? "text-ink" : "text-ink-muted",
+                )}
+              >
+                {tab.label}
+              </span>
+              <span className="text-[11px] text-ink-muted">{tab.hint}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* ---------- The qualities ---------- */}
-        <section className="card-surface p-5">
+        <section className={cn("card-surface p-5", pane === "preview" && "hidden lg:block")}>
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-display-sm text-ink">Qualities</h2>
@@ -118,6 +180,7 @@ export function WorkerFormClient({
               onClick={() => {
                 setEditing(null);
                 setAdding(true);
+                setPane("qualities");
               }}
             >
               <Plus className="size-4" aria-hidden />
@@ -151,10 +214,26 @@ export function WorkerFormClient({
                     {q.helpText ? (
                       <p className="text-body-sm text-ink-muted">{q.helpText}</p>
                     ) : null}
-                    <p className="type-label mt-1 text-ink-muted">
-                      {q.responseType === "TICK_3" ? "Three ticks" : "Yes / No"}
-                      {q.isRequired ? " · must be answered" : " · optional"}
-                    </p>
+                    {/* -- ONLY WHEN IT IS NOT THE NORM.
+                          Every row carried "THREE TICKS · MUST BE ANSWERED" in
+                          letterspaced caps — eight rows, eight lines, one fact,
+                          and it is the fact this whole form is built on. §6
+                          fixes the three cells and every quality is required,
+                          so restating it per row is the loudest repeated thing
+                          on the screen saying the least.
+
+                          A marker earns its place by being true of THIS row and
+                          not the others (P31-11's rule, applied here). So a
+                          Yes/No quality is named and an optional one is named;
+                          the eight that follow the form's own rule say nothing
+                          at all, and the sheet beside them shows the three
+                          ticks being drawn. -- */}
+                    {q.responseType !== "TICK_3" || !q.isRequired ? (
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] font-medium text-ink-muted">
+                        {q.responseType !== "TICK_3" ? <span>Yes / No</span> : null}
+                        {!q.isRequired ? <span>Optional</span> : null}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-0.5">
@@ -167,7 +246,7 @@ export function WorkerFormClient({
                             type="submit"
                             variant="ghost"
                             size="icon"
-                            className="size-8"
+                            className="size-11 lg:size-8"
                             disabled={!ids}
                             aria-label={`Move ${q.text} ${direction === -1 ? "up" : "down"}`}
                           >
@@ -188,6 +267,7 @@ export function WorkerFormClient({
                       onClick={() => {
                         setAdding(false);
                         setEditing(q);
+                        setPane("qualities");
                       }}
                     >
                       Edit
@@ -322,7 +402,7 @@ export function WorkerFormClient({
         </section>
 
         {/* ---------- Preview ---------- */}
-        <section className="card-surface p-5">
+        <section className={cn("card-surface p-5", pane === "qualities" && "hidden lg:block")}>
           <div className="flex items-center gap-2">
             <Users aria-hidden className="size-4 text-ink-muted" />
             <h2 className="text-display-sm text-ink">The supervisor&apos;s sheet</h2>

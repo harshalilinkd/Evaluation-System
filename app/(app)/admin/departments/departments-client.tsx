@@ -235,7 +235,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="ml-auto size-9 text-ink-muted hover:text-ink"
+                  className="ml-auto size-11 text-ink-muted hover:text-ink lg:size-9"
                   aria-label={`Edit ${d.name}`}
                   onClick={() => {
                     setEditing(d);
@@ -248,7 +248,7 @@ export function DepartmentsClient({ departments }: { departments: DepartmentRow[
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 text-ink-muted hover:text-critical"
+                  className="size-11 text-ink-muted hover:text-critical lg:size-9"
                   aria-label={`Delete ${d.name}`}
                   onClick={() => setDeleting(d)}
                 >

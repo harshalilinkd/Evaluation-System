@@ -169,7 +169,7 @@ export function RecycleBinTab({ cycles }: { cycles: BinnedCycleRow[] }) {
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 text-ink-muted hover:text-critical"
+              className="size-11 text-ink-muted hover:text-critical lg:size-9"
               aria-label={`Delete ${row.original.name} for good`}
               disabled={busyId === row.original.id}
               onClick={() => setPurging(row.original)}
