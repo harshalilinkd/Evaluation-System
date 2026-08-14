@@ -86,6 +86,39 @@ export function RecycleBinTab({ cycles }: { cycles: BinnedCycleRow[] }) {
         ),
       },
       {
+        /* -- WHO, beside how many.
+              Nine rows reading "Increment round · August 2026 · 3 people" are
+              indistinguishable from one another, and restoring the wrong one
+              puts three real appraisals back in front of three real people.
+              The names are what tell them apart.
+
+              Two here and a count for the rest: the column has room for two,
+              and the row's own dialog lists every one — which is also where
+              somebody reads the whole row before deciding. -- */
+        id: "who",
+        accessorFn: (row) => row.participantNames.join(", "),
+        header: "Who",
+        size: 240,
+        cell: ({ row }) => {
+          const names = row.original.participantNames;
+          if (names.length === 0) {
+            return <span className="text-body-sm text-ink-muted">Nobody was in it</span>;
+          }
+          /* -- THE WHOLE LIST, truncated by CSS rather than by slicing it.
+                Cutting to "two and 3 more" in the cell would cut it in the row
+                DIALOG too — that dialog renders this same `cell`, and it is
+                exactly where somebody reads the full row before restoring.
+                `truncate` clips to whatever the column is; the dialog has no
+                such width, so it shows every name. The phone card shows them
+                all as well. -- */
+          return (
+            <span title={names.join(", ")} className="block truncate text-body-sm text-ink">
+              {names.join(", ")}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "deletedAt",
         header: "Deleted",
         size: 112,
@@ -291,6 +324,13 @@ function PurgeDialog({
               answered so far. Destroying the cycle would destroy those with it, which the database
               refuses.
             </p>
+            {/* -- WHOSE appraisals, named.
+                  This paragraph counted them and left HR to work out which
+                  three — on a screen holding nine cycles with the same name,
+                  the same period and the same count. -- */}
+            {cycle.participantNames.length > 0 ? (
+              <p className="text-ink-muted">{cycle.participantNames.join(", ")}</p>
+            ) : null}
             <p className="text-ink-muted">
               Being in the bin is enough: it is already out of every list and every report. If you
               want it out of the way permanently, leave it here.

@@ -61,6 +61,15 @@ export type BinnedCycleRow = {
   periodLabel: string;
   status: Enums<"cycle_status">;
   participants: number;
+  /**
+   * Who is in it, by name, sorted.
+   *
+   * A count alone does not say whether a binned cycle is the one HR meant —
+   * nine rows reading "Increment round · August 2026 · 3 people" are
+   * indistinguishable from each other, and restoring the wrong one puts three
+   * real appraisals back in front of three real people.
+   */
+  participantNames: string[];
   deletedAt: string;
   deletedByName: string | null;
   reason: string | null;
@@ -89,17 +98,43 @@ export async function listBinnedCycles(): Promise<CycleResult<BinnedCycleRow[]>>
   const ids = cycles.map((c) => c.id);
 
   const [{ data: evaluations }, { data: actors }] = await Promise.all([
-    supabase.from("evaluations").select("cycle_id").in("cycle_id", ids).is("excluded_at", null),
+    /* -- WHO, not just how many.
+          The evaluatee was already being read and thrown away: this selected
+          `cycle_id` alone and counted the rows. "3 people" tells HR nothing
+          about whether a binned cycle is the one they meant — and restoring the
+          wrong one puts three real appraisals back in front of three real
+          people. -- */
+    supabase
+      .from("evaluations")
+      .select("cycle_id, evaluatee_id")
+      .in("cycle_id", ids)
+      .is("excluded_at", null),
     supabase
       .from("profiles")
       .select("id, full_name")
       .in("id", cycles.map((c) => c.deleted_by).filter((id): id is string => Boolean(id))),
   ]);
 
+  /* One more round trip, for the participants' own names. Not folded into the
+     query above: `evaluations` has two foreign keys into `profiles`, and a
+     select string that has to disambiguate them is one typo away from silently
+     resolving the wrong one (the same reason `loadCycleParticipants` reads them
+     separately). */
+  const participantIds = [...new Set((evaluations ?? []).map((e) => e.evaluatee_id))];
+  const { data: participants } = participantIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", participantIds)
+    : { data: [] };
+  const participantName = new Map((participants ?? []).map((p) => [p.id, p.full_name] as const));
+
   const counts = new Map<string, number>();
+  const people = new Map<string, string[]>();
   for (const row of evaluations ?? []) {
     counts.set(row.cycle_id, (counts.get(row.cycle_id) ?? 0) + 1);
+    const list = people.get(row.cycle_id) ?? [];
+    list.push(participantName.get(row.evaluatee_id) ?? "Unknown");
+    people.set(row.cycle_id, list);
   }
+  for (const list of people.values()) list.sort((a, b) => a.localeCompare(b));
 
   const names = new Map((actors ?? []).map((a) => [a.id, a.full_name] as const));
 
@@ -111,6 +146,7 @@ export async function listBinnedCycles(): Promise<CycleResult<BinnedCycleRow[]>>
       periodLabel: c.period_label,
       status: c.status,
       participants: counts.get(c.id) ?? 0,
+      participantNames: people.get(c.id) ?? [],
       deletedAt: c.deleted_at as string,
       deletedByName: c.deleted_by ? (names.get(c.deleted_by) ?? null) : null,
       reason: c.delete_reason,
