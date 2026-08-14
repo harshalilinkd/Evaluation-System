@@ -515,16 +515,12 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         </span>
       </ScreenToolbar>
 
-      {/* -- WHY SOMEBODY IS NOT ON THIS LIST.
-            It is the milestones still WAITING, not the staff roster — an item
-            leaves the moment it is created or skipped, which is why the count
-            falls as HR works through it. Reported as "all employee names are
-            not showing here", and the screen said nothing either way. -- */}
-      <p className="px-4 pb-1 text-body-sm text-ink-muted lg:px-0">
-        Reviews still waiting. Somebody drops off this list once their evaluation
-        has been created or the milestone skipped — the whole staff list is under
-        Team review.
-      </p>
+      {/* -- REMOVED, at the owner's instruction.
+            It explained that an item leaves this list once its evaluation is
+            created or the milestone skipped — the answer to "all employee names
+            are not showing here". Having asked once they now know, and a
+            sentence that stays after it has done its job is one more line above
+            the work every time the screen is opened. -- */}
 
       {message ? (
         <p
