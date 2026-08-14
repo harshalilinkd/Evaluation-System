@@ -616,10 +616,17 @@
        side, so 216px is available and the name beside it needs about half.
 
        84px rather than 96px: the mark is 2.11:1, so 96px stood 45px tall
-       against a two-line name block of about 34px, and a mark that overhangs
-       the text it sits beside at both top and bottom is the thing that reads as
-       misaligned. At 84px — 40px tall with the plate's padding — the two are
-       within a few pixels and the row has a shared centre.
+       against the name block beside it, and a mark that overhangs its
+       neighbour by that much is what reads as misaligned. 84px is 40px tall
+       with the plate's padding.
+
+       THE NAME IS ONE LINE NOW — the company line under "Appraise" was the
+       mark saying its own name a second time, so it went. The block beside it
+       is about 24px rather than 34px, and the mark is the taller of the two by
+       design: the row is `items-center`, so they share a centre line and the
+       mark reads as the anchor with the product name set against it. Sizing
+       the mark DOWN to match a line of text would make the logo the smaller
+       thing in its own brand lockup.
 
        `height: auto` is load-bearing now that the mark carries padding: without
        it `p-1.5` is added to the box rather than taken out of it, and the plate

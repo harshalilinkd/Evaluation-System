@@ -45,9 +45,14 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
         light ground, where a white plate would be an invisible box drawn around
         the mark, and it is the reason this is a prop rather than a constant.
 
-        `alt` is empty because the company name is written beside it — a screen
-        reader announcing "LinkD Prints" twice is noise, not access — and
-        because a decorative image renders as NOTHING when its file is missing,
+        `alt` is STILL empty, but not for the reason it used to be. That reason
+        was "the company name is written beside it", and it is not any more —
+        so the justification had to be re-derived rather than left standing.
+
+        It holds on two others. The link is named by the visible "Appraise"
+        beside it, so the mark inside it is decorative in the accessibility
+        sense: giving it alt text would make the link announce itself twice.
+        And a decorative image renders as NOTHING when its file is missing,
         rather than as a broken-image glyph (P27 addendum).
       */}
       {/* eslint-disable-next-line @next/next/no-img-element -- a small fixed-width mark; the optimiser has nothing to add and next/image would defer the one element that should paint first. */}
@@ -64,6 +69,14 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
       {/* Faded out by CSS on collapse rather than unmounted — the transition
           has to animate a real element, and remounting the brand on every
           toggle would flicker the logo. */}
+      {/* -- THE COMPANY NAME IS THE MARK, and it was written beside it too.
+            The artwork already reads "LiNKD" — so the rail said it twice, once
+            in the logo and once in 11px caps underneath, and the app's own name
+            had to share the space with a repeat.
+
+            The mark now carries the company and this carries the product, which
+            is one thing each. It also lets "Appraise" sit on the mark's centre
+            line rather than being pushed up by a second line beneath it. -- */}
       <span className="rail-label min-w-0 overflow-hidden">
         <span
           className={`block truncate text-display-sm leading-tight ${
@@ -71,13 +84,6 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
           }`}
         >
           Appraise
-        </span>
-        <span
-          className={`type-label block truncate ${
-            onNavy ? "text-sidebar-ink-muted" : "text-ink-muted"
-          }`}
-        >
-          LinkD Prints
         </span>
       </span>
     </Link>
