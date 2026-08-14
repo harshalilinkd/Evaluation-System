@@ -988,12 +988,27 @@ export function GroupedBarChart({
   labelKey,
   series,
   height,
+  /**
+   * A COUNT axis instead of the 0–5 score axis.
+   *
+   * The default is right for what this chart was built for and wrong for
+   * anything else: a fixed `[0, 5]` domain silently CLIPS a bar of 12, and it
+   * clips it without an error — the bar simply stops at the axis end and reads
+   * as a 5. So a caller plotting anything but a score says so, and gets an
+   * auto-scaled integer axis.
+   *
+   * Opt-in rather than inferred from the data: inferring would mean a set of
+   * scores that happen to top out at 3 draws on a 0–3 axis, which is exactly
+   * the truncation P33-2 forbids on an appraisal chart.
+   */
+  counts = false,
   className,
 }: {
   data: Array<Record<string, string | number | null>>;
   labelKey: string;
   series: Array<{ key: string; label: string; color: string }>;
   height?: number;
+  counts?: boolean;
   className?: string;
 }) {
   const reduced = usePrefersReducedMotion();
@@ -1022,21 +1037,27 @@ export function GroupedBarChart({
           <CartesianGrid horizontal={false} {...GRID} />
           <XAxis
             type="number"
-            domain={[0, 5]}
-            ticks={[0, 1, 2, 3, 4, 5]}
+            domain={counts ? [0, "auto"] : [0, 5]}
+            // No fixed ticks on a count axis — Recharts picks whole numbers,
+            // and 0–5 on a chart of twelve would be six labels under a bar
+            // running past the last of them.
+            ticks={counts ? undefined : [0, 1, 2, 3, 4, 5]}
+            allowDecimals={!counts}
             tickLine={false}
             axisLine={false}
             {...AXIS}
           />
           {/* Wide enough for the longest section name the product ships —
               "Quantitative Performance (KPI)" — because a category axis that
-              clips is an axis that renames the thing it labels. */}
+              clips is an axis that renames the thing it labels. A count chart's
+              categories are short (a band, a month), so it gives the width back
+              to the bars rather than holding 168px of blank margin open. */}
           <YAxis
             type="category"
             dataKey={labelKey}
             tickLine={false}
             axisLine={false}
-            width={168}
+            width={counts ? 56 : 168}
             {...AXIS}
           />
           <ChartTooltip />

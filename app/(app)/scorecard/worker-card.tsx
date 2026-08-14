@@ -4,6 +4,8 @@ import { HardHat } from "lucide-react";
 
 import { EmptyState } from "@/components/appraise/states";
 import { DashboardCard } from "@/components/appraise/metric-widget";
+import { TickTrend } from "@/components/appraise/tick-trend";
+import { TICK_3_OPTIONS } from "@/components/appraise/tier";
 import type { WorkerScorecard } from "@/lib/worker/scorecard";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -11,13 +13,15 @@ import { cn } from "@/lib/utils";
 /* -- The three ticks, spelled as the source form spells them.
       §17 forbids improving wording that came from a source form, and §6 fixes
       the three cells — so these are read from one map rather than retyped per
-      screen. No numeral: §6.2 keeps the 5/3/1 analytics mapping off a worker's
-      own sheet, and this is the most worker-facing surface there is. -- */
-const TICK_WORD: Record<string, string> = {
-  EXCELLENT: "Excellent",
-  SATISFACTORY: "Satisfactory",
-  NEEDS_IMPROVEMENT: "Needs Improvement",
-};
+      screen. The comment said that and the map was a local transcription; it is
+      now DERIVED from §6's constant, so the claim is true and a fifth copy of
+      three frozen strings is one fewer place for one of them to drift.
+
+      No numeral: §6.2 keeps the 5/3/1 analytics mapping off a worker's own
+      sheet, and this is the most worker-facing surface there is. -- */
+const TICK_WORD: Record<string, string> = Object.fromEntries(
+  TICK_3_OPTIONS.map((t) => [t.value, t.label]),
+);
 
 /** What somebody is waiting for, in the words §8 gives an employee. */
 const STAGE_WORD: Record<string, string> = {
@@ -51,6 +55,14 @@ export function WorkerScorecardCard({
   const [latest] = card.rounds;
   if (!latest) return null;
 
+  /* -- Only the rounds that produced a tick, oldest first.
+        A round still with the supervisor has no result to plot, and plotting
+        it as a gap would read as a bad one. -- */
+  const trend = [...card.rounds]
+    .reverse()
+    .filter((r) => r.overallTick !== null)
+    .map((r) => ({ id: r.evaluationId, label: r.periodLabel, tick: r.overallTick }));
+
   return (
     <div className="space-y-4">
       <DashboardCard title={isSelf ? "Your latest appraisal" : `${name}'s latest appraisal`}>
@@ -71,6 +83,26 @@ export function WorkerScorecardCard({
           </div>
         </div>
       </DashboardCard>
+
+      {/* ---------- How the overall has moved ----------
+            The one question a list of rounds does not answer: am I improving?
+            It is the only thing on this card that is about more than a single
+            appraisal, and the whole of what the tick history can honestly say.
+
+            NEWEST FIRST is how `card.rounds` arrives (the card reads `[0]` as
+            the latest), so it is reversed here — a trend has to run forwards.
+
+            The component draws nothing below two rated rounds, so a worker in
+            their first round sees the list and no chart rather than a single
+            column pretending to be a direction. */}
+      {/* The guard is here as well as inside the component: a titled card whose
+          body renders nothing is an empty box, which reads as a chart that
+          failed rather than as a history too short to have a direction. */}
+      {trend.length >= 2 ? (
+        <DashboardCard title={isSelf ? "How your overall has moved" : "How the overall has moved"}>
+          <TickTrend points={trend} />
+        </DashboardCard>
+      ) : null}
 
       <DashboardCard title="Every appraisal">
         {/* The table scrolls, the page does not — three columns of words and a

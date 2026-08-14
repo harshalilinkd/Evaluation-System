@@ -74,10 +74,16 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
         appraisal numbers, so the exact figures are always one press away.
         `ChartFigure` owns that toggle now; nothing here holds it. -- */
 
-  /* -- Which cycle the detail below is about.
-        "" is every cycle. The picker is the thing that turns this from a page
-        about a person into a page about one appraisal, which is what somebody
-        preparing for a conversation actually needs. -- */
+  /* -- Which cycles the HISTORY TABLE lists. "" is all of them.
+        The comment here claimed the picker "turns this from a page about a
+        person into a page about one appraisal". It does not, and it cannot:
+        every chart above the table is built from `card.questions`, which the
+        server returns for the LATEST rated cycle only. Filtering the page to an
+        older one would empty the section profile, the rating mix and the gaps
+        while leaving their headings — and filtering the trend to one cycle
+        would draw a trend through a single point, which is the thing P33-8
+        removed. A comment describing an ambition rather than the behaviour is
+        how the next person builds against it. It scopes the table it sits in. -- */
   const [cycleFilter, setCycleFilter] = React.useState<string>("");
   const visibleHistory = cycleFilter
     ? card.history.filter((h) => String(h.evaluation_id) === cycleFilter)
@@ -221,6 +227,58 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
         lead: h.lead_overall,
         final: h.final_overall,
       })),
+    [ratedHistory],
+  );
+
+  /* -- HOW THE TWO SIDES SPENT THEIR SCORES.
+        The donut above shows the SETTLED answer as one series, because a ring
+        can only carry one honestly. The question it cannot answer is the one
+        somebody actually asks in a review: not "what did we land on" but "how
+        differently did we mark". Nine 5s against two 5s is a sentence a person
+        understands immediately, and no average on this page states it — a self
+        of 4.20 against a lead of 3.90 could be a small difference everywhere
+        or a large one in three places, and those are opposite findings.
+
+        Every band is kept, including the empty ones, so the axis is the SCALE
+        rather than the bands that happen to be occupied. A missing 0-1 is a
+        fact about this review, and dropping it would shift every bar left and
+        quietly redraw the axis between two people's cards. -- */
+  const bandComparison = React.useMemo(() => {
+    const rows = RATING_BANDS.map((band) => ({ band, you: 0, lead: 0 }));
+    const at = (v: number) => rows[Math.min(Math.floor(v), RATING_BANDS.length - 1)]!;
+    for (const q of card.questions) {
+      if (q.self !== null) at(q.self).you += 1;
+      if (q.lead !== null) at(q.lead).lead += 1;
+    }
+    return rows;
+  }, [card.questions]);
+
+  const bandComparisonRated = bandComparison.some((r) => r.you > 0 && r.lead > 0);
+
+  /* -- WHETHER THE TWO SIDES ARE CONVERGING.
+        `sectionGaps` answers "where do we differ THIS time". Across cycles the
+        more useful question is whether the difference is closing — somebody
+        whose gap has run +1.2, +0.7, +0.2 is learning to read their own work,
+        and that is a better thing to say in a review than any single average.
+
+        CHRONOLOGICAL, never sorted by size: this is a time series and ranking
+        it would destroy the only axis that carries the finding.
+
+        Both overalls or nothing. A cycle where one side never submitted has no
+        difference to draw, and drawing one against a blank would invent a
+        disagreement out of a layer that does not exist (§11: missing is not
+        zero). -- */
+  const gapTrend = React.useMemo(
+    () =>
+      ratedHistory
+        .filter((h) => h.self_overall !== null && h.lead_overall !== null)
+        .map((h) => ({
+          section: String(h.evaluation_id),
+          label: h.period_label,
+          self: h.self_overall,
+          lead: h.lead_overall,
+          delta: Math.round((Number(h.lead_overall) - Number(h.self_overall)) * 100) / 100,
+        })),
     [ratedHistory],
   );
 
@@ -742,6 +800,80 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 <p className="mt-4 text-body-sm text-ink-muted">
                   A difference is not a mistake — it is the part of the review worth talking
                   about.
+                </p>
+              </ChartFigure>
+            </DashboardCard>
+          ) : null}
+
+          {/* ---------- How each side spent its scores ----------
+              The distribution behind the averages. Two series, so grouped and
+              never stacked: seven questions you marked 4 and three your lead
+              marked 4 is not ten of anything.
+
+              The tier hues, because the two series ARE the layers — the one
+              documented exception to keeping them out of a chart (UI2-12), and
+              the reason the legend beside it cannot disagree with the marks.
+
+              §5 twice over: guarded on `showLead`, and the lead counts come
+              from `q.lead`, which the server nulls on your own card. */}
+          {card.showLead && bandComparisonRated ? (
+            <DashboardCard title="How each of you marked">
+              <ChartFigure
+                caption="How many questions each side placed in each band"
+                rows={bandComparison}
+                columns={[
+                  { header: "Band", cell: (b) => b.band },
+                  { header: "You", cell: (b) => String(b.you), align: "right" },
+                  { header: "Manager", cell: (b) => String(b.lead), align: "right" },
+                  {
+                    header: "Difference",
+                    cell: (b) => (b.you === b.lead ? "—" : signed(b.you - b.lead)),
+                    align: "right",
+                  },
+                ]}
+              >
+                <GroupedBarChart
+                  data={bandComparison}
+                  labelKey="band"
+                  counts
+                  series={[
+                    { key: "you", label: "You", color: TIER_CHART_COLORS.self },
+                    { key: "lead", label: "Your lead", color: TIER_CHART_COLORS.lead },
+                  ]}
+                />
+                <p className="mt-4 text-body-sm text-ink-muted">
+                  Two averages a fifth of a point apart can come from very different
+                  reviews. This is the shape behind them.
+                </p>
+              </ChartFigure>
+            </DashboardCard>
+          ) : null}
+
+          {/* ---------- Whether the difference is closing ----------
+              The only panel on this page that is about more than one appraisal
+              and more than one number. It needs two cycles both sides rated —
+              a single point is not a direction, and calling one a trend is the
+              thing P33-8 removed from the chart above. */}
+          {card.showLead && gapTrend.length >= 2 ? (
+            <DashboardCard title="Are you and your lead converging?">
+              <ChartFigure
+                caption="The difference between your lead's overall and your own, cycle by cycle"
+                rows={gapTrend}
+                columns={[
+                  { header: "Cycle", cell: (g) => g.label },
+                  { header: "You", cell: (g) => formatScore(g.self), align: "right" },
+                  { header: "Manager", cell: (g) => formatScore(g.lead), align: "right" },
+                  { header: "Difference", cell: (g) => signed(g.delta), align: "right" },
+                ]}
+              >
+                {/* The SAME diverging component the section gaps use. One
+                    implementation, so a reader who has learnt "pink right, cyan
+                    left" upstairs does not have to learn it twice — and the two
+                    cannot drift into disagreeing about which side is which. */}
+                <DivergingGapChart rows={gapTrend} />
+                <p className="mt-4 text-body-sm text-ink-muted">
+                  Oldest first. A difference that is shrinking usually means the two of you
+                  are reading the same work the same way.
                 </p>
               </ChartFigure>
             </DashboardCard>
