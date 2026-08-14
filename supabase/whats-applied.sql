@@ -123,6 +123,8 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it HR cannot CORRECT a joining salary — 0069 refuses to overwrite one, so a figure typed wrong at import stays wrong.'),
   ('0076_evaluation_schedule', 'table', 'evaluation_schedule',
      'Without it the review schedule is not a setting: evaluations are computed from the old fixed 1-and-6-months-from-joining rule, and Settings > Evaluation periods cannot save.'),
+  ('0080_undo_0079_exception_splice', 'milestone_returns', 'create_milestone_evaluation reaches its RETURN',
+     'Without it 0079 part 3 leaves an exception clause between the INSERT and the return, which ends the function''s block — so the snapshot, both response rows, the tokens and the RETURN all fall outside the normal path and Create and send fails with "control reached end of function without RETURN".'),
   ('0079_rolling_cycle_per_milestone', 'cycle_per_milestone', 'a rolling cycle per milestone, not one per year',
      'Without it a person can hold only ONE milestone evaluation per financial year — the yearly cycle plus unique (cycle_id, evaluatee_id) — so their second review of the year fails with "duplicate key value violates constraint evaluations_cycle_evaluatee_unique". Under the company schedule everybody has two.'),
   ('0078_due_items_second_constraint', 'one_milestone_check', 'no constraint still enumerates MONTH_1',
@@ -356,6 +358,16 @@ select
     -- The ARGUMENT LIST is what 0079 wrote: it drops the one-argument form and
     -- creates (date, text). Detecting the milestone words in the body would go
     -- false the moment somebody rewords a cycle name.
+    -- The tail after the INSERT must hold a RETURN and no exception clause.
+    -- Anchored to control flow rather than to text, because "it compiled" was
+    -- exactly what let 0079 part 3 through.
+    when 'milestone_returns' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'create_milestone_evaluation'
+         and substr(pg_get_functiondef(p.oid),
+                    position('returning id into v_eval' in pg_get_functiondef(p.oid))) ~* '\mreturn\M'
+         and substr(pg_get_functiondef(p.oid),
+                    position('returning id into v_eval' in pg_get_functiondef(p.oid))) !~* '\mexception\s+when\M')
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'ensure_rolling_cycle'
