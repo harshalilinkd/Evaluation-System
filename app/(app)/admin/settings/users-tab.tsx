@@ -664,7 +664,7 @@ function AddPersonDialog({
                 <Input id="full_name" name="full_name" required className="min-h-11" />
               </Field>
 
-              <Field id="email" label="Work email" error={createState.fieldErrors?.email}>
+              <Field id="email" label="Email Address" error={createState.fieldErrors?.email}>
                 <Input
                   id="email"
                   name="email"
@@ -1088,7 +1088,7 @@ function EditPersonDialog({
 
               <Field
                 id="e_email"
-                label="Work email"
+                label="Email Address"
                 error={state.fieldErrors?.email}
                 hint="What they sign in with, and where their mail goes. Changing it takes effect at once."
               >
