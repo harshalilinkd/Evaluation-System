@@ -27,6 +27,26 @@ export type CycleListRow = {
    */
   cycleType: "EVALUATION" | "INCREMENT";
   participants: number;
+  /**
+   * How many DISTINCT managers are rating in this cycle.
+   *
+   * "3 people" answered half the question. A cycle is two populations of work,
+   * not one: three employees filling their own form, and however many managers
+   * are rating them — which is rarely three, because one HOD usually rates
+   * several. Somebody deciding whether to launch, or working out who to chase,
+   * needs both numbers.
+   *
+   * DISTINCT, and counted from `lead_id` on the evaluations themselves rather
+   * than from `profiles.reports_to`. The evaluation carries the manager it was
+   * launched with (P3-6) precisely so a reorganisation mid-cycle does not
+   * silently reassign an in-flight review — so this counts who is actually
+   * rating, not who would be if the cycle launched today.
+   *
+   * A participant with no manager contributes nothing to it. That is the state
+   * a launch refuses, and counting a null as a manager would report a cycle as
+   * having more raters than it has.
+   */
+  managers: number;
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
   /**
@@ -172,7 +192,10 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
 
   const { data: evaluations, error: evaluationError } = await supabase
     .from("evaluations")
-    .select("id, cycle_id, status, self_submitted_at, lead_submitted_at")
+    // `lead_id` for the distinct-manager count. Written out in full rather than
+    // concatenated: supabase-js infers the row type from this string at compile
+    // time and degrades everything it cannot statically parse (P3-11).
+    .select("id, cycle_id, lead_id, status, self_submitted_at, lead_submitted_at")
     .is("excluded_at", null);
 
   if (evaluationError) {
@@ -181,6 +204,8 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
 
   const tally = new Map<string, { participants: number; self: number; lead: number; final: number }>();
   const cycleOfEvaluation = new Map<string, string>();
+  /* A Set per cycle, so one HOD rating six people is counted once. */
+  const managers = new Map<string, Set<string>>();
   for (const row of evaluations ?? []) {
     const entry = tally.get(row.cycle_id) ?? { participants: 0, self: 0, lead: 0, final: 0 };
     entry.participants += 1;
@@ -189,6 +214,14 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     if (reachedFinal(row)) entry.final += 1;
     tally.set(row.cycle_id, entry);
     cycleOfEvaluation.set(row.id, row.cycle_id);
+
+    // A participant with no manager adds nobody. That state blocks a launch,
+    // and counting the null would report more raters than the cycle has.
+    if (row.lead_id) {
+      const set = managers.get(row.cycle_id) ?? new Set<string>();
+      set.add(row.lead_id);
+      managers.set(row.cycle_id, set);
+    }
   }
 
   /* -- Who has been sent a link.
@@ -238,6 +271,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         // silently claiming to be an increment cycle.
         cycleType: c.cycle_type === "INCREMENT" ? "INCREMENT" : "EVALUATION",
         participants: counts.participants,
+        managers: managers.get(c.id)?.size ?? 0,
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
         linksSent: sentPerCycle.get(c.id)?.size ?? 0,
       };

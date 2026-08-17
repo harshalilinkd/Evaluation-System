@@ -140,13 +140,43 @@ export function CyclesClient({
         size: 118,
         cell: ({ row }) => <CycleTypeChip type={row.original.cycleType} />,
       },
+      /* -- TWO POPULATIONS, NOT ONE.
+            "People 3" answered half the question. A cycle is three employees
+            filling their own form AND however many managers are rating them —
+            rarely the same number, because one HOD usually rates several. The
+            row detail was reported as not saying how many of each.
+
+            Two columns rather than one reading "3 · 2": the detail dialog
+            renders every column as its own labelled row, so splitting them is
+            what makes the dialog say "Employees 3 / Managers 2" instead of
+            leaving the reader to work out which number is which. -- */
       {
         accessorKey: "participants",
-        header: "People",
-        size: 84,
+        header: "Employees",
+        size: 96,
         meta: { align: "right" },
         cell: ({ row }) => (
           <span className="tabular text-body-sm text-ink">{row.original.participants}</span>
+        ),
+      },
+      {
+        accessorKey: "managers",
+        header: "Managers",
+        size: 96,
+        meta: { align: "right" },
+        cell: ({ row }) => (
+          <span
+            className="tabular text-body-sm text-ink"
+            /* Distinct people, not one per employee — worth saying once, where
+               somebody who expects the two counts to match will look. */
+            title={
+              row.original.managers === 1
+                ? "One manager is rating everybody in this cycle."
+                : `${row.original.managers} different managers are rating in this cycle.`
+            }
+          >
+            {row.original.managers}
+          </span>
         ),
       },
       /*
@@ -401,7 +431,7 @@ export function CyclesClient({
             </Button>
           </>
         )}
-        minWidth={1540}
+        minWidth={1636}
         empty={
           // The empty state speaks for the TAB, not the whole list. "Nothing
           // matches that" on an untouched Increment tab reads as a broken
