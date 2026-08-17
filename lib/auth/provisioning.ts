@@ -892,7 +892,7 @@ export async function updatePerson(
         return {
           error: "Check the highlighted fields.",
           fieldErrors: {
-            new_password: parsed.error.issues[0]?.message ?? "Use at least 10 characters",
+            new_password: parsed.error.issues[0]?.message ?? "Use at least 6 characters",
           },
         };
       }

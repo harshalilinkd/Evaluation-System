@@ -20,9 +20,31 @@ export const emailSchema = z
  * 72 is bcrypt's ceiling — anything beyond it is silently ignored, and a
  * password that quietly loses its tail is worse than one that was refused.
  */
+/* -- SIX, NOT TEN, AT THE OWNER'S INSTRUCTION.
+      They want everybody started on `firstname123` and changed by the person
+      later if they want to. Ten characters refused most of those, so the rule
+      was the thing stopping the plan.
+
+      The cost is worth stating once and then not repeating: a predictable
+      password is guessable by anybody who knows the person's name, and this
+      system holds appraisal ratings and salary figures. What limits the damage
+      is that the two most sensitive things are confined by DATABASE policy
+      rather than by the login — §5 keeps salary to HR and the MD and blindness
+      keeps each rating layer from the other side, so a guessed employee account
+      reads that person's own form and nothing else. The exposure is real and
+      bounded, and it is the owner's call to make.
+
+      SIX IS THE FLOOR AND NOT A PREFERENCE. Supabase Auth enforces a minimum of
+      its own — six by default — and refuses anything shorter with its own
+      message, which would arrive as a provider error rather than a field error.
+      Matching it means the form always answers first, in its own words.
+      `firstname123` clears it for any name of three letters or more.
+
+      72 is bcrypt's ceiling — anything beyond it is silently ignored, and a
+      password that quietly loses its tail is worse than one that was refused. -- */
 export const newPasswordSchema = z
   .string()
-  .min(10, "Use at least 10 characters")
+  .min(6, "Use at least 6 characters")
   .max(72, "Use 72 characters or fewer");
 
 export const signInSchema = z.object({

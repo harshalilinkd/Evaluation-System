@@ -688,7 +688,7 @@ function AddPersonDialog({
               <Field
                 id="password"
                 label="Password"
-                hint="At least 10 characters. Shown in plain text so you can read it out."
+                hint="At least 6 characters. Shown in plain text so you can read it out — firstname123 is fine, and they can change it themselves from their profile."
                 error={createState.fieldErrors?.password}
               >
                 <Input
@@ -1125,7 +1125,7 @@ function EditPersonDialog({
                 label="Set a new password"
                 optional
                 error={state.fieldErrors?.new_password}
-                hint="Leave blank to keep their current one. At least 10 characters, shown so you can read it out."
+                hint="Leave blank to keep their current one. At least 6 characters, shown so you can read it out."
               >
                 <Input
                   id="e_new_password"

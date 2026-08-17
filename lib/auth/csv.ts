@@ -113,7 +113,7 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         Production Team row may leave it blank. That rule lives in the row
         validation, because it depends on the track. -- */
   { key: "email", header: "email", hint: "blank for Production Team — they never sign in" },
-  { key: "password", header: "password", hint: "10+ characters — blank is fine for Production Team" },
+  { key: "password", header: "password", hint: "6+ characters — blank is fine for Production Team" },
   /* -- §7: which MODULE somebody is in. Independent of department, because both
         modules have people in the same teams. Blank means Backend Team, so a
         file written before this column existed still imports as it did. -- */

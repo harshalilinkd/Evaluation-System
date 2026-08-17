@@ -2,6 +2,8 @@
 
 /** Topbar: title, cycle selector, user menu, mobile nav trigger. DESIGN.md §7. */
 
+import Link from "next/link";
+
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, Search } from "lucide-react";
@@ -185,6 +187,17 @@ export function Topbar({
               ) : null}
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-rule" />
+            {/* -- THE WAY TO YOUR OWN ACCOUNT, which had none.
+                  This menu showed a name, an address and Sign out — so there
+                  was nowhere in the product to change your own password, and
+                  the only person who could was HR, on the screen where they set
+                  everybody else's. Not in the sidebar: it is an account
+                  setting, and this is where somebody looks for one. -- */}
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="w-full cursor-pointer font-sans text-body">
+                Your profile
+              </Link>
+            </DropdownMenuItem>
             <form action={onSignOut}>
               <DropdownMenuItem asChild>
                 <button type="submit" className="w-full cursor-pointer font-sans text-body">
