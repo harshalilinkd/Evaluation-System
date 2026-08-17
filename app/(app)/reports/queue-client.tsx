@@ -523,7 +523,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
                 onClick={() => setType(t)}
                 aria-pressed={type === t}
                 className={cn(
-                  "min-h-9 rounded-[6px] px-3 font-sans text-body-sm transition-colors",
+                  "min-h-9 rounded-sm px-3 font-sans text-body-sm transition-colors",
                   type === t
                     ? "bg-surface font-medium text-ink shadow-sm"
                     : "text-ink-muted hover:text-ink",

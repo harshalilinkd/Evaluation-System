@@ -315,7 +315,7 @@ export function StructurePane({
               >
                 <span
                   className={cn(
-                    "grid size-6 shrink-0 place-items-center rounded-[8px] text-[11px] font-bold transition-colors",
+                    "grid size-6 shrink-0 place-items-center rounded-control text-[11px] font-bold transition-colors",
                     isOpen
                       ? "bg-primary text-white"
                       : isDept
@@ -584,7 +584,7 @@ function Tag({ children, title }: { children: React.ReactNode; title?: string })
   return (
     <span
       title={title}
-      className="rounded-[5px] bg-surface-mute px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-rule"
+      className="rounded-sm bg-surface-mute px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-rule"
     >
       {children}
     </span>

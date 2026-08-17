@@ -67,7 +67,7 @@ export function ChartFigure<T>({
               onClick={() => setAsTable(key)}
               aria-pressed={asTable === key}
               className={cn(
-                "flex min-h-8 items-center gap-1.5 rounded-[6px] px-2.5 text-body-sm transition-colors",
+                "flex min-h-8 items-center gap-1.5 rounded-sm px-2.5 text-body-sm transition-colors",
                 asTable === key
                   ? "bg-surface text-ink shadow-sm"
                   : "text-ink-muted hover:text-ink",

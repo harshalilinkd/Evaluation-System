@@ -1286,7 +1286,7 @@ function TierLegend({
     >
       {(showLead ? (["self", "lead"] as const) : (["self"] as const)).map((tier) => (
         <li key={tier} className="flex items-center gap-1.5">
-          <span aria-hidden className={cn("size-2.5 rounded-[2px]", TIER_CLASSES[tier].dot)} />
+          <span aria-hidden className={cn("size-2.5 rounded-mark", TIER_CLASSES[tier].dot)} />
           {TIER_LABELS[tier]}
         </li>
       ))}
@@ -1295,7 +1295,7 @@ function TierLegend({
           <span
             aria-hidden
             className={cn(
-              lineFinal ? "h-0.5 w-4 rounded-pill" : "size-2.5 rounded-[2px]",
+              lineFinal ? "h-0.5 w-4 rounded-pill" : "size-2.5 rounded-mark",
               TIER_CLASSES.final.dot,
             )}
           />
@@ -1530,11 +1530,11 @@ function DivergingGapChart({
       {/* Legend — identity is never colour alone (§13.8). */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-rule pt-3 text-[11px] text-ink-muted">
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-[2px] bg-self" />
+          <span aria-hidden className="size-2.5 rounded-mark bg-self" />
           You rated higher
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-[2px] bg-lead" />
+          <span aria-hidden className="size-2.5 rounded-mark bg-lead" />
           Your lead rated higher
         </span>
       </div>

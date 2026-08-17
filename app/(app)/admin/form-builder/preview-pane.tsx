@@ -155,6 +155,12 @@ export function PreviewPane({
               floating in a wide pane. */}
           <div
             className={cn(
+              /* -- 28px is a PHONE'S corner radius, not a card's, and the 6px
+                    border is its bezel. This is the one arbitrary radius in the
+                    product that should stay arbitrary: it is drawing a device,
+                    so §4's 8/16/20 scale does not apply and putting it on that
+                    scale would stop it reading as a handset. Named here so it
+                    is a decision rather than a stray value. -- */
               phone &&
                 "overflow-hidden rounded-[28px] border-[6px] border-ink bg-canvas shadow-dashboard",
             )}
@@ -239,7 +245,7 @@ function Segmented({
             onClick={() => onChange(option.value)}
             aria-pressed={active}
             className={cn(
-              "relative flex items-center gap-1.5 rounded-[6px] px-3 py-1.5 text-body-sm font-medium transition-colors",
+              "relative flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-body-sm font-medium transition-colors",
               active ? "text-ink-invert" : "text-ink-muted hover:text-ink",
             )}
           >
@@ -247,7 +253,7 @@ function Segmented({
               <motion.span
                 layoutId={`segmented-${label}`}
                 transition={{ type: "spring", stiffness: 500, damping: 38 }}
-                className="absolute inset-0 rounded-[6px] bg-ink"
+                className="absolute inset-0 rounded-sm bg-ink"
                 aria-hidden
               />
             ) : null}

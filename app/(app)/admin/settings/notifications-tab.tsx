@@ -49,7 +49,11 @@ function StatusPill({ status }: { status: string }) {
       ? "border-critical/40 bg-critical-tint text-critical"
       : status === "QUEUED"
         ? "border-rule bg-surface-mute text-ink-muted"
-        : "border-final/40 bg-final-tint text-final";
+        /* -- Sent is a DELIVERY STATE, not a layer. It wore `final`, which
+              §13.1 reserves for "the MD said this" — so a message log read as
+              though every delivered row carried an MD decision. Green is the
+              done colour and is deliberately not a tier (UI2-2). -- */
+        : "border-success/40 bg-success-tint text-success";
 
   return (
     <span className={cn("type-label rounded-pill border px-2 py-1", tone)}>

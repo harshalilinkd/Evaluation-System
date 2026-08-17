@@ -253,7 +253,16 @@ export function DashboardClient({
           shell, which is the same shape the cycle board uses. Cards flush to
           the viewport edge look like a rendering fault; 16px of gutter reads as
           a decision. -- */
-    <div data-full-bleed className="space-y-6 px-4 py-6 lg:px-6">
+    /* -- THE RHYTHM NOW CARRIES THE HIERARCHY, and it did not.
+          Sections sat 24px apart (`space-y-6`) while three of them spaced their
+          own cards 24px apart too (`gap-6`). When the distance between groups
+          equals the distance inside one, the groups stop reading as groups —
+          which is why nine well-made panels read as a wall of cards.
+
+          32px between, 16px within. The proportion is the whole point: a card
+          is now visibly closer to its neighbours than to the next idea, so the
+          page has a spine without a single heading being added. -- */
+    <div data-full-bleed className="space-y-8 px-4 py-6 lg:px-6">
       {/* ---------- Always first: what THIS person has to do ----------
           Whatever their role, everybody has their own appraisal. A dashboard
           that opens on company statistics while the reader's own form is
@@ -633,7 +642,7 @@ function PipelineTile({
   return (
     <Link
       href={href}
-      className="card-surface group flex items-center gap-4 p-5 transition-shadow duration-hover hover:shadow-dashboard-hover"
+      className="card-surface group flex items-center gap-4 p-6 transition-shadow duration-hover hover:shadow-dashboard-hover"
     >
       <span aria-hidden className={cn("h-10 w-1 shrink-0 rounded-pill", bar)} />
       <span className="min-w-0 flex-1">
@@ -915,7 +924,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                 moves as work happens rather than only when somebody finishes
                 entirely, and a second definition on this screen would disagree
                 with the segmented bar under the cycle header. -- */}
-          <div className="card-surface flex flex-col justify-center p-5">
+          <div className="card-surface flex flex-col justify-center p-6">
             <p className="font-sans text-body-sm text-ink-muted">Cycle progress</p>
             <RadialGauge
               value={Number(progress?.percent_complete ?? 0)}
@@ -973,7 +982,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
       ) : null}
 
       {pulse ? (
-        <section className="grid items-stretch gap-6 lg:grid-cols-3">
+        <section className="grid items-stretch gap-4 lg:grid-cols-3">
           {/* ---------- Finished, and how that compares ----------
               A count on its own is a number; a count against last month is a
               direction. The comparison is what turns "9 completed" into
@@ -1301,7 +1310,7 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
             many forms are in, who is late. Neither says anything about the
             answers, which is what the exercise is for. */}
       {ratedPeople > 0 || sectionRows.length > 0 ? (
-        <section className="grid gap-6 xl:grid-cols-2">
+        <section className="grid gap-4 xl:grid-cols-2">
           {ratedPeople > 0 ? (
             <Panel
               title="The spread of scores"
@@ -1484,7 +1493,7 @@ function LeadView({ analytics }: { analytics: Analytics }) {
   const { needsAttention } = analytics;
 
   return (
-    <section className="grid items-start gap-6 lg:grid-cols-2">
+    <section className="grid items-start gap-4 lg:grid-cols-2">
       <Panel
         title="Your team"
         subtitle="Who has not been rated yet"
@@ -1526,7 +1535,7 @@ function EmployeeView({ analytics }: { analytics: Analytics }) {
   const { ownHistory } = analytics;
 
   return (
-    <section className="grid items-start gap-6 lg:grid-cols-2">
+    <section className="grid items-start gap-4 lg:grid-cols-2">
       <Panel
         title="Your appraisals"
         subtitle="Every cycle you have been through, and what each side scored"

@@ -38,6 +38,17 @@ const TONE: Record<
   /* -- Written out in full, never interpolated. Tailwind scans source
         statically, so `bg-${tone}/10` compiles to nothing (P7-1). -- */
   primary: { chip: "bg-primary/10 text-primary", bar: "bg-primary", spark: "primary" },
+  /* -- `cyan` AND `pink` ARE §13.1's TIER HUES, and they belong here.
+        I removed them as decoration-by-another-name and typecheck caught it:
+        the dashboard passes `cyan` to "Self-evaluations in" and `pink` to
+        "Manager ratings in", which are the employee's side and the manager's
+        side — precisely what the rule reserves them FOR. The colour names read
+        as decorative and the usage is not.
+
+        Recorded rather than quietly reverted, because the next reader will have
+        the same doubt: a tone called `cyan` looks like a choice about
+        appearance until you follow it to the two call sites that make it a
+        statement about who. -- */
   cyan: { chip: "bg-self-tint text-self", bar: "bg-self", spark: "cyan" },
   pink: { chip: "bg-lead-tint text-lead", bar: "bg-lead", spark: "pink" },
   green: { chip: "bg-success/10 text-success", bar: "bg-success", spark: "green" },

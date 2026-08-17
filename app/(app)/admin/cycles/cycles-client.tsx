@@ -615,9 +615,12 @@ function LinksCell({ sent, of }: { sent: number; of: number }) {
       }
       className={cn(
         "tabular inline-flex items-center gap-1.5 rounded-pill px-2 py-0.5 text-body-sm font-medium",
-        // Green means "done" here, not a tier — UI2-2 keeps it out of §13.1's
-        // reserved three for exactly this kind of use. The words carry it too.
-        all ? "bg-final-tint text-ink" : "bg-warning-tint text-ink",
+        /* -- Green means "done" here, not a tier — UI2-2 keeps it out of
+              §13.1's reserved three for exactly this kind of use, and the words
+              carry it too. THE CLASS SAID INDIGO while this comment said green:
+              `final-tint` is the MD's layer, and "all links sent" is not a
+              layer at all. The comment was right and the code was not. -- */
+        all ? "bg-success-tint text-ink" : "bg-warning-tint text-ink",
       )}
     >
       {all ? <Check className="size-3.5" aria-hidden /> : <Send className="size-3.5" aria-hidden />}
