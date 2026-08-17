@@ -10,23 +10,51 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Team review" };
 
-export default async function PeoplePage() {
+export default async function PeoplePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle?: string }>;
+}) {
   // §9: the guard is the first statement. A user without the role is
   // redirected before any markup is produced, never shown and then hidden.
   await requireRole(ADMIN_ROLES);
 
   const supabase = await createClient();
+  const { cycle: requestedCycle } = await searchParams;
 
-  /* -- The current cycle frames the whole screen. "Where does this person
-        stand" is meaningless without saying which cycle, and showing every
-        cycle at once would put three rows on screen for one person. -- */
-  const { data: cycle } = await supabase
+  /* -- ONE CYCLE FRAMES THE SCREEN, AND THE READER CHOOSES WHICH.
+        "Where does this person stand" is meaningless without saying which
+        cycle, and showing every cycle at once would put three rows on screen
+        for one person — so it stays one at a time.
+
+        WHAT WAS WRONG was not that one is shown. It is that one was shown with
+        NO WAY TO REACH THE OTHERS: this took the newest and stopped, so with an
+        Evaluation round and an Increment round both open, half the company's
+        scores were simply unreachable from here and the four counters above the
+        table described one exercise while reading as though they described the
+        company. Exactly the fault F16-1 fixed on the dashboard, on the screen
+        that never got the same treatment.
+
+        THEY ARE NOT MERGED, and that is the other half of the decision.
+        Averaging an Evaluation cycle with an Increment one produces a figure
+        that describes neither exercise, and §11 keeps a score inside the cycle
+        it was given in. So this SWITCHES rather than combines.
+
+        `deleted_at is null` because 0032's recycle bin is a timestamp and not a
+        status — a binned cycle is still ACTIVE, and being the newest it could
+        otherwise have been the one the whole screen described (F16-3). -- */
+  const { data: allCycles } = await supabase
     .from("evaluation_cycles")
     .select("id, name, period_label, status")
     .in("status", ["ACTIVE", "CLOSED"])
-    .order("starts_on", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .is("deleted_at", null)
+    .order("starts_on", { ascending: false });
+
+  const cycles = allCycles ?? [];
+  /* A `?cycle=` naming something that is not open falls back to the newest
+     rather than emptying the screen — a stale bookmark should not look like a
+     company with nobody in it. */
+  const cycle = (requestedCycle ? cycles.find((c) => c.id === requestedCycle) : null) ?? cycles[0] ?? null;
 
   const [{ data: people, error }, { data: departments }] = await Promise.all([
     supabase
@@ -97,6 +125,8 @@ export default async function PeoplePage() {
       rows={rows}
       departments={(departments ?? []).map((d) => d.name)}
       cycleLabel={cycle ? `${cycle.name} · ${cycle.period_label}` : null}
+      cycles={cycles.map((c) => ({ id: c.id, name: c.name, periodLabel: c.period_label }))}
+      cycleId={cycle?.id ?? null}
     />
   );
 }

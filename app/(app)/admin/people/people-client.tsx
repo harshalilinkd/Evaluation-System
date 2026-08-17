@@ -63,10 +63,16 @@ export function PeopleClient({
   rows,
   departments,
   cycleLabel,
+  cycles,
+  cycleId,
 }: {
   rows: PersonRow[];
   departments: string[];
   cycleLabel: string | null;
+  /** Every open or closed cycle, newest first. The switcher's options. */
+  cycles: Array<{ id: string; name: string; periodLabel: string }>;
+  /** The one the stage and score columns describe. */
+  cycleId: string | null;
 }) {
   const [search, setSearch] = React.useState("");
   const [department, setDepartment] = React.useState(ANY);
@@ -361,6 +367,50 @@ export function PeopleClient({
               ? `Everybody, both teams. Stages and scores are for ${cycleLabel}.`
               : "Everybody, both teams. Stages and scores fill in once a cycle is launched."}
           </p>
+
+          {/* -- WHICH CYCLE, when there is more than one.
+                Only rendered above one: a single chip that cannot be switched
+                away from is a control with nothing to do, and the sentence
+                above already names the cycle.
+
+                It SWITCHES rather than merges. An Evaluation round and an
+                Increment round are two different exercises, so a mean over both
+                describes neither and §11 keeps a score inside the cycle it was
+                given in. The four counters change with it, which is what keeps
+                them meaningful — "0 In progress" is then a fact about one
+                exercise rather than a mix of two.
+
+                Links, not state: the choice belongs in the URL so it survives a
+                refresh and can be sent to somebody, and the rows are a server
+                read anyway. The dashboard's own switcher, on the screen that
+                never got one. -- */}
+          {cycles.length > 1 ? (
+            <div
+              role="group"
+              aria-label="Choose a cycle"
+              className="mt-2 flex flex-wrap items-center gap-1"
+            >
+              {cycles.map((c) => {
+                const current = c.id === cycleId;
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/admin/people?cycle=${c.id}`}
+                    aria-current={current ? "true" : undefined}
+                    title={c.periodLabel}
+                    className={cn(
+                      "inline-flex min-h-11 items-center rounded-pill px-3 text-body-sm transition-colors sm:min-h-0 sm:py-1",
+                      current
+                        ? "bg-primary/10 font-medium text-primary"
+                        : "text-ink-muted hover:bg-surface-mute hover:text-ink",
+                    )}
+                  >
+                    {c.name}
+                  </Link>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Tally label={TRACK_LABELS.STAFF} value={counts.staff} />
