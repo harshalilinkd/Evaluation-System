@@ -718,7 +718,11 @@ dl.print-meta dd {
 .print-ratings th,
 .print-ratings td {
   border: 0.5pt solid #333333;
-  padding: 1.6mm 2mm;
+  /* 1.2mm, not 1.6mm. NINE ROWS, so every tenth of a millimetre here is worth
+     nearly a millimetre of page — this is the single biggest lever in getting
+     the sheet onto one side, and 1.2mm still leaves a cell you can put a pen
+     in. See the one-page note at the foot of this block. */
+  padding: 1.2mm 2mm;
   text-align: left;
   vertical-align: middle;
 }
@@ -761,7 +765,9 @@ dl.print-meta dd {
 /* A written comment, given room to be one. A single ruled line invites two
    words; a box invites a sentence. */
 .print-comment {
-  min-height: 14mm;
+  /* A hand-fillable box, so it needs to be writable rather than large. 10mm is
+     two lines of handwriting, which is what a supervisor's note actually is. */
+  min-height: 10mm;
   margin-top: 1.5mm;
   padding: 2mm;
   border: 0.5pt solid #999999;
@@ -864,7 +870,7 @@ dl.print-meta dd {
   letter-spacing: 0.1em;
   border-bottom: 0.75pt solid #000;
   padding-bottom: 1.2mm;
-  margin: 6mm 0 2.5mm;
+  margin: 4mm 0 2.5mm;
 }
 
 /*
@@ -874,7 +880,11 @@ dl.print-meta dd {
 .print-block.print-signatures {
   display: flex;
   gap: 8mm;
-  margin-top: 10mm;
+  /* -- THIS BLOCK IS WHAT BROKE TO A SECOND PAGE, and it carries
+        `break-inside: avoid` — so it does not spill a little, it moves whole.
+        A sheet whose signatures sit alone on page 2 is not a one-page form, and
+        the second sheet carried nothing but four ruled lines. -- */
+  margin-top: 6mm;
   padding-top: 5mm;
   border-top: 0.75pt solid #000;
 }
@@ -898,7 +908,13 @@ dl.print-meta dd {
 }
 
 .print-sig--stamp .print-sig-line {
-  height: 22mm;
+  /* The tallest cell in the row, so it sets the block's height — which makes it
+     the one trim that costs the document something real. It went to 16mm in the
+     first pass at fitting one page, and that was over-trimming: the budget only
+     needed about a third of what those trims reclaimed. 20mm, so the marked
+     area still reads as somewhere a round stamp goes. The WIDTH, which is what
+     actually makes room for a ~40mm mark, is unchanged. */
+  height: 20mm;
   border: 0.4pt dashed #9a9a9a;
 }
 
@@ -909,7 +925,7 @@ dl.print-meta dd {
 .print-sig-line {
   display: block;
   position: relative;
-  height: 14mm;
+  height: 11mm;
   border-bottom: 0.5pt solid #000;
 }
 
@@ -1024,7 +1040,7 @@ dl.print-meta dd {
   beside them in the same place every time.
 */
 .print-fields {
-  margin-top: 5mm;
+  margin-top: 3.5mm;
   border-top: 0.4pt solid #d0d0d0;
 }
 
@@ -1033,7 +1049,7 @@ dl.print-meta dd {
   grid-template-columns: 38mm 1fr;
   align-items: baseline;
   gap: 0 3mm;
-  padding: 2mm 0;
+  padding: 1.5mm 0;
   border-bottom: 0.4pt solid #d0d0d0;
   font-size: 9.5pt;
 }
@@ -1063,7 +1079,7 @@ dl.print-meta dd {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0 8mm;
-  margin-top: 4mm;
+  margin-top: 3mm;
 }
 
 .print-salary-cell {
@@ -1114,5 +1130,72 @@ dl.print-meta dd {
 .print-sheet .print-sig--stamp .print-sig-line {
   border: none;
   border-bottom: 0.5pt solid #000;
-  height: 14mm;
+  height: 11mm;
 }
+
+/* ==========================================================================
+   THE SIGNATURES SIT AT THE FOOT OF THE PAGE
+   ==========================================================================
+   Fitting the sheet onto one side left the signature panel floating in the
+   middle with ~40mm of blank paper under it, which reads as a document that
+   stopped early rather than one that ends where it should.
+
+   A FLEX COLUMN WITH AN AUTO MARGIN, not `position: fixed`. A fixed footer
+   repeats on EVERY page, so the moment a supervisor's comment pushed the sheet
+   to two sides there would be a second set of signature lines on the overflow —
+   four ruled lines inviting a second signature on a document that has one.
+
+   `min-height`, never `height`: when the content is short the free space
+   collects in the auto margin and the panel drops to the foot; when it is long
+   the container simply grows, the auto margin resolves to nothing, and the
+   panel follows the content as it always did. The `padding-top` is what keeps a
+   gap in that second case.
+
+   257mm rather than the full 261mm (A4 297 − 18 − 18). The last few
+   millimetres are not worth having: if a browser rounds the page box a hair
+   differently the container overflows and forces a BLANK second page, which is
+   a worse fault than the gap this fixes. Four millimetres of slack buys
+   certainty and costs nothing anybody can see.
+   ========================================================================== */
+
+.print-sheet--worker {
+  display: flex;
+  flex-direction: column;
+}
+
+.print-sheet--worker .print-block.print-signatures {
+  margin-top: auto;
+}
+
+/* -- THE FLOOR IS PRINT-ONLY, and putting it on the shared rule was a real
+      mistake worth naming: `@media screen` gives `.print-sheet` a 210×297mm
+      paper card with 18mm of padding, and `min-height: 257mm` on the same
+      single-class selector sat LATER in the file — so it won, and the preview
+      card shrank from A4 to 257mm. The printed page was right and the thing
+      everybody actually looks at was not.
+
+      On screen the card's own 297mm and its padding already give a 261mm
+      content box, so the flex column above is all that is needed there — the
+      auto margin drops the panel to the foot of a correctly-sized sheet. Only
+      the printed page, which has no such card, needs a height to push against.
+      -- */
+@media print {
+  .print-sheet--worker {
+    min-height: 257mm;
+  }
+}
+
+/* ==========================================================================
+   ONE PAGE, and what still costs it one
+   ==========================================================================
+   The trims above reclaim roughly 28mm, which is what it took to bring the
+   signature panel back onto the first sheet. Every one of them is scoped to a
+   class only the worker sheet uses, so the staff pack and the report are
+   untouched.
+
+   WHAT CAN STILL PUSH IT OVER, and deliberately: `.print-comment` is a
+   MIN-height. A supervisor who writes four lines grows the box and the sheet
+   grows with it. Clipping their words to protect a page count would be the
+   wrong trade on a document somebody signs — the form is designed to fit, not
+   forced to.
+   ========================================================================== */

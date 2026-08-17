@@ -27,7 +27,14 @@ const TICK_HEAD: Record<string, string> = {
 export function WorkerSheet({ review, index }: { review: WorkerReview; index?: number }) {
   return (
     <section
-      className={index !== undefined && index > 0 ? "print-sheet print-page-break" : "print-sheet"}
+      /* `print-sheet--worker` is what lets the signature panel sit at the foot
+         of the page. `.print-sheet` is shared by all four sheets, and only this
+         one was asked for — see print.css. */
+      className={
+        index !== undefined && index > 0
+          ? "print-sheet print-sheet--worker print-page-break"
+          : "print-sheet print-sheet--worker"
+      }
     >
       {/* -- CENTRED, at the owner's instruction, and the same treatment the
             report sheet already had (FIX-37). Three columns — mark left, round
