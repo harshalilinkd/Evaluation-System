@@ -252,7 +252,7 @@ export function selfEvaluationInvite(v: {
       - The deadline on its own labelled line rather than inside a sentence.
     */
     body:
-      `*Your performance evaluation is open*\n\n` +
+      `📋 *Your performance evaluation is open*\n\n` +
       `Hello ${v.name},\n\n` +
       `Your evaluation for ${v.period} is now open. Please fill in your self-assessment — it takes about ten minutes.\n\n` +
       `Due by: ${v.dueDate}\n\n` +
@@ -260,7 +260,7 @@ export function selfEvaluationInvite(v: {
       `This link is personal to you. Please do not forward it.\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "Your performance evaluation is open",
+      heading: "📋 Your performance evaluation is open",
       bodyHtml:
         p(`Dear ${v.name},`) +
         p("Your self-evaluation is now open. It takes about ten minutes, and your answers are read by HR and your head of department.") +
@@ -282,15 +282,15 @@ export function selfEvaluationReminder(v: {
   return {
     subject: `${daysLeft} to complete your evaluation for ${v.period}`,
     body:
-      `*Reminder: your evaluation is still open*\n\n` +
+      `⏳ *A reminder — your evaluation is still open*\n\n` +
       `Hello ${v.name},\n\n` +
       `Your evaluation for ${v.period} has not been submitted yet — ${daysLeft}.\n\n` +
       `Due by: ${v.dueDate}\n\n` +
-      `Open your form:\n${v.link}\n\n` +
+      `Pick up where you left off:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "A reminder about your evaluation",
+      heading: "⏳ A reminder about your evaluation",
       bodyHtml:
         p(`Dear ${v.name},`) +
         p("Your self-evaluation is still open. We would be grateful if you could complete it before the date below.") +
@@ -317,13 +317,13 @@ export function selfEvaluationOverdue(v: {
   return {
     subject: `Your evaluation for ${v.period} was due on ${v.dueDate}`,
     body:
-      `*Your evaluation is past its date*\n\n` +
+      `⚠️ *Your evaluation is past its date*\n\n` +
       `Hello ${v.name},\n\n` +
       `Your self-evaluation for ${v.period} was due on ${v.dueDate} and has not been submitted.\n\n` +
       `Please complete it as soon as you can:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "Your evaluation is now overdue",
+      heading: "⚠️ Your evaluation is now overdue",
       bodyHtml:
         p(`Dear ${v.name},`) +
         p("Your self-evaluation has passed its date and is still open. Please complete it at your earliest convenience — it remains open and nothing has been lost.") +
@@ -362,16 +362,16 @@ export function leadReviewInvite(v: {
   return {
     subject: `Your rating for ${v.employeeName} is open`,
     body:
-      `*You have a rating to complete*\n\n` +
+      `⭐ *You have a rating to complete*\n\n` +
       `Hello ${v.leadName},\n\n` +
       `The performance evaluation for ${v.employeeName} (${v.department}) is open for ${v.period}. ` +
       `You and they rate the same form at the same time, and neither of you sees the other's answers.\n\n` +
       `Due by: ${v.dueDate}\n\n` +
-      `Open your form:\n${v.link}\n\n` +
+      `Open your team's rating form:\n${v.link}\n\n` +
       `This link is personal to you. Please do not forward it.\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "A review is open for you",
+      heading: "⭐ A review is open for you",
       bodyHtml:
         p(`Dear ${v.leadName},`) +
         p("A performance review is now open for one of your team. Their own answers are not shown to you, and yours are not shown to them.") +
@@ -397,12 +397,13 @@ export function mdReviewPending(v: {
   return {
     subject: `${v.employeeName}'s evaluation is ready for management review`,
     body:
-      `${v.employeeName}'s evaluation for ${v.period} has been reviewed by HR ` +
-      `and is ready for your approval by ${v.dueDate}. ` +
-      `Open it here: ${v.link} ` +
+      `🖊️ *A report is ready for your approval*\n\n` +
+      `${v.employeeName}'s evaluation for ${v.period} has been reviewed by HR.\n\n` +
+      `Please approve by: ${v.dueDate}\n\n` +
+      `Open the report:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "A review is ready for you",
+      heading: "🖊️ A review is ready for your approval",
       bodyHtml:
         p("A performance review has been completed and is ready for your attention.") +
         details([
@@ -448,9 +449,13 @@ export function reportReady(v: {
 
   return {
     subject: `${v.employeeName}'s report is ready for your review`,
-    body: `${opening} Open it here: ${v.link} ` + SIGN_OFF,
+    body:
+      `📄 *A combined report is ready*\n\n` +
+      `${opening}\n\n` +
+      `Open the report:\n${v.link}\n\n` +
+      SIGN_OFF,
     html: shell({
-      heading: "A combined report is ready",
+      heading: "📄 A combined report is ready",
       bodyHtml:
         p(opening) +
         details([["Employee", v.employeeName], ["Period", v.period]]) +
@@ -503,14 +508,14 @@ export function formReturned(v: {
   return {
     subject,
     body:
-      `*${subject}*\n\n` +
+      `↩️ *${subject}*\n\n` +
       `Hello ${v.name},\n\n` +
       `${opening}\n\n` +
       `What was asked for:\n"${v.reason}"\n\n` +
       `Your answers are still there — open your form, make the changes and submit it again:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: subject,
+      heading: `↩️ ${subject}`,
       bodyHtml:
         p(`Dear ${v.name},`) +
         p(`${opening} The reason given was:`) +
@@ -550,11 +555,12 @@ export function evaluationFinalised(v: {
   return {
     subject: `${v.employeeName}'s evaluation has been finalised`,
     body:
-      `${v.employeeName}'s evaluation for ${v.period} has been finalised by management ` +
-      `and is now on record. Open it here: ${v.link} ` +
+      `✅ *An evaluation has been finalised*\n\n` +
+      `${v.employeeName}'s evaluation for ${v.period} has been finalised by management and is now on record.\n\n` +
+      `See the record:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "An evaluation has been finalised",
+      heading: "✅ An evaluation has been finalised",
       bodyHtml:
         p("An evaluation has been finalised by management and is now on record.") +
         details([
@@ -612,7 +618,7 @@ export function evaluationClosed(v: {
     subject: `Your evaluation for ${v.period} is complete`,
     body: `Hello ${v.name}, ${lines.join(" ")} ${closing} ${SIGN_OFF}`,
     html: shell({
-      heading: "Your evaluation is complete",
+      heading: "🏁 Your evaluation is complete",
       bodyHtml:
         lines.map((line, i) => p(i === 0 ? capitalise(line) : line)).join("") +
         (showsScore ? "" : p("Your manager will discuss it with you.")),
@@ -657,13 +663,13 @@ export function leadReviewReminder(v: {
   return {
     subject: `Your rating for ${v.employeeName} is due in ${v.days} day${v.days === 1 ? "" : "s"}`,
     body:
-      `*Reminder: a rating is due*\n\n` +
+      `🕒 *A reminder — a rating is waiting*\n\n` +
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) is due on ${v.dueDate}.\n\n` +
-      `Open your form:\n${v.link}\n\n` +
+      `Pick up where you left off:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "A reminder about your review",
+      heading: "🕒 A reminder about your review",
       bodyHtml:
         p(`Dear ${v.leadName},`) +
         p("One of your team is still waiting on your rating. We would be grateful if you could complete it before the date below.") +
@@ -684,13 +690,13 @@ export function leadReviewOverdue(v: {
   return {
     subject: `Your rating for ${v.employeeName} is overdue`,
     body:
-      `*A rating is overdue*\n\n` +
+      `🔔 *A rating is now overdue*\n\n` +
       `Hello ${v.leadName},\n\n` +
       `Your rating for ${v.employeeName} (${v.period}) was due on ${v.dueDate} and has not been submitted.\n\n` +
-      `Please complete it:\n${v.link}\n\n` +
+      `It takes a few minutes and the form is still open:\n${v.link}\n\n` +
       SIGN_OFF,
     html: shell({
-      heading: "Your review is now overdue",
+      heading: "🔔 Your review is now overdue",
       bodyHtml:
         p(`Dear ${v.leadName},`) +
         p("A rating for one of your team has passed its date. The form is still open and takes only a few minutes.") +
@@ -739,7 +745,7 @@ export function hrDueDigest(v: {
   return {
     subject: "What needs your attention today",
     body:
-      `*Today's summary*
+      `☀️ *Today's summary*
 
 ` +
       `Good morning.
@@ -754,7 +760,7 @@ ${v.link}
 ` +
       SIGN_OFF,
     html: shell({
-      heading: "Today's summary",
+      heading: "☀️ Today's summary",
       bodyHtml:
         p("Good morning,") +
         p("Here is what needs your attention today.") +
@@ -780,7 +786,7 @@ export function incrementsOverdue(v: {
   return {
     subject: `${v.items.length} increment${v.items.length === 1 ? " is" : "s are"} overdue`,
     body:
-      `*Increments past their date*
+      `📅 *Increments past their date*
 
 ` +
       `${v.items.length} ${v.items.length === 1 ? "increment is" : "increments are"} past the date they were due:
@@ -794,7 +800,7 @@ ${v.link}
 ` +
       SIGN_OFF,
     html: shell({
-      heading: "Increments past their date",
+      heading: "📅 Increments past their date",
       bodyHtml:
         p(
           `${v.items.length} ${v.items.length === 1 ? "increment is" : "increments are"} past the date they were due. They are listed below and on the increments screen.`,
@@ -839,7 +845,7 @@ export function evaluationsOverdue(v: {
   return {
     subject: `${total} form${total === 1 ? " is" : "s are"} overdue in ${v.cycleName}`,
     body:
-      `*${total} form${total === 1 ? " is" : "s are"} overdue* in ${v.cycleName}: ` +
+      `🗂️ *${total} form${total === 1 ? " is" : "s are"} still outstanding* in ${v.cycleName}: ` +
       `${parts.join(" and ")} have not submitted.
 
 ` +
@@ -849,7 +855,7 @@ ${v.link}
 ` +
       SIGN_OFF,
     html: shell({
-      heading: "Forms are overdue",
+      heading: "🗂️ Forms are still outstanding",
       bodyHtml:
         p("Some forms in the current cycle have passed their date and are still outstanding.") +
         details([["Cycle", v.cycleName], ["Still to submit", parts.join(" and ")]]) +
