@@ -713,6 +713,30 @@ function MdApproval({
   const [justClosed, setJustClosed] = React.useState(false);
   const settled = justClosed || status === "CLOSED" || status === "INTERVIEW_DONE";
 
+  /* -- WHETHER APPROVE AND CLOSE CAN POSSIBLY WORK FROM HERE.
+        This card was rendered with NO status gate, so it was fully live on a
+        record still with HR — and the close CANNOT succeed there. The chain is:
+        `saveApproval` writes the figure, then `confirm_increment` drives
+        MD_REVIEWED -> INTERVIEW_DONE through §8's function. At
+        PENDING_HR_REVIEW that from-status does not match, the whole transaction
+        rolls back, and nothing is written: no pay row, no employment update,
+        nothing closed.
+
+        What made it look like a product fault rather than a sequence one is
+        that STEP ONE SUCCEEDS. `increment_reviews` has its own policies and no
+        status guard, so the approved figure saved and the panel then read "MD
+        approved ₹2,16,000. Not closed yet — approving again will close it."
+        It could not, and pressing again wrote the same figure and failed the
+        same way.
+
+        Two statuses work. HR_APPROVED, where the MD's review runs first and
+        then the close; and MD_REVIEWED, where the close runs on its own.
+        PENDING_HR_REVIEW is not one of them and there is no path from it —
+        §8's PENDING_HR_REVIEW -> CLOSED row refuses an INCREMENT outright,
+        deliberately, because HR proposing and HR approving the same increment
+        is what the second pair of eyes exists to prevent. -- */
+  const canApprove = status === "HR_APPROVED" || status === "MD_REVIEWED";
+
 
   const approved = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
   const pct = hikePct(currentCtc, approved);
@@ -910,7 +934,7 @@ function MdApproval({
               id="approved_ctc"
               value={ctcText === "" ? null : Number(ctcText)}
               onValueChange={(annual) => setCtcText(annual === null ? "" : String(annual))}
-              disabled={settled}
+              disabled={settled || !canApprove}
             />
             {/* -- A SENTENCE, or nothing. It read "Defaults to the manager's
                   proposal. — on the current salary." whenever no percentage
@@ -936,7 +960,7 @@ function MdApproval({
                 type="date"
                 value={effectiveFrom}
                 onChange={(e) => setEffectiveFrom(e.target.value)}
-                disabled={settled}
+                disabled={settled || !canApprove}
                 className="min-h-11 tabular"
               />
               <p className="font-sans text-body-sm text-ink-muted">
@@ -957,7 +981,7 @@ function MdApproval({
               value={remarks}
               onChange={(e) => setRemarks(e.target.value)}
               rows={4}
-              disabled={settled}
+              disabled={settled || !canApprove}
               placeholder="Anything the record should carry."
             />
             <p className="font-sans text-body-sm text-ink-muted">
@@ -977,11 +1001,28 @@ function MdApproval({
                 the worst kind: nothing explains it, because there is nothing
                 left to explain. The figure is still required — an approval with
                 no amount approves nothing. -- */
-          disabled={settled || busy || approved === null || approved <= 0 || effectiveFrom === ""}
+          disabled={
+            settled || busy || !canApprove || approved === null || approved <= 0 || effectiveFrom === ""
+          }
           onClick={onApprove}
         >
           {settled ? "Closed" : busy ? "Approving and closing…" : "Approve and close"}
         </Button>
+
+        {/* -- WHY IT IS DISABLED, beside the control and not in a tooltip.
+              §13.4: a disabled button with no explanation is a dead end, and a
+              tooltip is not an explanation on a touch screen. It names the step
+              that is missing rather than the status, because "PENDING_HR_REVIEW"
+              is not something anybody can act on. -- */}
+        {!settled && !canApprove ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            {status === "PENDING_HR_REVIEW"
+              ? "This is still with HR. It can be approved once they have reviewed the report and sent it on — nothing typed here is lost in the meantime."
+              : status === "OPEN"
+                ? "Both sides are still filling in the form. The salary is settled after HR has reviewed it."
+                : "This record has not reached the approval step yet."}
+          </p>
+        ) : null}
 
         {/* -- SAID AFTER THE FACT, and it says what happens next.
               "Saved." would have been enough to stop the button reading as

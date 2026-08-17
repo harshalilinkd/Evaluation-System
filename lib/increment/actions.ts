@@ -378,9 +378,20 @@ export async function approveAndClose(input: {
   });
 
   if (!closed.ok) {
+    /* -- THE TAIL USED TO SAY "the record is with you", WHICH WAS OFTEN FALSE.
+          The commonest way to reach here is pressing this on a record still at
+          PENDING_HR_REVIEW: the figure saves, the close is refused because
+          `confirm_increment` drives MD_REVIEWED -> INTERVIEW_DONE and the
+          record is two steps before that — and the message then told the reader
+          to use a control that would refuse them for the same reason. The
+          screen gates the button now, so this is the backstop rather than the
+          first line of defence; it still has to be true. -- */
+    const stillWithHr = evaluation?.status === "PENDING_HR_REVIEW";
     return cycleError(
       closed.error.code,
-      `${closed.error.message} The figure is approved and the record is with you — use Confirm and close below to finish.`,
+      stillWithHr
+        ? `${closed.error.message} The figure is saved against the record, but it cannot be closed until HR has reviewed the report and sent it on.`
+        : `${closed.error.message} The figure is approved and the record is with you — use Confirm and close below to finish.`,
     );
   }
 
