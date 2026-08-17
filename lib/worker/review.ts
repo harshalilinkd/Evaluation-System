@@ -588,6 +588,8 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
           happened, which is what the owner asked to see. -- */
     let what: string;
     let detail: string | null = r.reason ?? null;
+    // Read once, so the guard below and the value it admits cannot disagree.
+    const named = ACTION_WORD[r.action];
 
     if (r.action === "worker_salary.changed") {
       const parts = [
@@ -608,17 +610,29 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
         detail =
           from === null || from === undefined ? `set to ${to}%` : `${from}% → ${to}%`;
       }
+    } else if (named) {
+      /* -- THE NAMED VERB WINS, and it did not.
+            This branch sat AFTER the status one, so every row carrying a
+            from/to — which is every transition — rendered as "moved it from
+            with management to finished" while a precise word for it sat unused
+            in the map. The MD sending an appraisal back read as a generic
+            status move rather than "sent it back to HR", which is the one entry
+            somebody scans this list for.
+
+            "Approved and closed it" also tells a reader WHAT was done; "moved
+            it from with management to finished" makes them translate two stage
+            names to work it out. A LABEL, never the stored key (§13.5) — and
+            never a paraphrase of the machinery either. -- */
+      what = named;
     } else if (r.from_status && r.to_status) {
+      /* -- The fallback for a transition nobody has named yet. Better than the
+            raw action, which is a stored value on screen — `readable()` once
+            let `worker.supervisor_submit` through as "worker.supervisor
+            submit", because a regex that half-matches is worse than a map that
+            misses. -- */
       what = `moved it from ${STAGE_WORD[String(r.from_status)] ?? readable(r.from_status)} to ${STAGE_WORD[String(r.to_status)] ?? readable(r.to_status)}`;
     } else {
-      /* -- A LABEL, never the stored key.
-            The fallback stripped a `worker_…` prefix with an underscore in it,
-            so `worker.supervisor_submit` (0057) came through untouched and
-            "worker.supervisor submit" appeared on screen — §8's rule against
-            showing a raw stored value, broken by a regex that did not match. A
-            map cannot half-match: an action with no entry falls to a sentence
-            that is at least a sentence. -- */
-      what = ACTION_WORD[r.action] ?? "made a change";
+      what = "made a change";
     }
 
     return {
@@ -645,6 +659,10 @@ const STAGE_WORD: Record<string, string> = {
 
 const ACTION_WORD: Record<string, string> = {
   "worker.self_submit": "submitted the worker's own sheet",
+  /* Retired with the self layer (WORKER-1), but still in the vocabulary — an
+     action with no word here renders as "made a change", which says nothing. */
+  "worker.self_submit_handover": "filled the worker's sheet on their behalf",
+  "worker.ready_for_review": "completed the sheet for HR",
   "worker.supervisor_submit": "submitted their ratings",
   "worker_evaluation.returned_to_hr": "sent it back to HR",
   "worker_evaluation.opened": "opened the appraisal",

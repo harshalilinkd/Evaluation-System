@@ -192,6 +192,27 @@ export function StartRoundDialog({
   }, [workers, dueNow]);
   const allChosen = eligible.length > 0 && chosen.size === eligible.length;
 
+  /* -- SEARCH, at the owner's instruction. Twenty-eight people in a 320px box
+        is four visible rows and a lot of scrolling to find one name.
+
+        IT IS A VIEW, NEVER THE SELECTION. `shown` is a separate list from
+        `eligible`, and every tick still writes to `chosen` by id — so filtering
+        cannot silently drop somebody who was already ticked, and clearing the
+        box brings them back still ticked. The count above the list keeps
+        reporting against `eligible`, not against the filtered view, because "1
+        of 28 chosen" is the fact HR is deciding on; "1 of 3 chosen" while a
+        filter is on would be a different and misleading sentence.
+
+        The same distinction P31-4 had to draw in the form builder, where a
+        filtered list handed to a reorder moved a row to its index among the
+        MATCHES rather than among its neighbours. -- */
+  const [query, setQuery] = React.useState("");
+  const shown = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (q === "") return eligible;
+    return eligible.filter((w) => w.name.toLowerCase().includes(q));
+  }, [eligible, query]);
+
   async function submit() {
     setBusy(true);
     setError(null);
@@ -390,15 +411,59 @@ export function StartRoundDialog({
               </p>
             ) : (
               <div className="overflow-hidden rounded-card border border-rule">
+                {/* -- The search sits INSIDE the box, above the toggle, so it
+                      reads as belonging to this list rather than to the dialog.
+                      `min-h-11` because §13.8 is about fingers. -- */}
+                <div className="border-b border-rule bg-surface-mute px-3 py-2">
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search by name"
+                    aria-label="Search the production team by name"
+                    className="min-h-11 bg-surface"
+                  />
+                </div>
+
+                {/* -- WHILE FILTERED, THIS TOGGLES WHAT YOU CAN SEE.
+                      A select-all reaching past the filter is the classic way a
+                      bulk action takes somebody nobody intended — F5-5 drew the
+                      same line on the question bank. The label says which it is,
+                      so the control cannot be misread. -- */}
                 <label className="flex items-center gap-3 border-b border-rule bg-surface-mute px-4 py-2.5">
                   <Checkbox
-                    checked={chosen.size === 0 ? false : allChosen ? true : "indeterminate"}
-                    onCheckedChange={() =>
-                      setChosen(allChosen ? new Set() : new Set(eligible.map((w) => w.id)))
+                    checked={
+                      shown.length === 0
+                        ? false
+                        : shown.every((w) => chosen.has(w.id))
+                          ? true
+                          : shown.some((w) => chosen.has(w.id))
+                            ? "indeterminate"
+                            : false
                     }
-                    aria-label={allChosen ? "Clear everyone" : "Choose everyone"}
+                    onCheckedChange={() =>
+                      setChosen((prev) => {
+                        const next = new Set(prev);
+                        const allShownChosen = shown.length > 0 && shown.every((w) => next.has(w.id));
+                        for (const w of shown) {
+                          if (allShownChosen) next.delete(w.id);
+                          else next.add(w.id);
+                        }
+                        return next;
+                      })
+                    }
+                    aria-label={
+                      query.trim() === ""
+                        ? allChosen
+                          ? "Clear everyone"
+                          : "Choose everyone"
+                        : `Choose all ${shown.length} shown`
+                    }
                   />
-                  <span className="font-sans text-body-sm text-ink">Everyone on the Production Team</span>
+                  <span className="font-sans text-body-sm text-ink">
+                    {query.trim() === ""
+                      ? "Everyone on the Production Team"
+                      : `All ${shown.length} shown`}
+                  </span>
                 </label>
 
                 {/* 320px rather than 256px: five rows is the common preselected
@@ -406,7 +471,17 @@ export function StartRoundDialog({
                     something is missing. Still bounded, so twenty-eight people
                     do not push the footer off a laptop screen. */}
                 <ul className="max-h-80 overflow-y-auto">
-                  {eligible.map((w) => {
+                  {shown.length === 0 ? (
+                    /* §13.4: a list that empties without saying why reads as
+                       broken. It also says the ticks survive, because the box
+                       looking empty is exactly when somebody fears otherwise. */
+                    <li className="px-4 py-6 text-center font-sans text-body-sm text-ink-muted">
+                      Nobody on the production team matches &ldquo;{query.trim()}&rdquo;.
+                      <br />
+                      Clear the search to see everyone — anybody already ticked stays ticked.
+                    </li>
+                  ) : null}
+                  {shown.map((w) => {
                     /* A default seeded from Reports-to only counts if that
                        person is actually on the supervisor list — otherwise the
                        select would show a blank with a value behind it. */

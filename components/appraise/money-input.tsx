@@ -38,6 +38,16 @@ export function MoneyInput({
   required,
   placeholder,
   className,
+  /**
+   * The line shown while the box is empty. Defaults to "A monthly figure.";
+   * pass `null` to show nothing until there is a figure to read out.
+   *
+   * OPTIONAL, so no existing caller changes. The ANNUAL READOUT is not
+   * suppressible and must not become so — it is what the letter says and what
+   * the database holds, and leaving it implicit is how two documents come to
+   * look as though they disagree. This hides a hint, never a figure.
+   */
+  emptyHint,
   "aria-describedby": describedBy,
 }: {
   id?: string;
@@ -47,6 +57,7 @@ export function MoneyInput({
   required?: boolean;
   placeholder?: string;
   className?: string;
+  emptyHint?: string | null;
   "aria-describedby"?: string;
 }) {
   /* -- What is in the box. Seeded from the stored figure and then owned by the
@@ -124,11 +135,13 @@ export function MoneyInput({
             database holds, so leaving it implicit would make two documents look
             like they disagree. It is a readout, never an input: one number, one
             place to type it. -- */}
-      <p className="font-sans text-body-sm text-ink-muted">
-        {monthly === null
-          ? "A monthly figure."
-          : `${formatInr(monthly)} a month · ${formatInr(annualFromMonthly(monthly))} a year`}
-      </p>
+      {monthly === null && emptyHint === null ? null : (
+        <p className="font-sans text-body-sm text-ink-muted">
+          {monthly === null
+            ? (emptyHint ?? "A monthly figure.")
+            : `${formatInr(monthly)} a month · ${formatInr(annualFromMonthly(monthly))} a year`}
+        </p>
+      )}
     </div>
   );
 }

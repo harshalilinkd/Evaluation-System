@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { returnWorkerToHr, reviewWorkerAppraisal, type WorkerReview } from "@/lib/worker/review";
+import { SALARY_TINT } from "@/components/appraise/salary-tones";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 import { saveWorkerSalaryAsHr } from "@/lib/worker/review";
@@ -36,10 +37,42 @@ const TICK_WORD: Record<string, string> = {
       a tier still means what it means everywhere else, and reaching for a
       different hue because this screen happens to have one column is how a
       reserved colour stops being reserved. -- */
+/* -- THREE RATINGS THAT LOOK DIFFERENT, because they are.
+      Every tick rendered in the SAME pink pill — so a sheet with one "Needs
+      improvement" among seven "Satisfactory" read as eight identical badges,
+      and the one row worth finding was the hardest to find. Colour that means
+      nothing is worse than no colour: it implies a distinction and then
+      withholds it.
+
+      It was also `bg-lead-tint` / `text-lead`, which is §13.1's HOD hue used
+      decoratively on something that is not a layer at all — the rule the
+      notification bell's placeholder dot broke in the same way (N1-16).
+
+      AN ORDINAL RAMP IN INK, plus one status accent. Excellent is the strongest
+      weight, Satisfactory the quiet middle, and Needs improvement takes
+      `critical` because it IS the attention case and is the only one anybody
+      acts on. No tier hue, no new token, and it reads as a document rather than
+      a dashboard — which is what this page is.
+
+      §13.8: never colour alone. The word is the signal; the treatment only
+      makes it findable, and "Not answered" stays plain text so an absence
+      cannot be mistaken for a rating. §6.2 holds too — no numeral appears here,
+      the 5/3/1 analytics mapping stays off a worker's own sheet. -- */
+const TICK_STYLE: Record<string, string> = {
+  EXCELLENT: "bg-surface-mute font-medium text-ink",
+  SATISFACTORY: "bg-surface-mute text-ink-muted",
+  NEEDS_IMPROVEMENT: "bg-critical-tint font-medium text-critical",
+};
+
 function Tick({ value }: { value: string | null }) {
   if (!value) return <span className="font-sans text-body-sm text-ink-faint">Not answered</span>;
   return (
-    <span className="inline-flex rounded-pill bg-lead-tint px-2.5 py-0.5 font-sans text-body-sm text-lead">
+    <span
+      className={cn(
+        "inline-flex rounded-pill px-2.5 py-1 font-sans text-body-sm",
+        TICK_STYLE[value] ?? "bg-surface-mute text-ink",
+      )}
+    >
       {TICK_WORD[value] ?? value}
     </span>
   );
@@ -103,7 +136,26 @@ export function WorkerReviewClient({
         which clears it on its own. -- */
   const savedOldCtc = review.salary?.oldCtc ?? null;
   const savedNewCtc = review.salary?.newCtc ?? null;
-  const [oldCtc, setOldCtc] = React.useState<number | null>(savedOldCtc);
+  /* -- CURRENT SALARY PREFILLS FROM THE EMPLOYMENT RECORD, at the owner's
+        instruction — and it reverses F22-2, which removed exactly this.
+
+        That removal was right about the NEW salary and wrong to take the
+        current one with it. The objection was that an appraisal with nothing
+        stored opened showing a figure, so HR could not tell a suggestion from a
+        saved value, and pressing nothing left the appraisal with no salary at
+        all. The second half no longer applies: FIX-44 blocks the hand-up while
+        `salaryDirty`, so a prefill that is never saved cannot reach management
+        — it holds the Send button and says why. And the first half was always
+        weaker here than for the new salary: this field is a FACT off the
+        employment record, not a proposal, and HR retyping a number the system
+        already holds is the work this screen exists to save.
+
+        NEW SALARY IS DELIBERATELY NOT PREFILLED. That one is the decision, and
+        showing a figure nobody chose on the number a wage is paid from is
+        exactly what F22-2 was reported for. -- */
+  const [oldCtc, setOldCtc] = React.useState<number | null>(
+    savedOldCtc ?? review.currentCtcOnRecord,
+  );
   const [newCtc, setNewCtc] = React.useState<number | null>(savedNewCtc);
   const salaryDirty = oldCtc !== savedOldCtc || newCtc !== savedNewCtc;
 
@@ -176,9 +228,22 @@ export function WorkerReviewClient({
             </Button>
           </div>
         </div>
-        <p className="font-sans text-body-sm text-ink-muted">
-          {[review.designation, review.department].filter(Boolean).join(" · ") || "—"} ·{" "}
-          {review.cycleName} {review.periodLabel}
+        {/* -- THE PERIOD WAS PRINTED TWICE — "Appraisal · August 2026 August
+              2026" — because the round's NAME already ends in its period and
+              the label was appended anyway. Shown only when it adds something,
+              and joined with the same separator as everything else rather than
+              a bare space. -- */}
+        <p className="mt-1 font-sans text-body-sm text-ink-muted">
+          {[
+            review.designation,
+            review.department,
+            review.cycleName,
+            review.periodLabel && !review.cycleName.includes(review.periodLabel)
+              ? review.periodLabel
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "—"}
         </p>
       </div>
 
@@ -204,14 +269,21 @@ export function WorkerReviewClient({
             columns — a quality name and a tick — need about 22rem before the
             text starts wrapping to one word a line, so below that the table
             scrolls inside the card and the page does not. -- */}
-      <div className="overflow-x-auto rounded-card border border-rule">
+      {/* -- A CARD, NOT A BOXED TABLE. UI-4: every actual card is borderless,
+            and a hard rule round a grid is what made this read as an exported
+            spreadsheet rather than a document — the same thing P27-2 had to
+            take off the printed sheet. Hairlines between rows do the work.
+
+            The tick is RIGHT-ALIGNED so eight of them share an edge; a ragged
+            column of pills is most of what looks untidy at a glance. -- */}
+      <div className="card-surface overflow-x-auto">
         <table className="w-full min-w-[22rem]">
           <thead>
-            <tr className="border-b border-rule bg-surface-mute">
-              <th scope="col" className="type-label px-4 py-2.5 text-left text-ink">
+            <tr className="border-b border-rule">
+              <th scope="col" className="type-label px-5 py-3 text-left text-ink-muted">
                 Quality
               </th>
-              <th scope="col" className="type-label px-4 py-2.5 text-left text-ink">
+              <th scope="col" className="type-label px-5 py-3 text-right text-ink-muted">
                 {review.supervisorName ?? "Supervisor"} ticked
               </th>
             </tr>
@@ -224,11 +296,18 @@ export function WorkerReviewClient({
                   "border-b border-rule last:border-b-0",
                   // §11: the overall is what the whole sheet resolves to, so it
                   // is marked rather than sitting as an eighth identical row.
-                  row.isOverall && "bg-surface-mute/60 font-medium",
+                  row.isOverall && "bg-surface-mute/60",
                 )}
               >
-                <td className="px-4 py-3 font-sans text-body-sm text-ink">{row.text}</td>
-                <td className="px-4 py-3">
+                <td
+                  className={cn(
+                    "px-5 py-3 font-sans text-body-sm text-ink",
+                    row.isOverall && "font-medium",
+                  )}
+                >
+                  {row.text}
+                </td>
+                <td className="px-5 py-3 text-right">
                   <Tick value={row.supervisor} />
                 </td>
               </tr>
@@ -239,21 +318,29 @@ export function WorkerReviewClient({
 
 
       {/* ---------- What the supervisor added ---------- */}
-      <div className="card-surface space-y-4 p-5">
+      {/* -- THREE FACTS ON A ROW, not stacked down a column. Two of them are a
+            word each, so a full-width block per fact left most of the card
+            empty and pushed the salary panel a screen further down. The
+            comment is prose and can run long, so it takes the wider half and
+            keeps `whitespace-pre-wrap` — the old version dropped a
+            supervisor's line breaks. -- */}
+      <div className="card-surface grid gap-5 p-5 sm:grid-cols-3">
         <div>
           <p className="type-label text-ink-muted">Overall performance</p>
-          <p className="font-sans text-body-lg text-ink">
+          <p className="mt-1 font-sans text-display-sm text-ink">
             {review.overallTick ? (TICK_WORD[review.overallTick] ?? review.overallTick) : "—"}
           </p>
         </div>
         <div>
-          <p className="type-label text-ink-muted">Supervisor comment</p>
-          <p className="font-sans text-body text-ink">{review.supervisorComment || "—"}</p>
-        </div>
-        <div>
           <p className="type-label text-ink-muted">Training required</p>
-          <p className="font-sans text-body text-ink">
+          <p className="mt-1 font-sans text-display-sm text-ink">
             {review.trainingRequired === null ? "Not answered" : review.trainingRequired ? "Yes" : "No"}
+          </p>
+        </div>
+        <div className="sm:col-span-3">
+          <p className="type-label text-ink-muted">Supervisor comment</p>
+          <p className="mt-1 whitespace-pre-wrap font-sans text-body text-ink">
+            {review.supervisorComment || "Nothing written."}
           </p>
         </div>
       </div>
@@ -533,10 +620,33 @@ export function WorkerReviewClient({
 /**
  * One step in the pay decision: what happened, who did it, when, and to what.
  *
+ * A THREE-COLUMN GRID, NOT A FLEX ROW WITH A GAP IN THE MIDDLE.
+ *
+ * It was `flex justify-between items-baseline`, and the three rows do not hold
+ * the same amount of text: two have a name and a date on the left with one
+ * figure on the right, while HR's has NO actor at all — pricing is not a
+ * transition and stamps neither (F44-7) — and three lines of figure. Baseline
+ * alignment then lines up only the first line of each side, so the blocks
+ * drifted apart and nothing shared an edge down the card.
+ *
+ * The fix is to give every row the SAME SHAPE and let a grid do the aligning:
+ *
+ *   · a step number, so three decisions read as a sequence rather than as
+ *     three unrelated lines — the same device the report's bands use;
+ *   · one line of title and one line of context on the left, where "from
+ *     ₹16,000 a month" now sits. It is context for the figure exactly as "who ·
+ *     when" is, so it belongs in the same slot rather than stacked above the
+ *     amount and pushing it out of line with its neighbours;
+ *   · one figure and one optional note on the right, all sharing a right edge.
+ *
+ * `items-start` rather than baseline, so the three amounts sit at the same
+ * offset from their row's top whatever is beneath them.
+ *
  * A pending step is stated as pending rather than shown as a blank — §13.4, and
  * a blank beside two filled rows reads as a value that failed to load.
  */
 function SalaryStage({
+  index,
   step,
   who,
   at,
@@ -546,38 +656,51 @@ function SalaryStage({
   lead,
   was,
 }: {
+  /** 1, 2, 3 — the order the money actually moves through. */
+  index: number;
   step: string;
   who: string | null;
   at: string | null;
   value: string;
   note?: string | null;
   pending?: boolean;
-  /** The figure the reader is deciding about. Rendered at display size. */
+  /** A figure the decision rests on. Weight, not size — the display-size
+      treatment belongs to the cards above, and two sizes in one list is what
+      made the rows fail to line up. */
   lead?: boolean;
-  /** What it was before, as context beside the figure rather than inside it. */
+  /** What it was before. Context for the figure, so it sits with the other
+      context rather than above the amount. */
   was?: string | null;
 }) {
+  /* -- NOTHING, rather than an em dash. A dash under a step with a real figure
+        beside it reads as a value that failed to load; the HR row genuinely has
+        no actor or date, because pricing is not a transition. Saying nothing is
+        the truthful rendering of nothing. -- */
+  const meta =
+    [who, at ? formatDateTime(at) : null, was].filter(Boolean).join(" · ") || null;
+
   return (
-    <li className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+    <li className="grid grid-cols-[1.25rem_1fr_auto] items-start gap-x-3 border-b border-rule py-2.5 first:pt-0 last:border-b-0 last:pb-0">
+      <span
+        aria-hidden
+        className={cn(
+          "tabular mt-0.5 text-center font-sans text-body-sm",
+          pending ? "text-ink-faint" : "text-ink-muted",
+        )}
+      >
+        {index}
+      </span>
+
       <div className="min-w-0">
         <p className="font-sans text-body-sm text-ink">{step}</p>
-        {/* -- NOTHING, rather than an em dash. A dash under a step with a real
-              figure beside it reads as a value that failed to load; the HR row
-              genuinely has no actor or date to show, because pricing is not a
-              transition and stamps neither. Saying nothing is the truthful
-              rendering of nothing. -- */}
-        {who || at ? (
-          <p className="font-sans text-body-sm text-ink-muted">
-            {[who, at ? formatDateTime(at) : null].filter(Boolean).join(" · ")}
-          </p>
-        ) : null}
+        {meta ? <p className="font-sans text-body-sm text-ink-muted">{meta}</p> : null}
       </div>
+
       <div className="text-right">
-        {was ? <p className="font-sans text-body-sm text-ink-muted">{was}</p> : null}
         <p
           className={cn(
-            "tabular font-sans",
-            lead && !pending ? "text-display-sm leading-tight" : "text-body",
+            "tabular font-sans text-body-lg leading-tight",
+            lead && !pending && "font-medium",
             pending ? "text-ink-faint" : "text-ink",
           )}
         >
@@ -666,6 +789,12 @@ function WorkerSalaryPanel({
         a rise, it is an assumption. -- */
   const rise = oldCtc !== null && newCtc !== null ? newCtc - oldCtc : null;
 
+  /* -- The approved figure, or nothing. There is no separate approved COLUMN in
+        this module — management approves the figure HR set — so what makes it
+        an approval is `mdApproval`, and without that there is nothing to show.
+        Derived once so the card and the stage row read the same value. -- */
+  const approved = mdApproval ? salary.newCtc : null;
+
   async function save() {
     setBusy(true);
     setError(null);
@@ -730,9 +859,29 @@ function WorkerSalaryPanel({
             the top of the panel entirely — it sat only in the stage list below,
             so the divergence between ₹16,200 and ₹16,000 was two glances apart
             when it is the whole point of the row. -- */}
+      {/* -- TINTED, at the owner's instruction, from the same map the increment
+            report's salary cards use — so a reader who has seen one recognises
+            the other rather than learning two conventions.
+
+            SHARING THE PALETTE DOES NOT CROSS §7's MODULE BOUNDARY. That rule
+            forbids refactoring a staff FUNCTION to serve the worker module; a
+            set of colour tokens is shared infrastructure, the same distinction
+            P24-5 drew when this module was given the staff `FormRenderer`.
+            Nothing about worker DATA moves.
+
+            WHY THESE THREE HUES. The first two are one person's single
+            statement — a percentage, and what that percentage comes to — so
+            they share the rater's tint; giving the priced figure a colour of
+            its own would say a second person had proposed it. The third is a
+            different decision by a different person, so it takes the settled
+            tint. Same reasoning the staff panel uses, and the same tokens.
+
+            No dot on any of them: `SALARY_DOT` answers "which of the three
+            layers", and the worker module has no layers — the supervisor rates
+            and HR prices. -- */}
       <dl className="grid gap-4 sm:grid-cols-3">
-        <div>
-          <dt className="type-label text-ink-muted">Supervisor suggested</dt>
+        <div className={cn("rounded-card p-4", SALARY_TINT[pct === null ? "none" : "proposed"])}>
+          <dt className="type-label text-ink-muted">Supervisor suggested %</dt>
           <dd className="tabular font-sans text-display-sm text-ink">
             {pct === null ? "—" : `${pct}%`}
           </dd>
@@ -742,8 +891,14 @@ function WorkerSalaryPanel({
               : "From their sheet. A suggestion, not the figure."}
           </dd>
         </div>
-        <div>
-          <dt className="type-label text-ink-muted">Which would make it</dt>
+        {/* -- Its own hue now, not the supervisor's. The two cards shared pink
+              on the reasoning that a percentage and what it comes to are one
+              person's single statement — true, and the owner has chosen to read
+              the row as three steps instead: what was suggested, what that
+              proposes, what management approves. Same three-step shape the
+              increment report uses. -- */}
+        <div className={cn("rounded-card p-4", SALARY_TINT[suggested === null ? "none" : "today"])}>
+          <dt className="type-label text-ink-muted">Proposed Salary</dt>
           <dd className="tabular font-sans text-display-sm text-ink">{moneyMonthly(suggested)}</dd>
           {/* -- Three audiences, three sentences. "Needs a current salary" is an
                 instruction, and the MD cannot act on it — they send it back to
@@ -765,21 +920,53 @@ function WorkerSalaryPanel({
               paid from. Where it differs from the suggestion the card says by
               how much, because that difference IS the decision HR made and it
               is what management is being asked to approve. -- */}
-        <div>
-          <dt className="type-label text-ink-muted">What HR set</dt>
+        {/* -- BLANK UNTIL MANAGEMENT HAS ACTUALLY APPROVED, at the owner's
+              instruction — and it was showing HR's own figure before anybody
+              had signed it off, under a heading reading "Management Approved".
+
+              `mdApproval` is the signal, NOT `closed`: it is the record of who
+              approved and when, and it is already what the stage row below
+              keys on, so the card and the row cannot disagree. HR can close a
+              sheet themselves on some paths, and that is not a management
+              approval — the card should stay empty there and say so.
+
+              The same rule the staff report's approval card follows (F36-2):
+              never defaulting to the proposal, because a figure standing in for
+              an approval nobody gave is the one number a wage is paid from. -- */}
+        <div
+          className={cn(
+            "rounded-card p-4",
+            SALARY_TINT[approved === null ? "none" : "approved"],
+          )}
+        >
+          {/* -- RENAMED at the owner's instruction. The figure is HR's, and
+                management approves it by closing — so the LABEL is the right
+                name for the slot and the CAPTION has to carry the stage, or a
+                card reading "Management Approved · ₹17,600 · Set it below"
+                would say two contradictory things at once. Approved only where
+                the appraisal is actually closed. -- */}
+          <dt className="type-label text-ink-muted">Management Approved</dt>
           <dd className="tabular font-sans text-display-sm text-ink">
-            {salary.newCtc === null ? "—" : moneyMonthly(salary.newCtc)}
+            {approved === null ? "—" : moneyMonthly(approved)}
           </dd>
+          {/* -- FOUR STATES, each true and each different, because a blank card
+                has to say WHICH kind of blank it is (§13.4). Nothing priced ·
+                priced and still with HR · priced and sitting with management ·
+                approved. -- */}
           <dd className="font-sans text-body-sm text-ink-muted">
-            {salary.newCtc === null
-              ? readOnly
-                ? "HR did not record a figure before this went up."
-                : "Set it below and press Save salary."
-              : suggested === null || salary.newCtc === suggested
-                ? "The same as the suggestion."
-                : `${moneyMonthly(Math.abs(salary.newCtc - suggested))} ${
-                    salary.newCtc > suggested ? "more" : "less"
-                  } than the suggestion.`}
+            {approved !== null
+              ? suggested === null || approved === suggested
+                ? "Approved. The same as the suggestion."
+                : `Approved. ${moneyMonthly(Math.abs(approved - suggested))} ${
+                    approved > suggested ? "more" : "less"
+                  } than the suggestion.`
+              : salary.newCtc === null
+                ? readOnly
+                  ? "HR did not record a figure before this went up."
+                  : "Not approved yet. Set it below and press Save salary."
+                : readOnly
+                  ? "With management. It fills in when they approve it."
+                  : "Not approved yet. Send it to management when the figures are right."}
           </dd>
         </div>
       </dl>
@@ -790,24 +977,27 @@ function WorkerSalaryPanel({
               a record of three decisions rather than as a screen that has
               stopped working. The management row is the one that was missing
               entirely: an approved figure that never said it was approved. -- */
-        <ol className="space-y-3 border-t border-rule pt-4">
+        <ol className="border-t border-rule pt-3">
           <SalaryStage
+            index={1}
             step="Supervisor recommended"
             who={supervisorName}
             at={stages.supervisorSubmittedAt}
             value={pct === null ? "No change" : `${pct}%`}
           />
           <SalaryStage
+            index={2}
             step="HR priced it"
             who={null}
             at={null}
-            /* -- THE FIGURE THE MD APPROVES, in the size that says so.
+            /* -- THE FIGURE THE MD APPROVES, marked as such.
                   It was one line of body text with the whole transition crammed
                   into it — "₹15,000.00 a month → ₹16,000.00 a month" — and the
-                  rise beneath it in the smallest type on the card. That is the
-                  number a pay decision is signed against; it cannot be the
-                  quietest thing on the screen. The NEW salary leads at display
-                  size and the current one becomes context. -- */
+                  rise beneath it in the smallest type on the card. The new
+                  salary leads and the current one is context.
+                  WEIGHT, not size: the display-size treatment now belongs to
+                  the three cards above, and two type sizes inside this list is
+                  what stopped the rows lining up. -- */
             lead
             value={rise === null ? "Not priced" : moneyMonthly(newCtc)}
             was={rise === null ? null : `from ${moneyMonthly(oldCtc)}`}
@@ -825,11 +1015,12 @@ function WorkerSalaryPanel({
             pending={rise === null}
           />
           <SalaryStage
+            index={3}
             step="Management approved"
             who={mdApproval?.name ?? null}
             at={mdApproval?.at ?? stages.mdReviewedAt}
-            // Once approved this is the figure that gets paid, so it leads at
-            // the same size as the one it approves.
+            // Once approved this is the figure that gets paid, so it is marked
+            // the same way as the one it approves.
             lead
             value={
               mdApproval
@@ -846,10 +1037,20 @@ function WorkerSalaryPanel({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="w_old_hr">Current salary</Label>
+              {/* -- NO PLACEHOLDER. `MoneyInput` defaults to "50,000", and a
+                    grey figure sitting in a money box reads as a stored value
+                    to most people — which is the exact ambiguity F22-2 was
+                    reported for, arriving by a different route. The ₹ prefix
+                    and the label already say what the field is; a specimen
+                    number adds nothing and can be misread as data.
+
+                    Left alone on the increment screens, which nobody has
+                    raised and which are a separate surface. -- */}
               <MoneyInput
                 id="w_old_hr"
                 value={oldCtc}
                 onValueChange={setOldCtc}
+                placeholder=""
               />
               {/* -- The record's figure is OFFERED, never assumed.
                     It used to be pre-filled, which made an unsaved screen look
@@ -877,7 +1078,19 @@ function WorkerSalaryPanel({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="w_new_hr">New salary</Label>
-              <MoneyInput id="w_new_hr" value={newCtc} onValueChange={setNewCtc} />
+              {/* -- No hint under this one, at the owner's instruction. The
+                    column already carries the quick-set link, and with Current
+                    salary now pre-filled its own caption is a real readout —
+                    so "A monthly figure." was the only line here saying
+                    nothing. The annual readout still appears the moment a
+                    figure is typed. -- */}
+              <MoneyInput
+                id="w_new_hr"
+                value={newCtc}
+                onValueChange={setNewCtc}
+                emptyHint={null}
+                placeholder=""
+              />
               {suggested !== null && newCtc !== suggested ? (
                 <button
                   type="button"
