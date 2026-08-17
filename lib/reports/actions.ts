@@ -112,7 +112,13 @@ export async function sendToMd(input: {
   // `transition()` — not re-implemented here. A second copy would be a second
   // definition of "complete", and they would disagree the first time P21
   // changes what the block contains.
-  const moved = await transition(parsed.data.evaluationId, "HR_APPROVED", actorOf(auth.session));
+  /* -- WAITS for the messages, unlike everything else. This action RETURNS
+        `notified` and the screen renders it — "sent to the MD, but we could not
+        reach them" is a third sentence, neither success nor failure. Deferring
+        the send here would answer that question with null every time. -- */
+  const moved = await transition(parsed.data.evaluationId, "HR_APPROVED", actorOf(auth.session), {
+    awaitNotifications: true,
+  });
   if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
 
   revalidatePath("/reports");
@@ -181,8 +187,10 @@ export async function hrCompleteEvaluation(input: {
   const saved = await saveHrReview(input);
   if (!saved.ok) return saved;
 
+  // Waits, for the same reason as sendToMd: this one surfaces `notified` too.
   const moved = await transition(parsed.data.evaluationId, "CLOSED", actorOf(auth.session), {
     finalScore,
+    awaitNotifications: true,
   });
   if (!moved.ok) return cycleError(moved.error.code, moved.error.message);
 

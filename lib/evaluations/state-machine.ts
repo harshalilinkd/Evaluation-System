@@ -5,6 +5,8 @@ import "server-only";
 import type { RatingLayer } from "@/lib/evaluations/transitions";
 
 import { getEvaluationForm } from "@/lib/forms/get-form";
+import { after } from "next/server";
+
 import { notifyTransition, type TransitionNotice } from "@/lib/notify/events";
 import { createClient } from "@/lib/supabase/server";
 import { GUARDS, type GuardResult } from "@/lib/evaluations/guards";
@@ -50,6 +52,35 @@ export type TransitionOptions = {
   /** HR advancing past a layer that never came in. Marks it skipped, not done. */
   skip?: { self?: boolean; lead?: boolean };
   /**
+   * Wait for the outbound messages before answering. Defaults to NO.
+   *
+   * THIS IS WHY A BUTTON SAT ON "Approving and closing…" FOR SECONDS.
+   * `notifyTransition` opens an SMTP connection to Gmail and posts to Maytapi —
+   * a TLS handshake, an AUTH, a send and a quit, per recipient, per channel,
+   * with §10's timeout-and-one-retry behind it. All of that ran inside the
+   * request, so the person who pressed the button was made to wait for
+   * somebody ELSE's WhatsApp to be accepted before their own screen moved. On
+   * `approveAndClose`, which chains three transitions, they waited for it more
+   * than once.
+   *
+   * The work is unchanged and still happens — `after()` runs it once the
+   * response has been sent, and the platform keeps the function alive for it.
+   * That is safe precisely because of PW-2: the hook already runs AFTER the
+   * commit, already swallows its own errors, and already cannot turn a
+   * successful transition into a reported failure. Nothing about the status
+   * change, the audit row or the scores depends on it.
+   *
+   * What IS lost when deferred is `notified` — the advisory that lets a caller
+   * say "submitted, but we could not reach your lead". Two callers surface
+   * that (`sendToMd`, `closeEvaluation`) and both pass `true`. Everything else
+   * discarded it, so everything else simply gets its answer sooner.
+   *
+   * The default is the fast path on purpose: forgetting this flag costs a
+   * caller an advisory it was not going to read, whereas defaulting the other
+   * way would leave every new button slow and nobody would know why.
+   */
+  awaitNotifications?: boolean;
+  /**
    * The agreed final score, recorded by HR on the MD's behalf.
    *
    * ⚠ DIVERGES FROM §11 AS AMENDED, AT THE OWNER'S EXPLICIT INSTRUCTION.
@@ -79,8 +110,14 @@ export type TransitionResult =
         to: EvaluationStatus;
         auditId: string;
         overallScore: number | null;
-        /** Advisory. A send that failed never fails the transition (§10). */
-        notified: TransitionNotice;
+        /**
+         * Advisory. A send that failed never fails the transition (§10).
+         *
+         * NULL when the messages were deferred, which is the default — see
+         * `awaitNotifications`. Null means "not waited for", never "nothing
+         * was sent"; the two readers that need the distinction ask to wait.
+         */
+        notified: TransitionNotice | null;
       };
     }
   | { ok: false; error: { code: string; message: string } };
@@ -305,12 +342,35 @@ export async function transition(
   // reported alongside the result rather than merged into it: the caller needs
   // to be able to say "submitted, but we could not reach your lead", which is
   // a different sentence from either success or failure.
-  const notified = await notifyTransition({
+  const notice = {
     evaluationId,
     from: evaluation.status,
     to,
     reason: options.reason ?? null,
-  });
+  };
+
+  /* -- Deferred unless the caller asked to wait. See `awaitNotifications`.
+        `after` is Next's own primitive for exactly this: the response goes out,
+        the platform keeps the function alive, the send completes. Reading
+        cookies inside it is supported, which is what `createClient()` needs.
+
+        Errors are swallowed here as well as inside `notifyTransition`, because
+        an `after` callback that throws is an unhandled rejection rather than
+        anything a person could act on — and by this point the transition is
+        durable and audited, so there is nothing left to report to. -- */
+  let notified: TransitionNotice | null = null;
+
+  if (options.awaitNotifications) {
+    notified = await notifyTransition(notice);
+  } else {
+    after(async () => {
+      try {
+        await notifyTransition(notice);
+      } catch {
+        // Nothing to surface: the response has already been sent.
+      }
+    });
+  }
 
   return {
     ok: true,
