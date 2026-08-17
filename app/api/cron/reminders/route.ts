@@ -7,8 +7,8 @@ import { sendNotification, type Channel } from "@/lib/notify/dispatch";
 import {
   dayInKolkata,
   daysUntil,
-  isQuietHour,
   reminderFor,
+  sweepSkipReason,
   timingSafeEqual,
   type ReminderKind,
 } from "@/lib/notify/schedule";
@@ -94,19 +94,30 @@ export async function GET(request: Request) {
 
   const now = new Date();
 
-  /* ---------- Quiet hours ---------- */
-  //
-  // 21:00–08:00 Asia/Kolkata, computed in that zone rather than the server's —
-  // a Vercel function runs in UTC, and a naive getHours() would put this five
-  // and a half hours out and send at 02:30 local.
-  //
-  // Nothing is queued for later: the job runs again tomorrow at 10:00 and the
-  // same people are still late. A backlog that fires at 08:00 would deliver
-  // yesterday's reasoning against today's data.
-  if (isQuietHour(now)) {
+  /* ---------- When the sweep may run ----------
+     Two rules, one predicate, so neither can be honoured without the other.
+
+     SUNDAY is the company's weekly off, and nothing scheduled goes out on it —
+     the whole point of a reminder is that somebody can act on it, and nobody
+     is at work to.
+
+     QUIET HOURS are 21:00–08:00. Both are computed in Asia/Kolkata rather than
+     the server's zone: a Vercel function runs in UTC, so a naive check puts the
+     hour five and a half hours out and calls Sunday 00:30 IST a Saturday.
+
+     NOTHING IS QUEUED FOR LATER, in either case. The job runs again on the next
+     working morning and whoever is late is still late, so the ladder picks them
+     up with that day's data. A backlog would deliver Sunday's reasoning on
+     Monday, and arrive as a pile. */
+  const skip = sweepSkipReason(now);
+  if (skip) {
     return NextResponse.json({
-      ok: true, skipped: "quiet_hours",
-      message: "Nothing sends between 21:00 and 08:00 Asia/Kolkata.",
+      ok: true,
+      skipped: skip,
+      message:
+        skip === "sunday"
+          ? "Sunday is the company's weekly off. Nothing scheduled sends today."
+          : "Nothing sends between 21:00 and 08:00 Asia/Kolkata.",
     });
   }
 

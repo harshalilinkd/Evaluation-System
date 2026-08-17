@@ -41,6 +41,50 @@ export function isQuietHour(now: Date): boolean {
   return hour >= QUIET_START_HOUR || hour < QUIET_END_HOUR;
 }
 
+/* ---------- Sunday ---------- */
+
+/**
+ * The company's weekly off. Nothing scheduled goes out on it.
+ *
+ * IN ASIA/KOLKATA, and that is the whole of the difficulty. A Vercel function
+ * runs in UTC, so a bare `getDay()` would call Sunday 00:30 IST a Saturday and
+ * Sunday 23:00 IST a Sunday that has already ended — five and a half hours of
+ * each end of the day judged as the wrong one. The same trap P17-2 recorded
+ * about the hour, one unit up.
+ *
+ * `weekday: "short"` rather than arithmetic on a formatted date: it asks the
+ * zone what day it is there, which is the actual question.
+ */
+export function isSundayInKolkata(now: Date): boolean {
+  return (
+    new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", weekday: "short" }).format(now) ===
+    "Sun"
+  );
+}
+
+/**
+ * Whether the nightly sweep should send anything at all right now.
+ *
+ * ONE PREDICATE FOR BOTH RULES, so a future caller cannot honour the hour and
+ * forget the day. It returns a reason rather than a boolean because the route
+ * reports which rule stopped it — "skipped: quiet_hours" and "skipped: sunday"
+ * are different facts, and a cron run that reports neither is one nobody can
+ * account for.
+ *
+ * NOTHING IS QUEUED FOR MONDAY. P17-3 settled this for the hour and the same
+ * reasoning holds for the day: the job runs again on Monday and whoever is late
+ * is still late, so the ladder picks them up with Monday's data. A backlog
+ * delivered on Monday morning would carry Sunday's reasoning — including
+ * "overdue by 3 days" that is now 4 — and would arrive as a pile.
+ */
+export type SweepSkip = "quiet_hours" | "sunday" | null;
+
+export function sweepSkipReason(now: Date): SweepSkip {
+  if (isSundayInKolkata(now)) return "sunday";
+  if (isQuietHour(now)) return "quiet_hours";
+  return null;
+}
+
 /* ---------- Which reminder, if any ---------- */
 
 export type ReminderKind = "ahead" | "due_today" | "overdue" | null;
