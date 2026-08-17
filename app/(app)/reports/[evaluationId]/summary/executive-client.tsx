@@ -12,6 +12,7 @@ import {
   verdictTone,
   type Tone,
 } from "@/app/(app)/reports/[evaluationId]/summary/narrative-map";
+import { SALARY_DOT, SALARY_TINT, type SalaryTone } from "@/components/appraise/salary-tones";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
 import type { SalaryBand } from "@/lib/increment/queries";
@@ -304,6 +305,7 @@ export function ExecutiveSummary({
                       screen the MD approves from, so it is the last place that should
                       still speak a different unit from the one HR typed it in. */}
                   <Fact
+                    tone="joining"
                     label="Joining Salary"
                     value={moneyMonthly(salary.joiningCtc)}
                     caption={
@@ -313,6 +315,7 @@ export function ExecutiveSummary({
                     }
                   />
                   <Fact
+                    tone="today"
                     label="Current Salary"
                     value={moneyMonthly(salary.currentCtc)}
                     caption={
@@ -323,6 +326,7 @@ export function ExecutiveSummary({
                     strong
                   />
                   <Fact
+                    tone="increment"
                     label="Last Increment"
                     value={salary.lastIncrementDate ? formatDate(salary.lastIncrementDate) : "None yet"}
                     caption={
@@ -341,6 +345,7 @@ export function ExecutiveSummary({
               <Card title="What was asked for">
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <Fact
+                    tone="asked"
                     label={`${firstName} asked for`}
                     // Monthly: the unit the employee typed it in (0061).
                     value={moneyMonthly(salary.review?.employee_expectation_ctc ?? null)}
@@ -410,8 +415,23 @@ export function ExecutiveSummary({
                       Blank until it is true — never defaulting to the proposal,
                       which would display an approval nobody gave on the one
                       number a salary is paid from. -- */}
-                <dl className="mt-3 border-t border-rule pt-3">
-                  <dt className="type-label text-ink-muted">Management approved</dt>
+                <dl
+                  className={cn(
+                    "mt-3",
+                    salary.review?.md_approved_ctc
+                      ? cn("rounded-card p-3", SALARY_TINT.approved)
+                      : "border-t border-rule pt-3",
+                  )}
+                >
+                  <dt className="type-label flex items-center gap-1.5 text-ink-muted">
+                    {salary.review?.md_approved_ctc ? (
+                      <span
+                        aria-hidden
+                        className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.approved)}
+                      />
+                    ) : null}
+                    Management approved
+                  </dt>
                   {salary.review?.md_approved_ctc ? (
                     <>
                       <dd className="tabular mt-0.5 font-sans text-body-lg text-ink">
@@ -742,20 +762,38 @@ function Blocks({
   );
 }
 
+/* -- The same tints the detailed report's salary cards wear, from the same
+      exported map — FIX-42 had to close five separate drifts between these two
+      screens, and a sixth would be careless. `tone` is optional and absent
+      means unchanged, so every Fact outside the salary section is untouched.
+
+      The dot is what names the layer without spending contrast on it: §13.8
+      keeps the label ink on a tint, so the hue alone could not be the signal,
+      and it never is — the dot always sits beside a label saying the same
+      thing in words. -- */
 function Fact({
   label,
   value,
   caption,
   strong,
+  tone,
 }: {
   label: string;
   value: string;
   caption?: string;
   strong?: boolean;
+  tone?: SalaryTone;
 }) {
   return (
-    <div>
-      <dt className="type-label leading-tight text-ink-muted">{label}</dt>
+    <div className={tone ? cn("rounded-card p-3", SALARY_TINT[tone]) : undefined}>
+      <dt className="type-label flex items-center gap-1.5 leading-tight text-ink-muted">
+        {/* Only a card that IS a layer carries one — SALARY_DOT is partial, so
+            the record cards have no entry and render nothing. */}
+        {tone && SALARY_DOT[tone] ? (
+          <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT[tone])} />
+        ) : null}
+        {label}
+      </dt>
       <dd
         className={cn(
           "tabular mt-0.5 font-sans leading-tight text-ink",

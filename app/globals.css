@@ -102,6 +102,20 @@
     --final: 79 70 229; /* #4F46E5  indigo · the MD, the authoritative answer */
     --final-tint: 224 231 255; /* #E0E7FF */
 
+    /* -- Two record tints, CHOSEN BY THE OWNER, for the two employment facts
+          on the salary panel: what they joined on, and when they last moved.
+
+          Not tier hues and deliberately so — those three mean "who said this"
+          (§13.1) and a joining salary is not something anybody SAID. These sit
+          beside them without claiming to be one, which is exactly why the row
+          could not simply borrow cyan and pink. -- */
+    --joining-tint: 255 229 217; /* #FFE5D9  · Joining Salary */
+    --today-tint: 255 243 212; /* #FFF3D4  · Current Salary */
+    --increment-tint: 221 235 255; /* #DDEBFF  · Last Increment */
+    --asked-tint: 224 242 233; /* #E0F2E9  · What they asked for */
+    --proposed-tint: 255 227 236; /* #FFE3EC  · Manager proposed */
+    --approved-tint: 235 224 255; /* #EBE0FF  · Management approved */
+
     /* -- Chart ramps -- */
     /*
        Charts need two things the brand tokens cannot supply, so they get their
@@ -161,6 +175,12 @@
     --radius-control: 8px; /* inputs, buttons */
     --radius-card: 16px; /* dashboard cards, widgets */
     --radius-card-lg: 20px; /* hero widgets */
+    /* -- A chart legend's key: a small square with the corners just taken off.
+          It has a token because it is a DISTINCTION, not a size — §13.1's tier
+          mark is a round dot and means "who said this", so a legend swatch has
+          to be visibly not that. Rounding it to the 6px `sm` step would make a
+          10px square almost circular and collide with it. -- */
+    --radius-mark: 2px; /* chart legend keys */
 
     /* -- The rail -- */
     --rail-w: 264px;
@@ -270,6 +290,17 @@
     --lead-tint: 131 24 67; /* #831843 */
     --final: 129 140 248;
     --final-tint: 49 46 129; /* #312E81 */
+
+    /* The two record tints, re-stepped for the dark surface. #FFD6BB and
+       #BFECFF are ~L 0.90: on the dark canvas they would be near-white slabs
+       carrying LIGHT text, because --ink is the light colour here (UI2-3). Same
+       hues at the 900 step, which is what every other tint above does. */
+    --joining-tint: 124 45 18; /* #7C2D12  orange-900 */
+    --today-tint: 120 53 15; /* #78350F  amber-900 */
+    --increment-tint: 30 58 138; /* #1E3A8A  blue-900 */
+    --asked-tint: 20 83 45; /* #14532D  green-900 */
+    --proposed-tint: 131 24 67; /* #831843  pink-900 */
+    --approved-tint: 76 29 149; /* #4C1D95  violet-900 */
 
     /* Chart ramps, re-stepped for the dark surface — SELECTED, not flipped.
        #22D3EE sits at L 0.80 and #818CF8 at 0.68, both outside the 0.48–0.67
@@ -383,6 +414,17 @@
     --lead-tint: 131 24 67; /* #831843 */
     --final: 129 140 248;
     --final-tint: 49 46 129; /* #312E81 */
+
+    /* The two record tints, re-stepped for the dark surface. #FFD6BB and
+       #BFECFF are ~L 0.90: on the dark canvas they would be near-white slabs
+       carrying LIGHT text, because --ink is the light colour here (UI2-3). Same
+       hues at the 900 step, which is what every other tint above does. */
+    --joining-tint: 124 45 18; /* #7C2D12  orange-900 */
+    --today-tint: 120 53 15; /* #78350F  amber-900 */
+    --increment-tint: 30 58 138; /* #1E3A8A  blue-900 */
+    --asked-tint: 20 83 45; /* #14532D  green-900 */
+    --proposed-tint: 131 24 67; /* #831843  pink-900 */
+    --approved-tint: 76 29 149; /* #4C1D95  violet-900 */
 
     /* Chart ramps, re-stepped for the dark surface — SELECTED, not flipped.
        #22D3EE sits at L 0.80 and #818CF8 at 0.68, both outside the 0.48–0.67

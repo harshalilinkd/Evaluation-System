@@ -13,8 +13,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 import { BandHeading } from "@/app/(app)/reports/[evaluationId]/report-bands";
+import { SALARY_DOT, SALARY_TINT, type SalaryTone } from "@/components/appraise/salary-tones";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,49 +44,48 @@ import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 
-/* -- WHY THESE CARDS ARE NOT ALL THE SAME COLOUR.
-      Reported as "all plain, all same font, same colour — confusing to read the
-      figures", and that was fair: six money figures in identical grey boxes
-      gives the eye nowhere to land, so a reader has to read all six to find the
-      two that matter.
+/* -- COLOUR ON THESE CARDS, at the owner's instruction, drawn from the KPI
+      palette so the two agree by construction rather than by coincidence.
 
-      Two do. CURRENT SALARY is the baseline every percentage on this screen is
-      measured from, and MANAGEMENT APPROVED is the outcome. Everything else —
-      what they joined on, when they last had a rise, what they asked for, what
-      the manager proposed — is context for those two.
+      WHICH HUE IS NOT A DECORATIVE CHOICE, and that is what makes it safe.
+      §13.1 reserves cyan, pink and indigo for Self, Lead and Final and says
+      they are "never used decoratively for anything else" — so the usual reason
+      to hesitate is real. It does not apply here, because these three cards ARE
+      the three layers: what the employee asked for, what their manager
+      proposed, what management approved. The tint says who is speaking, which
+      is precisely what §13.1 says it must always say. A reader who has learned
+      the legend on the dashboard reads this row without being taught anything.
 
-      SO THE EMPHASIS IS ONE HUE AT TWO STRENGTHS, not six colours. A palette
-      where every card is a different colour is the thing that reads as gaudy,
-      and it would also mean six hues each needing a meaning. One accent, used
-      twice, says "look here" and nothing else.
-
-      IT IS THE APP'S OWN `accent-tint`, deliberately NOT a tier hue. §13.1
-      reserves cyan, pink and indigo for who-said-this, and UI2-2 keeps green
-      for movement — a salary card wearing any of them would claim to mean
-      something it does not. `accent-tint` is the soft fill behind active
-      navigation; borrowing it for "this is the figure that counts" is the same
-      idea, and it re-maps correctly in dark mode because every token keeps its
-      role (UI2-3). -- */
+      The record above them — joining, current, last increment — is NOT a layer
+      and deliberately takes no tier hue. Tinting "Joining Salary" cyan would
+      say the employee said it, which is false, and that IS the decorative use
+      the rule forbids. Joining and last-increment wear two tints the owner
+      chose for them; today's figure wears `accent`, the one non-tier,
+      non-status tone in the palette, because it is the baseline every
+      percentage on this screen is measured from. -- */
 function Figure({
   label,
   value,
   hint,
-  tone = "quiet",
+  tone = "none",
+  dot = false,
 }: {
   label: string;
   value: string;
   hint?: string;
-  tone?: "quiet" | "accent";
+  tone?: SalaryTone;
+  /** A tier mark beside the label, for a card that IS one of the three layers. */
+  dot?: boolean;
 }) {
-  const accent = tone === "accent";
   return (
-    <figure
-      className={cn(
-        "rounded-control border p-4",
-        accent ? "border-primary/25 bg-accent-tint/60" : "border-rule bg-surface-mute",
-      )}
-    >
-      <figcaption className={cn("type-label", accent ? "text-primary" : "text-ink-muted")}>
+    /* -- Borderless and tinted, exactly as `KpiCard` is built. UI-4: every
+          actual card is borderless, and a hairline round a tint is the NOTICE
+          pattern, which would make a salary figure read as a warning. -- */
+    <figure className={cn("rounded-card p-4", SALARY_TINT[tone])}>
+      <figcaption className="type-label flex items-center gap-1.5 text-ink-muted">
+        {dot ? (
+          <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT[tone])} />
+        ) : null}
         {label}
       </figcaption>
       <p className="tabular text-display-md text-ink">{value}</p>
@@ -183,19 +184,24 @@ export function SalaryBand({
       <p className="type-label mt-1 text-ink-muted">Where they are today</p>
       <div className="mt-2 grid gap-4 sm:grid-cols-3">
         <Figure
+          tone="joining"
           label="Joining Salary"
           value={moneyMonthly(data.joiningCtc)}
           hint={data.joiningCtc === null ? "Not on their record." : `${money(data.joiningCtc)} a year`}
         />
-        {/* The baseline every percentage on this screen is measured from, so it
-            is one of the two figures the eye should find first. */}
+        {/* The baseline every percentage on this screen is measured from.
+            Its tint was chosen by the owner alongside the two beside it; like
+            them it takes no tier hue, because a salary on the record is not
+            something anybody SAID and tinting it cyan would claim the employee
+            did. */}
         <Figure
+          tone="today"
           label="Current Salary"
           value={moneyMonthly(currentCtc)}
           hint={`${money(currentCtc)} a year`}
-          tone="accent"
         />
         <Figure
+          tone="increment"
           label="Last Increment"
           value={data.lastIncrementDate ? formatDate(data.lastIncrementDate) : "None yet"}
           hint={
@@ -206,50 +212,6 @@ export function SalaryBand({
                 : `${data.monthsSinceLastIncrement} month${
                     data.monthsSinceLastIncrement === 1 ? "" : "s"
                   } ago.`
-          }
-        />
-      </div>
-
-      {/* ---------- What the manager recommended ----------
-          Beside joining and current salary, because that is the order somebody
-          reads the decision in: what they joined on, what they are on, and what
-          the person who manages them thinks it should become.
-
-          Three different absences, said apart. "No recommendation" reads as a
-          manager who declined to give one; the real cases are that they have
-          not submitted, that they answered No to promotion so the field was
-          never shown, or that they saw it and left it blank. Collapsing those
-          into one dash would have HR chasing a manager who has already
-          answered. */}
-      {/* ---------- ONE CARD, NOT TWO — and this was the reported confusion.
-
-          It was "Manager's recommended hike" beside "Manager's PROPOSED
-          salary", and further down sits "Manager PROPOSED". Two cards with
-          almost the same name showing different numbers: the first is what the
-          manager's percentage WOULD come to, the second is the figure actually
-          saved. A reader has no way to tell those apart from the labels, and
-          they legitimately differ.
-
-          So the suggestion is one card — the percentage, with what it comes to
-          underneath — and the word "proposed" is left to mean exactly one
-          thing: the figure on the record. -- */}
-      <p className="type-label mt-6 text-ink-muted">What the manager suggested</p>
-      <div className="mt-2">
-        <Figure
-          label="Manager Suggested Hike %"
-          value={data.managerHikePct === null ? "Nothing" : `${data.managerHikePct}% more`}
-          hint={
-            data.managerHikePct === null
-              ? data.managerPromotion === null
-                ? "Their review is not in yet."
-                : data.managerPromotion === "NO"
-                  ? "They did not recommend a promotion, so they were not asked."
-                  : "They were asked and left it blank."
-              : currentCtc === null
-                ? "We do not know their salary now, so this cannot be priced."
-                : `That would be ${moneyMonthly(
-                    newCtcFromPct(currentCtc, data.managerHikePct),
-                  )}. It is only a suggestion — the figure is set below.`
           }
         />
       </div>
@@ -370,10 +332,20 @@ export function SalaryBand({
 
       {review?.final_ctc ? (
         <div className="rounded-card border border-final/40 bg-final-tint p-6">
+          {/* -- MONTHLY, like every other salary on this panel.
+                It was the last annual pair left here, and the worst place for
+                one: it sits directly under three cards reading "₹19,800 a
+                month", so the same increment appeared to be two different
+                numbers depending on which line you read. The annual pair
+                follows as context, labelled, because that is what goes on the
+                letter (0061 — monthly at the edges, annual in the core). -- */}
           <p className="font-sans text-body text-final">
-            Confirmed: {money(review.current_ctc)} → {money(review.final_ctc)} (
+            Confirmed: {moneyMonthly(review.current_ctc)} → {moneyMonthly(review.final_ctc)} (
             {pctText(review.final_hike_pct)}), effective{" "}
             {review.effective_from ? formatDate(review.effective_from) : "—"}.
+          </p>
+          <p className="font-sans text-body-sm text-final/80">
+            {money(review.current_ctc)} → {money(review.final_ctc)} a year.
           </p>
         </div>
       ) : null}
@@ -476,39 +448,31 @@ function HrProposal({
     if (!result.ok) setError(result.error.message);
     else {
       setSaved(true);
+      /* -- A TOAST AS WELL AS THE INLINE NOTICE, at the owner's instruction:
+            "user should get confirmation ... to confirm their action performed
+            successfully". The notice beside the button is easy to miss on a
+            long panel — it is below the fold as often as not — and the toast
+            appears in the same corner for every action in the product, so
+            there is one place to learn to look. -- */
+      toast.success("Manager proposal saved.");
       router.refresh();
     }
   }
 
   return (
     <>
-      {/* ---------- Row 2 ---------- */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
-          {review?.employee_expectation_ctc ? (
-            <>
-              {/* Monthly: it is the unit the employee TYPED it in (0061). There
-                  are TWO of these cards and FIX-21 converted the other one — this
-                  is the one HR actually reads, and it was left showing an annual
-                  figure beside a column of monthly ones. */}
-              <p className="mt-1 tabular text-display-md text-ink">
-                {moneyMonthly(review.employee_expectation_ctc)}
-              </p>
-              <p className="font-sans text-body-sm text-ink-muted">
-                {money(review.employee_expectation_ctc)} a year
-              </p>
-              {review.employee_expectation_note ? (
-                <p className="mt-1 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
-                  {review.employee_expectation_note}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="mt-1 font-sans text-body text-ink-muted">Not stated.</p>
-          )}
-        </article>
+      {/* ---------- Row 2 ----------
+          ONE CARD, NOT TWO. "What {firstName} asked for" was here AND in the
+          three-card decision row further down, so HR — the only role that sees
+          both panels — read the same figure twice on one screen while the MD
+          saw it once. Reported as exactly that.
 
+          The DECISION row keeps it, because that row is the set: ask, proposal,
+          approval, side by side. What is left here is the gap, which is a
+          different number and appears nowhere else — and it now names the ask
+          in its own supporting line, so the context HR needs while typing a
+          proposal is still on screen. */}
+      <div className="grid gap-4">
         <article className="card-surface p-4">
           {/* -- ATTRIBUTED TO THE MANAGER, at the owner's instruction: the
                 manager recommends the figure and the MD decides it, so nothing
@@ -519,7 +483,9 @@ function HrProposal({
           <h3 className="type-label text-ink-muted">Compared with what they asked for</h3>
           {gap.amount === null ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
-              {review?.employee_expectation_ctc ? "Enter a proposal to compare." : "Nothing to compare."}
+              {review?.employee_expectation_ctc
+                ? `They asked for ${moneyMonthly(review.employee_expectation_ctc)}. Enter a proposal to compare.`
+                : `${firstName} did not state a figure, so there is nothing to compare.`}
             </p>
           ) : (
             <>
@@ -560,6 +526,16 @@ function HrProposal({
                     for an annual figure in as many words, but answers already
                     given cannot be re-asked, and a pay decision should not rest
                     on a number whose units are in doubt. -- */}
+              {/* -- NAMES THE ASK, which used to be the card beside this one.
+                    A difference with only one of its two operands on screen is
+                    a number the reader has to go and look something up for. -- */}
+              {review?.employee_expectation_ctc ? (
+                <p className="mt-1 font-sans text-body-sm text-ink-muted">
+                  They asked for {moneyMonthly(review.employee_expectation_ctc)}
+                  {review.employee_expectation_note ? ` — ${review.employee_expectation_note}` : "."}
+                </p>
+              ) : null}
+
               {gap.pct !== null && gap.pct >= 200 ? (
                 <p className="mt-2 rounded-control bg-warning-tint px-2.5 py-1.5 font-sans text-body-sm text-ink">
                   That is a long way apart. Worth checking they gave an annual figure rather than a
@@ -819,6 +795,7 @@ function MdApproval({
             gap being a window somebody can act in. -- */
       setJustClosed(true);
       setSaved(true);
+      toast.success("Approved and closed. The new salary is on their pay record.");
       router.refresh();
     } catch {
       setError(
@@ -835,9 +812,32 @@ function MdApproval({
           Two-up would have paired the ask with the proposal and orphaned the
           approval on a row of its own, which reads as an afterthought rather
           than as the last step. Still one column on a phone (§13.2). */}
+      {/* -- TINTED BY WHOSE FIGURE IT IS, at the owner's instruction, from the
+            KPI palette so the row matches the counters elsewhere.
+
+            The hue is not decoration and that is what makes it safe under
+            §13.1: these three cards ARE the three layers — the employee's ask,
+            their manager's proposal, management's approval — so cyan, pink and
+            indigo carry exactly the meaning the rule reserves them for. Someone
+            who learned the legend on the dashboard reads this row untaught.
+
+            EMPTY STAYS GREY, preserving the reasoning the third card already
+            carried: a card wearing management's indigo before management has
+            decided anything draws the eye to a decision nobody has made. The
+            tint appears when the figure does. -- */}
       <div className="grid gap-4 md:grid-cols-3">
-        <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">What {firstName} asked for</h3>
+        <article
+          className={cn(
+            "rounded-card p-4",
+            SALARY_TINT[review?.employee_expectation_ctc ? "asked" : "none"],
+          )}
+        >
+          <h3 className="type-label flex items-center gap-1.5 text-ink-muted">
+            {review?.employee_expectation_ctc ? (
+              <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.asked)} />
+            ) : null}
+            What {firstName} asked for
+          </h3>
           {review?.employee_expectation_ctc ? (
             <>
               {/* Monthly, because that is the unit the employee TYPED it in
@@ -861,12 +861,19 @@ function MdApproval({
         </article>
 
         {/* HR's figures, read-only for the MD — the trigger refuses a write. */}
-        <article className="card-surface p-4">
+        <article
+          className={cn("rounded-card p-4", SALARY_TINT[review?.hr_proposed_ctc ? "proposed" : "none"])}
+        >
           {/* -- The SAME figure the previous card calls the manager's, so it
                 carries the same name. Leaving this as "HR proposed" while HR's
                 own screen said "Manager proposed" would have one number with two
                 authors depending on who was reading it. -- */}
-          <h3 className="type-label text-ink-muted">Manager proposed</h3>
+          <h3 className="type-label flex items-center gap-1.5 text-ink-muted">
+            {review?.hr_proposed_ctc ? (
+              <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.proposed)} />
+            ) : null}
+            Manager proposed
+          </h3>
           {/* -- AN EMPTY CARD HAS TO SAY WHY IT IS EMPTY (§13.4).
                 This read "—" over "— a year · —": three dashes and no sentence,
                 which is indistinguishable from a figure that failed to load. It
@@ -885,14 +892,45 @@ function MdApproval({
                 {money(review.hr_proposed_ctc)} a year ·{" "}
                 {pctText(review.hr_proposed_hike_pct ?? null)}
               </p>
+              {/* -- WHAT THEY RECOMMENDED, now a line rather than a card.
+                    It had its own "Manager Suggested Hike %" card above, and
+                    the owner reported the two as duplicates. They were: one
+                    person, two statements, two cards, two figures that differ
+                    — which is the confusion FIX-46 tried to fix by RENAMING
+                    when the answer was to fold one into the other.
+
+                    Under a saved proposal the recommendation is provenance:
+                    where this figure came from, and whether it was followed.
+                    Worth a line, not a card. -- */}
+              {data.managerHikePct === null ? null : (
+                <p className="mt-1 font-sans text-body-sm text-ink-muted">
+                  They recommended {data.managerHikePct}%
+                  {review.hr_proposed_hike_pct === null
+                    ? "."
+                    : Math.abs(review.hr_proposed_hike_pct - data.managerHikePct) < 0.005
+                      ? ", and that is what was set."
+                      : `, and ${pctText(review.hr_proposed_hike_pct)} was set instead.`}
+                </p>
+              )}
             </>
           ) : (
             <>
               <p className="mt-1 tabular text-display-md text-ink-muted">—</p>
+              {/* -- THE THREE ABSENCES, KEPT APART. They lived on the card that
+                    has gone, and collapsing them into one dash would have HR
+                    chasing a manager who has already answered. With no proposal
+                    saved, the recommendation is the useful figure — so it leads
+                    here, priced, with what to do next. -- */}
               <p className="font-sans text-body-sm text-ink-muted">
                 {data.managerHikePct === null
-                  ? "Nothing proposed yet, and the manager has not recommended a percentage either."
-                  : `Nothing proposed yet. The manager recommended ${data.managerHikePct}% — set it in the panel above and press Save manager proposal.`}
+                  ? data.managerPromotion === null
+                    ? "Nothing proposed yet, and their manager's review is not in."
+                    : data.managerPromotion === "NO"
+                      ? "Nothing proposed yet. Their manager did not recommend a promotion, so they were not asked for a percentage."
+                      : "Nothing proposed yet. Their manager was asked for a percentage and left it blank."
+                  : `Nothing proposed yet. Their manager recommended ${data.managerHikePct}% — ${moneyMonthly(
+                      newCtcFromPct(currentCtc, data.managerHikePct),
+                    )} — which is set in the panel above.`}
               </p>
             </>
           )}
@@ -922,19 +960,16 @@ function MdApproval({
               would draw the eye to a decision nobody has made, which is worse
               than the flat row it replaces. -- */}
         <article
-          className={cn(
-            "p-4",
-            review?.md_approved_ctc
-              ? "rounded-card border border-primary/25 bg-accent-tint/60"
-              : "card-surface",
-          )}
+          className={cn("rounded-card p-4", SALARY_TINT[review?.md_approved_ctc ? "approved" : "none"])}
         >
-          <h3
-            className={cn(
-              "type-label",
-              review?.md_approved_ctc ? "text-primary" : "text-ink-muted",
-            )}
-          >
+          {/* -- Indigo now, not the neutral accent it wore before. This is the
+                FINAL layer and §13.1 gives that layer indigo everywhere else in
+                the product; the accent tint said "emphasised" where the palette
+                already had a word for "settled". -- */}
+          <h3 className="type-label flex items-center gap-1.5 text-ink-muted">
+            {review?.md_approved_ctc ? (
+              <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.approved)} />
+            ) : null}
             Management approved
           </h3>
           {review?.md_approved_ctc ? (
@@ -1204,6 +1239,7 @@ function InterviewCard({
     if (!result.ok) setError(result.error.message);
     else {
       setOpen(false);
+      toast.success("Confirmed. The increment is closed.");
       onDone();
     }
   }

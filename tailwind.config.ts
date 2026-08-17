@@ -97,6 +97,37 @@ const config: Config = {
           tint: color("final-tint"),
         },
 
+        /* -- Two record tints, chosen by the owner for the salary panel's
+              joining and last-increment cards. TINT ONLY, no DEFAULT: there is
+              no "joining" foreground and never should be. Kept beside the tiers
+              because they share a row with them, and separate from them because
+              they are not layers — see globals.css. -- */
+        joining: {
+          tint: color("joining-tint"),
+        },
+        /* Named `today`, not `current`: Tailwind already ships `bg-current` for
+           `currentColor`, and a token that shadows a built-in is a trap. */
+        today: {
+          tint: color("today-tint"),
+        },
+        increment: {
+          tint: color("increment-tint"),
+        },
+        /* -- The three decision cards. TINT ONLY: there is no "asked"
+              foreground. They no longer wear the tier tints — the owner chose
+              these — so the tier survives on each card as the small dot beside
+              its label, which is now the only thing tying this row to the
+              legend every other screen uses (§13.1). -- */
+        asked: {
+          tint: color("asked-tint"),
+        },
+        proposed: {
+          tint: color("proposed-tint"),
+        },
+        approved: {
+          tint: color("approved-tint"),
+        },
+
         /* -- The rail -- */
         //
         // Its own family, not a reuse of surface/ink. The sidebar is Slate Navy
@@ -175,6 +206,8 @@ const config: Config = {
         card: token("radius-card"), // 16px — dashboard cards
         "card-lg": token("radius-card-lg"), // 20px — hero widgets
         pill: "999px",
+        mark: token("radius-mark"), // 2px — a chart legend key, not a tier dot
+
         // The sizes the shadcn primitives already reference, mapped onto the
         // same scale so nothing renders off-system.
         sm: "6px",

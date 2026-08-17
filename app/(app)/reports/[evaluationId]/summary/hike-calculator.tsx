@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -153,6 +154,9 @@ export function HikeCalculator({
       return;
     }
     setSaved(true);
+    /* A toast as well as the inline state, at the owner's instruction — one
+       corner to learn to look at for every action in the product. */
+    toast.success(isHr ? "Manager proposal saved." : "Approval saved.");
   }
 
   /* -- APPROVE AND CLOSE, on the summary too.
@@ -187,6 +191,7 @@ export function HikeCalculator({
       return;
     }
     setSaved(true);
+    toast.success("Approved and closed. The new salary is on their pay record.");
     /* `settled` is decided by the server from the evaluation's status, so
        without this the panel would go on offering to close a closed record. */
     router.refresh();
