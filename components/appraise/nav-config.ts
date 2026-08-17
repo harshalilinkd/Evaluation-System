@@ -41,6 +41,15 @@ export type NavGroup = {
 };
 
 /**
+ * Who may open My Team.
+ *
+ * Declared here rather than inline so the nav item and the route guard read the
+ * SAME list. Two copies of "who may open this" is how a menu comes to offer a
+ * link that redirects, which reads as a permissions bug rather than as a menu.
+ */
+export const TEAM_ROLES: readonly AppRole[] = ["HOD", "SUPERVISOR", "HR_ADMIN", "MD"];
+
+/**
  * One config, consumed by the desktop rail, the mobile sheet and the active-item
  * logic. Nav and route guards agreeing is not a nicety: a link that renders but
  * redirects is worse than no link, because it reads as a permissions bug.
@@ -69,7 +78,18 @@ export const NAV: readonly NavGroup[] = [
 
               Their queue is Production Team, below. A supervisor who is ALSO a HOD
               still sees this one, on the HOD role. -- */
-        roles: ["HOD", "HR_ADMIN", "MD"],
+        /* -- OR THE RELATIONSHIP, which the item cannot express on its own.
+              A role is a configuration tick HR sets on the Users screen. Being
+              somebody's manager is `evaluations.lead_id`, copied at launch —
+              and nothing about being assigned as a manager grants HOD. So a
+              person named as the manager on three launched evaluations, sent
+              all three invite links, had no My Team in their sidebar.
+
+              `navFor` takes `leadsTeam` and admits this item on it. The list is
+              still the same one the /team guard uses, so the two cannot
+              disagree about who may open it (P4-7: actors are roles AND
+              relationships). -- */
+        roles: TEAM_ROLES,
       },
       /* -- SHOP FLOOR. It did not exist, and the worker board's own standing
             note told supervisors to use it — "both from Production Team in their own
@@ -155,12 +175,26 @@ export const NAV: readonly NavGroup[] = [
   },
 ];
 
-/** The groups this person can actually reach. Empty groups are dropped. */
-export function navFor(roles: readonly AppRole[]): NavGroup[] {
+/**
+ * The groups this person can actually reach. Empty groups are dropped.
+ *
+ * `leadsTeam` is the RELATIONSHIP half of the answer: somebody named as the
+ * manager on a launched evaluation may open My Team whether or not HR has
+ * ticked HOD on their account. Optional, defaulting to false, so every existing
+ * caller behaves exactly as it did.
+ */
+export function navFor(roles: readonly AppRole[], leadsTeam = false): NavGroup[] {
   return NAV.map((group) => ({
     ...group,
     items: group.items.filter(
-      (item) => item.roles.length === 0 || item.roles.some((role) => roles.includes(role)),
+      (item) =>
+        item.roles.length === 0 ||
+        item.roles.some((role) => roles.includes(role)) ||
+        // The one item a relationship can unlock. Named explicitly rather than
+        // flagged on the item: it is the only route in the product whose access
+        // is decided by anything other than a role, and a general mechanism for
+        // one case invites the next person to use it for something else.
+        (leadsTeam && item.href === ROUTES.team),
     ),
   })).filter((group) => group.items.length > 0);
 }
@@ -169,8 +203,12 @@ export function navFor(roles: readonly AppRole[]): NavGroup[] {
  * Longest match wins, so /admin/cycles highlights "Evaluation Cycles" rather
  * than every /admin entry at once.
  */
-export function activeHref(pathname: string, roles: readonly AppRole[]): string | null {
-  const candidates = navFor(roles)
+export function activeHref(
+  pathname: string,
+  roles: readonly AppRole[],
+  leadsTeam = false,
+): string | null {
+  const candidates = navFor(roles, leadsTeam)
     .flatMap((group) => group.items)
     .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
     .sort((a, b) => b.href.length - a.href.length);

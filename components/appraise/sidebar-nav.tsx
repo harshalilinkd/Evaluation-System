@@ -44,10 +44,12 @@ export const ICONS: Record<NavIcon, LucideIcon> = {
 
 export function SidebarNav({
   roles,
+  leadsTeam = false,
   onNavigate,
   onNavy = true,
 }: {
   roles: readonly AppRole[];
+  leadsTeam?: boolean;
   /** Closes the sheet on mobile. Omitted on the desktop rail. */
   onNavigate?: () => void;
   /**
@@ -58,11 +60,11 @@ export function SidebarNav({
   onNavy?: boolean;
 }) {
   const pathname = usePathname();
-  const active = activeHref(pathname, roles);
+  const active = activeHref(pathname, roles, leadsTeam);
 
   return (
     <nav className="space-y-6" aria-label="Main">
-      {navFor(roles).map((group, index) => (
+      {navFor(roles, leadsTeam).map((group, index) => (
         <div key={group.heading ?? `group-${index}`} className="space-y-1">
           {group.heading ? (
             <p

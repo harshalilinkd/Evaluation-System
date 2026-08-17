@@ -90,7 +90,13 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
   );
 }
 
-export function Sidebar({ roles }: { roles: readonly AppRole[] }) {
+export function Sidebar({
+  roles,
+  leadsTeam = false,
+}: {
+  roles: readonly AppRole[];
+  leadsTeam?: boolean;
+}) {
   return (
     // Slate Navy, edge to edge, pinned left — the one large dark field in the
     // light theme, and that is its job: it anchors the page, separates
@@ -106,7 +112,7 @@ export function Sidebar({ roles }: { roles: readonly AppRole[] }) {
         <SidebarBrand />
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-          <SidebarNav roles={roles} />
+          <SidebarNav roles={roles} leadsTeam={leadsTeam} />
         </div>
 
         <p className="rail-label tabular whitespace-nowrap px-3 text-body-sm text-sidebar-ink-muted">

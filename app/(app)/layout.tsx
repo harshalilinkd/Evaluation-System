@@ -8,6 +8,7 @@ import { AppShell } from "@/components/appraise/app-shell";
 import { SectionLabelProvider } from "@/components/appraise/section-labels";
 import { requireAuth } from "@/lib/auth/guards";
 import { getSectionConfig } from "@/lib/forms/section-config";
+import { leadsAnyEvaluation } from "@/lib/evaluations/team-queue";
 
 /**
  * Nothing under /(app) may ever be prerendered or cached. Every page here is
@@ -44,8 +45,21 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         control that did nothing. When cycle-scoping is real, the query comes
         back with the screens that honour it. -- */
 
+  /* -- IS THIS PERSON SOMEBODY'S MANAGER, whatever their roles say.
+        A role is a tick HR sets on the Users screen; being a manager is
+        `evaluations.lead_id`, copied at launch. Nothing about being assigned as
+        a manager grants HOD — so somebody named on three launched evaluations,
+        sent all three invite links, had no My Team in their sidebar and no way
+        to reach the queue that already held their work.
+
+        One indexed lookup per authenticated page load, and it returns after the
+        first row. Cheap enough to be honest with, and the alternative — granting
+        HOD when a cycle launches — would write a permission HR did not ask for
+        and could not easily see. -- */
+  const leadsTeam = await leadsAnyEvaluation(profile.id);
+
   return (
-    <AppShell profile={profile} roles={roles}>
+    <AppShell profile={profile} roles={roles} leadsTeam={leadsTeam}>
       <SectionLabelProvider labels={sections.labels}>
       {/* A pause is easy to set and easy to forget, and the failure it creates
           is silence. RLS decides who sees it — an employee gets nothing. */}

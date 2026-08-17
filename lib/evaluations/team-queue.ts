@@ -305,3 +305,35 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     ownEvaluations,
   };
 }
+
+/**
+ * Whether this person is the manager on ANY evaluation, live or past.
+ *
+ * BEING SOMEBODY'S MANAGER IS A RELATIONSHIP, NOT A ROLE, and conflating the
+ * two is what hid My Team from a manager who had people to rate.
+ *
+ * `evaluations.lead_id` is what decides who rates whom: it is copied at launch
+ * (P3-6) so a reorganisation cannot reassign an in-flight review, it is what
+ * this queue filters on, and it is what `is_lead_of_evaluation` enforces in
+ * RLS. The `HOD` role is a separate thing — a configuration tick HR sets on the
+ * Users screen — and nothing makes assigning somebody as a manager grant it.
+ *
+ * So a person could be named as the manager on three launched evaluations,
+ * receive all three invite links, and have no My Team in their sidebar and no
+ * route to it: the queue would have found their work, and nothing let them
+ * reach the queue. P4-7 settled the same point for transitions — "actors are
+ * roles AND relationships" — and the navigation never learned it.
+ *
+ * RLS answers this, not a role check: `evaluations` admits a row to the person
+ * named on it as lead, so an empty result means they genuinely lead nobody.
+ */
+export async function leadsAnyEvaluation(profileId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("evaluations")
+    .select("id")
+    .eq("lead_id", profileId)
+    .is("excluded_at", null)
+    .limit(1);
+  return (data ?? []).length > 0;
+}

@@ -17,10 +17,13 @@ import { getMyNotifications } from "@/lib/notify/inapp";
 export async function AppShell({
   profile,
   roles,
+  leadsTeam = false,
   children,
 }: {
   profile: Profile;
   roles: readonly AppRole[];
+  /** Named as the manager on at least one evaluation. Unlocks My Team (§P4-7). */
+  leadsTeam?: boolean;
   children: ReactNode;
 }) {
   /* -- The bell's first paint, read here rather than on mount --
@@ -36,7 +39,7 @@ export async function AppShell({
 
   return (
     <div className="flex min-h-dvh">
-      <Sidebar roles={roles} />
+      <Sidebar roles={roles} leadsTeam={leadsTeam} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar
@@ -63,7 +66,7 @@ export async function AppShell({
           `--bottom-nav-h` in globals.css, which both `.app-main` and the
           full-height table screens subtract — a fixed bar with nothing
           reserving its space hides the last row of every list. */}
-      <BottomNav roles={roles} />
+      <BottomNav roles={roles} leadsTeam={leadsTeam} />
     </div>
   );
 }
