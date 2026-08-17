@@ -22,7 +22,9 @@ import {
 import { IMPORT_COLUMNS } from "@/lib/auth/csv";
 import { bulkUpdatePeople } from "@/lib/employment/bulk";
 import { DateCell, MoneyCell, NumberCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
-import { ACCESS_LEVELS } from "@/lib/auth/schemas";
+import { ACCESS_LEVELS,
+  defaultPasswordFor,
+} from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -599,6 +601,35 @@ function AddPersonDialog({
   const [lastIncrementDate, setLastIncrementDate] = useState("");
   const hasPriorIncrement = lastIncrementDate.trim() !== "";
 
+  /* -- The name and the password, controlled, so the second can follow the
+        first. `passwordTouched` is the whole of the design: it is a DEFAULT
+        that stops the moment HR types their own, never a rule that overwrites
+        one. Both are still submitted through FormData like everything else on
+        this form — controlling them changes where the value comes from, not
+        where it goes. -- */
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordTouched, setPasswordTouched] = useState(false);
+
+  /* -- CLEARED WHEN THE FORM REMOUNTS, and this is not optional.
+        The <form> below is keyed on `createState.createdId`, so a successful
+        save remounts it and every uncontrolled field empties itself. These
+        three live OUT here, so without this they would survive — and the next
+        person HR added would open on the last one's name and password. A
+        controlled field inherits none of the reset a keyed subtree gives.
+
+        Adjust-during-render, React's documented answer to "a prop changed":
+        compare the id with the one last seen and reset when it moves. An effect
+        would paint once with the stale values first and is the shape the
+        compiler rejects (PC-4, F47-1). -- */
+  const [seenCreatedId, setSeenCreatedId] = useState(createState.createdId);
+  if (createState.createdId !== seenCreatedId) {
+    setSeenCreatedId(createState.createdId);
+    setFullName("");
+    setPassword("");
+    setPasswordTouched(false);
+  }
+
   // Close on success, so the new row is visible in the table behind. A failure
   // stays open holding its message next to the field it is about.
   useEffect(() => {
@@ -661,7 +692,25 @@ function AddPersonDialog({
           >
             <div className="grid gap-5 sm:grid-cols-2">
               <Field id="full_name" label="Full name" error={createState.fieldErrors?.full_name}>
-                <Input id="full_name" name="full_name" required className="min-h-11" />
+                <Input
+                  id="full_name"
+                  name="full_name"
+                  required
+                  className="min-h-11"
+                  value={fullName}
+                  onChange={(e) => {
+                    setFullName(e.target.value);
+                    /* -- FILLS THE PASSWORD IN, until HR types one themselves.
+                          The owner wants everybody started on `firstname123`,
+                          and HR was typing it by hand once per person — which
+                          is a step that gets skipped, and then two people have
+                          different rules. `passwordTouched` is what makes it a
+                          default rather than a lock: the moment HR edits the
+                          password field this stops following the name, so a
+                          deliberate choice is never overwritten mid-typing. -- */
+                    if (!passwordTouched) setPassword(defaultPasswordFor(e.target.value));
+                  }}
+                />
               </Field>
 
               <Field id="email" label="Email Address" error={createState.fieldErrors?.email}>
@@ -688,7 +737,7 @@ function AddPersonDialog({
               <Field
                 id="password"
                 label="Password"
-                hint="At least 6 characters. Shown in plain text so you can read it out — firstname123 is fine, and they can change it themselves from their profile."
+                hint="Filled in from their first name — read it out to them. At least 6 characters if you change it, and they can set their own from their profile."
                 error={createState.fieldErrors?.password}
               >
                 <Input
@@ -696,9 +745,21 @@ function AddPersonDialog({
                   name="password"
                   type="text"
                   required
-                  minLength={10}
+                  /* -- SIX, matching `newPasswordSchema`. It said TEN, which the
+                        browser enforces before the server is asked — so the form
+                        refused the very passwords the hint beside it recommends,
+                        and the rule the schema was lowered to allow was still
+                        being applied one layer up. Two copies of a threshold is
+                        how a form comes to reject what the server accepts
+                        (P13-6). -- */
+                  minLength={6}
                   className="min-h-11 tabular"
                   autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPasswordTouched(true);
+                    setPassword(e.target.value);
+                  }}
                 />
               </Field>
             </div>
@@ -1131,7 +1192,9 @@ function EditPersonDialog({
                   id="e_new_password"
                   name="new_password"
                   type="text"
-                  minLength={10}
+                  /* Six, matching the schema and the hint directly above — this
+                     field said ten while the label beside it promised six. */
+                  minLength={6}
                   autoComplete="new-password"
                   placeholder="Leave blank to keep it"
                   className="min-h-11 tabular"

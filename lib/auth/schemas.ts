@@ -42,6 +42,29 @@ export const emailSchema = z
 
       72 is bcrypt's ceiling — anything beyond it is silently ignored, and a
       password that quietly loses its tail is worse than one that was refused. -- */
+/**
+ * The password everybody starts on: their first name and 123.
+ *
+ * ONE IMPLEMENTATION, used by the create form and by the CSV import. Two copies
+ * of "what password does a new person get" would drift, and the drift would
+ * show up as HR reading out a password that does not work.
+ *
+ * Lowercased and stripped of anything that is not a letter, because HR reads
+ * this down a phone: "O'Brien" becomes `obrien123`, not `o'brien123`, and
+ * nobody has to be told where the apostrophe goes.
+ *
+ * The `123456` tail is the edge case, stated rather than left to fail: a
+ * two-letter first name gives `jo123`, which is five characters and below the
+ * floor below — so the suffix grows instead of the schema being weakened. It is
+ * still deterministic, and the field shows it in plain text either way.
+ */
+export function defaultPasswordFor(fullName: string): string {
+  const first = (fullName.trim().split(/\s+/)[0] ?? "").toLowerCase().replace(/[^a-z]/g, "");
+  if (first === "") return "";
+  const simple = `${first}123`;
+  return simple.length >= 6 ? simple : `${first}123456`;
+}
+
 export const newPasswordSchema = z
   .string()
   .min(6, "Use at least 6 characters")

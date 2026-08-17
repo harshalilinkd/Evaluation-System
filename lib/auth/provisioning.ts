@@ -10,6 +10,7 @@ import { ADMIN_ROLES } from "@/lib/auth/roles";
 import {
   ACCESS_LEVELS,
   createUserSchema,
+  defaultPasswordFor,
   emailSchema,
   newPasswordSchema,
   type AppRole,
@@ -1436,9 +1437,19 @@ export async function importUsers(
           secrets to be typed into a spreadsheet, which is worse than generating
           one they never see. Long and random, because it still guards an
           account. -- */
+    /* -- A BLANK PASSWORD COLUMN NOW MEANS `firstname123` FOR STAFF, at the
+          owner's instruction — the same default the create form fills in, from
+          the same function, so a person created either way gets the same
+          password. HR was otherwise typing it once per row down a spreadsheet.
+
+          A production worker still gets a long random one they never see: they
+          do not sign in (WORKER-1), so a guessable password there would be
+          exposure with no purpose. -- */
     const password =
       (record.password ?? "").trim() ||
-      (track === "WORKER" ? `wk-${crypto.randomUUID()}${crypto.randomUUID()}` : "");
+      (track === "WORKER"
+        ? `wk-${crypto.randomUUID()}${crypto.randomUUID()}`
+        : defaultPasswordFor(record.full_name ?? ""));
 
     /* -- MONTHLY OR ANNUAL, and the database is annual (0061).
           A payroll sheet is usually monthly, and 32000 read as a year is ₹2,667
