@@ -5,6 +5,7 @@ import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import type { LaunchPlan } from "@/lib/cycles/launch";
+import { contactFor, type ContactSource } from "@/lib/notify/contacts";
 import { isSuppressedFor, sendNotification } from "@/lib/notify/dispatch";
 import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
@@ -114,7 +115,10 @@ async function sendLaunchInvites(
   ];
 
   const [{ data: people }, { data: departments }] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, phone_e164").in("id", personIds),
+    supabase
+      .from("profiles")
+      .select("id, full_name, email, phone_e164, work_email, work_phone_e164")
+      .in("id", personIds),
     supabase.from("departments").select("id, name"),
   ]);
 
@@ -140,8 +144,7 @@ async function sendLaunchInvites(
         evaluationId: link.evaluationId,
         layer: "SELF",
         profileId: employee.id,
-        phone: employee.phone_e164,
-        email: employee.email,
+        person: employee,
         whatsappToken: link.selfToken,
         template: "selfEvaluationInvite",
         // Rendered per channel, because each channel carries its own token.
@@ -177,8 +180,7 @@ async function sendLaunchInvites(
         evaluationId: link.evaluationId,
         layer: "LEAD",
         profileId: lead.id,
-        phone: lead.phone_e164,
-        email: lead.email,
+        person: lead,
         whatsappToken: link.leadToken,
         template: "leadReviewInvite",
         render: (url) =>
@@ -232,8 +234,11 @@ async function deliverInvite(opts: {
   /** Whose link. Decides which token is minted for the email channel. */
   layer: "SELF" | "LEAD";
   profileId: string;
-  phone: string | null;
-  email: string | null;
+  /* -- The person, not a phone and an email (0081). Both templates this sends
+        are invites — somebody's own form or their team's — so both resolve to
+        the personal pair; but the choice is `contactFor`'s from the template,
+        not a decision restated at the two call sites below. -- */
+  person: ContactSource;
   /**
    * The plaintext token `launch_cycle` minted, which is scoped to WHATSAPP.
    *
@@ -262,12 +267,14 @@ async function deliverInvite(opts: {
         also revoked whatever it replaced (§10). -- */
   if (await isSuppressedFor(await createClient(), opts.profileId, opts.template)) return out;
 
+  const to = contactFor(opts.person, opts.template);
+
   // WhatsApp first: §13.2 — most people open the link on a phone, and a
   // WhatsApp message is read in minutes where an email may not be read at all.
-  if (opts.phone) {
+  if (to.phone) {
     const result = await sendNotification({
       channel: "WHATSAPP",
-      recipient: opts.phone,
+      recipient: to.phone,
       template: opts.template,
       message: opts.render(inviteLink(opts.whatsappToken)),
       vars: { ...(opts.vars ?? {}), link: inviteLink(opts.whatsappToken) },
@@ -281,14 +288,14 @@ async function deliverInvite(opts: {
     else if (!result.suppressed) out.failed += 1;
   }
 
-  if (opts.email) {
+  if (to.email) {
     const issued = await issueInviteToken(opts.evaluationId, "email", opts.layer);
     if (!issued.ok) {
       out.failed += 1;
     } else {
       const result = await sendNotification({
         channel: "EMAIL",
-        recipient: opts.email,
+        recipient: to.email,
         template: opts.template,
         message: opts.render(inviteUrl(issued.data.token)),
         vars: { ...(opts.vars ?? {}), link: inviteUrl(issued.data.token) },

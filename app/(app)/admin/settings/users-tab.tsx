@@ -74,6 +74,9 @@ export type PersonRow = {
   /** §7: which module they are in. Decides which appraisal form they receive. */
   track: string | null;
   phone_e164: string | null;
+  /** 0081: the optional official pair. Blank means "use the two above". */
+  work_email: string | null;
+  work_phone_e164: string | null;
   designation: string | null;
   date_of_joining: string | null;
   department: string | null;
@@ -787,6 +790,64 @@ function AddPersonDialog({
                 />
               </Field>
             </div>
+
+            {/* ---------- The official pair (0081) ----------
+                WHY THIS EXISTS. HR is an employee too. Her own appraisal and
+                the reviews she writes as a manager are about her as a person in
+                the company; HR administration is her job function — and she
+                wants the first on a personal number and the second on official
+                ones. Nothing above could express that, because a profile held
+                one of each.
+
+                BOTH OPTIONAL, and blank means "use the pair above". So this
+                changes nothing for anybody who leaves it empty, which is
+                everybody by default — there is no state in which adding these
+                makes somebody unreachable.
+
+                Only administrative messages come here. Which ones is decided by
+                the TEMPLATE, in `lib/notify/contacts.ts`, not by a setting on
+                this screen — the same person receives some messages personally
+                and others in their administrative capacity, on the same day. */}
+            <div className="mt-5 border-t border-rule pt-4">
+              <p className="text-body-sm font-medium text-ink">Official contact</p>
+              <p className="mt-0.5 max-w-prose text-body-sm text-ink-muted">
+                Optional, and only for somebody who does HR or management work. Leave both
+                blank and everything goes to the details above. When set, HR digests and
+                report notices come here instead — their own appraisal and their team&rsquo;s
+                still reach them personally.
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <Field
+                  id="work_email"
+                  label="Official email"
+                  optional
+                  error={createState.fieldErrors?.work_email}
+                >
+                  <Input
+                    id="work_email"
+                    name="work_email"
+                    type="email"
+                    autoComplete="off"
+                    className="min-h-11"
+                  />
+                </Field>
+                <Field
+                  id="work_phone"
+                  label="Official mobile"
+                  optional
+                  error={createState.fieldErrors?.work_phone}
+                >
+                  <Input
+                    id="work_phone"
+                    name="work_phone"
+                    type="tel"
+                    inputMode="tel"
+                    placeholder="+91 98765 43210"
+                    className="min-h-11 tabular"
+                  />
+                </Field>
+              </div>
+            </div>
           </FormSection>
 
           {/* ---------- Employment ---------- */}
@@ -1184,6 +1245,52 @@ function EditPersonDialog({
                   placeholder="+91 98765 43210"
                 />
               </Field>
+            </div>
+
+            {/* The same band as the create dialog. Two forms that collect the
+                same thing must offer the same fields, or the one used less is
+                the one that silently cannot set it. */}
+            <div className="mt-5 border-t border-rule pt-4">
+              <p className="text-body-sm font-medium text-ink">Official contact</p>
+              <p className="mt-0.5 max-w-prose text-body-sm text-ink-muted">
+                Optional, and only for somebody who does HR or management work. Leave both
+                blank and everything goes to the details above. When set, HR digests and
+                report notices come here instead — their own appraisal and their team&rsquo;s
+                still reach them personally.
+              </p>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <Field
+                  id="e_work_email"
+                  label="Official email"
+                  optional
+                  error={state.fieldErrors?.work_email}
+                >
+                  <Input
+                    id="e_work_email"
+                    name="work_email"
+                    type="email"
+                    autoComplete="off"
+                    defaultValue={person.work_email ?? ""}
+                    className="min-h-11"
+                  />
+                </Field>
+                <Field
+                  id="e_work_phone"
+                  label="Official mobile"
+                  optional
+                  error={state.fieldErrors?.work_phone}
+                >
+                  <Input
+                    id="e_work_phone"
+                    name="work_phone"
+                    type="tel"
+                    inputMode="tel"
+                    defaultValue={person.work_phone_e164 ?? ""}
+                    className="min-h-11 tabular"
+                    placeholder="+91 98765 43210"
+                  />
+                </Field>
+              </div>
             </div>
           </FormSection>
 

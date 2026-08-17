@@ -14,6 +14,7 @@
 import "server-only";
 import { absoluteUrl } from "@/lib/notify/preflight";
 
+import { contactFor, type ContactSource } from "@/lib/notify/contacts";
 import { sendNotification } from "@/lib/notify/dispatch";
 // `mdReviewDigest` is deliberately not imported: the MD's queue digest was
 // removed, and the template stays in templates.ts unused rather than deleted.
@@ -45,16 +46,15 @@ function appUrl(path: string): string {
 async function holdersOf(supabase: Client, role: "HR_ADMIN" | "MD") {
   const { data } = await supabase
     .from("user_roles")
-    .select("profile_id, profiles!inner(id, full_name, email, phone_e164, is_active)")
+    .select("profile_id, profiles!inner(id, full_name, email, phone_e164, work_email, work_phone_e164, is_active)")
     .eq("role", role);
 
   return (data ?? [])
     .map((row) => {
       const embedded = row.profiles as unknown;
-      return (Array.isArray(embedded) ? embedded[0] : embedded) as {
-        id: string; full_name: string; email: string | null;
-        phone_e164: string | null; is_active: boolean;
-      } | undefined;
+      return (Array.isArray(embedded) ? embedded[0] : embedded) as
+        | ({ id: string; full_name: string; is_active: boolean } & ContactSource)
+        | undefined;
     })
     .filter((p): p is NonNullable<typeof p> => Boolean(p) && p!.is_active);
 }
@@ -90,14 +90,21 @@ async function sentRecently(
  */
 async function deliver(
   supabase: Client,
-  person: { id: string; full_name: string; email: string | null; phone_e164: string | null },
+  person: { id: string; full_name: string } & ContactSource,
   template: keyof typeof CADENCE_HOURS,
   message: { subject?: string; body: string; html?: string },
   context: Record<string, string | number | null>,
 ): Promise<{ sent: number; failed: number; note: string | null }> {
+  /* -- OFFICIAL, because every digest here is addressed to somebody in their
+        administrative capacity — HR is told what is due BECAUSE they are HR.
+        Decided from the TEMPLATE rather than stated here, so it cannot drift
+        from the one rule in `contacts.ts` (0081). Falls back to the personal
+        pair when no work contact is set, which is everybody by default. -- */
+  const to = contactFor(person, template);
+
   const channels: Array<{ channel: "WHATSAPP" | "EMAIL"; recipient: string }> = [];
-  if (person.phone_e164) channels.push({ channel: "WHATSAPP", recipient: person.phone_e164 });
-  if (person.email) channels.push({ channel: "EMAIL", recipient: person.email });
+  if (to.phone) channels.push({ channel: "WHATSAPP", recipient: to.phone });
+  if (to.email) channels.push({ channel: "EMAIL", recipient: to.email });
 
   if (channels.length === 0) {
     return { sent: 0, failed: 0, note: `${person.full_name} has no phone or email on record.` };
@@ -126,7 +133,7 @@ async function deliver(
   return {
     sent,
     failed,
-    note: person.phone_e164 ? null : `${person.full_name} has no phone — sent by email only.`,
+    note: to.phone ? null : `${person.full_name} has no phone — sent by email only.`,
   };
 }
 

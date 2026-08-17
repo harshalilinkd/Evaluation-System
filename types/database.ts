@@ -591,6 +591,9 @@ export type Database = {
           /** NULL for a production worker, who never signs in (0071). */
           email: string | null;
           phone_e164: string | null;
+          /** 0081: optional second pair, for administrative messages only. */
+          work_email: string | null;
+          work_phone_e164: string | null;
           department_id: string | null;
           designation: string | null;
           date_of_joining: string | null;
@@ -609,6 +612,8 @@ export type Database = {
           /** NULL for a production worker, who never signs in (0071). */
           email: string | null;
           phone_e164?: string | null;
+          work_email?: string | null;
+          work_phone_e164?: string | null;
           department_id?: string | null;
           designation?: string | null;
           date_of_joining?: string | null;
@@ -626,6 +631,8 @@ export type Database = {
           /** NULL for a production worker, who never signs in (0071). */
           email?: string | null;
           phone_e164?: string | null;
+          work_email?: string | null;
+          work_phone_e164?: string | null;
           department_id?: string | null;
           designation?: string | null;
           date_of_joining?: string | null;

@@ -121,6 +121,13 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
   { key: "employee_code", header: "employee_code", hint: "LP-014 — REQUIRED when the email is blank" },
   { key: "department", header: "department", hint: "matched by name or code" },
   { key: "phone", header: "phone", hint: "9876543210" },
+  /* -- The OFFICIAL pair (0081). Optional, and blank for almost everybody.
+        Only somebody who does HR or management work needs one: their own
+        appraisal and their team's reach the personal details above, and the
+        administrative messages come here instead. Blank falls back, so a file
+        written before these columns existed imports exactly as it did. -- */
+  { key: "work_email", header: "work_email", hint: "optional — HR/management only" },
+  { key: "work_phone", header: "work_phone", hint: "optional — HR/management only" },
   { key: "designation", header: "designation", hint: "Senior Designer" },
   /* -- THE EMAIL, never the name. Two people can share a name; an email is what
         the account is keyed on, and it is the only manager identifier a

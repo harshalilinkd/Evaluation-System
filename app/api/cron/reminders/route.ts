@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
+import { contactFor } from "@/lib/notify/contacts";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
 import {
   dayInKolkata,
@@ -296,7 +297,7 @@ export async function GET(request: Request) {
 
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone_e164, is_active")
+    .select("id, full_name, email, phone_e164, work_email, work_phone_e164, is_active")
     .in("id", [...holders.keys()]);
 
   /* -- Names of the people being RATED, for a lead's message. A separate read
@@ -344,9 +345,18 @@ export async function GET(request: Request) {
       ? (overdue ? "leadReviewOverdue" : "leadReviewReminder")
       : (overdue ? "selfEvaluationOverdue" : "selfEvaluationReminder");
 
+    /* -- PERSONAL, on both of the templates this loop can choose.
+          A reminder about your own form and a reminder about your team's are
+          both about you as a person in the company, not about an administrative
+          duty (0081). Resolved from the TEMPLATE rather than asserted here —
+          the choice is `contactFor`'s and this stays a caller, so a future
+          template added to the pair above cannot quietly take the wrong pair.
+          Falls back to the personal contact where no work one is set. -- */
+    const to = contactFor(person, template);
+
     const channels: Array<{ channel: Channel; recipient: string }> = [];
-    if (person.phone_e164) channels.push({ channel: "WHATSAPP", recipient: person.phone_e164 });
-    if (person.email) channels.push({ channel: "EMAIL", recipient: person.email });
+    if (to.phone) channels.push({ channel: "WHATSAPP", recipient: to.phone });
+    if (to.email) channels.push({ channel: "EMAIL", recipient: to.email });
     if (channels.length === 0) { skipped += 1; continue; }
 
     for (const { channel, recipient } of channels) {

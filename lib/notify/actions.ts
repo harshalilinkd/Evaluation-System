@@ -9,6 +9,7 @@ import { checkAppUrl, resolveAppUrl } from "@/lib/notify/preflight";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
+import { contactFor } from "@/lib/notify/contacts";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
 import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
@@ -66,7 +67,7 @@ async function loadTarget(evaluationId: string, layer: "SELF" | "LEAD" = "SELF")
      the person they are rating, so both are needed to render it. */
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone_e164")
+    .select("id, full_name, email, phone_e164, work_email, work_phone_e164")
     .in("id", [...new Set([recipientId, data.evaluatee_id])]);
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
@@ -164,7 +165,14 @@ export async function sendEvaluationLink(
     );
   }
 
-  const recipient = channel === "WHATSAPP" ? person.phone_e164 : person.email;
+  /* -- Which of the two contact pairs (0081). Both templates this action can
+        send are invites — somebody's own form or their team's — so both are
+        personal. Resolved from the TEMPLATE rather than asserted here, and the
+        template is chosen from the layer a few lines below; the constant is
+        repeated because the resolution has to happen before the guard, and a
+        test pins the two to agree. -- */
+  const to = contactFor(person, layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite");
+  const recipient = channel === "WHATSAPP" ? to.phone : to.email;
   if (!recipient) {
     return cycleError(
       "NO_CONTACT",
@@ -373,13 +381,23 @@ export async function issueCopyableLink(
   if (!issued.ok) return cycleError("TOKEN_FAILED", "Could not create a link.");
 
   const supabase = await createClient();
+
+  /* -- The same template the layer implies, used for BOTH the log row and the
+        address recorded on it.
+        It was hardcoded to `selfEvaluationInvite` whatever was copied, so a
+        manager's link was recorded as an employee's — FIX-26 gave the dialog a
+        choice of layer and this row never learned about it. Small, and it is
+        the audit trail: a row that names the wrong link is worse than no row,
+        because it is believed. -- */
+  const copiedTemplate = layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite";
+
   // Recorded as an attempt with no provider behind it: HR is the delivery
   // channel here, and a link that leaves the building unrecorded is exactly what
   // §12 exists to prevent. The link itself is not in the row.
   await supabase.rpc("queue_notification", {
     p_channel: "EMAIL",
-    p_recipient: target.person.email ?? "copied-by-hr",
-    p_template: "selfEvaluationInvite",
+    p_recipient: contactFor(target.person, copiedTemplate).email ?? "copied-by-hr",
+    p_template: copiedTemplate,
     p_evaluation_id: evaluationId,
     p_profile_id: target.person.id,
     p_payload: { method: "copied_by_hr", name: target.person.full_name },

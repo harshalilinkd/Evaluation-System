@@ -149,6 +149,31 @@ export const createUserSchema = z.object({
     .regex(/^[0-9+\-()\s]*$/, "A phone number can only contain digits, spaces, + - and ( )")
     .optional()
     .or(z.literal("")),
+  /* ---------- The work contact (0081) ----------
+     OPTIONAL, AND BLANK MEANS "USE THE PERSONAL ONE". That is the whole of the
+     feature's safety: somebody who never fills these in behaves exactly as they
+     did before, so there is no state in which adding two columns makes a person
+     unreachable.
+
+     Only administrative messages go here — HR digests, report-ready, finalised.
+     Somebody's own appraisal and their team's reach the personal pair, because
+     those are about them as a person in the company rather than about their
+     job function. The rule lives in `lib/notify/contacts.ts`; these two fields
+     just hold the addresses.
+
+     Same shapes as the personal pair, deliberately: `work_email` reuses the
+     email check and `work_phone` the same permissive one, since it is the
+     server-side normaliser that gives the real answer with a reason (P11-12).
+     Two fields that hold the same kind of value should refuse the same things. */
+  work_email: z.string().trim().email("That does not look like an email address").optional().or(z.literal("")),
+  work_phone: z
+    .string()
+    .trim()
+    .max(20)
+    .regex(/^[0-9+\-()\s]*$/, "A phone number can only contain digits, spaces, + - and ( )")
+    .optional()
+    .or(z.literal("")),
+
   designation: z.string().trim().max(120).optional().or(z.literal("")),
   reports_to: z.string().uuid().optional().or(z.literal("")),
   date_of_joining: z.string().optional().or(z.literal("")),

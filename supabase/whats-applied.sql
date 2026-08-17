@@ -123,6 +123,13 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it HR cannot CORRECT a joining salary — 0069 refuses to overwrite one, so a figure typed wrong at import stays wrong.'),
   ('0076_evaluation_schedule', 'table', 'evaluation_schedule',
      'Without it the review schedule is not a setting: evaluations are computed from the old fixed 1-and-6-months-from-joining rule, and Settings > Evaluation periods cannot save.'),
+  /* -- Detected on the COLUMN, which is what 0081 wrote. The generic `column`
+        kind would be right here too, but `nullable` says the other half of the
+        claim: the whole safety argument is that both are optional and blank
+        falls back, so a column that existed and were NOT NULL would be a
+        different migration wearing the same name. -- */
+  ('0081_work_contact', 'nullable', 'profiles.work_email',
+     'Without it nobody can have a second contact pair: HR''s digests and report notices go to the same number and address as her own appraisal, and Settings > Users refuses the two new fields with "column does not exist". Everything else works exactly as before — the pair is optional and blank falls back.'),
   ('0080_undo_0079_exception_splice', 'milestone_returns', 'create_milestone_evaluation reaches its RETURN',
      'Without it 0079 part 3 leaves an exception clause between the INSERT and the return, which ends the function''s block — so the snapshot, both response rows, the tokens and the RETURN all fall outside the normal path and Create and send fails with "control reached end of function without RETURN".'),
   ('0079_rolling_cycle_per_milestone', 'cycle_per_milestone', 'a rolling cycle per milestone, not one per year',

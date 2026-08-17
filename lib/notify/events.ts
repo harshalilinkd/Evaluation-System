@@ -5,6 +5,7 @@ import { absoluteUrl } from "@/lib/notify/preflight";
 
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
+import { contactFor, type ContactSource } from "@/lib/notify/contacts";
 import { raiseInAppNotification } from "@/lib/notify/inapp";
 import {
   evaluationClosed,
@@ -82,8 +83,15 @@ async function deliver(opts: {
   template: TemplateKey;
   evaluationId: string;
   profileId: string;
-  phone: string | null;
-  email: string | null;
+  /* -- THE PERSON, not a phone and an email.
+        Every caller used to pass `phone: x.phone_e164, email: x.email`, which
+        put the choice of address at nine call sites — and with a second contact
+        pair (0081) that becomes nine places to remember which one this template
+        should use, of which eight would be right.
+        Handing over the ROW and letting `contactFor` decide means the rule is
+        applied by the function that already knows the template. A caller cannot
+        get it wrong because a caller no longer makes the decision. -- */
+  person: ContactSource;
   /** Called per channel, because an employee's link is channel-scoped (§10). */
   render: (link: string) => RenderedMessage;
   /**
@@ -112,9 +120,14 @@ async function deliver(opts: {
    */
   vars?: Record<string, unknown>;
 }): Promise<TransitionNotice> {
+  /* -- Personal or official, decided from the template (0081). Blank work
+        contacts fall back to the personal pair, so somebody who has never set
+        one behaves exactly as they did before. -- */
+  const to = contactFor(opts.person, opts.template);
+
   const channels: Array<{ channel: Channel; recipient: string }> = [];
-  if (opts.phone) channels.push({ channel: "WHATSAPP", recipient: opts.phone });
-  if (opts.email) channels.push({ channel: "EMAIL", recipient: opts.email });
+  if (to.phone) channels.push({ channel: "WHATSAPP", recipient: to.phone });
+  if (to.email) channels.push({ channel: "EMAIL", recipient: to.email });
 
   if (channels.length === 0) {
     // THE BELL STILL REACHES THEM, and this is the case that most justifies
@@ -282,7 +295,7 @@ async function run({
   const ids = [evaluation.evaluatee_id, evaluation.lead_id].filter((v): v is string => Boolean(v));
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone_e164, department_id")
+    .select("id, full_name, department_id, email, phone_e164, work_email, work_phone_e164")
     .in("id", ids);
 
   const employee = (people ?? []).find((p) => p.id === evaluation.evaluatee_id);
@@ -323,8 +336,7 @@ async function run({
           template: "leadReviewInvite",
           evaluationId,
           profileId: lead.id,
-          phone: lead.phone_e164,
-          email: lead.email,
+          person: lead,
           audience: "staff",
           staffPath: `/team/${evaluationId}`,
           render: (link) =>
@@ -352,8 +364,7 @@ async function run({
         template: "selfEvaluationInvite",
         evaluationId,
         profileId: employee.id,
-        phone: employee.phone_e164,
-        email: employee.email,
+        person: employee,
         // Somebody who has never signed in needs a token, not a login form.
         audience: "employee",
         render: (link) => selfEvaluationInvite({ ...selfInviteVars, link }),
@@ -383,8 +394,7 @@ async function run({
           template: "formReturned",
           evaluationId,
           profileId: employee.id,
-          phone: employee.phone_e164,
-          email: employee.email,
+          person: employee,
           audience: "employee",
           render: (link) => formReturned({ ...selfReturnVars, audience: "SELF", link }),
           vars: selfReturnVars,
@@ -406,8 +416,7 @@ async function run({
           template: "formReturned",
           evaluationId,
           profileId: lead.id,
-          phone: lead.phone_e164,
-          email: lead.email,
+          person: lead,
           audience: "staff",
           staffPath: `/team/${evaluationId}`,
           // Their RATING came back, not a form of their own.
@@ -433,7 +442,7 @@ async function run({
     case "OPEN->PENDING_HR_REVIEW": {
       const { data: hrForReady } = await supabase
         .from("user_roles")
-        .select("profile_id, profiles!inner(id, full_name, email, phone_e164)")
+        .select("profile_id, profiles!inner(id, full_name, email, phone_e164, work_email, work_phone_e164)")
         .eq("role", "HR_ADMIN");
 
       const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
@@ -441,7 +450,7 @@ async function run({
       for (const row of hrForReady ?? []) {
         const embedded = row.profiles as unknown;
         const person = (Array.isArray(embedded) ? embedded[0] : embedded) as
-          | { id: string; full_name: string; email: string | null; phone_e164: string | null }
+          | ({ id: string; full_name: string } & ContactSource)
           | undefined;
         if (!person) continue;
 
@@ -449,8 +458,7 @@ async function run({
           template: "reportReady",
           evaluationId,
           profileId: person.id,
-          phone: person.phone_e164,
-          email: person.email,
+          person,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
           vars: {
@@ -492,7 +500,7 @@ async function run({
     case "MD_REVIEWED->HR_APPROVED": {
       const { data: hrForReturn } = await supabase
         .from("user_roles")
-        .select("profile_id, profiles!inner(id, full_name, email, phone_e164)")
+        .select("profile_id, profiles!inner(id, full_name, email, phone_e164, work_email, work_phone_e164)")
         .eq("role", "HR_ADMIN");
 
       const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
@@ -500,7 +508,7 @@ async function run({
       for (const row of hrForReturn ?? []) {
         const embedded = row.profiles as unknown;
         const person = (Array.isArray(embedded) ? embedded[0] : embedded) as
-          | { id: string; full_name: string; email: string | null; phone_e164: string | null }
+          | ({ id: string; full_name: string } & ContactSource)
           | undefined;
         if (!person) continue;
 
@@ -508,8 +516,7 @@ async function run({
           template: "formReturned",
           evaluationId,
           profileId: person.id,
-          phone: person.phone_e164,
-          email: person.email,
+          person,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
           vars: {
@@ -541,7 +548,7 @@ async function run({
     case "PENDING_HR_REVIEW->HR_APPROVED": {
       const { data: mds } = await supabase
         .from("user_roles")
-        .select("profile_id, profiles!inner(id, full_name, email, phone_e164)")
+        .select("profile_id, profiles!inner(id, full_name, email, phone_e164, work_email, work_phone_e164)")
         .eq("role", "MD");
 
       const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
@@ -549,7 +556,7 @@ async function run({
       for (const row of mds ?? []) {
         const embedded = row.profiles as unknown;
         const person = (Array.isArray(embedded) ? embedded[0] : embedded) as
-          | { id: string; full_name: string; email: string | null; phone_e164: string | null }
+          | ({ id: string; full_name: string } & ContactSource)
           | undefined;
         if (!person) continue;
 
@@ -557,8 +564,7 @@ async function run({
           template: "mdReviewPending",
           evaluationId,
           profileId: person.id,
-          phone: person.phone_e164,
-          email: person.email,
+          person,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
           // No score in the body: a rating in a WhatsApp message is a rating
@@ -594,7 +600,7 @@ async function run({
     case "HR_APPROVED->MD_REVIEWED": {
       const { data: hr } = await supabase
         .from("user_roles")
-        .select("profile_id, profiles!inner(id, full_name, email, phone_e164)")
+        .select("profile_id, profiles!inner(id, full_name, email, phone_e164, work_email, work_phone_e164)")
         .eq("role", "HR_ADMIN");
 
       const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
@@ -602,7 +608,7 @@ async function run({
       for (const row of hr ?? []) {
         const embedded = row.profiles as unknown;
         const person = (Array.isArray(embedded) ? embedded[0] : embedded) as
-          | { id: string; full_name: string; email: string | null; phone_e164: string | null }
+          | ({ id: string; full_name: string } & ContactSource)
           | undefined;
         if (!person) continue;
 
@@ -610,8 +616,7 @@ async function run({
           template: "evaluationFinalised",
           evaluationId,
           profileId: person.id,
-          phone: person.phone_e164,
-          email: person.email,
+          person,
           audience: "staff",
           staffPath: `/reports/${evaluationId}`,
           vars: {
@@ -654,8 +659,7 @@ async function run({
         template: "evaluationClosed",
         evaluationId,
         profileId: employee.id,
-        phone: employee.phone_e164,
-        email: employee.email,
+        person: employee,
         // NONE renders no link at all, so no token is minted for one.
         audience: disclosure === "NONE" ? "employee-no-link" : "employee",
         // Not editable — its wording changes with the disclosure policy (§9),

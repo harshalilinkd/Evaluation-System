@@ -132,6 +132,8 @@ export async function createUser(
           receive. -- */
     track: formData.get("track") ?? "STAFF",
     phone: formData.get("phone") ?? "",
+    work_email: formData.get("work_email") ?? "",
+    work_phone: formData.get("work_phone") ?? "",
     designation: formData.get("designation") ?? "",
     reports_to: formData.get("reports_to") ?? "",
     date_of_joining: formData.get("date_of_joining") ?? "",
@@ -223,10 +225,28 @@ async function amendPerson(
     phoneE164 = result.e164;
   }
 
+  /* -- The work number goes through the SAME normaliser (0081).
+        0081's CHECK constraint requires E.164 on that column, so a number typed
+        as "98765 43210" would be refused by the database with a constraint
+        violation rather than by the form with a sentence. Normalising here is
+        what keeps the refusal readable — and it has to be the same function, or
+        the two columns would accept different things. -- */
+  let workPhoneE164: string | undefined;
+  if (input.work_phone) {
+    const { normaliseToE164 } = await import("@/lib/notify/phone");
+    const result = normaliseToE164(input.work_phone);
+    if (!result.ok) {
+      return { ok: false, error: `That work mobile number is not usable: ${result.reason}` };
+    }
+    workPhoneE164 = result.e164;
+  }
+
   const patch = {
     full_name: keep(input.full_name),
     employee_code: keep(input.employee_code),
     phone_e164: phoneE164,
+    work_phone_e164: workPhoneE164,
+    work_email: keep(input.work_email),
     department_id: keep(input.department_id),
     designation: keep(input.designation),
     reports_to: keep(input.reports_to),
@@ -384,9 +404,25 @@ async function provisionPerson(
     phoneE164 = result.e164;
   }
 
+  /* -- The work number, through the same normaliser (0081) and refused with the
+        same kind of sentence. Null clears it, which is what a person emptying
+        the field means — and clearing it simply returns them to the personal
+        pair rather than making them unreachable. -- */
+  let workPhoneE164: string | null = null;
+  if (input.work_phone) {
+    const { normaliseToE164 } = await import("@/lib/notify/phone");
+    const result = normaliseToE164(input.work_phone);
+    if (!result.ok) {
+      return { ok: false, error: `That work mobile number is not usable: ${result.reason}` };
+    }
+    workPhoneE164 = result.e164;
+  }
+
   const { error: profileError } = await supabase
     .from("profiles")
     .update({
+      work_phone_e164: workPhoneE164,
+      work_email: input.work_email ? input.work_email : null,
       full_name: input.full_name,
       department_id: input.department_id ? input.department_id : null,
       employee_code: input.employee_code ? input.employee_code : null,
@@ -1549,6 +1585,9 @@ export async function importUsers(
       roles: askedRoles.concat("EMPLOYEE"),
       employee_code: record.employee_code ?? "",
       phone: record.phone ?? "",
+      /* Optional, and blank for almost everybody — see IMPORT_COLUMNS. */
+      work_email: record.work_email ?? "",
+      work_phone: record.work_phone ?? "",
       designation: record.designation ?? "",
       reports_to: leadId ?? "",
       date_of_joining: joining,
