@@ -63,12 +63,27 @@ export function ExecutiveSummary({
   const firstName = header.employeeName.trim().split(/\s+/)[0] || "They";
 
   return (
-    <div
-      data-full-bleed
-      className="flex h-[calc(100dvh-var(--topbar,64px))] flex-col overflow-hidden"
-    >
-      {/* ================= HEADER — compact, fixed ================= */}
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface px-4 py-2.5 lg:px-6">
+    /* -- ONE SCROLL, NOT TWO. This was a fixed-height flex column holding two
+          panes that each scrolled on their own, and that is most of what read
+          as "messy": two scrollbars on one screen, neither of which moves the
+          page. The two columns are never the same length — the appraisal runs
+          to five sections and two blocks of prose, the salary panel to a form —
+          so one pane was always stranded mid-way while the other had ended.
+
+          It also broke the ordinary things a reader expects of a document:
+          browser find scrolls to a match the pane will not show, the scroll
+          position is not restored on back, and printing captures one viewport.
+
+          A page that scrolls once, in two columns. The right column ends and
+          leaves quiet space rather than holding a second scrollbar open — which
+          is the honest shape for two lists of different lengths. -- */
+    <div data-full-bleed className="flex min-h-full flex-col">
+      {/* ================= HEADER — compact, and it STAYS =================
+          Sticky rather than fixed-by-layout: the identity, the stage chip and
+          the way back to the full report are what somebody checks while reading
+          further down, and they were only reachable by scrolling the whole way
+          up once the panes were gone. */}
+      <header className="sticky top-0 z-10 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface px-4 py-2.5 lg:px-6">
         <Button asChild variant="ghost" size="sm" className="-ml-2 shrink-0">
           <Link href="/reports" aria-label="Back to reports">
             <ArrowLeft className="size-4" aria-hidden />
@@ -102,10 +117,17 @@ export function ExecutiveSummary({
         </span>
       </header>
 
-      {/* ================= THE 50/50 SPLIT ================= */}
-      <div className="grid min-h-0 flex-1 gap-px overflow-hidden bg-rule lg:grid-cols-2">
+      {/* ================= TWO COLUMNS, ONE PAGE =================
+          `items-start` so each column keeps its own height instead of the
+          shorter one being stretched to match — a stretched column puts a
+          border or a background where there is no content, which is the other
+          half of what read as untidy.
+
+          A real gap rather than the 1px hairline the two panes used: a rule
+          between two scroll panes is a frame, and there are no panes now. */}
+      <div className="grid flex-1 items-start gap-4 bg-canvas p-4 lg:grid-cols-2 lg:gap-5 lg:p-5">
         {/* ---------------- LEFT: appraisal ---------------- */}
-        <section className="min-h-0 space-y-3 overflow-y-auto bg-canvas p-4 lg:p-5">
+        <section className="space-y-3">
           <PartitionTitle
             title="Appraisal summary"
             note="Both sides rated the same form without seeing each other."
@@ -130,13 +152,20 @@ export function ExecutiveSummary({
             />
           </div>
 
-          {/* Verdict tags — the binary answers, consolidated */}
+          {/* -- THE MANAGER'S BINARY ANSWERS, and they now say whose they are.
+                Three chips sat loose between the scores and the table with no
+                heading, so they read as page furniture rather than as findings
+                — and "Promotion recommendation Yes" beside an employee's
+                average is ambiguous about who recommended it. A card, with a
+                title, in the same rhythm as everything under it. -- */}
           {lead.verdicts.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {lead.verdicts.map((v) => (
-                <VerdictTag key={v.question} block={v} />
-              ))}
-            </div>
+            <Card title="The manager's answers">
+              <div className="flex flex-wrap gap-1.5">
+                {lead.verdicts.map((v) => (
+                  <VerdictTag key={v.question} block={v} />
+                ))}
+              </div>
+            </Card>
           ) : null}
 
           {/* Section comparison — bars, not a list of numbers */}
@@ -177,11 +206,33 @@ export function ExecutiveSummary({
                         label's length left them — the single biggest reason the
                         block looked untidy. Now: name, self, lead, gap, each in
                         its own track, and the eye reads straight down. -- */
+                  /* -- THE BARS BELONG UNDER THE LABEL, NOT UNDER THE PAGE.
+                        They spanned both columns, so two full-width lines ran
+                        beneath every row — at that length and weight they read
+                        as rules separating the rows rather than as the data
+                        they are, and five sections produced ten of them. That
+                        was the single noisiest thing in the block.
+
+                        Now the left track holds the name with its two bars
+                        directly beneath, and the numbers keep their own columns
+                        to the right. The bar annotates the thing it is about,
+                        and each row is one object instead of two. -- */
                   <li
                     key={s.section}
-                    className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-1"
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4"
                   >
-                    <span className="truncate font-sans text-body-sm text-ink">{s.label}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-sans text-body-sm text-ink">
+                        {s.label}
+                      </span>
+                      {/* Two tracks, one per layer. The tier hue IS the identity
+                          here (§13.1), and the two lengths make the difference a
+                          shape rather than a subtraction the reader performs. */}
+                      <span className="mt-1.5 block space-y-1">
+                        <Track value={s.self} className="bg-self" />
+                        <Track value={s.lead} className="bg-lead" />
+                      </span>
+                    </span>
                     <span className="flex shrink-0 items-baseline gap-3">
                       <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
                         {score(s.self)}
@@ -200,14 +251,6 @@ export function ExecutiveSummary({
                       </span>
                       <Badge tone={tone}>{signed(gap)}</Badge>
                     </span>
-
-                    {/* Two tracks, one per layer. The tier hue IS the identity
-                        here (§13.1), and the two lengths make the difference a
-                        shape rather than a subtraction the reader performs. */}
-                    <div className="col-span-2 space-y-1 pb-1">
-                      <Track value={s.self} className="bg-self" />
-                      <Track value={s.lead} className="bg-lead" />
-                    </div>
                   </li>
                 );
               })}
@@ -240,7 +283,7 @@ export function ExecutiveSummary({
         </section>
 
         {/* ---------------- RIGHT: compensation ---------------- */}
-        <section className="min-h-0 space-y-3 overflow-y-auto bg-canvas p-4 lg:p-5">
+        <section className="space-y-3">
           {salary ? (
             <>
               <PartitionTitle

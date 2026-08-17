@@ -279,38 +279,53 @@ export function HikeCalculator({
             a screen that already had five and said nothing the numbers going
             from grey to black does not already say. The state change lives in
             the type, not in the container. -- */}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-card bg-surface-mute p-4 sm:grid-cols-4">
-        {/* The figure that is PAID, in the unit everybody now types and reads.
-              The annual equivalent rides underneath — it is what the letter
-              says, not what the decision is made in. */}
-          <Out
-            label="New salary"
-            value={formatInr(monthlyNew ?? 0)}
-            caption={target === null ? undefined : `${formatInr(target)} a year`}
-            strong
-            live={live}
-          />
+      {/* -- THREE FIGURES, NOT FOUR — one of them was a duplicate.
+            "New salary" and "New monthly" both rendered `monthlyNew`: the same
+            number twice, under two labels, inviting the reader to look for a
+            difference that does not exist. Since FIX-21 made every figure on
+            these screens monthly, "New monthly" had nothing left to say. Its
+            useful half — what they are on now — moves onto New salary, where
+            the comparison belongs.
+
+            AND AN EM DASH, NOT ₹0. `?? 0` printed ₹0 / ₹0 / 0.00% before
+            anything was entered, which reads as a decision to pay nothing
+            rather than as a decision not yet made. §11 is explicit that missing
+            is not zero, and this is the screen where the difference is a salary.
+            The greyed treatment was already trying to say it; a zero is too
+            strong a statement for opacity to take back. -- */}
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-card bg-surface-mute p-4 sm:grid-cols-3">
         <Out
-            label="Rise"
-            value={formatInr(monthlyFromAnnual(amount) ?? 0)}
-            caption={amount === null ? undefined : `${formatInr(amount)} a year`}
-            live={live}
-          />
+          label="New salary"
+          value={live ? formatInr(monthlyNew) : "—"}
+          caption={
+            !live
+              ? monthlyNow === null
+                ? undefined
+                : `Now ${formatInr(monthlyNow)}`
+              : `${formatInr(target)} a year · now ${formatInr(monthlyNow)}`
+          }
+          strong
+          live={live}
+        />
         <Out
-          label="New monthly"
-          value={formatInr(monthlyNew ?? 0)}
-          caption={monthlyNow === null ? undefined : `now ${formatInr(monthlyNow)}`}
+          label="Rise"
+          value={live ? formatInr(monthlyFromAnnual(amount)) : "—"}
+          caption={live && amount !== null ? `${formatInr(amount)} a year` : undefined}
           live={live}
         />
         <Out
           label="Annualised"
-          value={`${(annualised ?? 0).toFixed(2)}%`}
+          value={live && annualised !== null ? `${annualised.toFixed(2)}%` : "—"}
           /* -- P21-5: a 15% rise after 18 months is a different decision from
                 15% after 12, but the money actually paid is the real percent.
                 So the card says which is which rather than letting the larger
                 number be mistaken for the decision. -- */
           caption={
-            pct === null ? "Context only." : `Context only · paid is ${pct.toFixed(2)}%.`
+            !live
+              ? "Context only."
+              : pct === null
+                ? "Context only."
+                : `Context only · paid is ${pct.toFixed(2)}%.`
           }
           live={live}
         />
