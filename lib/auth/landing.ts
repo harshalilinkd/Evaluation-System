@@ -88,6 +88,11 @@ export const PROTECTED_PREFIXES = [
   "/people",
   "/scorecard",
   "/admin",
+  // Somebody's own account. It was missing, so the middleware treated it as a
+  // public page and a signed-out visitor reached the shell before its guard
+  // turned them round — losing the `next`, so signing in did not return them
+  // to the page they asked for.
+  "/profile",
 ] as const;
 
 export function isProtectedPath(pathname: string): boolean {

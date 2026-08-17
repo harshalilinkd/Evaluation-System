@@ -1,5 +1,6 @@
 /** Where Google lands. Exchanges the code for a session, or explains why not. */
 
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { landingPathFor, ROUTES } from "@/lib/auth/landing";
@@ -64,15 +65,36 @@ export async function GET(request: NextRequest) {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-    await supabase.auth.signOut();
-    return back("no_profile");
-  }
+  /* -- THE SIGN-OUT HAS TO REACH THE BROWSER, and it did not.
 
-  if (!profile.is_active) {
+        `signOut()` revokes the session at GoTrue and asks the cookie store to
+        clear the pair — but `back()` returns a BRAND-NEW `NextResponse`, and a
+        response constructed from scratch does not carry cookie work done
+        before it. Exactly the failure `redirectKeepingSession` documents in
+        lib/supabase/middleware.ts, from the other direction.
+
+        So the browser kept a cookie whose access token is still
+        cryptographically valid for the rest of its hour. The next request's
+        `getUser()` in middleware therefore SAW A USER on
+        `/login?error=no_profile`, and sent them into the app — where the
+        layout guard found no profile and sent them back. ERR_TOO_MANY_REDIRECTS
+        on the bare domain, with no way out but clearing cookies by hand.
+
+        Clearing them on the response itself is what makes the sign-out real.
+        Matching on the `sb-` prefix rather than naming the cookie because
+        supabase-ssr CHUNKS a large token across `…auth-token.0`, `.1`, … and
+        leaving one chunk behind is the same bug with a subtler symptom. -- */
+  const signOutInto = async (response: NextResponse) => {
     await supabase.auth.signOut();
-    return back("account_inactive");
-  }
+    for (const cookie of (await cookies()).getAll()) {
+      if (cookie.name.startsWith("sb-")) response.cookies.delete(cookie.name);
+    }
+    return response;
+  };
+
+  if (!profile) return signOutInto(back("no_profile"));
+
+  if (!profile.is_active) return signOutInto(back("account_inactive"));
 
   return NextResponse.redirect(new URL(next ?? landingPathFor(roles), url.origin));
 }

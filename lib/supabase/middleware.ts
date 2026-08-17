@@ -151,8 +151,24 @@ export async function updateSession(request: NextRequest) {
         the session ends up belonging to. -- */
   const wantsToSwitch = request.nextUrl.searchParams.has("switch");
   const midHandOff = request.nextUrl.searchParams.has("next");
+  /* -- 3. THE APP ITSELF SENT THEM HERE, and bouncing them back is a loop.
+        `requireAuth` redirects to `/login?error=no_profile` when a session is
+        valid but its profile row cannot be read, and to
+        `/login?error=account_inactive` when HR has switched somebody off. In
+        both cases the browser still holds a working session — so this rule saw
+        a user, redirected to the dashboard, the layout guard rejected them
+        again, and round it went until the browser gave up with
+        ERR_TOO_MANY_REDIRECTS. The whole site, for that person, with no way out
+        but clearing cookies.
 
-  if (user && pathname === ROUTES.login && !wantsToSwitch && !midHandOff) {
+        An `error` parameter means a guard has already decided this person may
+        not be in the app. The login screen is where that decision is explained;
+        overruling it is how a rejection becomes an infinite loop rather than a
+        message. Same shape as the two exceptions above — the redirect is for
+        somebody who WANDERED here, never for somebody who was sent. -- */
+  const wasRejected = request.nextUrl.searchParams.has("error");
+
+  if (user && pathname === ROUTES.login && !wantsToSwitch && !midHandOff && !wasRejected) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = ROUTES.dashboard;
     redirectUrl.search = "";
