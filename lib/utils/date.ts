@@ -76,7 +76,22 @@ export function formatInr(value: number | null | undefined): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
-    maximumFractionDigits: 2,
+    /* -- NO PAISE, at the owner's instruction. ₹18,000.00 is two characters of
+          noise on every salary in the product, and the trailing zeros are never
+          anything else: pay is set, stored and paid in whole rupees, and the
+          `.00` was decoration that made a column of figures harder to scan
+          rather than more precise.
+
+          Rounded rather than truncated, and stated here because it is the one
+          case that matters: a stored figure with a fractional part — an
+          imported ₹18,000.50, or a percentage-derived amount — would otherwise
+          DISAPPEAR by a rupee when it was displayed. Rounding shows the nearer
+          whole number; truncating would consistently understate.
+
+          Changed in the ONE place rather than at thirteen call sites. A product
+          that shows ₹18,000 on the salary band and ₹18,000.00 on the printed
+          sheet has two answers to the same question. -- */
+    maximumFractionDigits: 0,
   }).format(value);
 }
 

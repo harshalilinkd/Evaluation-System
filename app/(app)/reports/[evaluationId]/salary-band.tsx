@@ -42,10 +42,51 @@ import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 
-function Figure({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/* -- WHY THESE CARDS ARE NOT ALL THE SAME COLOUR.
+      Reported as "all plain, all same font, same colour — confusing to read the
+      figures", and that was fair: six money figures in identical grey boxes
+      gives the eye nowhere to land, so a reader has to read all six to find the
+      two that matter.
+
+      Two do. CURRENT SALARY is the baseline every percentage on this screen is
+      measured from, and MANAGEMENT APPROVED is the outcome. Everything else —
+      what they joined on, when they last had a rise, what they asked for, what
+      the manager proposed — is context for those two.
+
+      SO THE EMPHASIS IS ONE HUE AT TWO STRENGTHS, not six colours. A palette
+      where every card is a different colour is the thing that reads as gaudy,
+      and it would also mean six hues each needing a meaning. One accent, used
+      twice, says "look here" and nothing else.
+
+      IT IS THE APP'S OWN `accent-tint`, deliberately NOT a tier hue. §13.1
+      reserves cyan, pink and indigo for who-said-this, and UI2-2 keeps green
+      for movement — a salary card wearing any of them would claim to mean
+      something it does not. `accent-tint` is the soft fill behind active
+      navigation; borrowing it for "this is the figure that counts" is the same
+      idea, and it re-maps correctly in dark mode because every token keeps its
+      role (UI2-3). -- */
+function Figure({
+  label,
+  value,
+  hint,
+  tone = "quiet",
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: "quiet" | "accent";
+}) {
+  const accent = tone === "accent";
   return (
-    <figure className="rounded-control border border-rule bg-surface-mute p-4">
-      <figcaption className="type-label text-ink-muted">{label}</figcaption>
+    <figure
+      className={cn(
+        "rounded-control border p-4",
+        accent ? "border-primary/25 bg-accent-tint/60" : "border-rule bg-surface-mute",
+      )}
+    >
+      <figcaption className={cn("type-label", accent ? "text-primary" : "text-ink-muted")}>
+        {label}
+      </figcaption>
       <p className="tabular text-display-md text-ink">{value}</p>
       {hint ? <p className="font-sans text-body-sm text-ink-muted">{hint}</p> : null}
     </figure>
@@ -142,17 +183,20 @@ export function SalaryBand({
       <p className="type-label mt-1 text-ink-muted">Where they are today</p>
       <div className="mt-2 grid gap-4 sm:grid-cols-3">
         <Figure
-          label="Salary when they joined"
+          label="Joining Salary"
           value={moneyMonthly(data.joiningCtc)}
           hint={data.joiningCtc === null ? "Not on their record." : `${money(data.joiningCtc)} a year`}
         />
+        {/* The baseline every percentage on this screen is measured from, so it
+            is one of the two figures the eye should find first. */}
         <Figure
-          label="Salary now"
+          label="Current Salary"
           value={moneyMonthly(currentCtc)}
           hint={`${money(currentCtc)} a year`}
+          tone="accent"
         />
         <Figure
-          label="Last raise"
+          label="Last Increment"
           value={data.lastIncrementDate ? formatDate(data.lastIncrementDate) : "None yet"}
           hint={
             data.monthsSinceLastIncrement === null
@@ -192,7 +236,7 @@ export function SalaryBand({
       <p className="type-label mt-6 text-ink-muted">What the manager suggested</p>
       <div className="mt-2">
         <Figure
-          label="Their suggested rise"
+          label="Manager Suggested Hike %"
           value={data.managerHikePct === null ? "Nothing" : `${data.managerHikePct}% more`}
           hint={
             data.managerHikePct === null
@@ -873,8 +917,26 @@ function MdApproval({
               saying what is being waited for — never the manager's figure
               standing in, which would show an approval nobody gave. §13.4, and
               the same rule the card beside it needed. -- */}
-        <article className="card-surface p-4">
-          <h3 className="type-label text-ink-muted">Management approved</h3>
+        {/* -- THE OUTCOME, and the second of the two figures that matter.
+              Tinted only once there IS one: an empty card wearing the accent
+              would draw the eye to a decision nobody has made, which is worse
+              than the flat row it replaces. -- */}
+        <article
+          className={cn(
+            "p-4",
+            review?.md_approved_ctc
+              ? "rounded-card border border-primary/25 bg-accent-tint/60"
+              : "card-surface",
+          )}
+        >
+          <h3
+            className={cn(
+              "type-label",
+              review?.md_approved_ctc ? "text-primary" : "text-ink-muted",
+            )}
+          >
+            Management approved
+          </h3>
           {review?.md_approved_ctc ? (
             <>
               <p className="mt-1 tabular text-display-md text-ink">

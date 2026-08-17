@@ -261,7 +261,7 @@ export function ExecutiveSummary({
                       screen the MD approves from, so it is the last place that should
                       still speak a different unit from the one HR typed it in. */}
                   <Fact
-                    label="Salary when they joined"
+                    label="Joining Salary"
                     value={moneyMonthly(salary.joiningCtc)}
                     caption={
                       salary.joiningCtc === null
@@ -270,7 +270,7 @@ export function ExecutiveSummary({
                     }
                   />
                   <Fact
-                    label="Salary now"
+                    label="Current Salary"
                     value={moneyMonthly(salary.currentCtc)}
                     caption={
                       salary.currentCtc === null
@@ -280,7 +280,7 @@ export function ExecutiveSummary({
                     strong
                   />
                   <Fact
-                    label="Last raise"
+                    label="Last Increment"
                     value={salary.lastIncrementDate ? formatDate(salary.lastIncrementDate) : "None yet"}
                     caption={
                       salary.monthsSinceLastIncrement === null
