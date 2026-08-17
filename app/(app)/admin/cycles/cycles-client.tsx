@@ -418,6 +418,43 @@ export function CyclesClient({
         // The dialog SHOWS the row; these are what can be done with it. Without
         // them it is a read-only summary of a row the reader is looking at,
         // which is the least useful thing it could be.
+        /* -- WHO IS IN IT, AND WHO IS HOLDING IT UP.
+              The counts above say how much work there is; these say who to
+              talk to. A column cannot hold a list, so it goes in the dialog's
+              own slot beneath the fields.
+
+              §5 IS SATISFIED BY THE ROUTE, not by this component. `/admin/
+              cycles` is HR and MD only, and §9 gives both of them each side —
+              so naming who has submitted on both layers is theirs to see. On a
+              lead-facing screen the same list would be a leak, which is why the
+              query's own comment says so. -- */
+        rowDetail={(c) => (
+          <div className="grid gap-5 sm:grid-cols-2">
+            <PeopleList
+              title="Employees"
+              empty="Nobody has been added yet."
+              rows={c.employees.map((e) => ({
+                key: e.name,
+                name: e.name,
+                done: e.submitted,
+                note: e.submitted ? "Submitted" : "Not yet",
+              }))}
+            />
+            <PeopleList
+              title="Managers"
+              empty="Nobody has a manager assigned."
+              rows={c.managerRows.map((m) => ({
+                key: m.name,
+                name: m.name,
+                done: m.done === m.total,
+                /* -- The FRACTION, not "pending". A HOD rating six people can
+                      be finished for four, and one word would say the same
+                      thing about them as about somebody who has done none. -- */
+                note: `${m.done} of ${m.total}`,
+              }))}
+            />
+          </div>
+        )}
         rowActions={(c) => (
           <>
             <Button asChild variant="secondary" className="min-h-11">
@@ -502,6 +539,65 @@ function Count({ value, of }: { value: number; of: number }) {
  * needs to notice, and it is the one a boolean cannot express. The count is
  * always shown once anything has been sent.
  */
+/**
+ * A named list with a done/not-done state per row.
+ *
+ * ONE COMPONENT FOR BOTH SIDES, so the employees and the managers cannot drift
+ * apart in how "done" reads — which they would, being two lists built from two
+ * different facts.
+ *
+ * NEVER COLOUR ALONE (§13.8). Each row carries a tick or a dash AND a word, so
+ * the state survives a monochrome screen and reaches a screen reader. The tick
+ * is `success` because it means finished, which is the one thing green means in
+ * this product (UI2-2) — it is not a tier and does not claim to say who rated.
+ */
+function PeopleList({
+  title,
+  rows,
+  empty,
+}: {
+  title: string;
+  rows: Array<{ key: string; name: string; done: boolean; note: string }>;
+  empty: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="type-label text-ink-muted">
+        {title}
+        {rows.length > 0 ? <span className="tabular ml-1.5">{rows.length}</span> : null}
+      </p>
+      {rows.length === 0 ? (
+        <p className="mt-2 font-sans text-body-sm text-ink-muted">{empty}</p>
+      ) : (
+        <ul className="mt-2 space-y-1.5">
+          {rows.map((r) => (
+            <li key={r.key} className="flex items-baseline gap-2">
+              {r.done ? (
+                <Check aria-hidden className="size-3.5 shrink-0 translate-y-0.5 text-success" />
+              ) : (
+                <span aria-hidden className="w-3.5 shrink-0 text-center text-ink-muted">
+                  –
+                </span>
+              )}
+              <span className="min-w-0 flex-1 truncate font-sans text-body-sm text-ink">
+                {r.name}
+              </span>
+              <span
+                className={cn(
+                  "tabular shrink-0 font-sans text-body-sm",
+                  r.done ? "text-ink-muted" : "text-ink",
+                )}
+              >
+                {r.note}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function LinksCell({ sent, of }: { sent: number; of: number }) {
   if (of === 0) return <span className="text-body-sm text-ink-muted">—</span>;
 

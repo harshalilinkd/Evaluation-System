@@ -190,6 +190,15 @@ export type DataGridProps<TData> = {
    * ignorant of what its rows mean.
    */
   rowActions?: (row: TData) => React.ReactNode;
+  /**
+   * Extra detail beneath the field list, for anything a COLUMN cannot hold.
+   *
+   * A column shows one value per row. A list of names — who is in this cycle,
+   * and who has submitted — is not that shape, and squeezing it into a cell
+   * would be unreadable at any width. Rendered after the fields because it
+   * elaborates them rather than replacing them.
+   */
+  rowDetail?: (row: TData) => React.ReactNode;
 };
 
 /**
@@ -218,6 +227,7 @@ export function DataGrid<TData>({
   rowTitle,
   rowLabel,
   rowActions,
+  rowDetail,
 }: DataGridProps<TData>) {
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   /* -- The open row, by index rather than by value.
@@ -759,6 +769,21 @@ export function DataGrid<TData>({
                   </div>
                 ))}
             </dl>
+          ) : null}
+
+          {/* -- ANYTHING THAT IS NOT A COLUMN.
+                The field list above can only ever show what the table shows,
+                one value per column — which is right for the row's own facts
+                and cannot express a LIST. A cycle's detail needs to name the
+                employees and the managers in it and say who has submitted, and
+                three names in a table cell would be unreadable at any width.
+
+                So the dialog gets a slot beneath the fields rather than the
+                columns getting longer. Optional, so every existing caller is
+                unchanged, and rendered after them because it elaborates the
+                summary rather than replacing it. -- */}
+          {openRow && rowDetail ? (
+            <div className="mt-2 border-t border-rule pt-4">{rowDetail(openRow.original)}</div>
           ) : null}
 
           {openRow && rowActions ? (

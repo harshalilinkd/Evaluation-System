@@ -47,6 +47,31 @@ export type CycleListRow = {
    * having more raters than it has.
    */
   managers: number;
+  /**
+   * WHO is in it, and who has and has not submitted.
+   *
+   * A count says how much work there is; a name says who to talk to. The
+   * detail dialog is where somebody goes to answer "is this the cycle I meant,
+   * and who is holding it up" — and neither question is answerable from "3".
+   *
+   * HR AND THE MD ONLY, which is what makes it safe to carry both sides.
+   * `/admin/cycles` is guarded to those two roles, and §9 gives them both
+   * layers. This list must never reach a lead-facing screen: whether the
+   * employee has submitted is precisely what blind rating withholds from them
+   * (§5), so a component reusing this row on `/team` would be a leak.
+   *
+   * PENDING FIRST in both lists. They are read as a chase list, so they are
+   * ordered the way somebody would work them (N1-7's reasoning).
+   */
+  employees: Array<{ name: string; submitted: boolean }>;
+  /**
+   * Each manager once, with how far through their own reports they are.
+   *
+   * Not a boolean: a HOD rating six people can be finished for four of them,
+   * and "pending" would be as true of somebody who has done five as of
+   * somebody who has done none. The fraction is what says who to chase.
+   */
+  managerRows: Array<{ name: string; done: number; total: number }>;
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
   /**
@@ -195,7 +220,9 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     // `lead_id` for the distinct-manager count. Written out in full rather than
     // concatenated: supabase-js infers the row type from this string at compile
     // time and degrades everything it cannot statically parse (P3-11).
-    .select("id, cycle_id, lead_id, status, self_submitted_at, lead_submitted_at")
+    .select(
+      "id, cycle_id, evaluatee_id, lead_id, status, self_submitted_at, lead_submitted_at",
+    )
     .is("excluded_at", null);
 
   if (evaluationError) {
@@ -222,6 +249,58 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
       set.add(row.lead_id);
       managers.set(row.cycle_id, set);
     }
+  }
+
+  /* -- WHO, by name.
+        One round trip for every person named in any cycle — employees and
+        managers together, since both are rows in `profiles` and asking twice
+        would be two queries for one answer.
+
+        NOT an embedded join. `evaluations` has two foreign keys into
+        `profiles`, and a select string that has to disambiguate them is one
+        typo away from silently resolving the wrong one — the same reason
+        `listBinnedCycles` and `loadCycleParticipants` both read them
+        separately (P3-7). -- */
+  const namedIds = [
+    ...new Set(
+      (evaluations ?? [])
+        .flatMap((r) => [r.evaluatee_id, r.lead_id])
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const { data: named } = namedIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", namedIds)
+    : { data: [] };
+  const nameOf = new Map((named ?? []).map((p) => [p.id, p.full_name] as const));
+
+  const employeesIn = new Map<string, Array<{ name: string; submitted: boolean }>>();
+  /* Keyed by manager id so one HOD is one row however many people they rate. */
+  const managerTally = new Map<string, Map<string, { done: number; total: number }>>();
+
+  for (const row of evaluations ?? []) {
+    const list = employeesIn.get(row.cycle_id) ?? [];
+    list.push({
+      name: nameOf.get(row.evaluatee_id) ?? "Unknown",
+      submitted: Boolean(row.self_submitted_at),
+    });
+    employeesIn.set(row.cycle_id, list);
+
+    if (!row.lead_id) continue;
+    const perCycle = managerTally.get(row.cycle_id) ?? new Map();
+    const entry = perCycle.get(row.lead_id) ?? { done: 0, total: 0 };
+    entry.total += 1;
+    if (row.lead_submitted_at) entry.done += 1;
+    perCycle.set(row.lead_id, entry);
+    managerTally.set(row.cycle_id, perCycle);
+  }
+
+  /* -- PENDING FIRST, then alphabetical. Both lists are read as a chase list,
+        so they are ordered the way somebody would work them rather than the
+        order the database happened to return. -- */
+  for (const list of employeesIn.values()) {
+    list.sort(
+      (a, b) => Number(a.submitted) - Number(b.submitted) || a.name.localeCompare(b.name),
+    );
   }
 
   /* -- Who has been sent a link.
@@ -272,6 +351,13 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         cycleType: c.cycle_type === "INCREMENT" ? "INCREMENT" : "EVALUATION",
         participants: counts.participants,
         managers: managers.get(c.id)?.size ?? 0,
+        employees: employeesIn.get(c.id) ?? [],
+        managerRows: [...(managerTally.get(c.id)?.entries() ?? [])]
+          .map(([id, t]) => ({ name: nameOf.get(id) ?? "Unknown", done: t.done, total: t.total }))
+          // Furthest behind first, then alphabetical — the chase order.
+          .sort(
+            (a, b) => a.done / a.total - b.done / b.total || a.name.localeCompare(b.name),
+          ),
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
         linksSent: sentPerCycle.get(c.id)?.size ?? 0,
       };
