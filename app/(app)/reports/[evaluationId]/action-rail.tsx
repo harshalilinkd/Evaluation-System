@@ -93,6 +93,27 @@ export function HrRail({ report }: { report: EvaluationReport }) {
   const [recommendation, setRecommendation] = React.useState(
     report.review.hrRecommendation ?? "PROCEED",
   );
+
+  /* -- THE SUMMARY GATES ALL THREE HR ACTIONS, at the owner's instruction:
+        "make send to MD button hide or greyout until they add notes".
+
+        Greyed rather than hidden. A control that vanishes reads as a feature
+        that is not there — somebody hunts for it — where a disabled one with a
+        sentence beside it says what to do (§13.4). The sentence is what makes
+        the difference; a grey button on its own is the dead end the rule is
+        about.
+
+        ALL THREE, not just Send. `saveHrReview`, `sendToMd` and
+        `completeEvaluation` share `hrReviewSchema`, whose summary is
+        `.trim().min(1)` — so "Save without sending" was equally certain to fail,
+        and gating only Send would move the same complaint one button along.
+        "Return for changes" is untouched: it takes a reason, not a summary.
+
+        The expression is written ONCE and drives both the disabled state and
+        the sentence, so the form cannot accept what the server then rejects —
+        the two-copies-of-a-threshold problem P13-6 had to unpick. `.trim()`
+        matches the schema exactly, so whitespace does not slip past. -- */
+  const summaryMissing = summary.trim() === "";
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState<string | null>(null);
@@ -441,11 +462,21 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                 rendered disabled — §13.4 wants a disabled control explained,
                 and the honest explanation here is that the action does not
                 exist on this track (AMEND-2's second pair of eyes on pay). */}
+            {/* -- WHY THEY ARE GREY, beside them and not in a tooltip. §13.4,
+                  and a tooltip is not an explanation on a touch screen. Only
+                  while it blocks: a permanent copy of the hint already under
+                  the field would be the same sentence twice. -- */}
+            {summaryMissing ? (
+              <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 font-sans text-body-sm text-ink-muted">
+                Write your summary above first. It is what the MD reads before the report.
+              </p>
+            ) : null}
+
             {report.isIncrement ? null : (
               <Button
                 type="button"
                 className="min-h-11 w-full"
-                disabled={busy}
+                disabled={busy || summaryMissing}
                 onClick={() => setCompleteOpen(true)}
               >
                 {busy ? "Working…" : "Approve and complete"}
@@ -456,7 +487,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               type="button"
               variant={report.isIncrement ? "default" : "secondary"}
               className="min-h-11 w-full"
-              disabled={busy}
+              disabled={busy || summaryMissing}
               onClick={onSend}
             >
               {busy ? "Working…" : "Send to MD"}
@@ -466,7 +497,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               type="button"
               variant="secondary"
               className="min-h-11 w-full"
-              disabled={busy}
+              disabled={busy || summaryMissing}
               onClick={onSave}
             >
               Save without sending
