@@ -776,7 +776,7 @@ function AddPersonDialog({
 
               <Field
                 id="phone"
-                label="Work mobile"
+                label="Mobile No"
                 hint="Where their form link is sent. Indian numbers may be typed without +91."
                 error={createState.fieldErrors?.phone}
               >
@@ -1230,7 +1230,7 @@ function EditPersonDialog({
 
               <Field
                 id="e_phone"
-                label="Work mobile"
+                label="Mobile No"
                 optional
                 error={state.fieldErrors?.phone}
                 hint="Where their form link is sent. Indian numbers may be typed without +91."
@@ -1786,7 +1786,7 @@ export function UsersTab({
       },
       {
         accessorKey: "phone_e164",
-        header: "Work mobile",
+        header: "Mobile No",
         size: 150,
         cell: ({ row }) => <GridCell value={dash(row.original.phone_e164)} className="tabular" />,
       },

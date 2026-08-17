@@ -236,7 +236,7 @@ async function amendPerson(
     const { normaliseToE164 } = await import("@/lib/notify/phone");
     const result = normaliseToE164(input.work_phone);
     if (!result.ok) {
-      return { ok: false, error: `That work mobile number is not usable: ${result.reason}` };
+      return { ok: false, error: `That official mobile number is not usable: ${result.reason}` };
     }
     workPhoneE164 = result.e164;
   }
@@ -413,7 +413,7 @@ async function provisionPerson(
     const { normaliseToE164 } = await import("@/lib/notify/phone");
     const result = normaliseToE164(input.work_phone);
     if (!result.ok) {
-      return { ok: false, error: `That work mobile number is not usable: ${result.reason}` };
+      return { ok: false, error: `That official mobile number is not usable: ${result.reason}` };
     }
     workPhoneE164 = result.e164;
   }
