@@ -8,6 +8,7 @@ import { useFormStatus } from "react-dom";
 import { signIn, signInWithGoogle, type AuthState } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/appraise/password-input";
 import { Label } from "@/components/ui/label";
 
 /* -- The Google mark, inline.
@@ -114,14 +115,9 @@ export function SignInForm({ next, initialError }: { next?: string; initialError
         <Label htmlFor="password" className="type-label text-ink-muted">
           Password
         </Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          className="min-h-11"
-        />
+        {/* Show/hide, because somebody is typing a password HR gave them —
+            often on a phone — and had no way to check what they entered. */}
+        <PasswordInput id="password" name="password" autoComplete="current-password" required />
       </div>
 
       <SubmitButton />
