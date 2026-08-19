@@ -22,7 +22,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
   // It is also what makes a mid-cycle reassignment take effect immediately: the
   // check is against evaluations.lead_id, so the moment HR moves it the previous
   // lead loses the screen. Their draft stays on the LEAD layer untouched.
-  const { evaluation } = await requireEvaluationAccess(evaluationId, "lead");
+  const { evaluation, ...session } = await requireEvaluationAccess(evaluationId, "lead");
 
   /* -- AMEND-3: the LEAD form, and ONLY the LEAD form.
         This page used to load both layers and hand them to a paired renderer.
@@ -34,7 +34,14 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
         There is also no longer a "wait until the employee submits" gate. Both
         layers are open together (§8), so the lead can start the moment the
         cycle is launched — which is the whole point of rating in parallel. -- */
-  const leadForm = await getEvaluationForm(evaluationId, "LEAD");
+  /* -- WHICH manager form. The same person can be the reporting lead of one
+        report and the SECOND reviewer of another, so this is decided per
+        evaluation from who is signed in — never from a role, and never from
+        anything the browser sent. `requireEvaluationAccess` has already refused
+        anybody who is neither. -- */
+  const layer = evaluation.co_lead_id === session.profile.id ? "LEAD_2" : "LEAD";
+
+  const leadForm = await getEvaluationForm(evaluationId, layer);
   if (!leadForm.ok) {
     return <ErrorState title="Could not load this review" body={leadForm.error.message} />;
   }
@@ -49,7 +56,11 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
       .maybeSingle(),
     supabase
       .from("evaluation_cycles")
-      .select("name, period_label, lead_due_on")
+      // cycle_type decides how the manager WALKS the form: an evaluation
+      // cycle is a short sequence and gets the guided flow, the same as the
+      // employee's side of it. Both sides of one form should not be two
+      // different experiences of it.
+      .select("name, period_label, lead_due_on, cycle_type")
       .eq("id", evaluation.cycle_id)
       .maybeSingle(),
   ]);
@@ -71,10 +82,16 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
     departmentName: department?.name ?? null,
     periodLabel: cycle?.period_label ?? "",
     leadDueOn: cycle?.lead_due_on ?? null,
+    isIncrement: cycle?.cycle_type === "INCREMENT",
     status: leadForm.data.evaluationStatus,
     // The LEAD layer's own timestamp — never the record's status, and never
     // anything about the other side. §8: a layer locks on its own submission.
-    leadSubmittedAt: evaluation.lead_submitted_at,
+    // THIS reviewer's own timestamp — never the record's status, never the
+    // other manager's, and never anything about the employee. §8: a layer locks
+    // on its own submission (A3-3).
+    leadSubmittedAt:
+      layer === "LEAD_2" ? evaluation.co_lead_submitted_at : evaluation.lead_submitted_at,
+    isSecondReviewer: layer === "LEAD_2",
   };
 
   return <ReviewScreen form={leadForm.data} meta={meta} />;

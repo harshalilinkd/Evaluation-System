@@ -36,6 +36,12 @@ export type GuidedFormProps = {
   submitting?: boolean;
   /** The screen owns autosave; this only shows what it reports. */
   status?: React.ReactNode;
+  /* -- Passed straight through to `QuestionField`. The manager's comment
+        control arrives this way, exactly as it does on the scrolling form —
+        a comment is not a property of a form, so neither renderer knows what
+        one is (P13-9). Without this the guided flow would silently drop the
+        manager's ability to explain a score. -- */
+  renderAside?: (question: FormQuestion) => React.ReactNode;
 };
 
 /** Answered means it holds something. `0` and `false` are answers (P4-9, P12-3). */
@@ -76,6 +82,7 @@ export function GuidedForm({
   onSubmit,
   submitting = false,
   status,
+  renderAside,
 }: GuidedFormProps) {
   const reduced = useReducedMotion();
   const hidden = React.useMemo(() => new Set(hiddenQuestionIds ?? []), [hiddenQuestionIds]);
@@ -176,6 +183,7 @@ export function GuidedForm({
             value={values[question.questionId]}
             error={serverError ?? localError}
             readOnly={readOnly}
+            renderAside={renderAside}
             onChange={(v) => {
               setTouched(false);
               onChange(question.questionId, v);

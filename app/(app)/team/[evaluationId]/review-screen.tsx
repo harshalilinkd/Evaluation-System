@@ -22,6 +22,7 @@ import { AutosaveIndicator, type AutosaveState } from "@/components/appraise/aut
 import { BackLink } from "@/components/appraise/back-link";
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { GuidedForm } from "@/components/appraise/guided-form";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormActionBar } from "@/components/appraise/form-action-bar";
@@ -62,10 +63,21 @@ export type ReviewMeta = {
   designation: string | null;
   departmentName: string | null;
   periodLabel: string;
+  /** Evaluation cycles are walked one question at a time, like the employee's. */
+  isIncrement: boolean;
   leadDueOn: string | null;
   status: EvaluationStatus;
-  /** The LEAD layer's own timestamp. Nothing here reports the other side. */
+  /** This reviewer's own timestamp. Nothing here reports the other side. */
   leadSubmittedAt: string | null;
+  /**
+   * Whether the viewer is the SECOND reviewer (0083).
+   *
+   * Changes wording only — never what is asked. Both managers answer the same
+   * questions on the same form, and a second reviewer whose form differed would
+   * make the two ratings incomparable, which is the opposite of why both are
+   * collected.
+   */
+  isSecondReviewer?: boolean;
 };
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -87,7 +99,11 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
   // review is opened again to be read.
   const [thanked, setThanked] = React.useState(false);
   const [openComments, setOpenComments] = React.useState<ReadonlySet<string>>(new Set());
-  const cacheKey = draftKey(meta.evaluationId, "LEAD");
+  /* -- Keyed by LAYER as well as evaluation. Both managers open the same
+        evaluation id, and on a shared machine one cache key would restore the
+        team leader's unsaved draft into the coordinator's form (§5, and FIX-4
+        chose sessionStorage over localStorage for the same reason). -- */
+  const cacheKey = draftKey(meta.evaluationId, meta.isSecondReviewer ? "LEAD_2" : "LEAD");
 
   const pending = React.useRef<{
     answers: Record<string, unknown>;
@@ -512,26 +528,60 @@ export function ReviewScreen({ form, meta }: { form: FormDefinition; meta: Revie
         hiddenQuestionIds={hiddenQuestionIds}
       />
 
-      <FormRenderer
-        form={form}
-        values={values}
-        errors={errors}
-        readOnly={readOnly}
-        onChange={onChange}
-        // Recomputed on every answer, so a conditional appears the moment its
-        // parent is answered rather than on the next page load.
-        hiddenQuestionIds={hiddenQuestionIds}
-        renderAside={(question: FormQuestion) => (
-          <CommentField
-            question={question}
-            value={comments[question.questionId] ?? ""}
-            open={openComments.has(question.questionId)}
-            readOnly={readOnly}
-            onOpen={() => setOpenComments((prev) => new Set(prev).add(question.questionId))}
-            onChange={(text) => onComment(question.questionId, text)}
-          />
-        )}
-      />
+      {/* -- THE MANAGER WALKS THE SAME FORM THE EMPLOYEE DOES.
+             Both sides of one evaluation being two different experiences of it
+             is the kind of difference nobody decides on purpose — it just
+             happens because two screens were built at different times. An
+             evaluation cycle is a short sequence for the manager too.
+
+             The comment control rides through `renderAside` unchanged, so the
+             one thing that makes the manager's side different from the
+             employee's survives both layouts. -- */}
+      {meta.isIncrement || readOnly ? (
+        <FormRenderer
+          form={form}
+          values={values}
+          errors={errors}
+          readOnly={readOnly}
+          onChange={onChange}
+          // Recomputed on every answer, so a conditional appears the moment its
+          // parent is answered rather than on the next page load.
+          hiddenQuestionIds={hiddenQuestionIds}
+          renderAside={(question: FormQuestion) => (
+            <CommentField
+              question={question}
+              value={comments[question.questionId] ?? ""}
+              open={openComments.has(question.questionId)}
+              readOnly={readOnly}
+              onOpen={() => setOpenComments((prev) => new Set(prev).add(question.questionId))}
+              onChange={(text) => onComment(question.questionId, text)}
+            />
+          )}
+        />
+      ) : (
+        <GuidedForm
+          form={form}
+          values={values}
+          errors={errors}
+          hiddenQuestionIds={hiddenQuestionIds}
+          tier="lead"
+          readOnly={readOnly}
+          onChange={onChange}
+          submitLabel="Submit review"
+          onSubmit={askToSubmit}
+          renderAside={(question: FormQuestion) => (
+            <CommentField
+              question={question}
+              value={comments[question.questionId] ?? ""}
+              open={openComments.has(question.questionId)}
+              readOnly={readOnly}
+              onOpen={() => setOpenComments((prev) => new Set(prev).add(question.questionId))}
+              onChange={(text) => onComment(question.questionId, text)}
+            />
+          )}
+          status={<AutosaveIndicator state={saveState} savedAt={savedAt} />}
+        />
+      )}
 
       {/* ---------- Submit ---------- */}
       {/* One primary action (§13.3). The return-to-employee button that used to
