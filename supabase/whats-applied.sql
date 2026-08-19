@@ -119,6 +119,12 @@ with expected(migration, kind, object_name, why_it_matters) as (values
      'Without it a plain EVALUATION cycle asks the manager to recommend a promotion and a percentage, on a cycle that has no pay decision at the end of it.'),
   ('0073_notification_templates', 'table', 'notification_templates',
      'Without it Settings > Messages cannot save a reworded message — the editor is there and the table it writes to is not.'),
+  /* -- Detected on the PROVIDER CHECK the migration wrote, not on the function
+        name: `handle_new_auth_user` has existed since 0001 and 0071 rewrote it,
+        so a `function` detector would report 0074 applied on a database that
+        has never seen it — which is 0056's false positive exactly. -- */
+  ('0074_no_self_signup', 'no_selfsignup', 'handle_new_auth_user refuses a social provider',
+     'Without it, enabling Google sign-in lets ANY Google account on earth create itself a profile and an EMPLOYEE role. §9 puts account creation with HR.'),
   ('0075_correct_joining_salary', 'function', 'set_joining_salary',
      'Without it HR cannot CORRECT a joining salary — 0069 refuses to overwrite one, so a figure typed wrong at import stays wrong.'),
   ('0076_evaluation_schedule', 'table', 'evaluation_schedule',
@@ -305,6 +311,10 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'record_salary_expectation'
          and pg_get_functiondef(p.oid) like '%v_amount * 12%')
+    when 'no_selfsignup' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'handle_new_auth_user'
+         and pg_get_functiondef(p.oid) like '%raw_app_meta_data%')
     when 'pct_required' then exists (
       select 1 from public.questions
        where id = md5('linkd.q.mgr.hike_percent')::uuid and is_required)
