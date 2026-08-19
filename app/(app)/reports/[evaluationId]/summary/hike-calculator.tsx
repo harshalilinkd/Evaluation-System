@@ -464,7 +464,7 @@ function Out({
         className={cn(
           "tabular mt-0.5 font-sans leading-tight transition-colors duration-hover",
           strong ? "text-display-sm" : "text-body-lg",
-          live ? "text-ink" : "text-ink-muted/70",
+          live ? "text-ink" : "text-ink-faint",
         )}
       >
         {value}

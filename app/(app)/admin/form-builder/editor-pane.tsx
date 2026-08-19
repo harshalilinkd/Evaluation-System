@@ -465,7 +465,7 @@ function OptionEditor({
               dragIndex === i && "opacity-40",
             )}
           >
-            <span aria-hidden className="cursor-grab text-ink-muted/50 active:cursor-grabbing">
+            <span aria-hidden className="cursor-grab text-ink-faint active:cursor-grabbing">
               <GripVertical className="size-3.5" />
             </span>
             <Input
