@@ -42,8 +42,6 @@ const AUDIENCES = [
 export function PreviewPane({
   form,
   audience,
-  cycleType,
-  onCycleTypeChange,
   onAudienceChange,
   phone,
   onPhoneChange,
@@ -54,11 +52,6 @@ export function PreviewPane({
 }: {
   form: FormDefinition;
   audience: "SELF" | "LEAD";
-  /* Which cycle the preview is of. An evaluation cycle and an increment cycle
-     ask different questions (§6's cycle_scope), so "the form" is two forms and
-     the preview has to say which one it is showing. */
-  cycleType: "EVALUATION" | "INCREMENT";
-  onCycleTypeChange: (v: "EVALUATION" | "INCREMENT") => void;
   onAudienceChange: (next: "SELF" | "LEAD") => void;
   phone: boolean;
   onPhoneChange: (next: boolean) => void;
@@ -119,15 +112,6 @@ export function PreviewPane({
               options={AUDIENCES.map((a) => ({ value: a.value, label: a.label }))}
             />
             <Segmented
-              label="Cycle type"
-              value={cycleType}
-              onChange={(v) => onCycleTypeChange(v as "EVALUATION" | "INCREMENT")}
-              options={[
-                { value: "EVALUATION", label: "Evaluation" },
-                { value: "INCREMENT", label: "Increment" },
-              ]}
-            />
-            <Segmented
               label="Screen size"
               value={phone ? "phone" : "desktop"}
               onChange={(v) => onPhoneChange(v === "phone")}
@@ -151,8 +135,8 @@ export function PreviewPane({
         >
           <strong className="font-semibold text-ink">{current.heading}</strong> · {current.blurb}
           <span className="mt-0.5 block text-body-sm text-ink-muted">
-            {departmentName} · {cycleType === "INCREMENT" ? "Increment" : "Evaluation"} cycle ·{" "}
-            {questionCount} {questionCount === 1 ? "question" : "questions"} · {NOT_AN_ANSWER}
+            {departmentName} · {questionCount}{" "}
+            {questionCount === 1 ? "question" : "questions"} · {NOT_AN_ANSWER}
           </span>
         </motion.p>
       </header>

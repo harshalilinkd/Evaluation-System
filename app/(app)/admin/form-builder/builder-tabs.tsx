@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HardHat, LayoutTemplate } from "lucide-react";
+import { HardHat, LayoutTemplate, TrendingUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -28,11 +28,24 @@ import { cn } from "@/lib/utils";
  * rather than this strip, which would otherwise show with nothing selected.
  */
 const TABS = [
+  /* -- THREE FORMS, NAMED, and that is the separation.
+        The cycle type was a toggle inside the live preview: it filtered a third
+        of the screen while the structure list beside it still listed every
+        question in the bank, so somebody building the evaluation form was
+        still looking at increment questions. A filter is not a separate place.
+        Each tab is now a route that loads only its own cycle's questions, and
+        a question added in one is scoped to that one. -- */
   {
     href: "/admin/form-builder",
-    label: "Form Builder",
-    hint: "The form as a person meets it",
+    label: "Evaluation Form",
+    hint: "What an evaluation cycle asks",
     icon: LayoutTemplate,
+  },
+  {
+    href: "/admin/form-builder/increment",
+    label: "Increment Form",
+    hint: "What an increment cycle asks",
+    icon: TrendingUp,
   },
   /*
    * §7's second module, and a THIRD tab rather than a mode of the first two.

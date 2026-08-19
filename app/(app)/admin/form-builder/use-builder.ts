@@ -80,7 +80,10 @@ export function useBuilder({
   initialOptions,
   initialMappings,
   departmentId,
+  cycleType,
 }: {
+  /** Which builder this is. A new question is scoped to it (see `addQuestion`). */
+  cycleType: "EVALUATION" | "INCREMENT";
   initialQuestions: BuilderQuestion[];
   initialOptions: BuilderOption[];
   initialMappings: Array<{ departmentId: string; questionId: string; sortOrder: number }>;
@@ -257,9 +260,14 @@ export function useBuilder({
         category: isDept ? "DEPARTMENT" : "CORE",
         responseType: "SCALE_0_5",
         answeredBy: "EMPLOYEE_AND_LEAD",
-        // BOTH by default: a new question is asked on every cycle until
-        // somebody narrows it, which is the column default too (0022).
-        cycleScope: "BOTH",
+        /* -- SCOPED TO THE BUILDER IT WAS ADDED IN, and this is what keeps
+              the two forms separate in practice rather than only on screen.
+              Defaulting to BOTH would mean every question written in the
+              evaluation builder silently appeared on the increment form too —
+              the exact confusion the split exists to remove. The editor's
+              "Which cycles ask this?" control promotes it to Every cycle when
+              that is genuinely what somebody wants. -- */
+        cycleScope: cycleType === "INCREMENT" ? "INCREMENT_ONLY" : "EVALUATION_ONLY",
         isRequired: true,
         dependsOn: null,
         dependsValue: null,
