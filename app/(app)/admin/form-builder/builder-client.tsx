@@ -226,6 +226,7 @@ export function BuilderClient({
           className="flex-1"
         >
           <StructurePane
+            flat={cycleType === "EVALUATION"}
             sections={sections}
             draft={builder.draft}
             mappedIds={mappedIds}
@@ -299,6 +300,7 @@ export function BuilderClient({
         <div className="flex min-h-0 flex-1 flex-col">
           {mobilePane === "structure" ? (
             <StructurePane
+              flat={cycleType === "EVALUATION"}
               sections={sections}
               draft={builder.draft}
               mappedIds={mappedIds}

@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { monthlyFromAnnual } from "@/lib/increment/calc";
+import { annualFromMonthly, hikePct, monthlyFromAnnual } from "@/lib/increment/calc";
 import { saveSelfDraft, submitSelfEvaluation } from "@/lib/evaluations/self-actions";
 import {
   clearDraft,
@@ -319,6 +319,39 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
     },
     [values, cacheKey, readOnly],
   );
+
+  /* -- THE SALARY SUMMARY, and every figure in it is DERIVED.
+        Nothing here is a new field: `currentCtc` comes from the employment
+        record, the expectation is the answer to a question already on the form,
+        and the percentage is arithmetic on the two. Nothing is stored — §11
+        keeps a percentage computed once, in `calc.ts`, and a figure worked out
+        in a component is a figure nobody can reproduce (P21-2).
+
+        The question is found by SHAPE, not by a hard-coded id: 0052 moved the
+        server off `md5('linkd.q.salary_expectation_annual')` for exactly this
+        reason — a launched evaluation carries its own frozen copy, and an id
+        that is right today is not guaranteed right for a cycle already in
+        flight. A NUMBER question whose text asks about salary is the one. */
+  const expectationQuestionId = React.useMemo(() => {
+    for (const section of form.sections) {
+      for (const q of section.questions) {
+        if (q.responseType !== "NUMBER") continue;
+        if (/salary|expect|fair/i.test(q.text)) return q.questionId;
+      }
+    }
+    return null;
+  }, [form.sections]);
+
+  const expectedMonthly = React.useMemo(() => {
+    if (!expectationQuestionId) return null;
+    const raw = values[expectationQuestionId];
+    const asNumber = typeof raw === "number" ? raw : Number(raw);
+    return Number.isFinite(asNumber) && asNumber > 0 ? asNumber : null;
+  }, [expectationQuestionId, values]);
+
+  // The employee types MONTHLY (0061); the record holds ANNUAL. The comparison
+  // has to happen in one unit, and annual is the one the ledger stores.
+  const expectedHikePct = hikePct(meta.currentCtc, annualFromMonthly(expectedMonthly));
 
   /* ---------- Submit ---------- */
 
@@ -664,33 +697,6 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               §5 is relaxed for this one figure and no further (0040): their
               own, today's, on an increment form. Not their pay history, not
               anybody else's, and not on an ordinary evaluation. */}
-      {meta.isIncrement ? (
-        <dl className="card-surface mb-4 p-5">
-          <div>
-            {/* -- SHOWN PER MONTH, because that is what the form now ASKS FOR.
-                  0061 moved the expectation question to a monthly figure. This
-                  block sat directly above it showing the ANNUAL package — so
-                  the page would have anchored somebody on one unit and then
-                  asked them for the other, which is the 733% incident built
-                  into the layout rather than left to chance.
-
-                  The annual figure stays underneath as context: it is what
-                  appears on their letter, and dropping it entirely would make
-                  the two documents look like they disagree. -- */}
-            <dt className="type-label text-ink-muted">Current salary</dt>
-            <dd className="tabular mt-0.5 text-display-sm text-ink">
-              {meta.currentCtc === null
-                ? formatInr(null)
-                : `${formatInr(monthlyFromAnnual(meta.currentCtc))} a month`}
-            </dd>
-            <p className="mt-1 text-body-sm text-ink-muted">
-              {meta.currentCtc === null
-                ? "Not on record. HR can add it — it does not stop you filling this in."
-                : `${formatInr(meta.currentCtc)} a year. From your employment record, so it cannot be edited here. Your expectation is asked further down, per month.`}
-            </p>
-          </div>
-        </dl>
-      ) : null}
 
       {/* §6's wording, once — not under all 33 questions. See ScaleLegend. */}
       <ScaleLegend form={form} className="mb-4" />
@@ -751,6 +757,64 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           }
         />
       )}
+
+      {/* -- WHERE IT BELONGS NOW: after the questions, beside the answer it
+             relates to. It used to sit at the TOP, which anchored somebody on a
+             number before they had read anything and put it a whole form away
+             from the question it informs. -- */}
+      {meta.isIncrement && !readOnly ? (
+        <section className="card-surface mt-6 p-5 sm:p-6">
+          <h2 className="text-display-sm text-ink">Your salary</h2>
+          <p className="mt-1 text-body text-ink-muted">
+            All three per month. Only what you ask for is yours to set — the rest is
+            worked out from it.
+          </p>
+
+          {/* Three across on a laptop, stacked on a phone. Not a grid of three at
+              375px: ₹1,00,000 does not fit a third of that and would wrap
+              mid-figure. */}
+          <dl className="mt-5 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-control bg-surface-mute p-4">
+              <dt className="type-label text-ink-muted">Current</dt>
+              <dd className="tabular mt-1 text-display-sm text-ink">
+                {meta.currentCtc === null
+                  ? "—"
+                  : formatInr(monthlyFromAnnual(meta.currentCtc))}
+              </dd>
+              <p className="mt-1 text-body-sm text-ink-muted">
+                {meta.currentCtc === null
+                  ? "Not on record. HR can add it — it does not stop you filling this in."
+                  : "From your employment record."}
+              </p>
+            </div>
+
+            <div className="rounded-control bg-surface-mute p-4">
+              <dt className="type-label text-ink-muted">You asked for</dt>
+              <dd className="tabular mt-1 text-display-sm text-ink">
+                {expectedMonthly === null ? "—" : formatInr(expectedMonthly)}
+              </dd>
+              <p className="mt-1 text-body-sm text-ink-muted">
+                {expectedMonthly === null ? "Answer the salary question above." : "Your answer above."}
+              </p>
+            </div>
+
+            {/* Plain ink, not green or red. §11 makes a percentage a reporting
+                figure, not a verdict, and colouring somebody's own ask would
+                tell them whether they had asked correctly. */}
+            <div className="rounded-control bg-surface-mute p-4">
+              <dt className="type-label text-ink-muted">That is a rise of</dt>
+              <dd className="tabular mt-1 text-display-sm text-ink">
+                {expectedHikePct === null ? "—" : `${expectedHikePct.toFixed(2)}%`}
+              </dd>
+              <p className="mt-1 text-body-sm text-ink-muted">
+                {expectedHikePct === null
+                  ? "Shown once both figures are known."
+                  : "Worked out for you. Not a field."}
+              </p>
+            </div>
+          </dl>
+        </section>
+      ) : null}
 
       {/* ---------- The end of the form, on a large screen ----------
 

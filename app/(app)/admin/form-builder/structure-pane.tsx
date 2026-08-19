@@ -69,7 +69,20 @@ export function StructurePane({
   estimate,
   headcount,
   sections,
+  flat = false,
 }: {
+  /* -- FLAT: ONE LIST OF QUESTIONS, NO SECTION HEADINGS.
+        The evaluation form has no sections — it is ten-ish questions in an
+        order somebody chooses — and grouping them under eight headings, six of
+        which are empty, is a filing system for a thing that does not need
+        filing.
+
+        Every mechanism underneath is untouched: `section` is still a NOT NULL
+        enum on every question (§0.2 fixes it), reorder is still per section,
+        and the increment form still groups. What changes is that the headings
+        are not drawn and the groups cannot be collapsed, so the pane reads as
+        the single list it is. -- */
+  flat?: boolean;
   /** Names and order as HR has them (0036). Falls back to the shipped list. */
   sections?: SectionRow[];
   draft: BuilderQuestion[];
@@ -286,7 +299,11 @@ export function StructurePane({
           // them. A collapsed section holding the answer is the same as no
           // answer, and leaving the empties in place buries the matches.
           if (searching && (isAuto || rows.length === 0)) return null;
-          const isOpen = searching ? true : openSection === section;
+          // Flat drops the empties outright — an empty heading-less group is a
+          // gap with nothing to explain it.
+          if (flat && (isAuto || allRows.length === 0)) return null;
+          // Flat means always open: there is no header to collapse it with.
+          const isOpen = flat || searching ? true : openSection === section;
           const isEmpty = !isAuto && allRows.length === 0;
 
           return (
@@ -304,6 +321,8 @@ export function StructurePane({
                 isOpen ? "bg-surface shadow-dashboard" : "bg-transparent",
               )}
             >
+              {/* No heading in flat mode: the questions ARE the list. */}
+              {!flat ? (
               <button
                 type="button"
                 onClick={() => onOpenSectionChange(isOpen ? null : section)}
@@ -364,6 +383,7 @@ export function StructurePane({
                   </motion.span>
                 )}
               </button>
+              ) : null}
 
               <AnimatePresence initial={false}>
                 {isOpen && !isAuto ? (
