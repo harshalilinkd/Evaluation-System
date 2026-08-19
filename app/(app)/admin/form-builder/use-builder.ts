@@ -286,7 +286,8 @@ export function useBuilder({
       void commit(created);
       return localId;
     },
-    [commit, departmentId, draft],
+    // cycleType: a new question is scoped to the builder it was added in.
+    [commit, departmentId, draft, cycleType],
   );
 
   /* ---------- Remove ---------- */
@@ -306,10 +307,42 @@ export function useBuilder({
       if (id.startsWith("draft:")) return gone; // never reached the database
 
       setSave({ kind: "saving" });
-      const fd = new FormData();
-      fd.set("id", id);
-      fd.set("is_active", "false");
-      const result = await setQuestionActive({}, fd);
+
+      /* -- REMOVE MEANS "OFF THIS FORM", NOT "GONE FOR GOOD".
+            The two builders are two forms over one bank, so a question can sit
+            on both. Retiring it from the evaluation builder would take it off
+            the increment form too — somebody tidying one form silently
+            editing the other, which is the whole reason the builders were
+            separated.
+
+            So: on BOTH, narrow it to the other cycle and it keeps working
+            there. Only on this one, retire it — which is what §17 requires
+            anyway, since answers are filed against a question id and launched
+            evaluations hold their own frozen copy (PC-3). Nothing is ever
+            deleted either way. -- */
+      const onlyHere = (gone?.cycleScope ?? "BOTH") !== "BOTH";
+      const otherCycle = cycleType === "INCREMENT" ? "EVALUATION_ONLY" : "INCREMENT_ONLY";
+
+      let result: { error?: string };
+      if (gone && !onlyHere) {
+        // Through the same audited action every other edit uses (PC-1), with
+        // the whole question re-sent so nothing else on it is disturbed.
+        result = await saveQuestion(
+          {},
+          buildFormData(
+            { ...gone, cycleScope: otherCycle },
+            {
+              departmentIds: mappings.filter((m) => m.questionId === id).map((m) => m.departmentId),
+              options: options.filter((o) => o.questionId === id),
+            },
+          ),
+        );
+      } else {
+        const fd = new FormData();
+        fd.set("id", id);
+        fd.set("is_active", "false");
+        result = await setQuestionActive({}, fd);
+      }
 
       if (result.error) {
         // Put it back. A row that disappeared from the screen but not from the
@@ -322,7 +355,7 @@ export function useBuilder({
       setSave({ kind: "saved", at: new Date() });
       return gone;
     },
-    [draft],
+    [draft, cycleType, mappings, options],
   );
 
   /** Undo for the action above — the same audited path, in reverse. */

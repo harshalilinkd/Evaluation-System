@@ -37,18 +37,6 @@ const WHO = [
   { value: "LEAD_ONLY", label: "Manager" },
 ] as const;
 
-/* -- WHICH CYCLES ASK IT. The column has existed since 0022 and the assembly
-      has filtered on it ever since — an evaluation cycle gets BOTH +
-      EVALUATION_ONLY, an increment cycle BOTH + INCREMENT_ONLY. What was
-      missing was any way to SET it: the salary expectation (0022) and the
-      promotion pair (0072) each needed a migration, which is not a thing HR can
-      do. Labelled in cycle language rather than enum language, because "Every
-      cycle / Evaluation only / Increment only" is the question being asked. -- */
-const CYCLES = [
-  { value: "BOTH", label: "Every cycle" },
-  { value: "EVALUATION_ONLY", label: "Evaluation only" },
-  { value: "INCREMENT_ONLY", label: "Increment only" },
-] as const;
 
 /**
  * TYPE SIZES, PROMOTED ONE STEP (reported as "the font is very small").
@@ -322,37 +310,18 @@ export function EditorPane({
           </p>
         </div>
 
-        {/* ---------- Which cycles ask it ---------- */}
-        <div>
-          <Label className="mb-2 block text-body font-medium text-ink">
-            Which cycles ask this?
-          </Label>
-          <div className="grid grid-cols-3 gap-1.5">
-            {CYCLES.map((c) => {
-              const active = (question.cycleScope || "BOTH") === c.value;
-              return (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => onPatch({ cycleScope: c.value })}
-                  aria-pressed={active}
-                  className={cn(
-                    "rounded-control border py-2.5 text-body font-medium transition-colors",
-                    active
-                      ? "border-ink bg-ink text-ink-invert"
-                      : "border-border bg-canvas text-ink hover:border-ink/30",
-                  )}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-1.5 text-body-sm leading-snug text-ink-muted">
-            An evaluation cycle ends when management has read the report; an increment cycle
-            carries on into salary. A question only one of them needs belongs to that one.
-          </p>
-        </div>
+        {/* -- THE CYCLE CONTROL IS GONE, and the tabs are why.
+              It existed when one builder held both forms and something had to
+              say which cycle a question belonged to. There are two builders
+              now, so the answer is "the one you are standing in" — and a
+              control that restates where you already are is a question with an
+              obvious answer, asked on every question.
+
+              The capability is not lost, it moved to Remove: taking a question
+              off THIS form scopes it to the other one when it is on both, and
+              retires it when this was its only form. That is what "remove"
+              reads as on a per-form builder, and it needs no third state to
+              be chosen from a list. -- */}
 
         {/* ---------- Departments, for Job Specific Skills ---------- */}
         {isDept ? (
