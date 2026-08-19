@@ -220,7 +220,7 @@ export function activeHref(
 export function titleFor(pathname: string, roles: readonly AppRole[]): string {
   const href = activeHref(pathname, roles);
   const item = NAV.flatMap((g) => g.items).find((i) => i.href === href);
-  return item?.label ?? "Appraise";
+  return item?.label ?? "Appraisal";
 }
 
 /**

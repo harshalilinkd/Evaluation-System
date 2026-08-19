@@ -170,7 +170,7 @@ export async function sendEmailViaSmtp(
       message:
         `MAIL_FROM must be the account you are sending from. It is "${creds.from}" ` +
         `but you are signed in as ${creds.user} — Gmail will rewrite it. ` +
-        `Set MAIL_FROM="Appraise <${creds.user}>".`,
+        `Set MAIL_FROM="Appraisal <${creds.user}>".`,
     };
   }
 

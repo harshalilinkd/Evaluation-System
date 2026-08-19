@@ -22,8 +22,8 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Appraise",
-    template: "%s · Appraise",
+    default: "Appraisal",
+    template: "%s · Appraisal",
   },
   description: "Performance evaluation platform for LinkD Prints.",
   // Internal tool; it should never be indexed.

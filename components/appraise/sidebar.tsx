@@ -49,7 +49,7 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
         was "the company name is written beside it", and it is not any more —
         so the justification had to be re-derived rather than left standing.
 
-        It holds on two others. The link is named by the visible "Appraise"
+        It holds on two others. The link is named by the visible "Appraisal"
         beside it, so the mark inside it is decorative in the accessibility
         sense: giving it alt text would make the link announce itself twice.
         And a decorative image renders as NOTHING when its file is missing,
@@ -75,7 +75,7 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
             had to share the space with a repeat.
 
             The mark now carries the company and this carries the product, which
-            is one thing each. It also lets "Appraise" sit on the mark's centre
+            is one thing each. It also lets "Appraisal" sit on the mark's centre
             line rather than being pushed up by a second line beneath it. -- */}
       <span className="rail-label min-w-0 overflow-hidden">
         <span
@@ -83,7 +83,7 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
             onNavy ? "text-sidebar-ink" : "text-ink"
           }`}
         >
-          Appraise
+          Appraisal
         </span>
       </span>
     </Link>

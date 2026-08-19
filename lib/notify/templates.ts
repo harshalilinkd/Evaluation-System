@@ -139,7 +139,7 @@ function shell({ heading, bodyHtml, cta, personal = true }: {
           <!-- Night header band -->
           <tr>
             <td style="background-color:${EMAIL.night};padding:22px 32px;">
-              <span style="font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;color:${EMAIL.invert};letter-spacing:-0.01em;">Appraise</span>
+              <span style="font-family:Helvetica,Arial,sans-serif;font-size:17px;font-weight:700;color:${EMAIL.invert};letter-spacing:-0.01em;">Appraisal</span>
               <span style="font-family:Helvetica,Arial,sans-serif;font-size:11px;font-weight:600;color:#9CA3AF;letter-spacing:0.08em;text-transform:uppercase;padding-left:10px;">LinkD Prints</span>
             </td>
           </tr>

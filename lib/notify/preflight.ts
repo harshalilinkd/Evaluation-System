@@ -183,7 +183,7 @@ export function checkMailFrom(raw: string | undefined, smtpUser?: string): Prefl
         code: "MAIL_FROM_MISSING",
         title: "There is no From address for email",
         detail: "MAIL_FROM is empty, so no email can be sent.",
-        fix: `Set MAIL_FROM="Appraise <${user}>".`,
+        fix: `Set MAIL_FROM="Appraisal <${user}>".`,
       };
     }
     if (!value.toLowerCase().includes(user.toLowerCase())) {
@@ -195,7 +195,7 @@ export function checkMailFrom(raw: string | undefined, smtpUser?: string): Prefl
           `MAIL_FROM is "${value}" but you are signed in to SMTP as ${user}. ` +
           "Gmail rewrites a From address it does not own, so the message would " +
           "arrive from somebody other than the one recorded here.",
-        fix: `Set MAIL_FROM="Appraise <${user}>".`,
+        fix: `Set MAIL_FROM="Appraisal <${user}>".`,
       };
     }
     return { ok: true };
@@ -207,7 +207,7 @@ export function checkMailFrom(raw: string | undefined, smtpUser?: string): Prefl
       code: "MAIL_FROM_MISSING",
       title: "There is no From address for email",
       detail: "MAIL_FROM is empty, so no email can be sent.",
-      fix: 'Set MAIL_FROM, for example: MAIL_FROM="Appraise <noreply@linkdprints.com>"',
+      fix: 'Set MAIL_FROM, for example: MAIL_FROM="Appraisal <noreply@linkdprints.com>"',
     };
   }
 
@@ -222,7 +222,7 @@ export function checkMailFrom(raw: string | undefined, smtpUser?: string): Prefl
         "rejected by the provider — which is why WhatsApp arrives and email does not.",
       fix:
         "Verify your domain at resend.com/domains, then set MAIL_FROM to an address on it, " +
-        'for example MAIL_FROM="Appraise <noreply@linkdprints.com>". Restart the app after changing it.',
+        'for example MAIL_FROM="Appraisal <noreply@linkdprints.com>". Restart the app after changing it.',
     };
   }
 

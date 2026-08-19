@@ -159,6 +159,49 @@ export function WorkerReviewClient({
   const [newCtc, setNewCtc] = React.useState<number | null>(savedNewCtc);
   const salaryDirty = oldCtc !== savedOldCtc || newCtc !== savedNewCtc;
 
+  /* -- HR AND THE MD ON ONE RECORD, kept in step.
+        Asked for as "changes made in one screen should be visible to the
+        other". Two people work this sheet in sequence and often at the same
+        time, and until now each saw whatever was true when they opened the
+        page — which is how somebody approves a figure the other has already
+        changed.
+
+        POLLING, NOT REALTIME. Supabase Realtime needs replication switched on
+        per table from the dashboard, which NOTIFY-1 declined for the bell for
+        the same reason: it is a setting somebody has to remember, not something
+        a migration can carry. `router.refresh()` re-runs the server components
+        on a connection that already exists.
+
+        THIRTY SECONDS, and only while the tab is visible — the bell's rule
+        (45s) tightened a little because this screen is two people acting on one
+        row rather than a badge. A hidden tab polls nothing, and returning to
+        the tab refreshes immediately, which is when somebody actually looks.
+
+        NEVER WHILE THEY ARE EDITING. A refresh re-renders with server props,
+        and `savedOldCtc` / `savedNewCtc` feed the initial state — so
+        refreshing mid-edit is how a half-typed salary gets taken back out of
+        the field. Paused on `salaryDirty`, on `busy`, and while a dialog is
+        open, which is PC-4's rule: a refetch must never overwrite what somebody
+        is still typing. -- */
+  // Not held on `stale`: that flag means somebody else has already moved the
+  // record, and a refresh is precisely what resolves it.
+  const holdRefresh = salaryDirty || busy || returning;
+
+  React.useEffect(() => {
+    if (holdRefresh) return;
+
+    const tick = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const timer = window.setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, [holdRefresh, router]);
+
   async function finish(outcome: "CLOSE" | "SEND_TO_MD") {
     setBusy(true);
     setError(null);
@@ -371,7 +414,25 @@ export function WorkerReviewClient({
           }
         }
         currentCtcOnRecord={review.currentCtcOnRecord}
-        readOnly={closed || review.status === "REVIEWED"}
+        /* -- THE MD MAY NOW SET THE FIGURE, at the owner's instruction, and it
+              reverses F41-6.
+
+              That decision said the MD is told to send it back rather than type
+              an amount, because HR proposing and the MD approving collapsed
+              into one person is the control AMEND-2 restored. The concern was
+              put to the owner and they asked for it: in practice the MD is who
+              decides the number, and bouncing a sheet back to HR to type a
+              figure the MD has already chosen is a round trip that records
+              nothing extra.
+
+              The trail still distinguishes them — `log_worker_salary_change`
+              names whoever wrote each figure, and the three stages below still
+              read "HR priced it" or the MD's own name. What is gone is the
+              REQUIREMENT that they be two people.
+
+              CLOSED stays read-only for everybody: §8 has no path back from it
+              and §17 forbids editing a closed record. -- */
+        readOnly={closed || (review.status === "REVIEWED" && !isMd)}
         supervisorName={review.supervisorName}
         mdApproval={review.mdApproval}
         stages={review.stages}
@@ -489,10 +550,27 @@ export function WorkerReviewClient({
                   >
                     Send back to HR
                   </Button>
-                  <Button onClick={() => void finish("CLOSE")} disabled={busy} className="min-h-11">
+                  <Button
+                    onClick={() => void finish("CLOSE")}
+                    disabled={busy || salaryDirty}
+                    className="min-h-11"
+                  >
                     {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
                     Approve and close
                   </Button>
+                  {/* -- The same guard HR's hand-up carries, for the same
+                         reason and now on the more expensive side of it.
+                         Approving is irreversible (§8 has no path back from
+                         CLOSED), so signing off a figure that never left the
+                         browser would write the PREVIOUS amount to the worker's
+                         pay record with nothing on screen to show for it.
+                         FIX-44 found this from HR's end; the MD's end is worse
+                         because it cannot be undone. -- */}
+                  {salaryDirty ? (
+                    <p className="font-sans text-body-sm text-critical">
+                      Save the salary above first — approving now would sign off the previous figure.
+                    </p>
+                  ) : null}
                 </>
               ) : (
                 <p className="font-sans text-body-sm text-ink-muted">
