@@ -102,10 +102,45 @@ export function EditorPane({
         >
           <PencilLine className="size-5" />
         </span>
-        <h2 className="mt-4 text-body font-semibold text-ink">Nothing open</h2>
-        <p className="mt-1.5 max-w-[34ch] text-body-sm leading-relaxed text-ink-muted">
-          Choose a question from the structure on the left and its wording, answer
-          type and settings appear here.
+        {/* -- IT SAID "NOTHING OPEN", which names what is not happening rather
+               than what the screen is for. A third of the builder greeted a
+               first-time user with an absence and an instruction to go and do
+               something else.
+
+               It now says what the three panes ARE, in one line each and in the
+               order somebody uses them. §13.5: the builder has to be usable by
+               a non-technical person, and the first thing it says is the
+               cheapest place to make that true. -- */}
+        <h2 className="mt-4 text-body font-semibold text-ink">Build your form here</h2>
+        <p className="mt-1.5 max-w-[38ch] text-body-sm leading-relaxed text-ink-muted">
+          Pick a question on the left to change its wording or how it is answered. Whatever
+          you change appears straight away in the preview on the right, exactly as your
+          people will see it.
+        </p>
+
+        <ol className="mt-5 w-full max-w-[34ch] space-y-2 text-left">
+          {[
+            ["Left", "Every section and question, in order"],
+            ["Middle", "The one you are editing"],
+            ["Right", "What your people will actually see"],
+          ].map(([where, what], i) => (
+            <li key={where} className="flex items-start gap-2.5">
+              <span
+                aria-hidden
+                className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-pill bg-surface-mute text-body-xs font-semibold text-ink-muted"
+              >
+                {i + 1}
+              </span>
+              <span className="text-body-sm leading-snug text-ink-muted">
+                <strong className="font-medium text-ink">{where}</strong> — {what}
+              </span>
+            </li>
+          ))}
+        </ol>
+
+        <p className="mt-4 max-w-[34ch] text-body-xs leading-snug text-ink-muted">
+          Nothing here is saved until you change something, and nothing you type in the
+          preview is stored as an answer.
         </p>
 
         {onAdd && addSectionLabel ? (

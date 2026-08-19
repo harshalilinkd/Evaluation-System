@@ -548,8 +548,12 @@ export function StructurePane({
         )}
       >
         <div className="grid grid-cols-2 gap-2">
-          <Stat icon={Users} label="Employee answers" value={estimate.employeeQuestions} />
-          <Stat icon={UserCog} label="Manager answers" value={estimate.leadQuestions} />
+          {/* -- "Employee answers 11" reads as ELEVEN EMPLOYEES ANSWERED. It is
+                 the number of questions the employee is asked, and the label
+                 has to say so — a count whose subject is ambiguous is worse
+                 than no count, because the reader acts on the wrong one. -- */}
+          <Stat icon={Users} label="Questions for the employee" value={estimate.employeeQuestions} />
+          <Stat icon={UserCog} label="Questions for the manager" value={estimate.leadQuestions} />
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-rule pt-2">
           <span className="flex items-center gap-1.5 text-body-sm text-ink-muted">

@@ -246,6 +246,16 @@ function Segmented({
   options: ReadonlyArray<{ value: string; label: string; icon?: React.ElementType }>;
 }) {
   return (
+    <div className="flex items-center gap-2">
+      {/* -- THE LABEL WAS INVISIBLE, and that is the reported confusion.
+             `label` was an aria-label only, so a sighted first-timer met
+             "Employee Manager Evaluation Increment Desktop Phone" as one row of
+             six buttons with no way to tell they are THREE independent
+             switches. A screen reader always had this; everybody else did not.
+             §13.5: the builder has to be usable by a non-technical person. -- */}
+      <span aria-hidden className="hidden text-body-xs font-medium text-ink-muted lg:inline">
+        {label}
+      </span>
     <div
       role="group"
       aria-label={label}
@@ -278,6 +288,7 @@ function Segmented({
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
