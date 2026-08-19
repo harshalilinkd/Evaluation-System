@@ -50,6 +50,20 @@ const CYCLES = [
   { value: "INCREMENT_ONLY", label: "Increment only" },
 ] as const;
 
+/**
+ * TYPE SIZES, PROMOTED ONE STEP (reported as "the font is very small").
+ *
+ * This pane had 32 of its 34 text elements at 11-12px: every field label at
+ * `body-sm` and every hint at `body-xs`. `body` (14px) is the design system's
+ * standard UI step -- DESIGN.md SS3 gives it "table data, standard UI elements"
+ * -- and it appeared twice, on nothing that mattered. A form whose own labels
+ * are set at caption size is a form built for somebody who already knows what
+ * every control does.
+ *
+ * So: labels and controls to `body`, hints and errors to `body-sm`. Nothing in
+ * here is below 12px any more. No layout, wording or behaviour changed -- the
+ * pane scrolls, so the extra height costs nothing.
+ */
 export function EditorPane({
   question,
   options,
@@ -112,7 +126,7 @@ export function EditorPane({
                a non-technical person, and the first thing it says is the
                cheapest place to make that true. -- */}
         <h2 className="mt-4 text-body font-semibold text-ink">Build your form here</h2>
-        <p className="mt-1.5 max-w-[38ch] text-body-sm leading-relaxed text-ink-muted">
+        <p className="mt-1.5 max-w-[38ch] text-body leading-relaxed text-ink-muted">
           Pick a question on the left to change its wording or how it is answered. Whatever
           you change appears straight away in the preview on the right, exactly as your
           people will see it.
@@ -127,18 +141,18 @@ export function EditorPane({
             <li key={where} className="flex items-start gap-2.5">
               <span
                 aria-hidden
-                className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-pill bg-surface-mute text-body-xs font-semibold text-ink-muted"
+                className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-pill bg-surface-mute text-body-sm font-semibold text-ink-muted"
               >
                 {i + 1}
               </span>
-              <span className="text-body-sm leading-snug text-ink-muted">
+              <span className="text-body leading-snug text-ink-muted">
                 <strong className="font-medium text-ink">{where}</strong> — {what}
               </span>
             </li>
           ))}
         </ol>
 
-        <p className="mt-4 max-w-[34ch] text-body-xs leading-snug text-ink-muted">
+        <p className="mt-4 max-w-[34ch] text-body-sm leading-snug text-ink-muted">
           Nothing here is saved until you change something, and nothing you type in the
           preview is stored as an answer.
         </p>
@@ -148,7 +162,7 @@ export function EditorPane({
             <button
               type="button"
               onClick={onAdd}
-              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-control bg-primary px-4 text-body-sm font-semibold text-white transition-colors hover:bg-primary/90"
+              className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-control bg-primary px-4 text-body font-semibold text-white transition-colors hover:bg-primary/90"
             >
               <Plus aria-hidden className="size-4" />
               Add a question to {addSectionLabel}
@@ -156,7 +170,7 @@ export function EditorPane({
             {/* Naming the section the question would land in, because "Add a
                 question" on a form with eight of them is a button whose result
                 you cannot predict before pressing it. */}
-            <p className="mt-2 text-body-xs text-ink-muted">
+            <p className="mt-2 text-body-sm text-ink-muted">
               It lands at the end of that section and opens here.
             </p>
           </>
@@ -190,12 +204,12 @@ export function EditorPane({
                 form and left this header calling it the old thing. It survived
                 because the guard written to catch it tested `/^"use client"/`
                 against the whole file, and this one opens with a docblock. -- */}
-          <p className="mt-0.5 truncate text-body-xs text-ink-muted">{sectionName}</p>
+          <p className="mt-0.5 truncate text-body-sm text-ink-muted">{sectionName}</p>
         </div>
         <button
           type="button"
           onClick={onRemove}
-          className="flex shrink-0 items-center gap-1.5 rounded-control px-2.5 py-1.5 text-body-sm font-medium text-critical transition-colors hover:bg-critical-tint"
+          className="flex shrink-0 items-center gap-1.5 rounded-control px-2.5 py-1.5 text-body font-medium text-critical transition-colors hover:bg-critical-tint"
         >
           <Trash2 aria-hidden className="size-3.5" />
           Remove
@@ -224,7 +238,7 @@ export function EditorPane({
 
         {/* ---------- Answer type ---------- */}
         <div>
-          <Label className="mb-2 block text-body-sm font-medium text-ink">How is it answered?</Label>
+          <Label className="mb-2 block text-body font-medium text-ink">How is it answered?</Label>
           <div className="grid grid-cols-2 gap-2">
             {TYPE_CARDS.map((card) => {
               const active = question.responseType === card.value;
@@ -246,13 +260,13 @@ export function EditorPane({
                 >
                   <span
                     className={cn(
-                      "block text-body-sm font-semibold",
+                      "block text-body font-semibold",
                       active ? "text-primary" : "text-ink",
                     )}
                   >
                     {card.name}
                   </span>
-                  <span className="mt-0.5 block text-body-xs leading-snug text-ink-muted">
+                  <span className="mt-0.5 block text-body-sm leading-snug text-ink-muted">
                     {card.hint}
                   </span>
                 </motion.button>
@@ -281,7 +295,7 @@ export function EditorPane({
 
         {/* ---------- Who answers ---------- */}
         <div>
-          <Label className="mb-2 block text-body-sm font-medium text-ink">Who answers this?</Label>
+          <Label className="mb-2 block text-body font-medium text-ink">Who answers this?</Label>
           <div className="grid grid-cols-3 gap-1.5">
             {WHO.map((w) => {
               const active = question.answeredBy === w.value;
@@ -292,7 +306,7 @@ export function EditorPane({
                   onClick={() => onPatch({ answeredBy: w.value })}
                   aria-pressed={active}
                   className={cn(
-                    "rounded-control border py-2.5 text-body-sm font-medium transition-colors",
+                    "rounded-control border py-2.5 text-body font-medium transition-colors",
                     active
                       ? "border-ink bg-ink text-ink-invert"
                       : "border-border bg-canvas text-ink hover:border-ink/30",
@@ -303,14 +317,14 @@ export function EditorPane({
               );
             })}
           </div>
-          <p className="mt-1.5 text-body-xs leading-snug text-ink-muted">
+          <p className="mt-1.5 text-body-sm leading-snug text-ink-muted">
             Both means the employee rates themselves and the lead rates them, side by side.
           </p>
         </div>
 
         {/* ---------- Which cycles ask it ---------- */}
         <div>
-          <Label className="mb-2 block text-body-sm font-medium text-ink">
+          <Label className="mb-2 block text-body font-medium text-ink">
             Which cycles ask this?
           </Label>
           <div className="grid grid-cols-3 gap-1.5">
@@ -323,7 +337,7 @@ export function EditorPane({
                   onClick={() => onPatch({ cycleScope: c.value })}
                   aria-pressed={active}
                   className={cn(
-                    "rounded-control border py-2.5 text-body-sm font-medium transition-colors",
+                    "rounded-control border py-2.5 text-body font-medium transition-colors",
                     active
                       ? "border-ink bg-ink text-ink-invert"
                       : "border-border bg-canvas text-ink hover:border-ink/30",
@@ -334,7 +348,7 @@ export function EditorPane({
               );
             })}
           </div>
-          <p className="mt-1.5 text-body-xs leading-snug text-ink-muted">
+          <p className="mt-1.5 text-body-sm leading-snug text-ink-muted">
             An evaluation cycle ends when management has read the report; an increment cycle
             carries on into salary. A question only one of them needs belongs to that one.
           </p>
@@ -343,7 +357,7 @@ export function EditorPane({
         {/* ---------- Departments, for Job Specific Skills ---------- */}
         {isDept ? (
           <div>
-            <Label className="mb-2 block text-body-sm font-medium text-ink">
+            <Label className="mb-2 block text-body font-medium text-ink">
               Which teams are asked this?
             </Label>
             <div className="flex flex-wrap gap-1.5">
@@ -362,7 +376,7 @@ export function EditorPane({
                     }
                     aria-pressed={on}
                     className={cn(
-                      "rounded-full border px-3 py-1.5 text-body-sm font-medium transition-colors",
+                      "rounded-full border px-3 py-1.5 text-body font-medium transition-colors",
                       on
                         ? "border-primary bg-primary text-white"
                         : "border-border bg-canvas text-ink-muted hover:border-primary/40 hover:text-ink",
@@ -374,7 +388,7 @@ export function EditorPane({
               })}
             </div>
             {mappedDepartmentIds.length === 0 ? (
-              <p className="mt-1.5 text-body-xs font-medium text-critical">
+              <p className="mt-1.5 text-body-sm font-medium text-critical">
                 A question here with no team is asked of nobody. Pick at least one.
               </p>
             ) : null}
@@ -398,8 +412,8 @@ export function EditorPane({
               className="mt-0.5 size-4 shrink-0 accent-primary"
             />
             <span>
-              <span className="block text-body-sm font-medium text-ink">Only show sometimes</span>
-              <span className="mt-0.5 block text-body-xs leading-snug text-ink-muted">
+              <span className="block text-body font-medium text-ink">Only show sometimes</span>
+              <span className="mt-0.5 block text-body-sm leading-snug text-ink-muted">
                 {parents.length === 0
                   ? "Needs a Yes / No question above this one in the same section."
                   : "Show this only when an earlier Yes / No was answered a certain way."}
@@ -421,7 +435,7 @@ export function EditorPane({
                     value={question.dependsOn}
                     onChange={(e) => onPatch({ dependsOn: e.target.value })}
                     aria-label="Question this depends on"
-                    className="h-9 w-full rounded-control border border-border bg-surface px-2 text-body-sm text-ink"
+                    className="h-9 w-full rounded-control border border-border bg-surface px-2 text-body text-ink"
                   >
                     {parents.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -437,7 +451,7 @@ export function EditorPane({
                         onClick={() => onPatch({ dependsValue: v })}
                         aria-pressed={question.dependsValue === v}
                         className={cn(
-                          "flex-1 rounded-control border py-2 text-body-sm font-medium transition-colors",
+                          "flex-1 rounded-control border py-2 text-body font-medium transition-colors",
                           question.dependsValue === v
                             ? "border-primary bg-primary text-white"
                             : "border-border bg-surface text-ink hover:border-primary/40",
@@ -449,7 +463,7 @@ export function EditorPane({
                   </div>
                   {/* The rule read back as a sentence, so HR can check it
                       without reconstructing it from two controls. */}
-                  <p className="rounded-control bg-primary/[0.07] px-2.5 py-2 text-body-xs leading-snug text-ink">
+                  <p className="rounded-control bg-primary/[0.07] px-2.5 py-2 text-body-sm leading-snug text-ink">
                     Shown only when{" "}
                     <strong className="font-semibold">
                       “{parents.find((p) => p.id === question.dependsOn)?.text ?? "…"}”
@@ -469,8 +483,8 @@ export function EditorPane({
         {/* ---------- Required ---------- */}
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control border border-border bg-canvas p-3.5">
           <span>
-            <span className="block text-body-sm font-medium text-ink">Must be answered</span>
-            <span className="mt-0.5 block text-body-xs text-ink-muted">
+            <span className="block text-body font-medium text-ink">Must be answered</span>
+            <span className="mt-0.5 block text-body-sm text-ink-muted">
               Blocks submit until filled
             </span>
           </span>
@@ -503,9 +517,9 @@ function Field({
 }) {
   return (
     <div>
-      <Label className="mb-1.5 block text-body-sm font-medium text-ink">{label}</Label>
+      <Label className="mb-1.5 block text-body font-medium text-ink">{label}</Label>
       {children}
-      {hint ? <p className="mt-1 text-body-xs text-ink-muted">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-body-sm text-ink-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -522,7 +536,7 @@ function OptionEditor({
 
   return (
     <div className="pt-1">
-      <Label className="mb-2 block text-body-sm font-medium text-ink">The choices</Label>
+      <Label className="mb-2 block text-body font-medium text-ink">The choices</Label>
       <div className="space-y-1.5">
         {options.map((option, i) => (
           <div
@@ -575,13 +589,13 @@ function OptionEditor({
       <button
         type="button"
         onClick={() => onChange([...options, { label: "", value: "" }])}
-        className="mt-2 flex items-center gap-1.5 rounded-control px-2 py-1.5 text-body-sm font-medium text-primary transition-colors hover:bg-primary/[0.07]"
+        className="mt-2 flex items-center gap-1.5 rounded-control px-2 py-1.5 text-body font-medium text-primary transition-colors hover:bg-primary/[0.07]"
       >
         <Plus aria-hidden className="size-3.5" />
         Add a choice
       </button>
       {options.length === 0 ? (
-        <p className="mt-1 text-body-xs font-medium text-critical">
+        <p className="mt-1 text-body-sm font-medium text-critical">
           A Pick one question needs at least one choice.
         </p>
       ) : null}

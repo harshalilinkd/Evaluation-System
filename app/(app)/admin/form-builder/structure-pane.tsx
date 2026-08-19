@@ -224,7 +224,7 @@ export function StructurePane({
             Edit sections
           </button>
         </div>
-        <p className="text-body-sm leading-snug text-ink-muted">
+        <p className="text-body leading-snug text-ink-muted">
           Every employee answers the same form. Only {labelFor(DEPARTMENT_SECTION)} changes
           by department.
         </p>
@@ -246,7 +246,7 @@ export function StructurePane({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Find a question…"
             aria-label="Find a question"
-            className="h-11 w-full rounded-control border border-rule bg-surface pl-8 pr-8 text-body-sm text-ink placeholder:text-ink-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+            className="h-11 w-full rounded-control border border-rule bg-surface pl-8 pr-8 text-body text-ink placeholder:text-ink-muted focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           />
           {query ? (
             <button
@@ -261,7 +261,7 @@ export function StructurePane({
         </div>
 
         {searching ? (
-          <p aria-live="polite" className="text-body-sm text-ink-muted">
+          <p aria-live="polite" className="text-body text-ink-muted">
             {matchCount === 0
               ? "Nothing matches that."
               : `${matchCount} ${matchCount === 1 ? "question" : "questions"} match`}
@@ -328,7 +328,7 @@ export function StructurePane({
 
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-1.5">
-                    <span className="truncate text-body-sm font-medium">
+                    <span className="truncate text-body font-medium">
                       {labelFor(section)}
                     </span>
                     {isDept ? (
@@ -339,7 +339,7 @@ export function StructurePane({
                   </span>
                   {/* The count in words, not a bare numeral. An "8" beside a
                       section name reads as an index as easily as a total. */}
-                  <span className="mt-0.5 block truncate text-body-sm text-ink-muted">
+                  <span className="mt-0.5 block truncate text-body text-ink-muted">
                     {isAuto
                       ? "Filled in from the person's record"
                       : isEmpty
@@ -385,7 +385,7 @@ export function StructurePane({
                       ) : null}
 
                       {isEmpty ? (
-                        <p className="rounded-control bg-surface-mute px-2.5 py-2.5 text-body-sm leading-snug text-ink-muted">
+                        <p className="rounded-control bg-surface-mute px-2.5 py-2.5 text-body leading-snug text-ink-muted">
                           {isDept
                             ? "This team has no questions of its own yet. It cannot be launched until it has at least one."
                             : "Nothing here yet. Add the first question below."}
@@ -469,7 +469,7 @@ export function StructurePane({
                                       question truncated at four words is not
                                       identifiable, which is the whole job of
                                       this list. */}
-                                  <span className="line-clamp-2 text-body-sm leading-snug">
+                                  <span className="line-clamp-2 text-body leading-snug">
                                     {q.text}
                                   </span>
                                 </span>
@@ -556,7 +556,7 @@ export function StructurePane({
           <Stat icon={UserCog} label="Questions for the manager" value={estimate.leadQuestions} />
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-rule pt-2">
-          <span className="flex items-center gap-1.5 text-body-sm text-ink-muted">
+          <span className="flex items-center gap-1.5 text-body text-ink-muted">
             <Clock aria-hidden className="size-4" />
             Est. time to fill
           </span>
@@ -571,7 +571,7 @@ export function StructurePane({
           </motion.span>
         </div>
         {estimate.tooLong ? (
-          <p className="mt-2 text-body-sm font-medium leading-snug text-critical">
+          <p className="mt-2 text-body font-medium leading-snug text-critical">
             This is a long form. People rush the end of a long form.
           </p>
         ) : null}
@@ -606,7 +606,7 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1 text-body-sm text-ink-muted">
+      <div className="flex items-center gap-1 text-body text-ink-muted">
         <Icon aria-hidden className="size-3.5 shrink-0" />
         {label}
       </div>
@@ -639,7 +639,7 @@ function DepartmentPicker({
         id="builder-department"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full rounded-control border border-border bg-surface px-2 text-body-sm text-ink"
+        className="h-11 w-full rounded-control border border-border bg-surface px-2 text-body text-ink"
       >
         {departments.map((d) => (
           <option key={d.id} value={d.id} className="text-ink">
@@ -647,7 +647,7 @@ function DepartmentPicker({
           </option>
         ))}
       </select>
-      <p className="mt-1.5 flex items-center gap-1 text-body-sm text-ink-muted">
+      <p className="mt-1.5 flex items-center gap-1 text-body text-ink-muted">
         <Users aria-hidden className="size-3.5 shrink-0" />
         {people === 0
           ? "Nobody is in this team right now"
@@ -659,7 +659,7 @@ function DepartmentPicker({
           stale department survives another cycle. */}
       <Link
         href="/admin/settings?tab=departments"
-        className="mt-1 flex min-h-11 items-center gap-1 text-body-sm font-medium text-primary underline-offset-2 transition-colors hover:underline sm:min-h-0"
+        className="mt-1 flex min-h-11 items-center gap-1 text-body font-medium text-primary underline-offset-2 transition-colors hover:underline sm:min-h-0"
       >
         <Settings2 aria-hidden className="size-3.5 shrink-0" />
         Add, rename or retire a team
