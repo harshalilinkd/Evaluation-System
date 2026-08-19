@@ -80,7 +80,7 @@ export async function issueInviteToken(
    * passed — every caller took the `'SELF'` default, so there was no way to mint
    * a HOD's link outside of launch.
    */
-  layer: "SELF" | "LEAD" = "SELF",
+  layer: "SELF" | "LEAD" | "LEAD_2" = "SELF",
 ): Promise<IssueResult> {
   const supabase = await createClient();
 
@@ -159,7 +159,7 @@ export type ConsumeFailure = "INVALID" | "EXPIRED" | "REVOKED" | "WRONG_RECIPIEN
 
 export type ConsumeResult =
   /** `layer` decides where the link LANDS — see the note in `consumeInviteToken`. */
-  | { status: "OK"; evaluationId: string; layer: "SELF" | "LEAD" | "MD" }
+  | { status: "OK"; evaluationId: string; layer: "SELF" | "LEAD" | "LEAD_2" | "MD" }
   | { status: ConsumeFailure };
 
 /**
@@ -193,7 +193,7 @@ export async function consumeInviteToken(inviteId: string): Promise<ConsumeResul
     return {
       status: "OK",
       evaluationId: row.evaluation_id as string,
-      layer: (row.layer as "SELF" | "LEAD" | "MD" | null) ?? "SELF",
+      layer: (row.layer as "SELF" | "LEAD" | "LEAD_2" | "MD" | null) ?? "SELF",
     };
   }
   return { status: row.status as ConsumeFailure };

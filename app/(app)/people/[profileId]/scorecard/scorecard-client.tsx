@@ -99,7 +99,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
         this cycle STANDS is a different question and still reads `card.current`,
         which is deliberately the newest cycle whatever state it is in. -- */
   const ratedHistory = card.history.filter(
-    (h) => h.self_overall !== null || h.lead_overall !== null || h.final_overall !== null,
+    (h) => h.self_overall !== null || managerOf(h) !== null || h.final_overall !== null,
   );
   const latest = ratedHistory[ratedHistory.length - 1] ?? card.history[card.history.length - 1] ?? null;
   const previous = ratedHistory[ratedHistory.length - 2] ?? null;
@@ -224,7 +224,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
       ratedHistory.map((h) => ({
         period: h.period_label,
         self: h.self_overall,
-        lead: h.lead_overall,
+        lead: managerOf(h),
         final: h.final_overall,
       })),
     [ratedHistory],
@@ -271,13 +271,13 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
   const gapTrend = React.useMemo(
     () =>
       ratedHistory
-        .filter((h) => h.self_overall !== null && h.lead_overall !== null)
+        .filter((h) => h.self_overall !== null && managerOf(h) !== null)
         .map((h) => ({
           section: String(h.evaluation_id),
           label: h.period_label,
           self: h.self_overall,
-          lead: h.lead_overall,
-          delta: Math.round((Number(h.lead_overall) - Number(h.self_overall)) * 100) / 100,
+          lead: managerOf(h),
+          delta: Math.round((Number(managerOf(h)) - Number(h.self_overall)) * 100) / 100,
         })),
     [ratedHistory],
   );
@@ -340,18 +340,32 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
         needed it is the lead average, LABELLED as such. The caption under it
         says which layer it came from, so the hero never implies an authority
         the number does not have. -- */
-  const headline = latest?.final_overall ?? latest?.lead_overall ?? latest?.self_overall ?? null;
+  /* -- WHAT THE MANAGERS SAID. `manager_overall` (0087) is the mean of both
+        where this person has two managers, and equal to `lead_overall` where
+        they have one. Falling back the other way would show a designer half
+        their review.
+
+        NOT a fallback across the §5 strip: `withoutLeadLayer` nulls both
+        columns for an employee reading their own card, so both being null means
+        withheld rather than missing — and reaching past one to the other would
+        undo the strip on the very screen it was written for. -- */
+  const managerOf = (
+    h: { manager_overall: number | null; lead_overall: number | null } | null | undefined,
+  ) =>
+    h?.manager_overall ?? h?.lead_overall ?? null;
+
+  const headline = latest?.final_overall ?? managerOf(latest) ?? latest?.self_overall ?? null;
   const headlineLayer: "final" | "lead" | "self" | null =
     latest?.final_overall != null
       ? "final"
-      : latest?.lead_overall != null
+      : managerOf(latest) != null
         ? "lead"
         : latest?.self_overall != null
           ? "self"
           : null;
 
   const headlinePrev =
-    previous?.final_overall ?? previous?.lead_overall ?? previous?.self_overall ?? null;
+    previous?.final_overall ?? managerOf(previous) ?? previous?.self_overall ?? null;
   const headlineDelta =
     headline !== null && headlinePrev !== null ? headline - headlinePrev : null;
 

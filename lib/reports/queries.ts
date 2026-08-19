@@ -77,7 +77,7 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
     .select(
       // `final_overall` is the score HR agreed with the MD at completion. It
       // was never selected, so nothing downstream could show it.
-      "id, cycle_id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall, updated_at, evaluation_cycles!inner(deleted_at)",
+      "id, cycle_id, evaluatee_id, co_lead_id, department_id, status, self_submitted_at, lead_submitted_at, co_lead_submitted_at, self_skipped, lead_skipped, co_lead_skipped, final_overall, updated_at, evaluation_cycles!inner(deleted_at)",
     )
     /* -- OPEN IS IN THE LIST NOW, at the owner's instruction.
           A record appeared here only once BOTH sides had submitted, so an
@@ -202,9 +202,19 @@ export async function getReportQueue(): Promise<CycleResult<ReportQueue>> {
           columns above are already correct — they are written at submission —
           and this loop was the one place in the queue reading the raw blob.
           A skipped layer counts as in (§8: HR advanced past it deliberately). -- */
+    /* -- ALL of them, not both. A designer has three layers (0083), and
+          counting flags on two of three would compare the employee against
+          half the managers who were asked — a disagreement measured against an
+          incomplete review, which is the same fault this block was written to
+          fix one layer down.
+
+          Written as "no outstanding layer" so a person with one manager is
+          unaffected: the third clause is vacuously true when `co_lead_id` is
+          null, exactly as 0083's completion rule is. -- */
     const bothIn =
       (Boolean(e.self_submitted_at) || e.self_skipped) &&
-      (Boolean(e.lead_submitted_at) || e.lead_skipped);
+      (Boolean(e.lead_submitted_at) || e.lead_skipped) &&
+      (!e.co_lead_id || Boolean(e.co_lead_submitted_at) || e.co_lead_skipped);
     const answers = bothIn ? (answersOf.get(e.id) ?? { self: {}, lead: {} }) : { self: {}, lead: {} };
     let flagged = 0;
     for (const [questionId, selfValue] of Object.entries(answers.self)) {

@@ -601,6 +601,9 @@ export type Database = {
           signature_image: string | null;
           track: Database["public"]["Enums"]["track_type"];
           reports_to: string | null;
+          // 0083: a SECOND manager who rates this person independently of
+          // reports_to. Null for almost everybody.
+          co_reviewer_id: string | null;
           is_active: boolean;
           created_at: string;
           updated_at: string;
@@ -620,6 +623,7 @@ export type Database = {
           signature_image?: string | null;
           track?: Database["public"]["Enums"]["track_type"];
           reports_to?: string | null;
+          co_reviewer_id?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -639,6 +643,7 @@ export type Database = {
           signature_image?: string | null;
           track?: Database["public"]["Enums"]["track_type"];
           reports_to?: string | null;
+          co_reviewer_id?: string | null;
           is_active?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -1129,6 +1134,12 @@ export type Database = {
           // 0021: HR advanced past a layer that never came in.
           self_skipped: boolean;
           lead_skipped: boolean;
+          // 0083: a SECOND manager, where the evaluatee carries one. Null on
+          // the ordinary two-form flow, and its PRESENCE is what makes an
+          // evaluation need three submissions rather than two.
+          co_lead_id: string | null;
+          co_lead_submitted_at: string | null;
+          co_lead_skipped: boolean;
           returned_to: string | null;
           // 0022: this person's OWN deadlines. A rolling cycle gives each
           // person different ones, so the cycle's dates stopped being the answer.
@@ -1158,6 +1169,9 @@ export type Database = {
           final_overall?: number | null;
           self_skipped?: boolean;
           lead_skipped?: boolean;
+          co_lead_id?: string | null;
+          co_lead_submitted_at?: string | null;
+          co_lead_skipped?: boolean;
           returned_to?: string | null;
           due_self_on?: string | null;
           due_lead_on?: string | null;
@@ -1449,6 +1463,12 @@ export type Database = {
           self_overall: number | null;
           lead_overall: number | null;
           final_overall: number | null;
+          /**
+           * 0087. The mean of every SUBMITTED manager layer — equal to
+           * `lead_overall` where there is one manager, the mean of both where
+           * the evaluatee carries a second reviewer (0083).
+           */
+          manager_overall: number | null;
           promotion_recommendation: string | null;
           increment_type: string | null;
           increment_pct: number | null;
@@ -1785,7 +1805,7 @@ export type Database = {
         | "LEAD_REVIEWED"
         | "MD_FINALIZED";
       question_category: "CORE" | "DEPARTMENT";
-      rating_layer: "SELF" | "LEAD" | "MD";
+      rating_layer: "SELF" | "LEAD" | "MD" | "LEAD_2";
       question_section:
         | "METADATA"
         | "KPI"

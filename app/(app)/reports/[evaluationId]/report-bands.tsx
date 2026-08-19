@@ -83,6 +83,24 @@ function average(self: number | null, lead: number | null): string {
   return ((self + lead) / 2).toFixed(2);
 }
 
+/**
+ * WHAT THE MANAGERS TOGETHER SAY — the mean of the two, where a person has two.
+ *
+ * This is what the Average column then averages against Self, so AMEND-5's
+ * definition is unchanged: it is still "the mean of the Self and Manager
+ * figures". What a second reviewer changes is what the MANAGER figure is, not
+ * what the column means — and it is the same rule the owner set for the hike
+ * percentage, so the two cannot say different things about one person.
+ *
+ * With one manager it returns their figure untouched, which is what keeps every
+ * existing report identical.
+ */
+function managerMean(lead: number | null, coLead: number | null): number | null {
+  if (lead === null) return coLead;
+  if (coLead === null) return lead;
+  return (lead + coLead) / 2;
+}
+
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
 }
@@ -189,6 +207,13 @@ export function BandHeading({
 export function HeaderBand({ report }: { report: EvaluationReport }) {
   const { header, summary } = report;
 
+  /* -- Whether this person has a SECOND manager (0083). Null for almost
+        everybody, and every third column below is drawn only when it is not —
+        so an ordinary report is the two-column document it has always been.
+        First name only: a column heading has room for one word, and the full
+        name is in the header card above. -- */
+  const secondManager = header.coLeadName ? firstName(header.coLeadName) : null;
+
   /* -- THE FINAL SCORE, BEFORE IT IS STORED.
         `final_overall` is written at the close and not a moment earlier, so the
         tile was absent for the whole life of a record and appeared only once
@@ -246,7 +271,16 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           "grid divide-y divide-rule sm:divide-x sm:divide-y-0",
           // A fourth panel only once there is a final score. An empty "Final —"
           // on a report still with HR would read as a figure somebody forgot.
-          shownFinal === null ? "sm:grid-cols-3" : "sm:grid-cols-4",
+          // The grid grows with what there IS to show: a second manager adds a
+          // panel, a final score adds another. An empty tile reads as a figure
+          // somebody forgot rather than one that does not exist yet.
+          shownFinal === null
+            ? secondManager
+              ? "sm:grid-cols-4"
+              : "sm:grid-cols-3"
+            : secondManager
+              ? "sm:grid-cols-5"
+              : "sm:grid-cols-4",
         )}
       >
         {/* -- White, with the hue as a dot and a 2px rule.
@@ -274,6 +308,27 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             What {firstName(header.leadName)} said about them
           </p>
         </figure>
+
+        {/* -- The SECOND manager's own average, where there is one (0083).
+               Its own panel rather than folded into the one above: the two
+               managers rated independently and blind to each other, so showing
+               one figure would hide exactly the disagreement both were asked
+               for. Same manager hue — §13.1 keeps three tiers, and the NAME is
+               what tells the two apart (§13.8: never colour alone). -- */}
+        {secondManager ? (
+          <figure className="relative px-6 py-5">
+            <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-lead" />
+            <figcaption>
+              <TierTag tier="lead">{secondManager}&apos;s average</TierTag>
+            </figcaption>
+            <p className="tabular mt-1 text-display-lg text-ink">
+              {score(summary.coLeadOverall)}
+            </p>
+            <p className="font-sans text-body-sm text-ink-muted">
+              What {firstName(header.coLeadName)} said about them
+            </p>
+          </figure>
+        ) : null}
 
         {/* ---------- The agreed final score ----------
             §13.1's third tier, and legitimately so: indigo means "the final,
@@ -354,8 +409,20 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   <TierTag tier="self">Self</TierTag>
                 </th>
                 <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
-                  <TierTag tier="lead">Manager</TierTag>
+                  <TierTag tier="lead">{secondManager ? firstName(header.leadName) : "Manager"}</TierTag>
                 </th>
+                {/* -- The SECOND manager, only where there is one (0083). Named
+                       rather than numbered: "Manager 2" tells nobody which of
+                       two people wrote the figure, and on a pay decision that is
+                       the first thing anybody asks. Both wear the manager hue —
+                       §13.1 reserves three, and a fourth would say one
+                       manager's 4 means something different from the other's,
+                       which is the opposite of why both were asked. -- */}
+                {secondManager ? (
+                  <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
+                    <TierTag tier="lead">{secondManager}</TierTag>
+                  </th>
+                ) : null}
                 {/* Added at the owner's instruction — a deliberate amendment to
                     §11, recorded in §18. Plain ink and no tier dot: it belongs
                     to neither side, which is precisely why §11 did not want
@@ -387,12 +454,22 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                     >
                       {score(s.lead)}
                     </td>
+                    {secondManager ? (
+                      <td
+                        className={cn(
+                          "tabular px-4 py-3 text-right text-body font-semibold text-ink",
+                          TIER_CELL,
+                        )}
+                      >
+                        {score(s.coLead)}
+                      </td>
+                    ) : null}
                     {/* Both or nothing: Manager Review has no self score, and
                         printing the manager's figure there as an "average" would
                         say both sides agreed on a section only one of them
                         answered. */}
                     <td className="tabular px-4 py-3 text-right text-body font-semibold text-ink">
-                      {average(s.self, s.lead)}
+                      {average(s.self, managerMean(s.lead, s.coLead))}
                     </td>
                     <td
                       className={cn(
@@ -424,19 +501,29 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             return (
               <li key={s.section} className="px-4 py-3">
                 <p className="font-sans text-body text-ink">{s.label}</p>
-                <dl className="mt-2 grid grid-cols-4 gap-2">
+                <dl className={cn("mt-2 grid gap-2", secondManager ? "grid-cols-5" : "grid-cols-4")}>
                   <div>
                     <dt className="type-label text-self">Self</dt>
                     <dd className="tabular text-body font-semibold text-ink">{score(s.self)}</dd>
                   </div>
                   <div>
-                    <dt className="type-label text-lead">Manager</dt>
+                    <dt className="type-label text-lead">
+                      {secondManager ? firstName(header.leadName) : "Manager"}
+                    </dt>
                     <dd className="tabular text-body font-semibold text-ink">{score(s.lead)}</dd>
                   </div>
+                  {secondManager ? (
+                    <div>
+                      <dt className="type-label text-lead">{secondManager}</dt>
+                      <dd className="tabular text-body font-semibold text-ink">
+                        {score(s.coLead)}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt className="type-label text-ink-muted">Average</dt>
                     <dd className="tabular text-body font-semibold text-ink">
-                      {average(s.self, s.lead)}
+                      {average(s.self, managerMean(s.lead, s.coLead))}
                     </dd>
                   </div>
                   <div>
@@ -465,6 +552,10 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
 
 export function RatingsBand({ report, index }: { report: EvaluationReport; index: number }) {
   const [flaggedOnly, setFlaggedOnly] = React.useState(false);
+
+  // Same rule as the header band: no second manager, no third column, and the
+  // table is the one this screen has always drawn.
+  const secondManager = report.header.coLeadName ? firstName(report.header.coLeadName) : null;
 
   const sections = report.sections
     .map((s) => ({ ...s, rows: flaggedOnly ? s.rows.filter((r) => r.flag !== "none") : s.rows }))
@@ -526,8 +617,15 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                         §6's wording is untouched. It is fixed and §17 forbids
                         paraphrasing it, so the column moves, not the label. -- */}
                   <col />
-                  <col className="w-[300px]" />
-                  <col className="w-[300px]" />
+                  <col className={secondManager ? "w-[240px]" : "w-[300px]"} />
+                  <col className={secondManager ? "w-[240px]" : "w-[300px]"} />
+                  {/* -- Three answer columns at 300 would leave the question
+                         under 280px on a 1440 page, which the note above
+                         rejects as trading a common problem for a worse one. At
+                         240 each the two extremes of §6's wording wrap and the
+                         other four do not — the same compromise, re-struck for
+                         a third column. -- */}
+                  {secondManager ? <col className="w-[240px]" /> : null}
                   <col className="w-[104px]" />
                 </colgroup>
                 <thead>
@@ -537,8 +635,15 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                       <TierTag tier="self">Self</TierTag>
                     </th>
                     <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
-                      <TierTag tier="lead">Manager</TierTag>
+                      <TierTag tier="lead">
+                        {secondManager ? firstName(report.header.leadName) : "Manager"}
+                      </TierTag>
                     </th>
+                    {secondManager ? (
+                      <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
+                        <TierTag tier="lead">{secondManager}</TierTag>
+                      </th>
+                    ) : null}
                     <th className="type-label px-5 py-3 text-right font-bold text-ink">Gap</th>
                   </tr>
                 </thead>
@@ -588,6 +693,11 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                       <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
                         {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
                       </td>
+                      {secondManager ? (
+                        <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
+                          {row.coLeadAnswer ?? <span className="text-ink-muted">—</span>}
+                        </td>
+                      ) : null}
                       <td className="px-5 py-4 text-right">
                         {row.flag !== "none" ? (
                           <span className="tabular inline-flex items-center gap-1.5 rounded-pill bg-critical-tint px-2.5 py-1 text-body-sm font-semibold text-critical">
@@ -633,6 +743,10 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                     )}
                   </div>
 
+                  {/* -- Two columns on a phone whatever the count: three
+                         answer columns at 375px is about 110px each, which is
+                         narrower than §6's shortest label. A third manager
+                         stacks as its own row instead. -- */}
                   <dl className="mt-2 grid grid-cols-2 gap-3">
                     <div className="min-w-0">
                       <dt className="type-label text-self">Self</dt>
@@ -641,11 +755,21 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                       </dd>
                     </div>
                     <div className="min-w-0">
-                      <dt className="type-label text-lead">Manager</dt>
+                      <dt className="type-label text-lead">
+                        {secondManager ? firstName(report.header.leadName) : "Manager"}
+                      </dt>
                       <dd className="font-sans text-body-sm text-ink">
                         {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
                       </dd>
                     </div>
+                    {secondManager ? (
+                      <div className="col-span-2 min-w-0">
+                        <dt className="type-label text-lead">{secondManager}</dt>
+                        <dd className="font-sans text-body-sm text-ink">
+                          {row.coLeadAnswer ?? <span className="text-ink-muted">—</span>}
+                        </dd>
+                      </div>
+                    ) : null}
                   </dl>
 
                   {row.leadComment ? (
@@ -671,6 +795,11 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
 
   const employee = firstName(report.header.employeeName);
   const lead = firstName(report.header.leadName);
+  // Same rule as everywhere else on this report: no second manager, no third
+  // answer, and the band is what it has always been.
+  const secondManager = report.header.coLeadName
+    ? firstName(report.header.coLeadName)
+    : null;
 
   return (
     <section className="space-y-4">
@@ -715,6 +844,21 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
                   </span>
                 )}
               </p>
+
+              {/* -- The SECOND manager answered the same question, blind to the
+                     one above it. Shown beneath rather than as a third column:
+                     these are paragraphs, and three prose columns at this width
+                     are three narrow strips nobody reads. Named and ruled off,
+                     so it can never be mistaken for a continuation of the
+                     manager's own answer. -- */}
+              {secondManager ? (
+                <div className="mt-3 border-t border-rule pt-3">
+                  <TierTag tier="lead">What {secondManager} said</TierTag>
+                  <p className="mt-1.5 whitespace-pre-wrap font-sans text-body text-ink">
+                    {pair.coLeadAnswer ?? <span className="text-ink-muted">Left blank.</span>}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
         </article>

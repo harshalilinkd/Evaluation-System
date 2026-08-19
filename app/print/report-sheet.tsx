@@ -39,12 +39,34 @@ function average(self: number | null, lead: number | null): string {
   return ((self + lead) / 2).toFixed(2);
 }
 
+/**
+ * What the managers TOGETHER say, where a person has two (0083).
+ *
+ * The Average column then averages this against Self, so AMEND-5's definition
+ * is untouched — it is still the mean of the Self and Manager figures. What a
+ * second reviewer changes is what the manager figure IS, and it is the same
+ * rule the owner set for the hike percentage, so the printed sheet and the
+ * salary card cannot say different things about one person.
+ *
+ * With one manager it returns their figure, which is what keeps every sheet
+ * printed to date identical.
+ */
+function managerMean(lead: number | null, coLead: number | null): number | null {
+  if (lead === null) return coLead;
+  if (coLead === null) return lead;
+  return (lead + coLead) / 2;
+}
+
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
 }
 
 export function ReportSheet({ report }: { report: EvaluationReport }) {
   const { header, summary, narratives, meta, review } = report;
+
+  // No second manager, no third column — every sheet printed to date is
+  // byte-identical.
+  const secondManager = header.coLeadName ? firstName(header.coLeadName) : null;
   const employee = firstName(header.employeeName);
   const lead = firstName(header.leadName);
 
@@ -99,6 +121,15 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <dd>{header.dateOfJoining ? formatDate(header.dateOfJoining) : "—"}</dd>
           </div>
           <div><dt>Rated by</dt><dd>{header.leadName ?? "—"}</dd></div>
+          {/* -- A second reviewer is a fact about who rated this person, so it
+                belongs in the identity block and not only in a column heading.
+                Rendered only where there is one: the grid is three columns and
+                the rule that hides the trailing border keys on the last three
+                children, so an always-present empty row would put two rules
+                across the foot of the block (FIX-34). -- */}
+          {header.coLeadName ? (
+            <div><dt>Second reviewer</dt><dd>{header.coLeadName}</dd></div>
+          ) : null}
           {/* -- THE CYCLE, as a third row rather than a corner block.
                 Three fields, so the grid stays a clean multiple of its three
                 columns — seven or eight would leave a ragged last row, and the
@@ -123,7 +154,8 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <tr>
               <th>Section</th>
               <th className="print-num">Self</th>
-              <th className="print-num">Manager</th>
+              <th className="print-num">{secondManager ? firstName(header.leadName) : "Manager"}</th>
+              {secondManager ? <th className="print-num">{secondManager}</th> : null}
               <th className="print-num">Average</th>
               <th className="print-num">Gap</th>
             </tr>
@@ -134,7 +166,8 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 <td>{s.label}</td>
                 <td className="print-num">{score(s.self)}</td>
                 <td className="print-num">{score(s.lead)}</td>
-                <td className="print-num">{average(s.self, s.lead)}</td>
+                {secondManager ? <td className="print-num">{score(s.coLead)}</td> : null}
+                <td className="print-num">{average(s.self, managerMean(s.lead, s.coLead))}</td>
                 <td className="print-num">{gapText(s.gap)}</td>
               </tr>
             ))}
@@ -183,7 +216,8 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <tr>
                 <th>Question</th>
                 <th>Self</th>
-                <th>Manager</th>
+                <th>{secondManager ? firstName(header.leadName) : "Manager"}</th>
+                {secondManager ? <th>{secondManager}</th> : null}
                 <th>Gap</th>
               </tr>
             </thead>
@@ -202,6 +236,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                   </td>
                   <td>{row.selfAnswer ?? "—"}</td>
                   <td>{row.leadAnswer ?? "—"}</td>
+                  {secondManager ? <td>{row.coLeadAnswer ?? "—"}</td> : null}
                   <td className="print-num">{gapText(row.gap)}</td>
                 </tr>
               ))}
@@ -220,6 +255,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 <th>Topic</th>
                 <th>What {employee} said</th>
                 <th>What {lead} said</th>
+                {secondManager ? <th>What {secondManager} said</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -228,6 +264,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                   <td>{pair.topic}</td>
                   <td>{pair.selfAnswer ?? "—"}</td>
                   <td>{pair.leadAnswer ?? "—"}</td>
+                  {secondManager ? <td>{pair.coLeadAnswer ?? "—"}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -251,8 +288,29 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
       {/* ---------- Band 5 ---------- */}
       {narratives.leadAssessment.length > 0 ? (
         <section className="print-section print-block">
-          <h2>The lead&rsquo;s assessment</h2>
+          <h2>
+            {secondManager && header.leadName
+              ? `${header.leadName}’s assessment`
+              : "The lead’s assessment"}
+          </h2>
           {narratives.leadAssessment.map((block) => (
+            <div key={block.question} className="print-narrative">
+              <h3>{block.question}</h3>
+              <p>{block.answer ?? "—"}</p>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
+      {/* -- The SECOND manager's own written verdict, as its own signed-off
+             section. Merged with the one above it would present one assessment
+             where there are two, on the document a pay decision is signed
+             from — and the two were written blind to each other, which is the
+             reason both were collected. -- */}
+      {secondManager && narratives.coLeadAssessment.length > 0 ? (
+        <section className="print-section print-block">
+          <h2>{header.coLeadName}&rsquo;s assessment</h2>
+          {narratives.coLeadAssessment.map((block) => (
             <div key={block.question} className="print-narrative">
               <h3>{block.question}</h3>
               <p>{block.answer ?? "—"}</p>

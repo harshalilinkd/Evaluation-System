@@ -122,11 +122,31 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
 
           <NarrativeBand
             index={data.narratives.paired.length > 0 ? 4 : 3}
-            title="The lead's assessment"
+            title={
+              data.header.coLeadName
+                ? `${data.header.leadName ?? "The manager"}'s assessment`
+                : "The lead's assessment"
+            }
             hint="Every question the manager answered, in the order they were asked. Ratings are in section 1 with their scores."
             blocks={data.narratives.leadAssessment}
             tone="lead"
           />
+
+          {/* -- A BAND OF THEIR OWN, where there is a second manager (0083).
+                 Merging the two would present one verdict where there are two,
+                 and leave the reader unable to tell who wrote which — on a
+                 report whose whole purpose is that the two rated blind to each
+                 other. Named, because that is what tells them apart (§13.8:
+                 never colour alone, and both managers share the manager hue). -- */}
+          {data.header.coLeadName && data.narratives.coLeadAssessment.length > 0 ? (
+            <NarrativeBand
+              index={data.narratives.paired.length > 0 ? 5 : 4}
+              title={`${data.header.coLeadName}'s assessment`}
+              hint="The same questions, answered independently by their second reviewer."
+              blocks={data.narratives.coLeadAssessment}
+              tone="lead"
+            />
+          ) : null}
 
           {salary?.ok ? (
             <SalaryBand

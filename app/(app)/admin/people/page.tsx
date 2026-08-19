@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { managerFigure, managerOverallByEvaluation } from "@/lib/evaluations/manager-overall";
 
 export const metadata: Metadata = { title: "Team review" };
 
@@ -90,9 +91,17 @@ export default async function PeoplePage({
   const { data: evaluations } = cycle
     ? await supabase
         .from("evaluations")
-        .select("evaluatee_id, status, self_overall, lead_overall, final_overall, excluded_at")
+        .select("id, evaluatee_id, status, self_overall, lead_overall, final_overall, excluded_at")
         .eq("cycle_id", cycle.id)
     : { data: [] };
+
+  /* -- One batched read for the manager figure, rather than a call per row:
+        this roster is the whole company. Skipped entirely when there is no
+        cycle, which is when `evaluations` is empty anyway. -- */
+  const managerOveralls = await managerOverallByEvaluation(
+    supabase,
+    (evaluations ?? []).map((e) => e.id),
+  );
 
   const departmentName = new Map((departments ?? []).map((d) => [d.id, d.name]));
   const leadName = new Map((people ?? []).map((p) => [p.id, p.full_name]));
@@ -115,7 +124,10 @@ export default async function PeoplePage({
       status: evaluation?.excluded_at ? null : (evaluation?.status ?? null),
       excluded: Boolean(evaluation?.excluded_at),
       self: evaluation?.self_overall ?? null,
-      lead: evaluation?.lead_overall ?? null,
+      // The MANAGER figure (0087), so a designer's column is both of theirs.
+      lead: evaluation
+        ? managerFigure(evaluation.id, evaluation.lead_overall, managerOveralls)
+        : null,
       final: evaluation?.final_overall ?? null,
     };
   });

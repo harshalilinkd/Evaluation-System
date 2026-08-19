@@ -248,7 +248,9 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
           direct select and cannot become a back door around §9. -- */
     supabase
       .from("v_employee_history")
-      .select("profile_id, cycle_name, period_label, starts_on, lead_overall, final_overall")
+      .select(
+        "profile_id, cycle_name, period_label, starts_on, lead_overall, manager_overall, final_overall",
+      )
       .or("final_overall.not.is.null,lead_overall.not.is.null")
       .order("starts_on", { ascending: false })
       .limit(200),
@@ -273,7 +275,17 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
     // The employee's own score is deliberately NOT a fallback — a leaderboard
     // built partly on self-assessment ranks confidence, not performance.
     const final = row.final_overall === null ? null : Number(row.final_overall);
-    const lead = row.lead_overall === null ? null : Number(row.lead_overall);
+    /* -- The MANAGER figure, not the reporting lead's alone: for somebody with
+          a second reviewer (0083) that is the mean of both, and ranking them on
+          half their review would put them above or below their colleagues for a
+          reason nobody could explain from the screen. Falls back to the older
+          column, which is what the view itself does. -- */
+    const lead =
+      row.manager_overall !== null
+        ? Number(row.manager_overall)
+        : row.lead_overall === null
+          ? null
+          : Number(row.lead_overall);
     const score = final ?? lead;
     if (score === null) continue;
 

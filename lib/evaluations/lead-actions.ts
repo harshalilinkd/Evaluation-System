@@ -21,6 +21,35 @@ function fail<T>(code: string, message: string): LeadResult<T> {
   return { ok: false, error: { code, message } };
 }
 
+/**
+ * Which manager form this person fills on this evaluation.
+ *
+ * DERIVED FROM THE SESSION, never taken as an argument. A `layer` parameter is
+ * one a caller could choose, and choosing `LEAD` while being the second
+ * reviewer would write into the other manager's form — §9 is explicit that
+ * client code is never the only guard, and here the client would not even be a
+ * guard, it would be the decision.
+ *
+ * RLS and `merge_evaluation_answers` both re-check it anyway; this decides
+ * which of the two the person is being offered.
+ */
+async function reviewerLayerFor(
+  evaluationId: string,
+  profileId: string,
+): Promise<"LEAD" | "LEAD_2" | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("evaluations")
+    .select("lead_id, co_lead_id")
+    .eq("id", evaluationId)
+    .maybeSingle();
+
+  if (!data) return null;
+  if (data.lead_id === profileId) return "LEAD";
+  if (data.co_lead_id === profileId) return "LEAD_2";
+  return null;
+}
+
 // A "use server" module may export only async functions (P8-8), so the minimum
 // reason length is not re-exported from here — both this file and the dialog
 // import it from lib/evaluations/transitions.
@@ -54,7 +83,10 @@ export async function saveLeadDraft(
   const profile = await getCurrentProfile();
   if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
 
-  const form = await getEvaluationForm(evaluationId, "LEAD");
+  const layer = await reviewerLayerFor(evaluationId, profile.id);
+  if (!layer) return fail("NOT_A_REVIEWER", "This review is not yours to write.");
+
+  const form = await getEvaluationForm(evaluationId, layer);
   if (!form.ok) return fail(form.error.code, form.error.message);
 
   // §8's locking rule, checked before the round trip so a submitted review gives
@@ -85,7 +117,7 @@ export async function saveLeadDraft(
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("merge_evaluation_answers", {
     p_evaluation_id: evaluationId,
-    p_layer: "LEAD",
+    p_layer: layer,
     p_answers_patch: answersPatch as Json,
     p_comments_patch: commentsPatch as Json,
     p_remove_keys: removeKeys,
@@ -140,14 +172,17 @@ export async function submitLeadReview(
   const profile = await getCurrentProfile();
   if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
 
-  const form = await getEvaluationForm(evaluationId, "LEAD");
+  const layer = await reviewerLayerFor(evaluationId, profile.id);
+  if (!layer) return fail("NOT_A_REVIEWER", "This review is not yours to write.");
+
+  const form = await getEvaluationForm(evaluationId, layer);
   if (!form.ok) return fail(form.error.code, form.error.message);
 
   if (form.data.isSubmitted) {
     return fail("ALREADY_SUBMITTED", "You have already submitted this review.");
   }
 
-  const validation = validateAnswers(form.data, "LEAD", form.data.answers);
+  const validation = validateAnswers(form.data, layer, form.data.answers);
   if (!validation.ok) {
     const count = validation.missingIds.length;
     return fail(
@@ -169,7 +204,7 @@ export async function submitLeadReview(
     // re-checks the same thing in SQL.
       roles: await getRoles(),
     },
-    { locks: "LEAD" },
+    { locks: layer },
   );
 
   if (!moved.ok) return fail(moved.error.code, moved.error.message);

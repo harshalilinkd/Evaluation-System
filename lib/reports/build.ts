@@ -47,7 +47,7 @@ export async function buildEvaluationReport(
       // P3-11: written out in full, never concatenated — supabase-js infers the
       // row type from this string and degrades everything to GenericStringError
       // on anything it cannot statically parse.
-      "id, cycle_id, evaluatee_id, lead_id, department_id, status, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped, final_overall",
+      "id, cycle_id, evaluatee_id, lead_id, co_lead_id, department_id, status, self_submitted_at, lead_submitted_at, co_lead_submitted_at, self_skipped, lead_skipped, co_lead_skipped, final_overall",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -71,13 +71,24 @@ export async function buildEvaluationReport(
 
   /* -- Both layers' forms. Each is the FROZEN snapshot (§5), so the report
         shows the questions as they were asked, not as they read today. -- */
-  const [selfForm, leadForm] = await Promise.all([
+  const hasCoLead = Boolean(evaluation.co_lead_id);
+
+  const [selfForm, leadForm, coLeadForm] = await Promise.all([
     getEvaluationForm(evaluationId, "SELF"),
     getEvaluationForm(evaluationId, "LEAD"),
+    /* -- The SECOND manager's layer, only where there is one. Asking for it
+          otherwise would be asking a question whose answer is guaranteed to be
+          nothing, and every field below is null in that case — so a person with
+          one manager gets exactly the report they got before. -- */
+    hasCoLead ? getEvaluationForm(evaluationId, "LEAD_2") : Promise.resolve(null),
   ]);
 
   if (!selfForm.ok) return cycleError("FORM_FAILED", "Could not assemble the self layer.");
   if (!leadForm.ok) return cycleError("FORM_FAILED", "Could not assemble the lead layer.");
+  if (coLeadForm !== null && !coLeadForm.ok) {
+    return cycleError("FORM_FAILED", "Could not assemble the second reviewer's layer.");
+  }
+  const coLeadData = coLeadForm !== null && coLeadForm.ok ? coLeadForm.data : null;
 
   /* -- A LAYER THAT HAS NOT BEEN SUBMITTED CARRIES NO SCORE. Reported, and it
         was wrong in the way that matters most on this screen.
@@ -101,6 +112,10 @@ export async function buildEvaluationReport(
         is there is all there is going to be. -- */
   const selfIn = Boolean(evaluation.self_submitted_at) || Boolean(evaluation.self_skipped);
   const leadIn = Boolean(evaluation.lead_submitted_at) || Boolean(evaluation.lead_skipped);
+  // The identical rule for the third layer — a draft is not a rating, and the
+  // second manager's autosaved half-form must not become a number either.
+  const coLeadIn =
+    Boolean(evaluation.co_lead_submitted_at) || Boolean(evaluation.co_lead_skipped);
 
   const selfAnswers = selfForm.data.answers;
   const leadAnswers = leadForm.data.answers;
@@ -111,6 +126,8 @@ export async function buildEvaluationReport(
      become a number. */
   const scoredSelfAnswers = selfIn ? selfAnswers : {};
   const scoredLeadAnswers = leadIn ? leadAnswers : {};
+  const coLeadAnswers = coLeadData?.answers ?? {};
+  const scoredCoLeadAnswers = coLeadIn ? coLeadAnswers : {};
 
   const { data: responses } = await supabase
     .from("evaluation_responses")
@@ -119,9 +136,13 @@ export async function buildEvaluationReport(
 
   const leadRow = responses?.find((r) => r.layer === "LEAD");
   const leadComments = (leadRow?.comments ?? {}) as Record<string, string>;
+  const coLeadRow = responses?.find((r) => r.layer === "LEAD_2");
+  const coLeadComments = (coLeadRow?.comments ?? {}) as Record<string, string>;
 
   /* -- People and the department. -- */
-  const ids = [evaluation.evaluatee_id, evaluation.lead_id].filter((v): v is string => Boolean(v));
+  const ids = [evaluation.evaluatee_id, evaluation.lead_id, evaluation.co_lead_id].filter(
+    (v): v is string => Boolean(v),
+  );
   const [{ data: people }, { data: department }] = await Promise.all([
     supabase
       .from("profiles")
@@ -134,6 +155,7 @@ export async function buildEvaluationReport(
 
   const evaluatee = people?.find((p) => p.id === evaluation.evaluatee_id);
   const lead = people?.find((p) => p.id === evaluation.lead_id);
+  const coLead = people?.find((p) => p.id === evaluation.co_lead_id);
 
   /* ---------- Summary ---------- */
   //
@@ -144,6 +166,9 @@ export async function buildEvaluationReport(
   // gap between two numbers derived by different code.
   const selfScores = computeScores(selfForm.data, scoredSelfAnswers);
   const leadScores = computeScores(leadForm.data, scoredLeadAnswers);
+  const coLeadScores = coLeadData
+    ? computeScores(coLeadData, scoredCoLeadAnswers)
+    : null;
 
   /* The gap needs BOTH sides in. Measured against a draft it is not a
      disagreement, it is a reading of how far somebody has got — and §11 makes
@@ -160,9 +185,10 @@ export async function buildEvaluationReport(
       label: SECTION_LABELS[section],
       self,
       lead: leadValue,
+      coLead: coLeadScores?.sectionScores[section] ?? null,
       gap: self === null || leadValue === null ? null : round2(leadValue - self),
     };
-  }).filter((s) => s.self !== null || s.lead !== null);
+  }).filter((s) => s.self !== null || s.lead !== null || s.coLead !== null);
 
   /* ---------- Sections and rows ---------- */
   //
@@ -170,7 +196,11 @@ export async function buildEvaluationReport(
   // LEAD_ONLY. The employee's carries EMPLOYEE_AND_LEAD and EMPLOYEE_ONLY. The
   // union, in form order, is every question that was asked of anybody.
   const byId = new Map<string, FormQuestion>();
-  for (const q of [...leadForm.data.questions, ...selfForm.data.questions]) {
+  for (const q of [
+    ...leadForm.data.questions,
+    ...(coLeadData?.questions ?? []),
+    ...selfForm.data.questions,
+  ]) {
     if (!byId.has(q.questionId)) byId.set(q.questionId, q);
   }
   const allQuestions = [...byId.values()].sort(
@@ -179,9 +209,24 @@ export async function buildEvaluationReport(
 
   // §6: a question hidden by an unmet condition was never asked, so it is not
   // part of the record. Showing it with two blanks would read as unanswered.
-  const hidden = new Set([...selfForm.data.hiddenQuestionIds, ...leadForm.data.hiddenQuestionIds]);
+  /* -- Hidden for EVERY layer that was asked. A question the second manager's
+        promotion answer revealed was genuinely asked of them, so it belongs in
+        the record even where the other two never saw it. -- */
+  const hidden = new Set(
+    [
+      ...selfForm.data.hiddenQuestionIds,
+      ...leadForm.data.hiddenQuestionIds,
+      ...(coLeadData?.hiddenQuestionIds ?? []),
+    ].filter(
+      (id) =>
+        !(coLeadData && !coLeadData.hiddenQuestionIds.includes(id) &&
+          leadForm.data.hiddenQuestionIds.includes(id)),
+    ),
+  );
   const answeredHidden = (id: string) =>
-    selfAnswers[id] !== undefined || leadAnswers[id] !== undefined;
+    selfAnswers[id] !== undefined ||
+    leadAnswers[id] !== undefined ||
+    coLeadAnswers[id] !== undefined;
 
   const sections: ReportSection[] = [];
   for (const section of SECTION_ORDER) {
@@ -211,9 +256,16 @@ export async function buildEvaluationReport(
             question.answeredBy === "EMPLOYEE_ONLY"
               ? null
               : readableAnswer(question, leadAnswers[question.questionId]),
+          coLeadAnswer:
+            !coLeadData || question.answeredBy === "EMPLOYEE_ONLY"
+              ? null
+              : readableAnswer(question, coLeadAnswers[question.questionId]),
           gap: v?.delta ?? null,
           flag: v?.flag ?? "none",
-          leadComment: leadComments[question.questionId]?.trim() || null,
+          leadComment:
+            [leadComments[question.questionId]?.trim(), coLeadComments[question.questionId]?.trim()]
+              .filter(Boolean)
+              .join(" · ") || null,
         };
       });
 
@@ -238,6 +290,10 @@ export async function buildEvaluationReport(
       selfAnswer: selfQ ? readableAnswer(selfQ, selfAnswers[selfQ.questionId]) : null,
       leadQuestion: leadQ?.text ?? null,
       leadAnswer: leadQ ? readableAnswer(leadQ, leadAnswers[leadQ.questionId]) : null,
+      // The same question, answered by the second manager. Null where there is
+      // no second manager, which is what the screen branches on.
+      coLeadAnswer:
+        leadQ && coLeadData ? readableAnswer(leadQ, coLeadAnswers[leadQ.questionId]) : null,
     });
   }
 
@@ -290,6 +346,29 @@ export async function buildEvaluationReport(
         q.responseType === "NUMBER",
     )
     .map((q) => ({ question: q.text, answer: readableAnswer(q, leadAnswers[q.questionId]) }));
+
+  /* -- THE SECOND MANAGER'S OWN WRITTEN VERDICT.
+        Built from the same filter as the band above — the same questions, on
+        the same form — so the two are directly comparable, which is the whole
+        reason both were asked. Read from their own answers, and empty when
+        there is no second manager. -- */
+  const coLeadAssessment: NarrativeBlock[] = !coLeadData
+    ? []
+    : allQuestions
+        .filter((q) => q.answeredBy !== "EMPLOYEE_ONLY")
+        .filter((q) => q.section === "MANAGER_REVIEW")
+        .filter((q) => !hidden.has(q.questionId) || answeredHidden(q.questionId))
+        .filter(
+          (q) =>
+            isNarrative(q) ||
+            q.responseType === "SINGLE_SELECT" ||
+            q.responseType === "BOOLEAN" ||
+            q.responseType === "NUMBER",
+        )
+        .map((q) => ({
+          question: q.text,
+          answer: readableAnswer(q, coLeadAnswers[q.questionId]),
+        }));
 
   /* ---------- Meta: §12's record of what actually happened ---------- */
 
@@ -350,6 +429,7 @@ export async function buildEvaluationReport(
       designation: evaluatee?.designation ?? null,
       dateOfJoining: evaluatee?.date_of_joining ?? null,
       leadName: lead?.full_name ?? null,
+      coLeadName: coLead?.full_name ?? null,
       cycleName: cycle.name,
       cycleType: isIncrement ? "Increment" : "Evaluation",
       period: cycle.period_label,
@@ -361,7 +441,8 @@ export async function buildEvaluationReport(
       // Read from the row, never recomputed: §5 says a stored score is never
       // recalculated on read, and this one was agreed between two people
       // rather than derived from anything.
-      finalOverall: evaluation.final_overall === null ? null : Number(evaluation.final_overall),
+      coLeadOverall: coLeadScores?.overallScore ?? null,
+    finalOverall: evaluation.final_overall === null ? null : Number(evaluation.final_overall),
       overallGap:
         selfScores.overallScore === null || leadScores.overallScore === null
           ? null
@@ -371,7 +452,7 @@ export async function buildEvaluationReport(
       flagThreshold: threshold,
     },
     sections,
-    narratives: { paired, employeeVoice, leadAssessment },
+    narratives: { paired, employeeVoice, leadAssessment, coLeadAssessment },
     meta: {
       selfSubmittedAt: evaluation.self_submitted_at,
       leadSubmittedAt: evaluation.lead_submitted_at,

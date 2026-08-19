@@ -28,6 +28,15 @@ export const TIER_LABELS: Record<Tier, string> = {
 export const TIER_FOR_LAYER: Record<Enums<"rating_layer">, Tier> = {
   SELF: "self",
   LEAD: "lead",
+  /* -- A SECOND manager is still the manager layer, so it takes the manager
+        colour. §13.1 reserves exactly three hues and says they mean the same
+        thing on every screen — inventing a fourth for the second reviewer would
+        need an explicit instruction (§0.2), and would also be saying that a
+        Design Coordinator's 4 means something different from a Team Leader's 4,
+        which is the opposite of why both are asked. Where the two must be told
+        apart — the report's columns — they are told apart by their LABEL, which
+        survives greyscale and a colourblind reader (§13.8). -- */
+  LEAD_2: "lead",
   MD: "final",
 };
 

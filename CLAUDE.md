@@ -7103,3 +7103,696 @@ which is what actually happens.
 **Not done, and named.** Notifications for due-soon and overdue evaluations
 (the digests, the bell and the nightly job all exist — this is wiring), and
 post-launch tracking from the evaluation screen.
+
+---
+
+### FIX-60 — Deleting several accounts, and the refusal that could not say why
+
+No migration. `lib/auth/provisioning.ts`, a `selection` prop on
+`components/appraise/data-grid.tsx`, and delete mode on Settings › Users.
+
+Asked for as "I want to delete all accounts in system — give delete all, or
+select all and delete", from a screenshot of the single-delete dialog reading
+**"Could not delete that account."**
+
+#### That message was the real report, and it named nothing
+
+`deletePerson` counted four things before deleting — evaluations of them,
+evaluations they lead, audit rows, pay history — and anything else fell through
+to `auth.admin.deleteUser`, which answers `Database error deleting user` and
+nothing more. So every OTHER foreign key in the schema surfaced as six words
+that name no cause and no fix (§0.7, §13.4).
+
+The commonest of those is `profiles.reports_to`: 0001's self-FK means **a
+manager cannot be deleted while anybody still points at them**, and that is not
+something they did, so no count of their actions could ever have found it. The
+production module was missing too — `worker_evaluations` has referenced
+profiles since 0047 and this check never learned about it.
+
+| # | Decision | Why |
+|---|---|---|
+| F60-1 | **One implementation of "has this person done anything", shared by both deletes** | Two copies would eventually disagree about what counts, and the disagreement would read as one screen refusing what the other allowed. `blockersFor` is the single answer and `describeBlockers` the single wording. |
+| F60-2 | The org chart and the worker module join the check, and both are NAMED | "3 people reporting to them" carries its own fix — move them to another manager — where "Could not delete that account" sends somebody to me. Named separately and never totalled, for the reason the original comment gave: "4 references" tells HR nothing to look at. |
+| F60-3 | **Four queries for the whole batch, not four per person** | "Delete all" over a roster of fifty would otherwise be two hundred round trips: a server action that times out rather than one that answers. `audit_log` is the exception and is counted per person — it is the one table here that holds thousands of rows for a single administrator — and it is asked LAST, of the people nothing else has ruled out, so the expensive check runs on the smallest set. |
+| F60-4 | An `or` filter's other side is never counted against a candidate | One evaluation row matches for the evaluatee OR the lead, and blaming the wrong one of them would refuse somebody for a reason that is not theirs. `bump` only ever increments an id the batch actually asked about, and a test drives exactly that row. |
+| F60-5 | **The audit row is written AFTER the delete now, not before** | §12 still wants the record and it still has to carry what was destroyed, so the person is read first — that half is unchanged, and `audit_log.entity_id` carries no foreign key (P3-2), so the row outlives the profile either way. But writing it first means a refusal leaves the trail asserting somebody was deleted while they are still on the roster, and across a run of fifty that is a history nobody can trust. |
+| F60-6 | **One refusal does not fail the batch** | Anybody the system still holds a record of is KEPT and named; the rest go. FIX-5 drew this line for the question bank and it holds here — HR asked for these to go, so the honest outcome is that the ones that can go do, and the rest come back with the reason and the alternative (§13.4). |
+| F60-7 | Not one transaction, and it does not pretend to be | Each delete is an Admin API call rather than a database write, so P19C-9's reasoning applies unchanged: the honest design is a per-person report, and a partial run is recoverable by reading the screen. Six at a time (P15-5) — fifty simultaneous calls do not fail cleanly, they queue and the screen hangs on the slowest. |
+| F60-8 | **Never the caller's own account, ticked or not** | P8-4 refuses self-deactivation because locking the last administrator out is a support call the database cannot undo, and a select-all makes that one careless press. Refused in the action, and the row's tick is disabled with the reason — a disabled checkbox is not a permission (§9), and a tick that silently does nothing is the dead end §13.4 forbids. |
+
+#### Selection belongs to the grid, not to this screen
+
+| # | Decision | Why |
+|---|---|---|
+| F60-9 | **`selection` is a `DataGrid` prop**, off unless a screen asks | The question bank hand-rolled a checkbox column (FIX-5) and this would have been the second copy — which is the drift the grid was extracted to stop. It renders on the table AND on the phone cards from one declaration, so a bulk action is not quietly desktop-only (§13.2). |
+| F60-10 | The tick is a CONTROL, not a field | Excluded from the card's field list and the details dialog by id, beside the gutter — the same rule that keeps a ⋯ menu out of a list of values. |
+| F60-11 | On a card it is a SIBLING of the toggle button, never inside it | A checkbox nested in a button is invalid markup and hands a screen reader one control where there are two. Asserted on the markup between the card's `<li>` and its button, with a self-test proving the check would catch a nested one. |
+| F60-12 | **Clicking a row still OPENS that person, in every mode** | Making it tick was the obvious move and is wrong: `onRowClick` is also what the gutter button and the card's "Open person" button call, and both say Open. A control that ticks a box while announcing that it opens somebody is worse than one extra click. |
+| F60-13 | Select-all covers what is ON SCREEN | The search and the status filter are how HR narrows to "the ones I mean", and a toggle reaching past them would select people they cannot see (F5-5). The label says "all N shown", and the banner says the filters decide what that means. |
+| F60-14 | The selection is cleared DURING RENDER, never from an effect | An effect calling setState is the cascading-render shape the React compiler rejects — recorded nine times in this log, and it failed lint here on the first attempt. It also paints once with the stale count. Compared by action-state identity (PC-4's device). No `router.refresh()`: the action revalidates the route, so the roster arrives as fresh props. |
+
+#### And the thing "delete all" actually runs into
+
+**Most accounts on a real roster can never be deleted, by design.** `audit_log`
+is append-only for every caller including a superuser (P4-4) and the reset
+scripts deliberately leave it alone — so once somebody has signed in and done
+anything, their profile is permanent. §17 says so from the other direction:
+people are switched off, not erased.
+
+| # | Decision | Why |
+|---|---|---|
+| F60-15 | **`setPeopleActive` — bulk deactivation, beside the bulk delete** | Telling HR "deactivate them instead" fifty times and leaving them to do it one dialog at a time is the complaint that brought this in, one step further along. It is also offered inside the result strip, on the kept list, where the refusal is actually read. |
+| F60-16 | It does not stop to confirm; the delete does | Deactivation is reversible by the same control. The delete is not, which is why that one lists who it is about and states the rule first. |
+| F60-17 | **`.select()` is the detection, not decoration** | A PostgREST update matching no row is a SUCCESS with zero rows, so without it the screen would report accounts switched off that RLS had refused. Ninth appearance of that class in this log (FIX-14, F15-14, F15-16, 0066, 0069, F22-5, F24-4). |
+| F60-18 | One audit row per person, never one carrying a list | P14-5: somebody asking why an account is switched off should find a row about that account. |
+
+**Verification — 11 logic checks and 37 source checks, 0 failed.** The blocker
+helper is sliced VERBATIM out of `provisioning.ts` and run against a stubbed
+client, because a probe that retypes the logic it is checking is not a check of
+that logic (FIX-12): one evaluation row with two different people on it refuses
+each of them for their OWN reason, a manager is refused for the three people
+pointing at them, a non-uuid never reaches a filter string, `audit_log` is
+proved to be asked twice for seven candidates, and the four batched reads are
+proved to stay four. Typecheck 0 errors, lint 0 errors (11 pre-existing
+warnings), build clean.
+
+**Not verified against live data.** Nothing here was run against the real
+database, and the suites still live outside the repository (§18 STATUS).
+
+---
+
+### FIX-61 — Re-importing after a pay wipe, and a people reset that keeps the trail
+
+`lib/auth/provisioning.ts`; new `supabase/RESET-PEOPLE.sql` and
+`supabase/RESET-PEOPLE-ARMED.sql`. No migration.
+
+Asked for as: *"this query removed all the employees pay records — so now I want
+to remove all users data and re-import."* The query was
+`RESET-CYCLES-AND-PAY-ARMED.sql`, working exactly as written.
+
+#### Why deleting everybody was the wrong tool for it
+
+That script **keeps** people, roles, departments, joining dates and the audit
+trail, and empties the pay. Re-uploading the roster then restored every fact
+about a person **except what they are paid** — because `amendPerson` refuses to
+write salary onto somebody who already exists (F24-11), and correctly:
+`salary_history` is append-only for every caller (P19-3), so a second upload
+must never append a rise nobody decided or duplicate an opening row.
+
+So the missing figure was the whole reason for wanting the accounts gone. And
+deleting them costs the logins, the role grants and the joining dates — and
+mostly cannot happen anyway, because `audit_log` refuses DELETE for every caller
+including a superuser (P4-4), so anybody who has ever acted is permanent.
+
+| # | Decision | Why |
+|---|---|---|
+| F61-1 | **An EMPTY ledger is a different case, and it is the one this needed** | Rule 3 is intact — a re-import still never touches a pay history that exists. What it now does is fill one that does not: no pay row, no `current_ctc` and no `joining_ctc`. Anybody who has ever been paid anything fails all three tests and is left exactly as they are. It fills a gap; it never overwrites an answer — the same device the `salary_effective_from` fill three lines above uses. |
+| F61-2 | **The three null tests are re-asserted AT THE WRITE, not only at the read** | Between the read and the update another import row or the Employment tab may have put a figure there, and a lost race would overwrite a real salary. `.is("current_ctc", null).is("joining_ctc", null)` on the update itself, with `.select()` telling a refusal from a success — a PostgREST update matching no row is a success with zero rows, the silent-write class for the ninth time. |
+| F61-3 | **The pay arithmetic was EXTRACTED, not copied** | `composeOpeningPay` and `buildLedger` are lifted out of `provisionPerson` unchanged and now called by both paths. A second copy would be a second answer to "what were they paid before this rise", on the table §12 makes evidence — and the create path's version is the one with F56-11's backwards-walking chain in it, which nobody would reproduce correctly from memory. |
+| F61-4 | The restored rows say where they came from | `"Recorded when the roster was re-imported."` rather than the create path's note. The ledger should not claim these were entered when the account was made. |
+
+#### And the wipe itself, for when it really is wanted
+
+Two files, following the shape of the existing reset pair: a read-only report
+that refuses to act, and an armed twin.
+
+| # | Decision | Why |
+|---|---|---|
+| F61-5 | **The report leads with the two cheaper answers** | Re-importing updates people in place, and the pay case above is now a re-upload rather than a wipe. A destructive script whose header does not say when NOT to use it is a script somebody reaches for first. |
+| F61-6 | Administrators are kept, always | Every account holding HR_ADMIN or MD, plus anything added to a KEEP list at the top. The armed file **refuses outright** if that would leave nobody — locking the last administrator out is the one mistake the database cannot undo (P8-4), and a select-all-and-delete makes it one paste. |
+| F61-7 | It refuses while an evaluation, a production appraisal or a pay row still belongs to somebody going | Each of those is a record §5 and §17 exist to keep. This file will not quietly destroy one to get a person out of the way; clearing them is a separate, louder decision with its own script, and the message names it. |
+| F61-8 | **The audit trail is ANONYMISED, never deleted** | The decision of the phase. Deleting somebody is refused by `audit_log` because they are named on every row they caused — so the guard has to come off either way. Deleting those rows would remove the record that anything happened at all, on the one table whose whole purpose is that nothing can. Setting `actor_id` to null keeps every row and every diff, and null is exactly what the system actor already looks like on a scheduled transition (F11-4). WHAT happened survives; only WHO did it goes, which is what deleting somebody means. |
+| F61-9 | The guard goes back on, and the script says so in its final row | Same idiom `RESET-CYCLES-AND-PAY-ARMED.sql` uses for `salary_history`'s trigger. Everything sits inside one transaction, so a failure anywhere leaves the trigger enabled and the roster untouched. |
+| F61-10 | The wipe writes its own audit row | The people are gone from the trail as actors; the fact that somebody removed them is not. `audit_log.entity_id` carries no foreign key (P3-2), so the row outlives everything it describes. |
+| F61-11 | It deletes the LOGIN, not the profile | `auth.users` is the root and everything cascades from it (0001). Deleting the profile alone leaves an account that still signs in and a trigger that rebuilds a bare profile on the next login — the same reasoning the product's own delete follows. |
+
+#### A bug in my own script, found by running it
+
+`RESET-PEOPLE-ARMED.sql` died on its first statement with **`record "r" is not
+assigned yet`**. The notice block declared a loop record `r` and the query
+beneath it aliased `user_roles` as `r` — and PL/pgSQL substitutes a declared
+variable *before* Postgres resolves a table alias, so `r.profile_id` read the
+unassigned record. P1-4 recorded the mirror image of this years ago: in a SQL
+function a column name outranks an identically named parameter.
+
+Renamed to `rec` and `ur`. **This is the argument for running a destructive
+script rather than reading it**: it would have failed on the owner's database,
+in a transaction, with a message about a variable that is not in the file.
+
+**A second correction, from the owner running it.** The report file ended in
+`raise exception`, so that it could not possibly change anything. Safe, and
+useless: the Supabase editor returns only the LAST result, so raising discarded
+both tables above it and left a red error box as the entire report. A file with
+no DML in it needs no exception to be safe — it needs to be readable. It now
+ends in a verdict row: READY with a count of who would go, or BLOCKED naming
+which script to run first. **And the check meant to catch this matched the
+sentence explaining it** — the comment trap, eleventh occurrence, in a suite
+whose own header warns about it; the SQL comment stripper it needed is now
+written above every check that uses it.
+
+**A third correction, also from running it.** Two accounts could be deleted
+from neither place: not from Settings, because they have acted, and not by the
+script, because they hold HR_ADMIN and MD. "Keep every administrator" was a safe
+default taken as a rule, and as a rule it is wrong — a system set up with three
+test administrators could never be cleared down. The armed file now has a DELETE
+list beside its KEEP list, and the invariant it actually enforces is the narrow
+one: **at least one administrator must survive**, counted AFTER the selection
+rather than before it, because "does anybody hold HR_ADMIN today" is the
+question a delete list makes irrelevant. Naming them one email at a time is
+deliberate — that list is the difference between clearing out the staff and
+clearing out the people who approve pay.
+
+**A fourth correction, and it is the same lesson as F60-2 in a different
+costume.** The owner pasted the armed file with the list still untouched. It
+deleted nobody, wrote its own audit row, and printed a tidy summary — which
+reads as "it worked", not as "you have not told it who". Two things now stop
+that: **a run with nobody to delete refuses**, naming the list and where it is,
+and **any entry matching nobody refuses**, quoting what was typed. A typo in an
+address had exactly the same silent outcome as an empty list.
+
+The list also takes an **employee code or a full name**, not only an address.
+The roster shows all three; being strict about which one goes in the file is
+friction for no safety, since every match is printed by name before anything is
+destroyed.
+
+**Rewritten to ONE list, at the owner's instruction: "delete all users except
+harshali.linkd@gmail.com".** The two-list model — keep every administrator,
+minus a delete list — went, and with it the administrator exemption. What
+survives is exactly what the KEEP list names; everybody else goes, whatever
+their access level. That is simpler to reason about and it is what was asked
+for, and the file ships with that address in it.
+
+Three guards carry the weight, and each answers a way the previous shapes
+failed:
+- **A keep address matching nobody stops the run.** One mistyped character would
+  otherwise put the account being signed in with into the deletion set. The
+  administrator guard would usually catch it, and "usually" is not enough for
+  that account.
+- **At least one administrator must survive**, counted after the selection.
+- **A run with nobody to delete refuses**, rather than printing a tidy summary.
+
+`RESET-PEOPLE.sql` was moved onto the same list in the same pass, because a
+report judging by "is an administrator" while the armed file judges by an
+address describes a run nobody is going to make.
+
+**Verification — 27 checks on the armed file and 8 on the report, both against
+real Postgres (PGlite), and 32 on the source. 0 failed.** The fixture is shaped
+like the owner's actual roster — five accounts, two of them administrators the
+product refused to delete because they have acted, one production worker with no
+address at all — and only the named address survives. An administrator named
+in the list is proved to go by address, by employee code and by name; the ones
+not named are proved untouched; their audit rows are proved anonymised rather
+than deleted; deleting every administrator is proved refused with nobody
+removed; and both silent-no-op paths are proved to raise.
+
+One assertion was **reversed deliberately** and says so: "a second run does not
+fail" was asserting the very behaviour the owner mistook for success. `audit_log` and its append-only trigger are lifted from 0004 rather
+than retyped — they are the object the script switches off, so an approximation
+would prove nothing (FIX-12). The fixture reproduces the case that motivated it:
+two people who have acted, a manager somebody reports to, and an administrator
+who reports to that manager. Proved: the trigger genuinely refuses both the
+audit delete and the login delete beforehand; the script REFUSES while an
+evaluation is attached and deletes nobody; a clean run leaves exactly the
+administrators and the named keeper; the logins and role grants cascade away;
+**every audit row survives with the deleted people's rows anonymised and the
+surviving administrator still named on their own**; the guard is back on and
+still refuses an update; the dangling reporting line and authored question are
+cleared; and a second run is not an error.
+
+One assertion of mine was wrong and was corrected rather than loosened: it
+counted the administrator's audit rows and got two, because STEP 5's own
+`people.reset` row names them. Scoped to the row they actually caused.
+
+Typecheck clean for these files; `npm run build` currently fails type checking in
+`lib/cycles/dispatch-launch.ts` on `"LEAD_2"`, which belongs to the
+second-reviewer work landing in parallel and is untouched here.
+
+
+---
+
+### SECOND-REVIEWER — three forms, where a person has two managers
+
+Migrations `0082_second_reviewer_enum.sql`, `0083_second_reviewer.sql`,
+`0084_launch_second_reviewer.sql`, `0085_second_reviewer_submits.sql`,
+`0086_cycle_progress_second_reviewer.sql`.
+
+**NEW SCHEMA, AT THE OWNER'S EXPLICIT INSTRUCTION.** §0.4 forbids inventing a
+table or a column without one. The request was a three-form evaluation for
+Designers — Self, Team Leader and Design Coordinator — with the final hike
+percentage being the average of the two managers' figures.
+
+| # | Decision | Why |
+|---|---|---|
+| SR-1 | **It is not "Designers". It is "has a second reviewer"** | Hardcoding the department would put a team name into the schema and into every query that reads it, and §0.2 then freezes it — so the first other team wanting the same arrangement would need a migration rather than a setting. The rule is data instead: a person may carry `co_reviewer_id`, and anybody who does gets three forms. Setting it on the designers produces exactly the requested behaviour; leaving it null leaves everybody else on the two-form flow, which stays the default. |
+| SR-2 | The enum value gets a **migration of its own** | `alter type … add value` cannot be USED in the transaction that adds it. AMEND-3 spent a whole migration on the same constraint. |
+| SR-3 | Both managers are **blind to each other**, not merely to the employee | §5 says no layer may read another, and the request says both evaluators submit independently. So the co-lead reads LEAD_2 and nothing else, exactly as the lead reads LEAD and nothing else. Proved under `set role authenticated` — PGlite connects as superuser and bypasses RLS, so without the role switch every assertion would have passed while proving nothing. |
+| SR-4 | The completion rule is written as **"no outstanding layer"**, not a longer AND | So an evaluation with no co-lead behaves byte-for-byte as it does today: the third clause is vacuously true when `co_lead_id` is null. The same sentence now lives in five places — 0083's trigger, `requireBothLayersIn`, the reports queue, the cycle board and 0086's view — and they must agree, because the trigger is what actually raises the status and a guard that permitted what the trigger will not is a button that does nothing. |
+| SR-5 | **0084's first version matched a six-line literal and found NOTHING** | The literal is byte-for-byte what 0022 contains — so the deployed body is not what 0022 contains, and nothing in this repository can say how it differs. A patch that has to reproduce six lines exactly is betting on six lines never having been reformatted, re-applied from a differently-ended copy, or edited by hand. FIX-10's addendum lost that bet on one newline; 0056 lost it in the other direction and reported success. **Every anchor is now ONE line, matched as a whitespace-tolerant regex, asserted to occur exactly once, and every failure prints the region of the real body it searched** — so a second miss diagnoses itself instead of sending somebody back to guess again. |
+| SR-6 | `\b` in a Postgres regex is **backspace**; the word boundary is `\y` | An anchor using it matched nothing. Caught by executing the migration rather than by comparing strings — which is exactly what the first version of that suite did, and why it passed while the migration failed. |
+| SR-7 | **The patch whitelist was the dangerous half of 0085** | `apply_evaluation_transition` patches the evaluation from a jsonb whitelist of column names, so `co_lead_submitted_at` was not refused — it was DROPPED IN SILENCE. The response row would lock, the evaluation would say nothing had been submitted, and the completion rule would wait for ever on a review that was already in. The silent-write class in a new costume: not an UPDATE matching no row, but a patch key matching no column. Both failures are reproduced in the suite before the fix is applied. |
+| SR-8 | The token is **issued to the coordinator, not the evaluatee** | `issue_invite_token` picks its recipient with `case when p_layer = 'LEAD' then e.lead_id else e.evaluatee_id end`. The same else-branch that makes SELF correct makes LEAD_2 wrong: the coordinator's link would be refused as the wrong recipient, and the designer would hold a token for a form that is not theirs. The landing route carried the mirror of it — a LEAD_2 token falling through to `/my-evaluation`. |
+| SR-9 | The write layer is **derived from the session**, never a parameter | The same HOD can be the reporting lead of one report and the second reviewer of another, so it is decided per evaluation. A `layer` argument is one a caller could choose, and choosing LEAD while being the second reviewer would write into the other manager's form — §9 says client code is never the only guard, and here it would not be a guard at all, it would be the decision. |
+| SR-10 | Drafts are keyed by **(evaluation, layer)** everywhere | The queue's draft probe, and FIX-4's tab-local mirror. Both managers open the same evaluation id; one key would report a team leader's started review as the coordinator's, and on a shared machine would restore one manager's unsaved answers into the other's form. |
+| SR-11 | Both managers wear the **manager hue** | §13.1 reserves three and says they mean the same thing on every screen. A fourth would say a Design Coordinator's 4 means something different from a Team Leader's 4, which is the opposite of why both are asked. They are told apart by NAME, which survives greyscale and a colourblind reader (§13.8). |
+| SR-12 | **There is no `co_lead_overall` column**, deliberately | `evaluation_responses.overall_score` has always been the authoritative figure; the evaluation-level columns are a denormalised convenience from the two-layer world. A fourth would mean §0.4 schema, another patch to the transition whitelist, and a fourth number for analytics to keep in step — and it would still not answer what a designer's report asks, which is what the two managers' figures come to TOGETHER. |
+| SR-13 | The hike is the **mean of the two, and a silence is never averaged in** | At the owner's instruction. With one manager it IS that manager's figure, which is what makes it safe behind the existing quick-set button — nothing about the ordinary case moves. Where only one has answered, that one stands and the screen says so: half of somebody's opinion is not the other half's, and the mean of 10 and nothing is not 5. |
+| SR-14 | The report's **Average column averages Self against what the managers together say** | AMEND-5's definition is untouched — it is still the mean of the Self and Manager figures. What a second reviewer changes is what the MANAGER figure is, and it is the same rule the owner set for the hike, so the printed sheet and the salary card cannot say different things about one person. |
+| SR-15 | **§11's gap is still Lead − Self** | The threshold and every flag are calibrated to it. Quietly redefining it as "average-of-managers − self" would move every flag in the system for one team with nobody having asked. The second manager's own difference is visible beside it in the columns. |
+| SR-16 | 0086 is **recreated, not patched** | The difference from 0084 and 0085: those change one arm of a two-hundred-line function nobody should have to retype; a forty-line view IS its own definition, so restating it is reading the whole thing rather than hoping a fragment still matches. Every column name is unchanged (§0.2) — `lib/analytics/queries.ts` selects `*` into a generated type, so a renamed column is a silently missing figure at worst. |
+| SR-17 | The percentage stays **people × 3**, not × 4 | A second reviewer does not make one person's appraisal worth more of the cycle than anybody else's, and weighting designers higher would make a cycle's figure depend on how many of them are in it. Their manager step simply completes later. |
+| SR-18 | HR's per-manager chase tally counted `lead_id` **alone** | So a Design Coordinator carrying twelve designers appeared on no chase list at all. Both managers are tallied now, each against their own form. |
+
+**Verification — 185 checks across seven suites, 0 failed.** Four run against
+real Postgres. The claims that matter are the negative ones, and they are
+checked as such: 0086 is applied to a fixture and every column compared
+**before and after, one by one**, so a figure that moved for somebody without a
+second reviewer would be named; the report suite counts the guards on every
+third column rather than trusting them, because one unguarded cell would put an
+empty column on every report in the company; and `whats-applied.sql`'s five new
+detectors are each proved to answer **false before their migration and true
+after** — 0056 failed the first half and 0058's row failed the second, and both
+were trusted at the time.
+
+**Not done.** Nothing weights a designer's two manager ratings where a single
+headline figure is needed elsewhere — the scorecard and P16's analytics views
+still read `lead_overall`, which is the reporting lead's alone. The worker
+module is untouched and has no second-reviewer concept.
+
+**The parallel entry above is resolved.** `dispatch-launch.ts` no longer fails
+type checking on `"LEAD_2"`: `issueInviteToken` and the invite landing both
+accept the third layer now. Typecheck 0, lint 0 errors, build clean.
+
+---
+
+### FIX-62 — The password you can only see once, and the columns that were already there
+
+`lib/auth/csv.ts`, `lib/auth/provisioning.ts`, the import dialog and the edit
+form on Settings › Users. No migration.
+
+Asked for as: put password, official mobile and official email in the import
+template "so nothing will be missed", and stop the password vanishing after it
+is set — it should be visible on the users form too.
+
+#### The first half was already true, and read as false
+
+All three columns have been in `IMPORT_COLUMNS` since 0081 and P19-C, and the
+template's header row is generated from that list, so none of them can go
+missing. What made them look absent was their hints: `work_email` and
+`work_phone` both said "optional — HR/management only", which reads as a field
+for somebody else's use rather than one to fill in. They now say what they are
+and what a blank one falls back to.
+
+#### The second half cannot be done, and saying so is the fix
+
+**A password cannot be shown, here or anywhere.** Supabase stores a bcrypt hash
+and nothing else — there is no query, no screen and no admin call that returns
+an existing password. The plain text exists for exactly as long as it takes to
+create the account. Nothing was lost when it "vanished"; it was never kept.
+
+Storing it so it could be displayed is not an option worth pricing: a roster of
+readable passwords is the single worst thing this database could hold, and every
+account in the company is in it.
+
+So the intent — *nothing should be missed* — is served at the one moment the
+plain text genuinely exists.
+
+| # | Decision | Why |
+|---|---|---|
+| F62-1 | **The import reports the password each new account was given** | That run is the only moment it exists in the clear. It is shown once, with a Copy button that produces a tab-separated list ready to paste into a spreadsheet, and the panel says plainly that no screen can show them again. Before this, a blank password column silently produced `firstname123` and HR had no way to know. |
+| F62-2 | Only for a CREATION, never an update | The import ignores the password column for somebody who already exists (F24-9), so reporting one would be reporting a change that did not happen — and would tell HR to hand out a password the account does not have. |
+| F62-3 | Never for a production worker | Theirs is a long random string generated because they never sign in (WORKER-1). Printing twenty-five of those would bury the handful somebody actually has to read out. |
+| F62-4 | **The edit form says why its field is empty** | "Set a new password" sitting blank on a person who plainly has one reads as data that was lost — which is exactly how it was reported. It now says the current one cannot be shown because only an encrypted form is stored, that blank keeps it, and that typing replaces it. §13.4: an unexplained gap is a dead end. |
+| F62-5 | Blank still means keep | Unchanged, and worth restating: any other field can be saved without touching the password, which is what stops an edit to a phone number locking somebody out. |
+| F62-6 | Nothing is stored, logged or audited in the clear | Checked in both directions: no password reaches a profile column and none reaches an audit diff. The audit row records `password_reset: true` — that it happened, never what it became. |
+
+**Verification — 14 checks, 0 failed.** All three columns are proved present and
+proved generated from one list; the password is proved reported on creation
+only, never on an update and never for a worker; the screen is proved to list
+them with the once-only warning; the edit form is proved to explain itself; and
+no password is proved to reach a column, a diff or a log.
+
+**The escaping trap, twice in one edit.** A `	` and a `
+` written through a
+Python script reached the file as a real tab and a real newline, breaking the
+string they were in. §18's standing remedy was ignored and then followed: the
+line was rewritten with the editor rather than through another language.
+
+
+---
+
+### SECOND-REVIEWER-2 — the manager figure, where there are two managers
+
+Migration `0087_manager_overall.sql`. `lib/evaluations/manager-overall.ts` is
+new; the scorecard, the pulse leaderboard, the Team review roster, the printed
+sheet and the batch cover all read the new figure.
+
+The gap the previous entry named. `evaluations.lead_overall` is the REPORTING
+LEAD's average and nothing else — which was the whole of the manager side until
+0083, and is half of it for anybody carrying a second reviewer. Six screens
+showed one headline manager number and every one of them read that column.
+
+| # | Decision | Why |
+|---|---|---|
+| SR2-1 | **A new name, not a new meaning for an old one** | The obvious fix is to make `lead_overall` mean "what the managers said", and it is the wrong one: that column is written by the transition at the reporting lead's submission and is the truthful answer to "what did THAT person score them", which the report still shows in its own column. A column that quietly starts meaning something else is worse than a missing one, because nothing fails — the figures simply stop matching the label, and §0.2 freezes a name precisely so that cannot happen by accident. |
+| SR2-2 | Still **no column on `evaluations`** | SR-12 settled it and the reasoning holds: `evaluation_responses.overall_score` is already the authoritative per-layer figure, so a stored copy would be a fourth number to keep in step and another patch to the transition function's whitelist. `manager_overall(uuid)` computes it on read, and it is one function rather than three copies of the aggregate — three copies is three chances for one to drift, and the one that drifts is the one nobody is looking at. |
+| SR2-3 | The function is **SECURITY INVOKER** | A definer function here would hand every signed-in employee the company's manager averages through an aggregate — the default-view trap P16-2 proved by querying as three different people. |
+| SR2-4 | **`create or replace view` may only APPEND a column** | Putting `manager_overall` beside `lead_overall`, where it reads better, fails with *"cannot change name of view column final_overall to manager_overall"*: the replace is positional, so every column after the insertion point is treated as renamed. It goes last, and the migration says why so the next person does not move it back. |
+| SR2-5 | **A dropped column is a silent behaviour change** | My first draft of `v_department_scores` restated the view from the four columns I had read and lost `self_count` and `avg_final` — Postgres refused it outright, which is the one place this class fails loudly. The same draft had turned a `left join departments` into a `join`, which it would NOT have refused: everybody with no department would simply have vanished from the figures. Recreating a view means reproducing all of it, and the suite now compares every column before and after. |
+| SR2-6 | **The §5 strip had to cover the new column** | `withoutLeadLayer` nulls `lead_overall` for an employee reading their own card, because §17 forbids showing them the lead's answers and an average IS those answers summarised. Adding `manager_overall` without stripping it too would have reintroduced that exact leak, on the same screen, through the newer column. |
+| SR2-7 | …and the scorecard does **not** fall back across the strip | `manager_overall ?? lead_overall` is right everywhere else, because the view already falls back the same way. On the employee's own card both are nulled deliberately, so reaching past one to the other would undo the strip on the very screen it was written for. One helper, so the six readings on that page cannot drift apart. |
+| SR2-8 | `v_variance_by_lead` had **the same blind spot the chase list had** (SR-18) | It joined `e.lead_id` and read the LEAD layer, so a Design Coordinator rating twelve designers appeared in it not at all — on the one report that would show them rating everybody two points high. Each rater is now measured against THEIR OWN layer, which is what the view has always meant: P16-5 keeps the signed and absolute means apart precisely so an inconsistent rater does not average to neutral, and that only works if the rows belong to one rater. |
+| SR2-9 | Three screens read `evaluations` directly, so they get a **batched helper** | The printed sheet, the batch cover and the Team review roster do not go through a view. One query over `evaluation_responses`, merged in TypeScript (P3-7) — an `.rpc()` per row would be forty-seven calls on a pack whose concurrency P15-5 capped for exactly that reason. |
+| SR2-10 | **Submitted only**, everywhere | A response row exists from launch and autosaves from the moment a form is opened; `overall_score` is written at submission. Counting a draft would put a rating nobody stood behind onto a signed document — FIX-55 had to fix precisely this on the report. |
+| SR2-11 | `avg_lead` and `gap` keep their names and their claims | A department's manager average genuinely means every manager who was asked; leaving a designer's coordinator out made the number quietly wrong rather than differently defined. Identical wherever nobody in the department has a second reviewer. |
+
+**Verification — 22 checks on 0087 against real Postgres, 228 across nine
+suites, 0 failed.** The negative claim is checked first and column by column:
+all three views' output is recorded before the migration and compared after, so
+a figure that moved for somebody with one manager would be named. Then the
+arithmetic — one manager in of two gives that one's figure, an unsubmitted
+second review does not move it, both in gives the mean, and `lead_overall`
+still reports the reporting lead alone.
+
+**One of my own assertions was wrong and was corrected, not loosened.** It
+expected the coordinator's mean delta to be +1 where the fixture makes it −2 —
+the coordinator answered 1 against a self-rating of 3. The view was right and my
+arithmetic was not; the corrected check now also asserts the two managers' signs
+are opposite, which is the property that makes per-rater variance worth having.
+
+`whats-applied.sql` gained a row detecting the function AND the view that calls
+it: the function alone would read true if somebody created it by hand, and the
+views are where it bites.
+
+---
+
+### FIX-63 — Every address and number on screen, and a check helper that was deleting code
+
+`app/(app)/admin/settings/users-tab.tsx`, `app/(app)/profile/`. No migration.
+
+Asked for as: all emails and phones should be shown in the app — nothing should
+vanish or fall back.
+
+#### What was actually hidden
+
+0081 added an official email and mobile beside the personal pair, and
+`contactFor` resolves work-or-personal when a message is SENT. Nothing on screen
+resolved anything — but nothing SHOWED the official pair either. The roster had
+Email and Mobile No and stopped there, and a person's own profile had Email
+alone. So two columns that are on the record appeared nowhere in the product,
+and "which address do you have for me?" had no answer on any screen.
+
+| # | Decision | Why |
+|---|---|---|
+| F63-1 | **All four are columns on the roster, and all four are rows on your own profile** | Email · Mobile · Official email · Official mobile. Each renders what is stored or an em dash; none ever borrows the other's value. |
+| F63-2 | Shown even when empty | Rendering the official pair only when set would make an absent one indistinguishable from a feature that does not exist — and that list is the answer to "what do you hold for me". |
+| F63-3 | **`contactFor`'s fallback is NOT removed, and that is the important half** | It is what keeps somebody with no official address reachable: strip it and an administrative message to a person who never filled that column in would have nowhere to go. What was wrong was a SCREEN behaving like a router — showing one value and hiding another that is genuinely on the record. Sending resolves; display does not. |
+| F63-4 | The distribution board is untouched | It reads the personal pair, which is what an invite actually uses (`TEMPLATE_PURPOSE`), so nothing there was being resolved away in the first place. Checked rather than assumed. |
+| F63-5 | The grid's `minWidth` went 1480 → 1890 | Two columns at 240 and 170 would otherwise be squeezed below their declared widths and the frozen name column would sit against a crushed grid. |
+
+#### The check helper was silently deleting real code
+
+Four of these suites stripped comments with a `{` `/*` … `*/` `}` rule meant for
+JSX. `[\s\S]*?` is lazy but it BACKTRACKS: when the first comment terminator is
+not followed by a closing brace it keeps hunting for one, so a single object
+literal whose first member is a comment — which is most of the column
+definitions in this codebase — swallowed every property after it.
+
+The symptom was four assertions failing against code that was plainly present,
+and the honest reading is worse than that: for as long as the rule existed,
+every ABSENCE check in those files was passing partly because the code it
+searched had been thrown away. `bulkdelete.src.mjs` was re-run with the fix and
+is still 37/37, so nothing was being masked there — but that had to be checked
+rather than assumed.
+
+The rule is gone. Block comments then line comments, nothing brace-aware.
+
+**And three self-inflicted breakages while fixing it**, all the same family §18
+keeps recording: an unquoted heredoc ate every `$` and `` in the replacement
+regex; the explanatory comment I inserted contained a comment TERMINATOR and
+closed itself early; and a slice left a duplicated closing brace. The remedy is
+the one already written down — **prefer a plain edit over a regex escaped
+through another language** — and it was ignored three times in ten minutes.
+
+**Verification — 16 checks on the contacts, and the other three suites re-run
+under the corrected stripper (37, 32, 14). 0 failed.** All four fields are
+proved to be columns and rows, proved to render an em dash rather than a
+substitute, and `contactFor` is proved to still fall back. Typecheck 0, lint 0
+errors, build clean.
+
+
+---
+
+### SECOND-REVIEWER-3 — the import template, and a misalignment it uncovered
+
+No migration. `lib/auth/csv.ts`, `lib/auth/schemas.ts`, `lib/auth/provisioning.ts`
+and both dialogs on Settings › Users.
+
+Asked directly: is the second reviewer in the users import template? It was not,
+and it was not on the CREATE dialog either — it had shipped on the EDIT dialog
+alone. So it could be set on somebody who already existed and never on somebody
+being entered, and a 52-row payroll upload could not carry it at all.
+
+| # | Decision | Why |
+|---|---|---|
+| SR3-1 | By **EMAIL**, and resolved in the database AND in the file | Exactly as `reports_to` is: two people can share a name and an email is what the account is keyed on (P19C-14). Resolved against the file too, because what HR exports is the org chart — one file where the Design Coordinator is four rows further down (FIX-56). A name in neither is refused rather than silently dropped. |
+| SR3-2 | The commit **waits for BOTH managers** | A second reviewer is a profile id like the first, so somebody whose coordinator is lower in the file cannot be written until that person exists. Writing them early with the column blank would leave a designer on the two-form flow with nothing on screen to say why. |
+| SR3-3 | A circle still writes **whatever DID resolve** | A ring in the reporting line should not also cost somebody a second reviewer that was perfectly resolvable, and the note names which of the two could not be set. |
+| SR3-4 | The same two refusals as the dialog, said in the import | Not themselves, and not the same person as their manager. All three places must agree — the dialogs, the import, and 0084's launch, which SILENTLY SKIPS a co-reviewer who is also the lead. Without them a file would import cleanly and the launch would ignore a second reviewer HR had carefully set, with nothing to explain the missing third form (§13.4). |
+| SR3-5 | The create dialog gets the picker; the create ACTION gets the check | The edit picker can exclude their own manager from the list because that manager is already known. The create one cannot — `reports_to` is being chosen in the same breath — so the action refuses the clash. A control that cannot prevent something has to be backed by one that can. |
+| SR3-6 | Blank stays blank | Optional in the schema, so a file written before this column existed imports exactly as it did. |
+
+#### The bug the column count found, which was not mine
+
+**Both example rows in the template were missing their `work_email` and
+`work_phone` cells, and the second was missing `roles` as well.** Every value
+after `phone` was emitted one or two columns to the LEFT: "Senior Designer"
+landed in `work_email`, the joining date in the column beside it. Anybody who
+downloaded the template, filled it in and uploaded it got a file the importer
+read as nonsense — and it has been that way since 0081 added the work-contact
+pair.
+
+It survives because it fails silently. A short row is not a parse error; it is a
+row whose later fields are blank and whose earlier ones are in the wrong place.
+
+**And the check that should have caught it was the one I had described but not
+written.** The suite header claimed a round trip — the template parsed back
+through its own reader — and the assertion underneath only counted cells.
+Counting says a row is the right LENGTH; reading it back says each value is in
+the right COLUMN, which is the thing that was wrong. The round trip is now real,
+and asserts a job title never lands in `work_email`.
+
+Two of my own checks were wrong on the way: a character class of `[a-z_]`
+silently dropped the four numbered `increment_1_*` columns and made every row
+look over-long, and a cell regex escaped through Python collapsed to something
+that would not parse. The second is the **fifth** occurrence of that trap in
+this log, and the standing remedy was already written down — prefer a plain
+`indexOf` over a regex you had to escape through another language. The cell
+scanner uses no regex at all now.
+
+**Verification — 38 checks (import), 246 across ten suites, 0 failed.**
+Typecheck 0, lint 0 errors, build clean.
+
+
+---
+
+### FIX-60 — A joining date is not an increment
+
+No migration. `lib/increment/queries.ts` and the report's salary panel.
+
+Reported: the salary section shows a new joiner's JOINING date under **Last
+Increment**, when their first increment is the one being decided. A date under
+that label asserts a rise happened.
+
+**The three writers are all correct** — `createPerson`, `amendPerson` and the
+Employment tab each leave `last_increment_date` null when there is no rise, and
+0068 excludes JOINING and CORRECTION from the ledger rule that maintains it. The
+cause is 0068's own deliberate carve-out, in its own words: *"anybody with NO
+recorded rise keeps whatever was typed — that is the bootstrap case, and there
+is nothing better to replace it with."* Somebody imported or entered with their
+joining date in that column therefore keeps it for ever, and the panel reported
+it faithfully.
+
+| # | Decision | Why |
+|---|---|---|
+| F60-1 | **The ledger decides, on read** | 0068 made it authoritative — "where there is a ledger of rises, its latest entry is the answer" — and the panel already loads that ledger for the pay history. Deriving it here applies the same rule to the one case 0068 could not, and self-heals a stale column as a side effect. |
+| F60-2 | No rise, and the stored date **is** their joining date → **null** | The reported case. A joining date under "Last Increment" is not a near-miss, it is the opposite of the fact: it says a rise happened on the day they walked in. |
+| F60-3 | No rise, some **other** date → **kept** | The rule could have been "no ledger, no date", and that would have been wrong. A real increment predating the pay ledger is recorded nowhere else, and blanking it would quietly restart somebody's increment clock — the exact damage 0066 and 0068 were written to undo. |
+| F60-4 | CORRECTION is not a rise | Excluded, as 0068 excludes it: fixing a figure that was typed wrong does not restart the clock. `past` already excludes JOINING (P19E-1), so the filter names the three reasons rather than trusting the query's shape. |
+| F60-5 | The months figure follows the corrected date | It feeds the annualised-percent line, so a first increment was being annualised over the months since somebody JOINED — presented as context on a pay decision. |
+| F60-6 | The empty card says **why** it is empty | §13.4, FIX-30: "None yet — this would be their first. They joined 01-04-2025." A blank beside a filled Joining and Current reads as a figure that failed to load; the fact HR is actually deciding against is that there is no previous rise. |
+
+**Not changed: the stored column.** Nulling `last_increment_date` where it
+equals the joining date would be a data change on live pay records, and it also
+drives `next_increment_date` and the increment calendar. It needs an
+instruction, not an assumption. The panel is now right either way.
+
+#### A test helper that could delete the code it was checking
+
+Two assertions failed against strings the file plainly contained. The cause was
+mine, in the `code()` comment-stripper four suites share:
+
+```
+.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")   // "a JSX comment"
+```
+
+It is only a JSX comment when the `{` is closed by `*/ }`. Where it is not —
+`hint={ /* … */ value }` — the lazy span extends to a LATER `*/ }` elsewhere in
+the file and everything between is deleted. It had been silently removing real
+source, which is worse than a false failure: a check that reads a file with
+holes in it can pass for the wrong reason.
+
+**And my first correction was also wrong.** Stripping block comments first and
+then tidying `{ }` ate `{}` — a legitimate empty object literal — and broke a
+different suite. The stripper now removes block comments and whole-line `//`
+comments and nothing else; the `{ }` a JSX comment leaves behind is inert for
+every check here, and touching it is how a stripper starts deleting code again.
+
+**Verification — 18 checks (lastrise), 264 across eleven suites, 0 failed.** The
+rule is extracted from the source and RUN against six cases including the two
+that must NOT change. Typecheck 0, lint 0 errors, build clean.
+
+---
+
+### FIX-64 — Any password length, and one missing manager no longer holds back fifty people
+
+`lib/auth/schemas.ts`, `lib/auth/{csv,provisioning}.ts`, Settings › Users and
+`/profile`. No migration.
+
+#### The password floor
+
+Asked for: "there is no restriction for password char length — it should be 4, 5,
+6, 10 or more than that."
+
+| # | Decision | Why |
+|---|---|---|
+| F64-1 | **`MIN_PASSWORD_LENGTH = 4`, and it is ONE constant** | Read by the schema, by both `minLength` attributes, by all four hints and by the import template. The number was previously typed in six places, and they had already drifted once: a field said ten while the label beside it promised six, so the form refused the passwords its own hint recommended. |
+| F64-2 | 72 stays | Bcrypt's ceiling. Beyond it the tail is silently ignored, and a password that quietly loses its end is worse than one that was refused. |
+| F64-3 | **Lowering ours does not lower Supabase's, and the app now says so** | GoTrue enforces a minimum of its own — six by default — so a five-character password can pass the form and still be refused at the account. That refusal is intercepted on both the create and the change path and turned into a sentence naming the dashboard setting (Authentication → Sign In / Providers → Minimum password length). Left raw it reads as the form contradicting itself. |
+| F64-4 | An employee changing their OWN password still gets the provider's exact words | They cannot change a project setting, so naming it would send them to something they have no access to. "Use at least 6 characters" is actionable for them; it is not for HR, who is the one who can move the limit. |
+
+#### One missing manager was failing the whole file
+
+Reported mid-run: a 51-row export refused with nine rows naming two managers by
+address — both people who had been deleted from the roster an hour earlier.
+Because one bad row imports nothing (P19C-8), fifty-one people were held back
+over nine cells.
+
+| # | Decision | Why |
+|---|---|---|
+| F64-5 | **An unresolvable manager is a NOTE, not a refusal** | FIX-56 refused it on the reasoning that "that one genuinely has to be fixed before the file can go in". Wrong trade, and inconsistent with its own neighbour: the circular-manager case has always imported the row and named the field (P19B-8 — the account is real and usable, and one unresolved field should not fail a row). An address nobody has is the same shape. The person is created with no manager and the row says which address was not found. |
+| F64-6 | The second reviewer moves with it | Same rule, and easier still to justify: it is optional for almost everybody, so failing a whole file over one is harder to defend than for a manager. |
+| F64-7 | **The note is finally rendered** | `note` has been on the result since FIX-56 and was displayed NOWHERE — so "the row says so" said it to nobody, and a quietly dropped field is worse than a refused one because nothing brings the reader back to it. An "Imported, but" table now sits between the passwords and the failures. |
+| F64-8 | An unresolved manager becomes NO manager, never a guess | The person imports unattached and appears in the report. A cycle cannot launch for somebody with no lead, so the gap surfaces again at the next honest moment rather than being buried. |
+| F64-9 | What still refuses, still refuses | An unknown department, an unrecognised access level and a duplicate address inside the file all fail the row as before — each is a value that would land wrong rather than absent. |
+
+**Verification — 16 checks on the password rule, 12 on the import. 0 failed.**
+Both `minLength` attributes are proved to read the constant, no six survives
+outside a comment, and the provider refusal is proved intercepted on both paths.
+The import is proved to compute the missing manager as a flag, to name the
+address in a note, to reach the row result, to render in its own table, and to
+leave the four genuine refusals intact. Typecheck 0, lint 0 errors, build clean.
+
+**The comment trap, twelfth occurrence, in a check written minutes after the
+eleventh.** "Nothing anywhere still says six" matched the comment quoting the
+provider's own message. It strips comments now.
+---
+
+### FIX-65 — A correct database reported a problem it did not have
+
+No migration. `supabase/whats-applied.sql` only.
+
+Prompted by the diagnostic's `0055→0061_salary_question_wording` row reading
+**false** on a database where everything is right. Two more faults were found in
+the same file while confirming it.
+
+#### The false alarm
+
+The row asks whether the employee's salary question still says *monthly* — which
+matters, because 0061 multiplies that answer by twelve, so a question that stops
+saying monthly is one whose answers are out by a factor of twelve, feeding a pay
+decision. It matched the literal phrase `%monthly salary%`. The live text reads
+**"What is your monthly Expected Salary?"** — the two words are no longer
+adjacent, so the check went false and the row's own note pointed at a repair
+(re-running 0055) that would have put the question **back to annual while the
+×12 conversion stayed**. The tool meant to prevent the 733% incident was
+recommending it.
+
+| # | Decision | Why |
+|---|---|---|
+| F65-1 | **The word, not the phrase** | FIX-19 wrote this lesson down (F19-8) and this row still carried the fault: question text is editable in the Form Builder, so any detector keyed to a PHRASE breaks the first time somebody rewords the question. The word is what carries the meaning, and its ABSENCE is the state worth catching. |
+| F65-2 | **No backslash, deliberately** | Postgres spells a word boundary `\m`/`\M`, and whether a lone backslash in a string literal survives depends on `standard_conforming_strings` — one setting away from turning the check into a permanent false alarm, in a file people PASTE into whatever console they have open. A bracket expression says the same thing and cannot be misread. Proved on real Postgres: it passed against `\m…\M` in one engine and failed in another before the pattern was changed. |
+| F65-3 | The row's note now describes **what false would mean**, not what to re-run | "TRUE is correct" was true and useless to somebody staring at a false. It names the consequence — answers out by twelve — so the reader chases the wording rather than the migration. |
+
+#### The second false alarm, and the more dangerous one
+
+`0079_rolling_cycle_per_milestone` read **false** on a database where it was
+fully applied. Its detector compared
+
+```
+pg_get_function_identity_arguments(p.oid) = 'date, text'
+```
+
+and that can NEVER be true: the function includes the parameter NAMES, so the
+real value is `p_on date, p_milestone text`. It was written against what the
+migration DECLARES rather than what Postgres REPORTS.
+
+**Its note then invited the repair that would cause damage.** 0079 part 3
+splices an `exception when unique_violation` clause into
+`create_milestone_evaluation`, and 0080 exists to remove it — an `exception`
+clause terminates the enclosing statement list, so with it in place the insert,
+the snapshot, both response rows, the tokens and the RETURN all fall outside the
+normal path and "Create and send" fails with *control reached end of function
+without RETURN*. Part 3 skips itself only when it finds the text
+`already has this review in`, and deleting exactly that text is what 0080 does.
+So **re-running 0079 after 0080 re-breaks the feature** — and the row was telling
+the reader it had never run.
+
+| # | Decision | Why |
+|---|---|---|
+| F65-8 | `oidvectortypes(proargtypes)`, which is the types alone | Name-agnostic, so renaming a parameter cannot move it — proved by a check that renames both and still reads true. |
+| F65-9 | The row carries a **do-not-re-run** note, like the 0055 one | Two rows in one file have now invited a destructive repair by reporting a healthy state as missing. A detector that can go stale needs the consequence written beside it, not just the fix. |
+| F65-10 | Found by testing the ASSUMPTION, not the migration | I believed `pg_get_function_identity_arguments` excluded names and was wrong. One query against real Postgres settled it in seconds; three rounds of reasoning about why a correct migration had not applied would not have. |
+
+#### `when 'none' then null` — the landmine FIX-16 half-removed
+
+That entry found 0058 reported as outstanding for three sessions while being
+applied all along, because its row used the kind `'none'` — "repair, nothing to
+detect" — which returns NULL. It removed the last ROW using it and **left the
+BRANCH**, sitting where the next person adding a repair migration would reach
+for it.
+
+| # | Decision | Why |
+|---|---|---|
+| F65-4 | The branch is **deleted**, so the expression is structurally incapable of returning NULL | `true` means applied and `false` means not, with no third answer. A repair whose effect seems undetectable is not exempt — 0058's own row proves the EFFECT is what to detect, not the running. |
+| F65-5 | `'policy'` is **kept** although equally unused | The rule is "no branch may answer NULL", not "no branch is unused". A correct generic detector with no current user is reusable and harmless; a null-returning one is how a gap gets invented. |
+
+#### The file is RUN now, not only read
+
+F19-9 established this and there was no harness in the tree. It stubs the six
+tables the file reads and executes the whole thing.
+
+| # | Decision | Why |
+|---|---|---|
+| F65-6 | It asserts **no row answers NULL**, every kind a row asks for is defined, and the changed row behaves in **both** directions | TRUE on the live wording and FALSE when the word is dropped. A detector proved only in the passing direction is one that cannot fail. |
+| F65-7 | The runner prints **only the message** | PGlite prints its entire minified bundle in a stack trace, and a runner that reports that instead of the error ends the investigation before it starts. P19B-9 fixed this once; it was not in this harness. |
+
+**Verification — 14 checks, 0 failed**, plus 8 on the pattern itself against real
+Postgres: the live wording, the older wording, a parenthesised form and a
+capitalised one all detected; the two dangerous states (`monthly` dropped,
+reverted to annual) both caught; and no false positive inside `Semimonthly` or
+`monthlyish`.
+
+**Three of my own mistakes, all recorded shapes.** The orphan check pinned
+`when 'table' then` with exactly one space against a file that writes two — a
+kind used by a dozen rows reported as undefined, which is the substring trap
+(P31). A `\n` escaped through Python into a JavaScript string arrived as a real
+newline and would not parse — the **sixth** occurrence of escaping through
+another language, whose standing remedy is written down and was not followed.
+And the runner printed the PGlite bundle, which P19B-9 already fixed elsewhere.
+
+**Also noted, not changed.** `'public.due_items'::regclass` in the
+`one_milestone_check` branch throws rather than returning false if 0031 has
+never been applied, which would take the whole diagnostic down on a fresh
+database. Harmless where 0031 is applied — which is everywhere it currently
+runs — and a `to_regclass` guard is the fix whenever somebody points this at a
+new project.

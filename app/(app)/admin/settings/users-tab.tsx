@@ -27,6 +27,7 @@ import { bulkUpdatePeople } from "@/lib/employment/bulk";
 import { DateCell, MoneyCell, NumberCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
 import { ACCESS_LEVELS,
   defaultPasswordFor,
+  MIN_PASSWORD_LENGTH,
 } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -377,6 +378,25 @@ function ImportDialog({
   }
 
   const failed = state.rows?.filter((r) => !r.ok) ?? [];
+  /* -- THE ONLY TIME ANYBODY WILL SEE THESE.
+        Supabase stores a bcrypt hash and nothing else, so a password cannot be
+        read back from any screen, query or admin call — not here, not on the
+        person's record, not ever. This run is the one moment the plain text
+        exists, so it is shown once and can be copied. After that the only route
+        is to set a new one on their record and tell them that instead. -- */
+  const created = state.rows?.filter((r) => r.ok && r.password) ?? [];
+  /* -- ROWS THAT LANDED WITH SOMETHING UNSET.
+        `note` has existed on the result since FIX-56 and was rendered NOWHERE,
+        so "the account is real and usable and the row says so" was only half
+        true — it said so to nobody. A field quietly dropped is worse than one
+        refused, because nothing brings the reader back to it (§13.4). -- */
+  const noted = state.rows?.filter((r) => r.ok && r.note) ?? [];
+
+  function copyPasswords() {
+    // Tab-separated, so it pastes into a spreadsheet as two columns.
+    const text = created.map((r) => [r.name, r.password].join("\t")).join("\n");
+    void navigator.clipboard?.writeText(text);
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -461,6 +481,72 @@ function ImportDialog({
             set it afterwards.
           </p>
         </details>
+
+        {created.length > 0 ? (
+          <div className="rounded-control border border-warning/40 bg-warning-tint p-4">
+            <p className="font-sans text-body-sm text-ink">
+              <span className="font-medium">Their passwords, this once.</span> Passwords are stored
+              encrypted, so no screen can show them again — copy these now and hand them over. If one
+              is lost, open that person and set a new one.
+            </p>
+            <div className="mt-3 overflow-x-auto rounded-control border border-rule bg-surface">
+              <table className="w-full min-w-[24rem] border-collapse">
+                <thead>
+                  <tr className="border-b border-rule bg-surface-mute">
+                    {["Name", "Password"].map((h) => (
+                      <th key={h} className="type-label px-4 py-2 text-left text-ink-muted">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {created.map((row) => (
+                    <tr key={row.line} className="border-b border-rule last:border-b-0">
+                      <td className="px-4 py-2 font-sans text-body-sm text-ink">{row.name}</td>
+                      <td className="px-4 py-2 tabular text-body-sm text-ink">{row.password}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 min-h-11"
+              onClick={copyPasswords}
+            >
+              Copy the list
+            </Button>
+            {/* Production workers are absent on purpose: they never sign in, so
+                theirs is a long random string nobody needs (WORKER-1). */}
+          </div>
+        ) : null}
+
+        {noted.length > 0 ? (
+          <div className="overflow-x-auto rounded-control border border-warning/40">
+            <table className="w-full min-w-[28rem] border-collapse">
+              <thead>
+                <tr className="border-b border-warning/30 bg-warning-tint">
+                  {["Row", "Name", "Imported, but"].map((h) => (
+                    <th key={h} className="type-label px-4 py-2 text-left text-ink">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {noted.map((row) => (
+                  <tr key={row.line} className="border-b border-rule last:border-b-0">
+                    <td className="px-4 py-2 tabular text-body-sm text-ink-muted">{row.line}</td>
+                    <td className="px-4 py-2 font-sans text-body-sm text-ink">{row.name}</td>
+                    <td className="px-4 py-2 font-sans text-body-sm text-ink-muted">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         {failed.length > 0 ? (
           <div className="overflow-x-auto rounded-control border border-critical/40">
@@ -742,7 +828,7 @@ function AddPersonDialog({
               <Field
                 id="password"
                 label="Password"
-                hint="Filled in from their first name — read it out to them. At least 6 characters if you change it, and they can set their own from their profile."
+                hint={`Filled in from their first name — read it out to them. At least ${MIN_PASSWORD_LENGTH} characters if you change it, and they can set their own from their profile.`}
                 error={createState.fieldErrors?.password}
               >
                 <Input
@@ -750,14 +836,14 @@ function AddPersonDialog({
                   name="password"
                   type="text"
                   required
-                  /* -- SIX, matching `newPasswordSchema`. It said TEN, which the
-                        browser enforces before the server is asked — so the form
-                        refused the very passwords the hint beside it recommends,
-                        and the rule the schema was lowered to allow was still
-                        being applied one layer up. Two copies of a threshold is
-                        how a form comes to reject what the server accepts
-                        (P13-6). -- */
-                  minLength={6}
+                  /* -- FROM THE CONSTANT, never typed. The browser enforces
+                        this before the server is ever asked, so a number here
+                        that is higher than the schema's makes the form refuse
+                        the very passwords the hint beside it recommends — which
+                        is exactly what happened when this said ten. Two copies
+                        of a threshold is how a form comes to reject what the
+                        server accepts (P13-6). -- */
+                  minLength={MIN_PASSWORD_LENGTH}
                   className="min-h-11 tabular"
                   autoComplete="new-password"
                   value={password}
@@ -830,6 +916,30 @@ function AddPersonDialog({
               >
                 <select id="reports_to" name="reports_to" className={SELECT_CLASS}>
                   <option value="">Nobody yet</option>
+                  {people
+                    .filter((p) => p.is_active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+
+              {/* -- The SAME field the edit dialog carries. It was on the edit
+                     side only, which meant a second reviewer could be set on
+                     somebody who already existed and never on somebody being
+                     entered — so every new Designer had to be created, saved,
+                     and then reopened. -- */}
+              <Field
+                id="co_reviewer_id"
+                label="Second reviewer"
+                optional
+                error={createState.fieldErrors?.co_reviewer_id}
+                hint="A second manager who rates them independently, on the same form. Leave empty unless they genuinely have two."
+              >
+                <select id="co_reviewer_id" name="co_reviewer_id" className={SELECT_CLASS}>
+                  <option value="">Nobody — the usual case</option>
                   {people
                     .filter((p) => p.is_active)
                     .map((p) => (
@@ -1187,15 +1297,25 @@ function EditPersonDialog({
                 label="Set a new password"
                 optional
                 error={state.fieldErrors?.new_password}
-                hint="Leave blank to keep their current one. At least 6 characters, shown so you can read it out."
+                /* -- WHY THIS FIELD IS EMPTY, said where somebody is looking at
+                      it. Reported as the password "vanishing" after being set:
+                      it did not, and it cannot be shown. Supabase stores a
+                      bcrypt hash and nothing else, so there is no query, screen
+                      or admin call anywhere that returns an existing password —
+                      the plain text exists only for the moment it is typed.
+                      An empty box with no explanation reads as data that was
+                      lost (§13.4). -- */
+                hint={`Their current password cannot be shown — only an encrypted form of it is stored. Leave this blank to keep it, or type a new one (${MIN_PASSWORD_LENGTH}+ characters) to replace it.`}
               >
                 <Input
                   id="e_new_password"
                   name="new_password"
                   type="text"
-                  /* Six, matching the schema and the hint directly above — this
-                     field said ten while the label beside it promised six. */
-                  minLength={6}
+                  /* -- FROM THE CONSTANT, not typed here. This field once said
+                        ten while the label beside it promised six, and a form
+                        that refuses what it recommends is unusable in exactly
+                        the way nobody reports. -- */
+                  minLength={MIN_PASSWORD_LENGTH}
                   autoComplete="new-password"
                   placeholder="Leave blank to keep it"
                   className="min-h-11 tabular"
@@ -1937,6 +2057,21 @@ export function UsersTab({
         cell: ({ row }) => <GridCell value={row.original.email ?? "—"} className="tabular" />,
       },
       {
+        /* -- THE OFFICIAL PAIR IS SHOWN, NOT RESOLVED (0081).
+              `contactFor` picks work-or-personal when a message is SENT, and
+              that stays — it is what keeps somebody with no work address
+              reachable. But a screen resolving the same way shows one value and
+              hides another that is genuinely on the record, and "which address
+              is this?" then has no answer anywhere in the app.
+
+              So all four are columns. Each renders what is stored or an em
+              dash; none ever borrows the other's value. -- */
+        accessorKey: "work_email",
+        header: "Official Email",
+        size: 240,
+        cell: ({ row }) => <GridCell value={dash(row.original.work_email)} className="tabular" />,
+      },
+      {
         accessorKey: "designation",
         header: "Designation",
         size: 180,
@@ -1995,6 +2130,14 @@ export function UsersTab({
         header: "Mobile No",
         size: 150,
         cell: ({ row }) => <GridCell value={dash(row.original.phone_e164)} className="tabular" />,
+      },
+      {
+        accessorKey: "work_phone_e164",
+        header: "Official Mobile No",
+        size: 170,
+        cell: ({ row }) => (
+          <GridCell value={dash(row.original.work_phone_e164)} className="tabular" />
+        ),
       },
       {
         accessorKey: "date_of_joining",
@@ -2527,7 +2670,10 @@ export function UsersTab({
         data={rows}
         columns={columns}
         storageKey="appraise.people.column-widths"
-        minWidth={1480}
+        /* -- Raised with the two official columns (240 + 170). Left at 1480
+              they would have been squeezed out of their own declared widths and
+              the frozen name column would sit against a crushed grid. -- */
+        minWidth={1890}
         /* -- The employee code IS the row number here (F58-style), so it takes
               the gutter rather than sitting in a column beside a counter saying
               the same thing. In EDIT MODE the gutter renders the field instead

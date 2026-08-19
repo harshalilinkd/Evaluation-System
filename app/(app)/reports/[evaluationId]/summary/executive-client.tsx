@@ -56,7 +56,24 @@ export function ExecutiveSummary({
 }) {
   const { header, summary, narratives } = report;
 
-  const lead = classifyNarratives(narratives.leadAssessment);
+  /* -- BOTH managers' written verdicts. Reading only the reporting lead's
+        would drop half of a designer's review from the summary that exists to
+        be read instead of the full report — which is the worst place to lose
+        it. Concatenated HERE rather than merged in the builder, because the
+        detailed report keeps them apart and names each; a summary is a summary,
+        and what it needs is every point made, not who made it. -- */
+  const lead = classifyNarratives([
+    ...narratives.leadAssessment,
+    ...narratives.coLeadAssessment,
+  ]);
+  const secondManager = header.coLeadName;
+
+  /** What the managers TOGETHER say — the mean of the two, or the one there is. */
+  const managerMean = (a: number | null, b: number | null): number | null => {
+    if (a === null) return b;
+    if (b === null) return a;
+    return (a + b) / 2;
+  };
   const self = classifyNarratives(narratives.employeeVoice);
   const tenure = tenureLabel(header.dateOfJoining, new Date());
   // "Employee requested" is a form label; the person has a name and it reads as
@@ -140,9 +157,29 @@ export function ExecutiveSummary({
                 like one object. The dot carries the tier — the same device the
                 report's own column headings use — so identity is stated without
                 a coloured border round every figure. -- */}
-          <div className="card-surface grid grid-cols-3 divide-x divide-rule">
+          <div
+            className={cn(
+              "card-surface grid divide-x divide-rule",
+              secondManager ? "grid-cols-4" : "grid-cols-3",
+            )}
+          >
             <Headline label="Employee" value={score(summary.selfOverall)} accent="self" />
-            <Headline label="Manager" value={score(summary.leadOverall)} accent="lead" />
+            <Headline
+              label={secondManager ? (header.leadName ?? "Manager") : "Manager"}
+              value={score(summary.leadOverall)}
+              accent="lead"
+            />
+            {/* -- Their own panel, not folded into the one beside it: the two
+                   managers rated independently and blind to each other, so one
+                   figure would hide exactly the disagreement both were asked
+                   for. Named, because the manager hue is shared (§13.1). -- */}
+            {secondManager ? (
+              <Headline
+                label={secondManager}
+                value={score(summary.coLeadOverall)}
+                accent="lead"
+              />
+            ) : null}
             <Headline
               label="Gap"
               value={signed(summary.overallGap)}
@@ -232,6 +269,7 @@ export function ExecutiveSummary({
                       <span className="mt-1.5 block space-y-1">
                         <Track value={s.self} className="bg-self" />
                         <Track value={s.lead} className="bg-lead" />
+                        {secondManager ? <Track value={s.coLead} className="bg-lead" /> : null}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-baseline gap-3">
@@ -241,14 +279,25 @@ export function ExecutiveSummary({
                       <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
                         {score(s.lead)}
                       </span>
+                      {secondManager ? (
+                        <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
+                          {score(s.coLead)}
+                        </span>
+                      ) : null}
                       {/* -- BOTH OR NOTHING (AMEND-5, A5-2). Manager Review has
                             no self score at all; printing the manager's figure
                             there as an "average" would state that both sides
                             agreed on a section only one of them answered. -- */}
                       <span className="tabular w-9 text-right font-sans text-body-sm text-ink">
-                        {s.self === null || s.lead === null
-                          ? "—"
-                          : ((s.self + s.lead) / 2).toFixed(2)}
+                        {/* The MANAGER figure is what the managers together
+                            say, so AMEND-5's definition is unchanged: still the
+                            mean of the Self and Manager figures. */}
+                        {(() => {
+                          const managers = managerMean(s.lead, s.coLead);
+                          return s.self === null || managers === null
+                            ? "—"
+                            : ((s.self + managers) / 2).toFixed(2);
+                        })()}
                       </span>
                       <Badge tone={tone}>{signed(gap)}</Badge>
                     </span>

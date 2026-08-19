@@ -13,7 +13,7 @@ export type AppRole = Enums<"app_role">;
  * relationships (the evaluatee, the lead). Both are represented, because a
  * role check alone would let any HOD in the company return any employee's form.
  */
-export type ActorRule = AppRole | "EVALUATEE" | "LEAD" | "SYSTEM";
+export type ActorRule = AppRole | "EVALUATEE" | "LEAD" | "CO_LEAD" | "SYSTEM";
 
 export type TransitionActor = {
   profileId: string;
@@ -108,6 +108,22 @@ export const TRANSITIONS: readonly TransitionDefinition[] = [
     locks: "LEAD",
     isReturn: false,
     action: "evaluation.lead_submit",
+    label: "Submit review",
+  },
+  /* -- The SECOND manager, where the evaluatee carries one (0083/0085).
+        A row of its own rather than a second actor on the row above: the two
+        lock different layers, and `locks` is what tells two OPEN → OPEN moves
+        apart (A3-6) — one row with two actors could not say which layer to
+        lock. It also keeps the two independent, which is what makes the three
+        forms blind to one another (§5). -- */
+  {
+    from: "OPEN",
+    to: "OPEN",
+    actors: ["CO_LEAD"],
+    guards: ["requireAllRequiredAnswered"],
+    locks: "LEAD_2",
+    isReturn: false,
+    action: "evaluation.co_lead_submit",
     label: "Submit review",
   },
 
@@ -317,6 +333,8 @@ export type TransitionSubject = {
   status: EvaluationStatus;
   evaluatee_id: string;
   lead_id: string | null;
+  /** 0083. Null on the ordinary two-form flow. */
+  co_lead_id?: string | null;
 };
 
 function actorSatisfies(rule: ActorRule, evaluation: TransitionSubject, actor: TransitionActor) {
@@ -327,6 +345,12 @@ function actorSatisfies(rule: ActorRule, evaluation: TransitionSubject, actor: T
       // The assigned lead for THIS evaluation, copied at launch — not whoever
       // currently happens to hold the HOD role.
       return evaluation.lead_id !== null && actor.profileId === evaluation.lead_id;
+    case "CO_LEAD":
+      // The assigned SECOND reviewer for THIS evaluation, frozen at launch —
+      // not whoever currently carries `co_reviewer_id` on the profile. P4-7's
+      // rule, and it matters more here: a second opinion signed by the wrong
+      // person is worse than no second opinion.
+      return Boolean(evaluation.co_lead_id) && actor.profileId === evaluation.co_lead_id;
     case "SYSTEM":
       return actor.isSystem === true;
     default:
@@ -341,6 +365,8 @@ function describeActors(rules: readonly ActorRule[]): string {
         return "the employee being evaluated";
       case "LEAD":
         return "their reporting lead";
+      case "CO_LEAD":
+        return "their second reviewer";
       case "SYSTEM":
         return "the system";
       case "HR_ADMIN":

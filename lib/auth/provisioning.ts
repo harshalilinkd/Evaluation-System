@@ -12,6 +12,7 @@ import {
   createUserSchema,
   defaultPasswordFor,
   emailSchema,
+  MIN_PASSWORD_LENGTH,
   newPasswordSchema,
   type AppRole,
   type CreateUserInput,
@@ -137,6 +138,7 @@ export async function createUser(
     work_phone: formData.get("work_phone") ?? "",
     designation: formData.get("designation") ?? "",
     reports_to: formData.get("reports_to") ?? "",
+    co_reviewer_id: formData.get("co_reviewer_id") ?? "",
     date_of_joining: formData.get("date_of_joining") ?? "",
     employment_type: String(formData.get("employment_type") ?? "PERMANENT"),
     last_increment_date: formData.get("last_increment_date") ?? "",
@@ -150,6 +152,23 @@ export async function createUser(
       fieldErrors[key] ??= issue.message;
     }
     return { error: "Check the highlighted fields.", fieldErrors };
+  }
+
+  /* -- The one refusal that CAN apply on a create: naming the same person as
+        both managers. "Themselves" cannot — they have no id yet — and the
+        database's own CHECK covers that case for ever.
+
+        Said here as well as in the edit dialog and 0084's launch, deliberately:
+        the launch silently skips a second reviewer who is also the lead, so
+        without this HR would set one, see it saved, and never learn why the
+        third form did not appear (§13.4). -- */
+  if (parsed.data.co_reviewer_id && parsed.data.co_reviewer_id === parsed.data.reports_to) {
+    return {
+      error: "The second reviewer has to be somebody other than their manager.",
+      fieldErrors: {
+        co_reviewer_id: "Their manager already rates them — choose a different person",
+      },
+    };
   }
 
   const result = await provisionPerson(parsed.data, auth.session.profile.id);
@@ -251,6 +270,7 @@ async function amendPerson(
     department_id: keep(input.department_id),
     designation: keep(input.designation),
     reports_to: keep(input.reports_to),
+    co_reviewer_id: keep(input.co_reviewer_id),
     date_of_joining: keep(input.date_of_joining),
     track: keep(input.track),
   };
@@ -314,6 +334,104 @@ async function amendPerson(
       .is("salary_effective_from", null);
   }
 
+  /* -- RESTORING PAY ONTO AN EMPTY LEDGER, AND ONLY AN EMPTY ONE.
+        Rule 3 above says salary is not touched on a re-import, and that rule is
+        intact: `salary_history` is append-only for every caller (P19-3), so a
+        second upload must never append a rise nobody decided or a duplicate
+        opening row.
+
+        An EMPTY ledger is a different case, and it is the one that made
+        somebody reach for "delete every account and import them again".
+        RESET-CYCLES-AND-PAY-ARMED.sql empties the pay history and blanks both
+        salary columns deliberately — and after it, a re-upload of the same
+        spreadsheet restored every fact about a person EXCEPT what they are
+        paid, because this path refused to write it. Deleting the accounts to
+        get around that costs their logins, their roles and their joining dates.
+
+        THE THREE `null` TESTS ARE THE WHOLE SAFETY OF IT, the same device the
+        `salary_effective_from` fill above uses: no pay row, no current figure
+        and no baseline. Anybody who has ever been paid anything on this system
+        fails all three and is left exactly as they are. It fills a gap; it
+        never overwrites an answer. -- */
+  const salaryOffered = input.joining_ctc !== undefined || input.current_ctc !== undefined;
+
+  if (salaryOffered) {
+    const [pay, record] = await Promise.all([
+      supabase.from("salary_history").select("id", { count: "exact", head: true }).eq("profile_id", profileId),
+      supabase
+        .from("employment_records")
+        .select("profile_id, current_ctc, joining_ctc")
+        .eq("profile_id", profileId)
+        .maybeSingle(),
+    ]);
+
+    const ledgerEmpty =
+      (pay.count ?? 0) === 0 &&
+      (record.data?.current_ctc ?? null) === null &&
+      (record.data?.joining_ctc ?? null) === null;
+
+    if (ledgerEmpty) {
+      const ledger = buildLedger(input);
+      const lastIncrementOn = newestRise(input);
+
+      /* -- The same two columns the create path writes, and for the same
+            reason: somebody joining on ₹1,80,000 with no rise yet IS on
+            ₹1,80,000, so leaving `current_ctc` blank would be false. -- */
+      const figures = {
+        current_ctc: input.current_ctc ?? input.joining_ctc ?? null,
+        joining_ctc: input.joining_ctc ?? null,
+        salary_effective_from: lastIncrementOn ?? input.date_of_joining ?? null,
+        last_increment_date: lastIncrementOn,
+      };
+
+      const written = record.data
+        ? await supabase
+            .from("employment_records")
+            .update(figures)
+            .eq("profile_id", profileId)
+            /* -- Re-asserted at the write, not only at the read above. Between
+                  the two, another import row or the Employment tab may have put
+                  a figure there — and a lost race here would overwrite a real
+                  salary. A PostgREST update matching no row is a success with
+                  zero rows, which is why `.select()` is what tells them apart
+                  (the silent-write class, ninth appearance). -- */
+            .is("current_ctc", null)
+            .is("joining_ctc", null)
+            .select("profile_id")
+        : await supabase
+            .from("employment_records")
+            .insert({ profile_id: profileId, ...figures })
+            .select("profile_id");
+
+      if (written.error) {
+        return {
+          ok: false,
+          error: `Their details were updated but the salary was not: ${written.error.message}`,
+        };
+      }
+
+      if ((written.data ?? []).length > 0) {
+        const salaryRows = composeOpeningPay(
+          profileId,
+          input,
+          ledger,
+          actorProfileId,
+          "Recorded when the roster was re-imported.",
+        );
+
+        if (salaryRows.length > 0) {
+          const { error } = await supabase.from("salary_history").insert(salaryRows);
+          if (error) {
+            return {
+              ok: false,
+              error: `Their details and today's salary were saved, but the pay history was not: ${error.message}`,
+            };
+          }
+        }
+      }
+    }
+  }
+
   /* -- Rule 4. Everyone holds EMPLOYEE and it is never removed (P8-3). -- */
   const wanted = new Set<string>(["EMPLOYEE", ...input.roles]);
   const { data: held } = await supabase
@@ -355,6 +473,132 @@ async function amendPerson(
   return { ok: true, profileId };
 }
 
+/**
+ * The rises this row describes, oldest first.
+ *
+ * Lifted out of the create path so the re-import path cannot grow a second
+ * reading of the same columns. Two readings would eventually disagree about a
+ * pay ledger, which is the one place a disagreement is expensive.
+ */
+function buildLedger(input: CreateUserInput): Array<{ effective_from: string; amount?: number }> {
+  const byDate = new Map<string, number | undefined>();
+  if (input.last_increment_date) {
+    byDate.set(input.last_increment_date, input.last_increment_amount);
+  }
+  for (const entry of input.increments ?? []) {
+    byDate.set(entry.effective_from, entry.amount);
+  }
+  const ledger = [...byDate.entries()]
+    .map(([effective_from, amount]) => ({ effective_from, amount }))
+    .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  return ledger;
+}
+
+/**
+ * The opening `salary_history` rows for somebody whose ledger is EMPTY.
+ *
+ * Extracted from `provisionPerson` UNCHANGED, and now called by both paths: an
+ * account being created, and a re-import filling a ledger with nothing in it.
+ * A second copy of this arithmetic would be a second answer to "what were they
+ * paid before this rise", on the table §12 makes evidence.
+ */
+function composeOpeningPay(
+  profileId: string,
+  input: CreateUserInput,
+  ledger: Array<{ effective_from: string; amount?: number }>,
+  actorProfileId: string,
+  note: string,
+): Array<{
+  profile_id: string;
+  effective_from: string;
+  previous_ctc: number | null;
+  new_ctc: number;
+  hike_amount: number | null;
+  hike_pct: number | null;
+  reason: string;
+  recorded_by: string;
+  note: string;
+}> {
+  const salaryRows: Array<{
+    profile_id: string;
+    effective_from: string;
+    previous_ctc: number | null;
+    new_ctc: number;
+    hike_amount: number | null;
+    hike_pct: number | null;
+    reason: string;
+    recorded_by: string;
+    note: string;
+  }> = [];
+
+  /* -- NO JOINING ROW. The baseline is `joining_ctc` on the employment record,
+        written above, and the ledger renders it as row 1 (0043).
+
+        It used to be appended here as a `salary_history` row with reason
+        JOINING. That reads well and breaks the moment somebody records a
+        joining salary AFTER a revision already exists — the revision path
+        measured it against today's salary and filed the first pay a person ever
+        received as a rise. A baseline that cannot be compared against anything
+        cannot be got wrong that way. -- */
+
+  /* -- THE CHAIN IS ANCHORED ON TODAY'S SALARY AND WALKS BACKWARDS.
+        Forward from `joining_ctc` was the obvious direction and is the wrong
+        one: joining 25,000 plus a recorded rise of 5,000 comes to 30,000, and
+        if the record says they are on 32,000 today the ledger's newest row
+        would contradict the record it sits beside. Today's figure is the one
+        thing known for certain, so each rise is subtracted from it in turn and
+        the oldest `previous_ctc` falls where it falls — which is honest about
+        there having been earlier rises nobody typed in.
+
+        For a single entry this is byte-for-byte the arithmetic that was here
+        before, which is what makes it safe to widen rather than a second
+        algorithm sitting beside the first. -- */
+  if (input.current_ctc !== undefined && ledger.length > 0) {
+    let newCtc = input.current_ctc;
+    let newest = true;
+
+    for (const entry of ledger.slice().reverse()) {
+      /* The increment amount is what makes the previous figure knowable.
+         Failing that, the baseline does — which is what makes the FIRST
+         revision measure against what somebody joined on. */
+      const hike = entry.amount;
+      const previous = hike !== undefined ? newCtc - hike : (input.joining_ctc ?? null);
+      const usable = previous !== null && previous > 0;
+
+      /* -- STOP BEFORE WRITING A ROW WE CANNOT STAND BEHIND.
+            The newest row's `new_ctc` is `current_ctc` — a figure on the
+            record. Every older row's is one this loop derived, and it is only
+            worth writing while the step above it worked out. Caught by the
+            suite: rises adding to more than the salary produced a row saying
+            somebody was moved to ₹1,000, which is not something anybody
+            typed. The newest row is still written with a null previous, which
+            is the long-standing behaviour for a rise with no amount. -- */
+      if (!usable && !newest) break;
+
+      salaryRows.push({
+        profile_id: profileId,
+        effective_from: entry.effective_from,
+        previous_ctc: usable ? previous : null,
+        new_ctc: newCtc,
+        hike_amount: hike ?? null,
+        hike_pct: usable && hike !== undefined ? Math.round((hike / previous) * 10000) / 100 : null,
+        reason: "ANNUAL_INCREMENT",
+        recorded_by: actorProfileId,
+        note,
+      });
+
+      /* Stop rather than guess. An entry with no amount leaves nothing to
+         subtract, and a previous figure at or below zero means the amounts do
+         not describe this salary — either way the older rows would be fiction. */
+      if (!usable || hike === undefined) break;
+      newCtc = previous;
+      newest = false;
+    }
+  }
+
+  return salaryRows;
+}
+
 async function provisionPerson(
   input: CreateUserInput,
   actorProfileId: string,
@@ -375,11 +619,12 @@ async function provisionPerson(
 
   if (createError || !created?.user) {
     const duplicate = /already|exists|registered/i.test(createError?.message ?? "");
+    const tooShort = passwordTooShortForProvider(createError?.message);
     return {
       ok: false,
       error: duplicate
         ? "Somebody already has that email address."
-        : "Could not create the account. Try again, or check the email address.",
+        : (tooShort ?? "Could not create the account. Try again, or check the email address."),
     };
   }
 
@@ -445,6 +690,7 @@ async function provisionPerson(
       phone_e164: phoneE164,
       designation: input.designation ? input.designation : null,
       reports_to: input.reports_to ? input.reports_to : null,
+      co_reviewer_id: input.co_reviewer_id ? input.co_reviewer_id : null,
       // 0024: the ONE joining date. `employment_records` no longer has a copy.
       date_of_joining: input.date_of_joining ? input.date_of_joining : null,
       is_active: true,
@@ -476,16 +722,7 @@ async function provisionPerson(
 
         BUILT HERE, BEFORE THE EMPLOYMENT RECORD, because the record's
         `last_increment_date` is derived from it — see below. -- */
-  const byDate = new Map<string, number | undefined>();
-  if (input.last_increment_date) {
-    byDate.set(input.last_increment_date, input.last_increment_amount);
-  }
-  for (const entry of input.increments ?? []) {
-    byDate.set(entry.effective_from, entry.amount);
-  }
-  const ledger = [...byDate.entries()]
-    .map(([effective_from, amount]) => ({ effective_from, amount }))
-    .sort((a, b) => a.effective_from.localeCompare(b.effective_from));
+  const ledger = buildLedger(input);
 
   /* -- THE CLOCK COMES FROM THE NEWEST RISE, whichever column carried it.
         0068 made the pay ledger authoritative for `last_increment_date` — "once
@@ -567,82 +804,13 @@ async function provisionPerson(
         that could send its own previous figure could write a history that
         disagrees with the record it came from, and this table's only job is to
         be evidence. -- */
-  const salaryRows: Array<{
-    profile_id: string;
-    effective_from: string;
-    previous_ctc: number | null;
-    new_ctc: number;
-    hike_amount: number | null;
-    hike_pct: number | null;
-    reason: string;
-    recorded_by: string;
-    note: string;
-  }> = [];
-
-  /* -- NO JOINING ROW. The baseline is `joining_ctc` on the employment record,
-        written above, and the ledger renders it as row 1 (0043).
-
-        It used to be appended here as a `salary_history` row with reason
-        JOINING. That reads well and breaks the moment somebody records a
-        joining salary AFTER a revision already exists — the revision path
-        measured it against today's salary and filed the first pay a person ever
-        received as a rise. A baseline that cannot be compared against anything
-        cannot be got wrong that way. -- */
-
-  /* -- THE CHAIN IS ANCHORED ON TODAY'S SALARY AND WALKS BACKWARDS.
-        Forward from `joining_ctc` was the obvious direction and is the wrong
-        one: joining 25,000 plus a recorded rise of 5,000 comes to 30,000, and
-        if the record says they are on 32,000 today the ledger's newest row
-        would contradict the record it sits beside. Today's figure is the one
-        thing known for certain, so each rise is subtracted from it in turn and
-        the oldest `previous_ctc` falls where it falls — which is honest about
-        there having been earlier rises nobody typed in.
-
-        For a single entry this is byte-for-byte the arithmetic that was here
-        before, which is what makes it safe to widen rather than a second
-        algorithm sitting beside the first. -- */
-  if (input.current_ctc !== undefined && ledger.length > 0) {
-    let newCtc = input.current_ctc;
-    let newest = true;
-
-    for (const entry of ledger.slice().reverse()) {
-      /* The increment amount is what makes the previous figure knowable.
-         Failing that, the baseline does — which is what makes the FIRST
-         revision measure against what somebody joined on. */
-      const hike = entry.amount;
-      const previous = hike !== undefined ? newCtc - hike : (input.joining_ctc ?? null);
-      const usable = previous !== null && previous > 0;
-
-      /* -- STOP BEFORE WRITING A ROW WE CANNOT STAND BEHIND.
-            The newest row's `new_ctc` is `current_ctc` — a figure on the
-            record. Every older row's is one this loop derived, and it is only
-            worth writing while the step above it worked out. Caught by the
-            suite: rises adding to more than the salary produced a row saying
-            somebody was moved to ₹1,000, which is not something anybody
-            typed. The newest row is still written with a null previous, which
-            is the long-standing behaviour for a rise with no amount. -- */
-      if (!usable && !newest) break;
-
-      salaryRows.push({
-        profile_id: profileId,
-        effective_from: entry.effective_from,
-        previous_ctc: usable ? previous : null,
-        new_ctc: newCtc,
-        hike_amount: hike ?? null,
-        hike_pct: usable && hike !== undefined ? Math.round((hike / previous) * 10000) / 100 : null,
-        reason: "ANNUAL_INCREMENT",
-        recorded_by: actorProfileId,
-        note: "Recorded when the account was created.",
-      });
-
-      /* Stop rather than guess. An entry with no amount leaves nothing to
-         subtract, and a previous figure at or below zero means the amounts do
-         not describe this salary — either way the older rows would be fiction. */
-      if (!usable || hike === undefined) break;
-      newCtc = previous;
-      newest = false;
-    }
-  }
+  const salaryRows = composeOpeningPay(
+    profileId,
+    input,
+    ledger,
+    actorProfileId,
+    "Recorded when the account was created.",
+  );
 
   if (salaryRows.length > 0) {
     const { error: salaryError } = await supabase.from("salary_history").insert(salaryRows);
@@ -782,6 +950,7 @@ export async function updatePerson(
 
   const departmentId = String(formData.get("department_id") ?? "").trim();
   const reportsTo = String(formData.get("reports_to") ?? "").trim();
+  const coReviewer = String(formData.get("co_reviewer_id") ?? "").trim();
 
   // Their own lead is a cycle nobody can resolve, and P10-7's self-led case is
   // already a hard block at launch — refused here so it never reaches one.
@@ -789,6 +958,33 @@ export async function updatePerson(
     return {
       error: "Somebody cannot report to themselves.",
       fieldErrors: { reports_to: "Choose a different person" },
+    };
+  }
+
+  /* -- A SECOND reviewer (0083), refused where it would not be a SECOND
+        opinion. Both refusals are the same rule from different sides: rating
+        yourself is not a second opinion, and it would hand one person both
+        sides of a blind pair (§5); the same person as their manager is one
+        opinion recorded twice, on two forms.
+
+        0083's CHECK constraint and 0084's launch both refuse these too. Three
+        places deliberately: the constraint is the backstop, the launch is what
+        actually decides, and this is the only one that can say WHY at the
+        moment somebody is choosing (§13.4). Without it the launch would simply
+        ignore a second reviewer HR had carefully set, with nothing on screen
+        to explain the silence. -- */
+  if (coReviewer && coReviewer === profileId) {
+    return {
+      error: "Somebody cannot be their own second reviewer.",
+      fieldErrors: { co_reviewer_id: "Choose a different person" },
+    };
+  }
+  if (coReviewer && coReviewer === reportsTo) {
+    return {
+      error: "The second reviewer has to be somebody other than their manager.",
+      fieldErrors: {
+        co_reviewer_id: "Their manager already rates them — choose a different person",
+      },
     };
   }
 
@@ -844,7 +1040,9 @@ export async function updatePerson(
 
   const { data: before } = await supabase
     .from("profiles")
-    .select("full_name, employee_code, designation, department_id, reports_to, date_of_joining, phone_e164, work_email, work_phone_e164")
+    .select(
+      "full_name, employee_code, designation, department_id, reports_to, co_reviewer_id, date_of_joining, phone_e164, work_email, work_phone_e164",
+    )
     .eq("id", profileId)
     .maybeSingle();
 
@@ -857,6 +1055,7 @@ export async function updatePerson(
     designation: String(formData.get("designation") ?? "").trim() || null,
     department_id: departmentId || null,
     reports_to: reportsTo || null,
+    co_reviewer_id: coReviewer || null,
     date_of_joining: String(formData.get("date_of_joining") ?? "").trim() || null,
     phone_e164: phoneE164,
     // Null clears the pair, which is what emptying the field means: they fall
@@ -942,7 +1141,8 @@ export async function updatePerson(
         return {
           error: "Check the highlighted fields.",
           fieldErrors: {
-            new_password: parsed.error.issues[0]?.message ?? "Use at least 6 characters",
+            new_password:
+              parsed.error.issues[0]?.message ?? `Use at least ${MIN_PASSWORD_LENGTH} characters`,
           },
         };
       }
@@ -956,10 +1156,15 @@ export async function updatePerson(
       );
 
       if (authError) {
+        /* -- The same provider floor the create path hits, on the path where a
+              password is CHANGED. Without this the message is GoTrue's own
+              "at least 6 characters", which reads as a contradiction of the
+              hint beside the field that had just accepted it. -- */
+        const tooShort = passwordTooShortForProvider(authError.message);
         warnings.push(
           /registered|already|duplicate|exists/i.test(authError.message)
             ? "their sign-in details — somebody already uses that email address"
-            : `their sign-in details — ${authError.message}`,
+            : `their sign-in details — ${tooShort ?? authError.message}`,
         );
       } else {
         if (credentials.email) {
@@ -1174,22 +1379,241 @@ export async function updatePerson(
   return { ok: true, createdId: profileId, message: `${fullName}'s details were saved.` };
 }
 
+/**
+ * Whether the provider refused a password for being too short, and what to do.
+ *
+ * OUR FLOOR IS FOUR AND SUPABASE'S IS ITS OWN — six unless the project says
+ * otherwise. Lowering ours does not lower theirs, so a five-character password
+ * now passes the form and can still be refused at the account. GoTrue answers
+ * "Password should be at least 6 characters", which is true, unactionable from
+ * inside this app, and reads as a bug in the form that had just accepted it.
+ *
+ * Named separately from every other auth failure because the fix is a SETTING
+ * rather than a retry (§0.7, §13.4).
+ */
+function passwordTooShortForProvider(message: string | undefined): string | null {
+  if (!message) return null;
+  if (!/password/i.test(message)) return null;
+  if (!/at least|too short|minimum|length/i.test(message)) return null;
+  return (
+    `${message.replace(/\.$/, "")}. That limit is Supabase's, not this app's — ` +
+    "raise the password or lower it in the Supabase dashboard under " +
+    "Authentication → Sign In / Providers → Minimum password length."
+  );
+}
+
 /* ---------- Delete ---------- */
 
 /**
- * Delete somebody outright — but only somebody nothing depends on.
+ * WHY DELETING SOMEBODY USUALLY REFUSES, AND WHAT REFUSES IT.
  *
  * §17 AND §12 BOTH SAY PEOPLE ARE SWITCHED OFF, NOT ERASED, AND THAT STANDS.
  *
- * P4-5 recorded the consequence years before this action existed: `audit_log`
- * .actor_id has no ON DELETE clause, so once somebody has acted their profile
- * cannot be removed — Postgres refuses it. The same is true of an evaluation
- * they are the subject or the lead of.
+ * P4-5 recorded the consequence years before any of this existed:
+ * `audit_log.actor_id` has no ON DELETE clause, so once somebody has acted
+ * their profile cannot be removed — Postgres refuses it. The same holds for an
+ * evaluation they are the subject or the lead of, a production appraisal, a pay
+ * row, and anybody who reports to them.
  *
  * So this is not "delete a person". It is "undo a person who was created by
  * mistake and has done nothing yet", which is the only case the database will
  * permit and the only one §17 does not forbid. Everything else is deactivation,
  * and the message says so rather than failing with a constraint violation.
+ *
+ * ONE IMPLEMENTATION, shared by the single delete and the bulk one. Two copies
+ * would eventually disagree about what counts as "has done nothing", and the
+ * disagreement would show up as one screen refusing what the other allowed.
+ */
+type PersonBlockers = {
+  asEvaluatee: number;
+  asLead: number;
+  asWorker: number;
+  asRater: number;
+  pay: number;
+  reports: number;
+  acted: number;
+};
+
+const EMPTY_BLOCKERS: PersonBlockers = {
+  asEvaluatee: 0,
+  asLead: 0,
+  asWorker: 0,
+  asRater: 0,
+  pay: 0,
+  reports: 0,
+  acted: 0,
+};
+
+/**
+ * Named separately, never totalled.
+ *
+ * "2 evaluations and a pay history" tells HR which thing to look at, where "4
+ * references" does not — and the people reporting to them in particular have a
+ * fix nobody would guess from a bare count: move them to another manager first.
+ */
+function describeBlockers(counts: PersonBlockers): string[] {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const out: string[] = [];
+  if (counts.asEvaluatee > 0)
+    out.push(plural(counts.asEvaluatee, "evaluation of them", "evaluations of them"));
+  if (counts.asLead > 0) out.push(plural(counts.asLead, "evaluation they rate", "evaluations they rate"));
+  if (counts.asWorker > 0)
+    out.push(plural(counts.asWorker, "production appraisal of them", "production appraisals of them"));
+  if (counts.asRater > 0)
+    out.push(
+      plural(counts.asRater, "production appraisal they rate", "production appraisals they rate"),
+    );
+  if (counts.pay > 0) out.push("pay history");
+  if (counts.reports > 0) out.push(`${plural(counts.reports, "person", "people")} reporting to them`);
+  if (counts.acted > 0) out.push("a recorded history of actions");
+  return out;
+}
+
+/** Anything else is not a uuid and has no business being interpolated into a filter. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Run `work` over `items`, `size` at a time. */
+async function inBatches<T>(
+  items: readonly T[],
+  size: number,
+  work: (item: T) => Promise<void>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(work));
+  }
+}
+
+/**
+ * What still depends on each of these people.
+ *
+ * FOUR QUERIES FOR THE WHOLE BATCH, not four per person: "delete all" over a
+ * roster of fifty would otherwise be two hundred round trips, which is a server
+ * action that times out rather than one that answers.
+ *
+ * `audit_log` is the exception and is counted per person — it is the one table
+ * here that can hold thousands of rows for a single administrator, so reading
+ * its rows back to group them in TypeScript would pull the whole trail across
+ * the wire. It is also asked LAST, of the people nothing else has ruled out
+ * already, so the expensive check runs on the smallest set.
+ */
+async function blockersFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  ids: string[],
+): Promise<Map<string, PersonBlockers>> {
+  const clean = [...new Set(ids)].filter((id) => UUID_SHAPE.test(id));
+  const found = new Map<string, PersonBlockers>(clean.map((id) => [id, { ...EMPTY_BLOCKERS }]));
+  if (clean.length === 0) return found;
+
+  /* -- Only ever counts against somebody who was ASKED about. An `or` filter
+        returns a row when EITHER side matches, so the other side's id belongs
+        to somebody this batch is not deleting — counting it would refuse a
+        person for a reason that is not theirs. -- */
+  const bump = (id: string | null | undefined, key: keyof PersonBlockers) => {
+    if (!id) return;
+    const row = found.get(id);
+    if (row) row[key] += 1;
+  };
+
+  const list = clean.join(",");
+
+  const [evaluations, workers, pay, reports] = await Promise.all([
+    supabase
+      .from("evaluations")
+      .select("evaluatee_id, lead_id")
+      .or(`evaluatee_id.in.(${list}),lead_id.in.(${list})`),
+    supabase
+      .from("worker_evaluations")
+      .select("worker_id, supervisor_id")
+      .or(`worker_id.in.(${list}),supervisor_id.in.(${list})`),
+    supabase.from("salary_history").select("profile_id").in("profile_id", clean),
+    /* -- The org chart is one table (§7's shared infrastructure), and 0001's
+          self-FK means a manager cannot be removed while anybody still points
+          at them. This is the commonest real refusal and the one the old
+          message could not name — it fell through to "Could not delete that
+          account", which sends somebody to me rather than to the fix. -- */
+    supabase.from("profiles").select("reports_to").in("reports_to", clean),
+  ]);
+
+  for (const row of evaluations.data ?? []) {
+    bump(row.evaluatee_id, "asEvaluatee");
+    bump(row.lead_id, "asLead");
+  }
+  for (const row of workers.data ?? []) {
+    bump(row.worker_id, "asWorker");
+    bump(row.supervisor_id, "asRater");
+  }
+  for (const row of pay.data ?? []) bump(row.profile_id, "pay");
+  for (const row of reports.data ?? []) bump(row.reports_to, "reports");
+
+  const stillClear = clean.filter(
+    (id) => describeBlockers(found.get(id) ?? EMPTY_BLOCKERS).length === 0,
+  );
+
+  /* -- head:true — the count is the whole answer, and reading the rows would
+        pull every action they have ever taken. Bounded concurrency for the
+        reason P15-5 bounded the print pack: fifty simultaneous requests do not
+        fail cleanly, they queue inside the pooler and the screen hangs on the
+        slowest. -- */
+  await inBatches(stillClear, 8, async (id) => {
+    const { count } = await supabase
+      .from("audit_log")
+      .select("id", { count: "exact", head: true })
+      .eq("actor_id", id);
+    const row = found.get(id);
+    if (row) row.acted = count ?? 0;
+  });
+
+  return found;
+}
+
+/**
+ * Destroy one auth account, nothing having been found to depend on it. Returns
+ * the reason it could not be, or null once it is gone.
+ *
+ * THE AUDIT ROW IS WRITTEN AFTER THE DELETE, NOT BEFORE.
+ *
+ * §12 wants the record and it has to carry what was destroyed, so the person is
+ * read first — that half is unchanged. But writing the row before the attempt
+ * means a refusal leaves `audit_log` asserting somebody was deleted while they
+ * are still on the roster, and across a bulk run that is a trail nobody can
+ * trust. `audit_log.entity_id` carries no foreign key (P3-2), so the row still
+ * outlives the profile it describes.
+ */
+async function destroyAccount(
+  actorId: string,
+  person: { id: string; full_name: string; email: string | null },
+): Promise<string | null> {
+  /* -- The auth account is the root: `profiles` hangs off it with ON DELETE
+        CASCADE (0001), so removing the account takes the profile and its role
+        grants with it. Deleting the profile alone would leave an account that
+        can still sign in and whose trigger would rebuild a bare profile on next
+        login. -- */
+  const { error } = await createServiceClient().auth.admin.deleteUser(person.id);
+
+  if (error) {
+    /* -- GoTrue answers "Database error deleting user" and nothing more, so
+          WHICH constraint refused is not knowable from here. The message says
+          what is true and what to do instead, rather than a phrase HR would
+          have to interpret (§0.7, §13.4). -- */
+    return "something in the system still refers to them — deactivate them instead";
+  }
+
+  await createServiceClient().from("audit_log").insert({
+    actor_id: actorId,
+    entity: "profile",
+    entity_id: person.id,
+    action: "profile.deleted",
+    diff: { before: { full_name: person.full_name, email: person.email } } as Json,
+  });
+
+  return null;
+}
+
+/**
+ * Delete somebody outright — but only somebody nothing depends on.
+ *
+ * The server counts what refers to them and names it; the dialog says so up
+ * front rather than making HR click to discover a refusal.
  */
 export async function deletePerson(
   _prev: ProvisionState,
@@ -1208,35 +1632,15 @@ export async function deletePerson(
 
   const { data: person } = await supabase
     .from("profiles")
-    .select("full_name, email")
+    .select("id, full_name, email")
     .eq("id", profileId)
     .maybeSingle();
 
   if (!person) return { error: "That person no longer exists." };
 
-  // head:true — the counts are the whole answer, and reading the rows to decide
-  // one button would pull every evaluation they have ever been part of.
-  const [{ count: asEvaluatee }, { count: asLead }, { count: acted }, { count: pay }] =
-    await Promise.all([
-      supabase
-        .from("evaluations")
-        .select("id", { count: "exact", head: true })
-        .eq("evaluatee_id", profileId),
-      supabase.from("evaluations").select("id", { count: "exact", head: true }).eq("lead_id", profileId),
-      supabase.from("audit_log").select("id", { count: "exact", head: true }).eq("actor_id", profileId),
-      supabase
-        .from("salary_history")
-        .select("id", { count: "exact", head: true })
-        .eq("profile_id", profileId),
-    ]);
-
-  // Named separately, not totalled: "2 evaluations and a pay history" tells HR
-  // which thing to look at, where "4 references" does not.
-  const blockers: string[] = [];
-  if ((asEvaluatee ?? 0) > 0) blockers.push(`${asEvaluatee} evaluation(s) of them`);
-  if ((asLead ?? 0) > 0) blockers.push(`${asLead} evaluation(s) they lead`);
-  if ((acted ?? 0) > 0) blockers.push("a recorded history of actions");
-  if ((pay ?? 0) > 0) blockers.push("pay history");
+  const blockers = describeBlockers(
+    (await blockersFor(supabase, [profileId])).get(profileId) ?? EMPTY_BLOCKERS,
+  );
 
   if (blockers.length > 0) {
     return {
@@ -1246,32 +1650,208 @@ export async function deletePerson(
     };
   }
 
-  // Logged BEFORE the delete. audit_log.entity_id carries no foreign key, so the
-  // row outlives what it describes — the only remaining evidence they existed.
-  await createServiceClient().from("audit_log").insert({
-    actor_id: auth.session.profile.id,
-    entity: "profile",
-    entity_id: profileId,
-    action: "profile.deleted",
-    diff: { before: person } as Json,
-  });
-
-  // The auth account is the root: `profiles` hangs off it with ON DELETE CASCADE
-  // (0001), so removing the account takes the profile and its role grants with
-  // it. Deleting the profile alone would leave an account that can still sign in
-  // and whose trigger would rebuild a bare profile on next login.
-  const { error } = await createServiceClient().auth.admin.deleteUser(profileId);
-  if (error) {
-    return {
-      error: /foreign key|violates/i.test(error.message)
-        ? `${person.full_name} is still referenced somewhere and cannot be deleted. Deactivate them instead.`
-        : "Could not delete that account.",
-    };
-  }
+  const failure = await destroyAccount(auth.session.profile.id, person);
+  if (failure) return { error: `${person.full_name} could not be deleted — ${failure}.` };
 
   revalidatePath("/admin/settings");
   revalidatePath("/admin/people");
   return { ok: true, message: `${person.full_name} was deleted.` };
+}
+
+export type DeletePeopleState = {
+  ok?: boolean;
+  error?: string;
+  /** How many accounts were actually destroyed. */
+  deleted?: number;
+  /** Those that were refused, and the reason each was refused. */
+  kept?: { id: string; name: string; reason: string }[];
+  message?: string;
+};
+
+/**
+ * Delete several accounts at once.
+ *
+ * THE SAME RULE AS THE SINGLE DELETE, APPLIED PERSON BY PERSON. A batch does
+ * not relax §17: anybody the system still holds a record of is KEPT and named,
+ * rather than the whole run failing because one of fifty has an evaluation.
+ * FIX-5 drew this line for the question bank and it holds here — HR asked for
+ * these to go, so the honest outcome is that the ones that can go do, and the
+ * rest come back with the reason and the alternative.
+ *
+ * Never the caller's own account, whatever was ticked. P8-4 refuses
+ * self-deactivation for the same reason — locking the last administrator out is
+ * a support call the database cannot undo — and a select-all makes that one
+ * careless press rather than a decision.
+ */
+export async function deletePeople(
+  _prev: DeletePeopleState,
+  formData: FormData,
+): Promise<DeletePeopleState> {
+  const auth = await checkRole(ADMIN_ROLES);
+  if (!auth.ok) return { error: auth.error.message };
+
+  const ids = readProfileIds(formData);
+  if (ids.length === 0) return { error: "Nobody was selected." };
+
+  const supabase = await createClient();
+
+  const { data: people, error: readError } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .in("id", ids);
+
+  if (readError) return { error: "Could not read those people. Nothing was deleted." };
+  if (!people || people.length === 0) return { error: "Those people no longer exist." };
+
+  const kept: { id: string; name: string; reason: string }[] = [];
+
+  const candidates = people.filter((person) => {
+    if (person.id === auth.session.profile.id) {
+      kept.push({
+        id: person.id,
+        name: person.full_name,
+        reason: "this is your own account — deleting it would lock you out",
+      });
+      return false;
+    }
+    return true;
+  });
+
+  const blockers = await blockersFor(
+    supabase,
+    candidates.map((person) => person.id),
+  );
+
+  const deletable = candidates.filter((person) => {
+    const reasons = describeBlockers(blockers.get(person.id) ?? EMPTY_BLOCKERS);
+    if (reasons.length === 0) return true;
+    kept.push({
+      id: person.id,
+      name: person.full_name,
+      reason: `the system holds ${reasons.join(", ")} — deactivate them instead`,
+    });
+    return false;
+  });
+
+  let deleted = 0;
+
+  /* -- Six at a time. Each delete is an Admin API call rather than a database
+        write, so this is NOT one transaction and does not pretend to be
+        (P19C-9): every person's outcome is reported individually, and a partial
+        run is recoverable by reading the result rather than by inspecting the
+        database. -- */
+  await inBatches(deletable, 6, async (person) => {
+    const failure = await destroyAccount(auth.session.profile.id, person);
+    if (failure) kept.push({ id: person.id, name: person.full_name, reason: failure });
+    else deleted += 1;
+  });
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+
+  const accounts = (n: number) => `${n} ${n === 1 ? "account" : "accounts"}`;
+
+  return {
+    ok: true,
+    deleted,
+    kept: kept.sort((a, b) => a.name.localeCompare(b.name)),
+    message:
+      kept.length === 0
+        ? `${accounts(deleted)} deleted.`
+        : deleted === 0
+          ? `Nothing was deleted. ${accounts(kept.length)} kept:`
+          : `${accounts(deleted)} deleted, ${kept.length} kept:`,
+  };
+}
+
+/**
+ * Switch several accounts off — or back on.
+ *
+ * THIS IS WHAT §17 ACTUALLY OFFERS, so it belongs beside the bulk delete rather
+ * than one dialog at a time. Almost everybody on a real roster is undeletable
+ * by design: `audit_log` refuses DELETE for every caller including a superuser
+ * (P4-4), so once somebody has acted their profile is permanent. Telling HR
+ * "deactivate them instead" and then leaving them to do it fifty times is the
+ * complaint that brought the bulk delete in, one step further along.
+ *
+ * Deactivation is reversible, which is why this one does not stop to confirm:
+ * the same control switches them back on.
+ */
+export async function setPeopleActive(
+  _prev: DeletePeopleState,
+  formData: FormData,
+): Promise<DeletePeopleState> {
+  const auth = await checkRole(ADMIN_ROLES);
+  if (!auth.ok) return { error: auth.error.message };
+
+  const active = String(formData.get("is_active") ?? "") === "true";
+  const ids = readProfileIds(formData).filter((id) => id !== auth.session.profile.id);
+
+  if (ids.length === 0) {
+    return {
+      error:
+        readProfileIds(formData).length === 0
+          ? "Nobody was selected."
+          : "That is your own account — deactivating it would lock you out.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  /* -- `.select()` IS THE DETECTION, not decoration. A PostgREST update that
+        matches no row is a SUCCESS with zero rows, so without this the screen
+        would report accounts switched off that RLS had refused — the silent
+        write this log has now recorded eight times (FIX-14, F15-14, 0066,
+        0069, F22-5). -- */
+  const { data: changed, error } = await supabase
+    .from("profiles")
+    .update({ is_active: active })
+    .in("id", ids)
+    .select("id, full_name");
+
+  if (error) return { error: "Could not update those accounts. Nothing was changed." };
+
+  const done = changed ?? [];
+
+  // §12: one row per person, never one carrying a list. Somebody asking why an
+  // account is switched off should find a row about that account (P14-5).
+  if (done.length > 0) {
+    await createServiceClient()
+      .from("audit_log")
+      .insert(
+        done.map((person) => ({
+          actor_id: auth.session.profile.id,
+          entity: "profile",
+          entity_id: person.id,
+          action: active ? "profile.reactivated" : "profile.deactivated",
+        })),
+      );
+  }
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+
+  const missed = ids.length - done.length;
+  const accounts = (n: number) => `${n} ${n === 1 ? "account" : "accounts"}`;
+
+  return {
+    ok: true,
+    message: `${accounts(done.length)} ${active ? "reactivated" : "deactivated"}${
+      missed > 0 ? `. ${missed} could not be changed` : ""
+    }.`,
+  };
+}
+
+/** The selection, as the dialog sends it. */
+function readProfileIds(formData: FormData): string[] {
+  try {
+    const parsed: unknown = JSON.parse(String(formData.get("ids") ?? "[]"));
+    return Array.isArray(parsed)
+      ? [...new Set(parsed.map(String).filter((id) => UUID_SHAPE.test(id)))]
+      : [];
+  } catch {
+    return [];
+  }
 }
 
 /* ---------- Bulk import ---------- */
@@ -1290,6 +1870,23 @@ export type ImportRowResult = {
    * unresolved field should not fail a row (P19B-8's reasoning).
    */
   note?: string;
+  /**
+   * The password this account was CREATED with, so HR can hand it over.
+   *
+   * ONLY WAY THEY WILL EVER SEE IT. Supabase stores a bcrypt hash and nothing
+   * else — there is no query, no screen and no admin call that returns a
+   * password, here or anywhere. Once this run is off the screen the only route
+   * back is to set a new one on the person's record.
+   *
+   * Absent on an update: the import ignores the password column for somebody
+   * who already exists (F24-9), so reporting one would be reporting a change
+   * that did not happen.
+   *
+   * Absent for a production worker: theirs is a long random string they never
+   * use, because they do not sign in (WORKER-1). Printing it would be noise
+   * beside the people who actually need one.
+   */
+  password?: string;
 };
 
 export type ImportState = {
@@ -1382,6 +1979,16 @@ export async function importUsers(
     input: CreateUserInput;
     /** Set only when their manager is another row in this file. */
     leadEmail?: string;
+    /**
+     * A field that could not be set, said in the report rather than failing the
+     * row. Currently only a manager or a second reviewer named by an address
+     * nobody has — the account is real and usable without either (P19B-8).
+     */
+    note?: string;
+    /** The same, for a second reviewer (0083). Blank for almost everybody. */
+    coEmail?: string;
+    /** What a NEW account would be created with, so the run can report it. */
+    shownPassword?: string;
   }> = [];
   const rows: ImportRowResult[] = [];
 
@@ -1412,18 +2019,54 @@ export async function importUsers(
 
           So a manager is now looked for in the database first and in this
           file second, and the commit below creates people in dependency order.
-          A name that is in neither is still refused, because that one really
-          does have to be fixed before the file can go in. -- */
+
+          A NAME IN NEITHER IS A NOTE, NOT A REFUSAL, and that changed after it
+          bit: an export naming two managers who were no longer on the system
+          failed NINE rows, and because one bad row imports nothing (P19C-8) all
+          fifty-one people were held back over nine cells. That is the wrong
+          trade. P19B-8 settled the principle for the circular case already —
+          the account is real and usable, and one unresolved field should not
+          fail a row — and an unknown manager is the same shape: the person is
+          created without one and the row says so, in the report HR is reading
+          anyway. Nothing is silent; nothing is lost. -- */
     const leadEmail = normaliseEmailCell(record.reports_to);
     const leadId = leadEmail ? profileByEmail.get(leadEmail) : "";
     const leadIsInThisFile = Boolean(leadEmail) && !leadId && emailsInThisFile.has(leadEmail);
+    const leadMissing = Boolean(leadEmail) && !leadId && !leadIsInThisFile;
 
-    if (leadEmail && !leadId && !leadIsInThisFile) {
+    /* -- THE SECOND REVIEWER (0083), on exactly the same terms as the manager
+          above: database first, this file second, and a name in neither is a
+          note rather than a refusal. It is optional for almost everybody, which
+          makes failing a whole file over one even harder to justify. -- */
+    const coEmail = normaliseEmailCell(record.second_reviewer);
+    const coId = coEmail ? profileByEmail.get(coEmail) : "";
+    const coIsInThisFile = Boolean(coEmail) && !coId && emailsInThisFile.has(coEmail);
+    const coMissing = Boolean(coEmail) && !coId && !coIsInThisFile;
+
+    /* -- REFUSED WHERE IT WOULD NOT BE A SECOND OPINION. The same two rules the
+          Settings dialog and 0084's launch both apply, said here at the moment
+          somebody can still fix the spreadsheet. Without them a file would
+          import cleanly and the launch would then ignore a second reviewer HR
+          had carefully set, with nothing on screen to explain the silence. -- */
+    /* -- Their OWN address, from the raw cell: the derived one is not built
+          until further down, and a worker's is synthesised from their employee
+          code in any case — which no second reviewer would ever be named by. -- */
+    const ownEmail = normaliseEmailCell(record.email);
+    if (coEmail && ownEmail && coEmail === ownEmail) {
       rows.push({
         line,
         name,
         ok: false,
-        error: `Nobody has the email ${record.reports_to} — not in the system, and not in this file either. Add them as a row, or leave this blank and set it afterwards.`,
+        error: `${name} cannot be their own second reviewer. Leave the column blank, or name somebody else.`,
+      });
+      return;
+    }
+    if (coEmail && leadEmail && coEmail === leadEmail) {
+      rows.push({
+        line,
+        name,
+        ok: false,
+        error: `The second reviewer has to be somebody other than their manager — this row names ${record.second_reviewer} for both. Their manager already rates them.`,
       });
       return;
     }
@@ -1499,6 +2142,11 @@ export async function importUsers(
       (track === "WORKER"
         ? `wk-${crypto.randomUUID()}${crypto.randomUUID()}`
         : defaultPasswordFor(record.full_name ?? ""));
+
+    /* -- Reported back only for somebody who signs in. A worker's is random and
+          unusable by design, and printing twenty-five of those would bury the
+          handful HR has to read out. -- */
+    const shownPassword = track === "WORKER" ? undefined : password;
 
     /* -- MONTHLY OR ANNUAL, and the database is annual (0061).
           A payroll sheet is usually monthly, and 32000 read as a year is ₹2,667
@@ -1650,6 +2298,7 @@ export async function importUsers(
       work_phone: record.work_phone ?? "",
       designation: record.designation ?? "",
       reports_to: leadId ?? "",
+      co_reviewer_id: coId ?? "",
       date_of_joining: joining,
       employment_type: (record.employment_type || "PERMANENT").toUpperCase(),
       last_increment_date: lastIncrement,
@@ -1675,11 +2324,24 @@ export async function importUsers(
 
     // `leadEmail` travels only when the manager is in this file — the commit
     // resolves it once that person exists.
+    /* -- Both halves in one sentence, because a row missing both should not
+          produce two lines HR has to read as one fact. -- */
+    const dropped = [
+      leadMissing ? `no manager — nobody has ${record.reports_to}` : null,
+      coMissing ? `no second reviewer — nobody has ${record.second_reviewer}` : null,
+    ].filter(Boolean);
+
     prepared.push({
       line,
       name,
       input: parsed.data,
       leadEmail: leadIsInThisFile ? leadEmail : undefined,
+      coEmail: coIsInThisFile ? coEmail : undefined,
+      shownPassword,
+      note:
+        dropped.length > 0
+          ? `Imported with ${dropped.join(" and ")}. Add them and re-upload, or set it on the person.`
+          : undefined,
     });
   });
 
@@ -1753,9 +2415,15 @@ export async function importUsers(
   // closure the compiler cannot prove runs after the guard.
   const actorId = auth.session.profile.id;
 
-  async function write(item: (typeof prepared)[number], leadId: string | undefined) {
+  async function write(
+    item: (typeof prepared)[number],
+    leadId: string | undefined,
+    coId: string | undefined,
+  ) {
     const already = idByEmail.get(item.input.email.toLowerCase());
-    const input = leadId ? { ...item.input, reports_to: leadId } : item.input;
+    let input = item.input;
+    if (leadId) input = { ...input, reports_to: leadId };
+    if (coId) input = { ...input, co_reviewer_id: coId };
 
     const result = already
       ? await amendPerson(already, input, actorId)
@@ -1766,7 +2434,17 @@ export async function importUsers(
       else created += 1;
       // What makes the next pass able to place their reports.
       resolved.set(item.input.email.toLowerCase(), already ?? result.profileId);
-      rows.push({ line: item.line, name: item.name, ok: true, updated: Boolean(already) });
+      rows.push({
+        line: item.line,
+        name: item.name,
+        ok: true,
+        updated: Boolean(already),
+        /* -- Only on a CREATION. An update ignores the password column
+              entirely (F24-9), so reporting one would be reporting a change
+              that did not happen. -- */
+        password: already ? undefined : item.shownPassword,
+        note: item.note,
+      });
     } else {
       rows.push({ line: item.line, name: item.name, ok: false, error: result.error });
     }
@@ -1778,14 +2456,20 @@ export async function importUsers(
     for (let i = 0; i < waiting.length; ) {
       const item = waiting[i]!;
       const leadId = item.leadEmail ? resolved.get(item.leadEmail) : undefined;
+      const coId = item.coEmail ? resolved.get(item.coEmail) : undefined;
 
-      if (item.leadEmail && !leadId) {
-        i += 1; // Their manager is not in yet. Come back to them.
+      /* -- BOTH managers, or come back to them. A second reviewer is a profile
+            id like the first, so somebody whose Design Coordinator is further
+            down this file cannot be written until that person exists — and
+            writing them early with the column blank would leave a designer on
+            the two-form flow with nothing on screen to say why. -- */
+      if ((item.leadEmail && !leadId) || (item.coEmail && !coId)) {
+        i += 1;
         continue;
       }
 
       waiting.splice(i, 1);
-      await write(item, leadId);
+      await write(item, leadId, coId);
       progress = true;
     }
   }
@@ -1796,10 +2480,19 @@ export async function importUsers(
         one field that cannot be resolved is named rather than the whole row
         being failed over it. -- */
   for (const item of waiting) {
-    await write(item, undefined);
+    /* -- Whatever DID resolve still travels: a circle in the reporting line
+          should not also cost somebody their second reviewer, which may be
+          perfectly resolvable. -- */
+    await write(
+      item,
+      item.leadEmail ? resolved.get(item.leadEmail) : undefined,
+      item.coEmail ? resolved.get(item.coEmail) : undefined,
+    );
     const row = rows.find((r) => r.line === item.line);
     if (row?.ok) {
-      row.note = `Created, but their manager could not be set — this file has them reporting to each other in a circle. Set it from Team review.`;
+      const unresolved =
+        item.leadEmail && !resolved.get(item.leadEmail) ? "manager" : "second reviewer";
+      row.note = `Created, but their ${unresolved} could not be set — this file has them naming each other in a circle. Set it from Team review.`;
     }
   }
 

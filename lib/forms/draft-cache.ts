@@ -33,7 +33,7 @@ export type CachedDraft = {
   at: number;
 };
 
-type Layer = "SELF" | "LEAD";
+type Layer = "SELF" | "LEAD" | "LEAD_2";
 
 /** Keyed by evaluation AND layer: a HOD who is also an employee has both. */
 export function draftKey(evaluationId: string, layer: Layer): string {

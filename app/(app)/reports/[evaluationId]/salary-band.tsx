@@ -205,8 +205,15 @@ export function SalaryBand({
           label="Last Increment"
           value={data.lastIncrementDate ? formatDate(data.lastIncrementDate) : "None yet"}
           hint={
+            /* -- WHY it is empty, not merely that it is (§13.4, FIX-30). A blank
+                  beside a filled Joining and Current reads as a figure that
+                  failed to load; "this would be their first" is the fact HR is
+                  actually deciding against, and it is the commonest case on a
+                  new joiner's first review. -- */
             data.monthsSinceLastIncrement === null
-              ? "No raise on record."
+              ? data.dateOfJoining
+                ? `None yet — this would be their first. They joined ${formatDate(data.dateOfJoining)}.`
+                : "No raise on record."
               : data.monthsSinceLastIncrement === 0
                 ? "This month."
                 : `${data.monthsSinceLastIncrement} month${
@@ -381,7 +388,11 @@ function HrProposal({
         A figure HR has already saved wins over the recommendation. Otherwise
         reopening the screen would quietly discard their considered number and
         put the manager's back. -- */
-  const managerPct = data.managerHikePct;
+  /* -- The SETTLED recommendation, which is the mean of the two where the
+        person has two managers (0083) and simply the manager's figure where
+        they have one. Using the lead's alone would quietly ignore half of a
+        designer's review on the one screen where the number is acted on. -- */
+  const managerPct = data.recommendedHikePct;
   const managerProposed = newCtcFromPct(data.currentCtc, managerPct);
 
   const [ctcText, setCtcText] = React.useState(
@@ -560,11 +571,31 @@ function HrProposal({
               line beneath says which it is, so the label can never claim an
               authorship the number does not have. -- */}
         <h3 className="font-sans text-body font-medium text-ink">Manager proposed salary hike</h3>
-        {data.managerHikePct !== null ? (
+        {managerPct !== null ? (
           <p className="font-sans text-body-sm text-ink-muted">
-            {pctInput.trim() !== "" && Number(pctInput) !== data.managerHikePct
-              ? `Changed from the manager's ${data.managerHikePct}%. The MD sees both.`
-              : `The manager's recommendation of ${data.managerHikePct}%.`}
+            {pctInput.trim() !== "" && Number(pctInput) !== managerPct
+              ? `Changed from ${data.recommendedIsAverage ? "the managers'" : "the manager's"} ${managerPct}%. The MD sees both.`
+              : `${data.recommendedIsAverage ? "The managers'" : "The manager's"} recommendation of ${managerPct}%.`}
+          </p>
+        ) : null}
+        {/* -- BOTH figures, named, wherever two managers were asked.
+               An average printed on its own is a number nobody can check, and
+               the two it came from are the reason a second opinion was
+               collected at all. Shown even when only one has answered, because
+               "waiting on the Design Coordinator" is exactly what HR needs to
+               know before proposing a figure. -- */}
+        {data.coManagerName !== null ? (
+          <p className="font-sans text-body-sm text-ink-muted">
+            {data.managerHikePct !== null
+              ? `Manager ${data.managerHikePct}%`
+              : "Manager — not answered"}
+            {" · "}
+            {data.coManagerHikePct !== null
+              ? `${data.coManagerName} ${data.coManagerHikePct}%`
+              : `${data.coManagerName} — not answered`}
+            {data.recommendedIsAverage
+              ? `. The average is ${data.recommendedHikePct}%.`
+              : ". Waiting on the second reviewer before an average can be taken."}
           </p>
         ) : null}
 
@@ -902,12 +933,14 @@ function MdApproval({
                     Under a saved proposal the recommendation is provenance:
                     where this figure came from, and whether it was followed.
                     Worth a line, not a card. -- */}
-              {data.managerHikePct === null ? null : (
+              {data.recommendedHikePct === null ? null : (
                 <p className="mt-1 font-sans text-body-sm text-ink-muted">
-                  They recommended {data.managerHikePct}%
+                  {data.recommendedIsAverage
+                    ? `Their two managers averaged ${data.recommendedHikePct}%`
+                    : `They recommended ${data.recommendedHikePct}%`}
                   {review.hr_proposed_hike_pct === null
                     ? "."
-                    : Math.abs(review.hr_proposed_hike_pct - data.managerHikePct) < 0.005
+                    : Math.abs(review.hr_proposed_hike_pct - data.recommendedHikePct) < 0.005
                       ? ", and that is what was set."
                       : `, and ${pctText(review.hr_proposed_hike_pct)} was set instead.`}
                 </p>

@@ -230,15 +230,31 @@ async function requireDisclosureReady(ctx: GuardContext): Promise<GuardResult> {
  * the record by claiming the other side is in.
  */
 async function requireBothLayersIn(ctx: GuardContext): Promise<GuardResult> {
-  const { self_submitted_at, lead_submitted_at } = ctx.evaluation;
-  if (self_submitted_at && lead_submitted_at) return { ok: true };
+  const { self_submitted_at, lead_submitted_at, co_lead_id, co_lead_submitted_at, co_lead_skipped } =
+    ctx.evaluation;
+
+  /* -- ALL of them, not both. A person with a second reviewer (0083) has three
+        layers, and two of three is not complete — advancing on two would send
+        HR a report missing a manager who was asked for one, and would lock the
+        third out on the way past: their layer gates on status OPEN, so their
+        form would close before they had opened it.
+
+        Written as "no outstanding layer" so somebody with one manager is
+        unaffected: the third clause is vacuously true when `co_lead_id` is
+        null, exactly as 0083's own completion trigger is. The two must agree —
+        the trigger is what actually raises the status, and a guard that
+        permitted what the trigger will not would be a button that does
+        nothing. -- */
+  const coLeadIn = !co_lead_id || Boolean(co_lead_submitted_at) || co_lead_skipped;
+  if (self_submitted_at && lead_submitted_at && coLeadIn) return { ok: true };
 
   // The message deliberately does NOT say which side is missing: this guard can
-  // be reached by the employee or the lead, and naming the other one leaks the
-  // very progress signal §5's blindness invariant exists to withhold.
+  // be reached by the employee or by either manager, and naming the outstanding
+  // one leaks the very progress signal §5's blindness invariant exists to
+  // withhold. "Everyone" rather than "both", because there may be three.
   return deny(
     "LAYERS_INCOMPLETE",
-    "Both sides have not been submitted yet. HR will review this once they are.",
+    "Not everyone has submitted yet. HR will review this once they have.",
   );
 }
 

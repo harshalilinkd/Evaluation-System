@@ -26,10 +26,23 @@ const RECIPIENT_CHOICES: Array<{
   detail: string;
   value: InviteRecipients;
 }> = [
-  { id: "both", label: "Both", detail: "The employee and their Manager", value: ["SELF", "LEAD"] },
-  { id: "self", label: "Employee only", detail: "The Manager can be sent theirs later", value: ["SELF"] },
-  { id: "lead", label: "Manager only", detail: "The employee can be sent theirs later", value: ["LEAD"] },
+  { id: "both", label: "Both", detail: "The employee and their {M}", value: ["SELF", "LEAD"] },
+  { id: "self", label: "Employee only", detail: "The {M} can be sent theirs later", value: ["SELF"] },
+  { id: "lead", label: "{M} only", detail: "The employee can be sent theirs later", value: ["LEAD"] },
 ];
+
+/**
+ * "Manager" or "managers", following who is actually in this cycle.
+ *
+ * The CHOICE does not change: a second reviewer is a manager, and one LEAD
+ * selection sends to both of them — a separate toggle would let a cycle go out
+ * to one of a designer's two managers and not the other, which is not a
+ * decision anybody would mean to take. Only the word follows the roster, so the
+ * screen stops saying "their Manager" about somebody who has two.
+ */
+function managerWord(plural: boolean): string {
+  return plural ? "Managers" : "Manager";
+}
 
 export function StepReview({
   people,
@@ -54,6 +67,8 @@ export function StepReview({
   // HR's own name for it, not the shipped default (P25).
   const departmentSection = useSectionLabel("DEPARTMENT_SPECIFIC");
   const included = people.filter((p) => state[p.id]?.included);
+  /** True when anybody in this cycle is rated by two managers (0083). */
+  const anyTwoManagers = included.some((p) => Boolean(p.coReviewerName));
   const excluded = people.filter((p) => !state[p.id]?.included);
 
   /* -- Card 1: participants per department. -- */
@@ -190,6 +205,18 @@ export function StepReview({
                   <p className="truncate text-body-sm text-ink-muted">
                     {[p.designation, p.departmentName].filter(Boolean).join(" · ") || "—"}
                   </p>
+                  {/* -- A SECOND manager changes what this launch DOES: three
+                         forms open instead of two, and the record does not reach
+                         HR until all three are in. Setting one in Settings and
+                         seeing no trace of it on the screen that launches the
+                         cycle reads as the setting not having taken — which is
+                         exactly how it was reported. -- */}
+                  {p.coReviewerName ? (
+                    <p className="truncate text-body-sm text-ink-muted">
+                      Rated by two: their manager and{" "}
+                      <span className="text-ink">{p.coReviewerName}</span>
+                    </p>
+                  ) : null}
                 </li>
               ))
             )}
@@ -198,6 +225,9 @@ export function StepReview({
           {included.length > 0 ? (
             <p className="mt-3 text-body-sm text-ink-faint">
               Last increment shown on the right. Go back to People to add or remove somebody.
+              {included.some((p) => p.coReviewerName)
+                ? " Anybody rated by two managers gets a third form, and their appraisal reaches you once all three are in."
+                : ""}
             </p>
           ) : null}
         </section>
@@ -299,10 +329,10 @@ export function StepReview({
                         chosen ? "text-primary" : "text-ink",
                       )}
                     >
-                      {choice.label}
+                      {choice.label.replace("{M}", managerWord(anyTwoManagers))}
                     </span>
                     <span className="mt-0.5 block text-body-sm text-ink-muted">
-                      {choice.detail}
+                      {choice.detail.replace("{M}", managerWord(anyTwoManagers))}
                     </span>
                   </button>
                 );

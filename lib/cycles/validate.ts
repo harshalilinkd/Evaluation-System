@@ -24,6 +24,14 @@ export type ParticipantSnapshot = {
   /** The HOD's own contact details — they are a recipient now (item 9). */
   leadEmail: string | null;
   leadPhone: string | null;
+  /* -- 0083's SECOND reviewer, read from the EVALUATEE'S PROFILE rather than
+        from the evaluation: at this point the evaluation's own `co_lead_id` is
+        still null, because copying it there is what launch DOES (0084). This is
+        the intention; the evaluation's column is the frozen record of it. -- */
+  coLeadId: string | null;
+  coLeadName: string | null;
+  coLeadEmail: string | null;
+  coLeadPhone: string | null;
 };
 
 /**
@@ -65,7 +73,9 @@ export async function loadCycleParticipants(
 
   const { data: profiles, error: profileError } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164")
+    .select(
+      "id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164, co_reviewer_id",
+    )
     .in("id", [...profileIds]);
 
   if (profileError) {
@@ -82,6 +92,12 @@ export async function loadCycleParticipants(
 
   const byProfile = new Map((profiles ?? []).map((p) => [p.id, p]));
   const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));
+
+  await addCoReviewers(
+    supabase,
+    byProfile,
+    evaluations.map((row) => byProfile.get(row.evaluatee_id)?.co_reviewer_id ?? null),
+  );
 
   const out: ParticipantSnapshot[] = [];
   for (const row of evaluations) {
@@ -109,11 +125,82 @@ export async function loadCycleParticipants(
       // person be reached" is asked of both sides (item 9).
       leadEmail: row.lead_id ? (byProfile.get(row.lead_id)?.email ?? null) : null,
       leadPhone: row.lead_id ? (byProfile.get(row.lead_id)?.phone_e164 ?? null) : null,
+      ...coLeadFields(person.co_reviewer_id, row.lead_id, row.evaluatee_id, byProfile),
     });
   }
 
   out.sort((a, b) => a.name.localeCompare(b.name));
   return { ok: true, data: out };
+}
+
+type ProfileLike = {
+  id: string;
+  full_name: string;
+  email: string | null;
+  phone_e164: string | null;
+  co_reviewer_id: string | null;
+};
+
+/**
+ * Pull in any second reviewer who is not already loaded.
+ *
+ * They are nobody's lead and need not be in this cycle at all, so the queries
+ * above cannot have asked for them — those are keyed on the evaluatees and
+ * their leads. Skipped entirely when nobody carries one, which is almost every
+ * cycle, so the ordinary path costs nothing.
+ */
+async function addCoReviewers(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  byProfile: Map<string, ProfileLike>,
+  candidates: Array<string | null>,
+): Promise<void> {
+  const missing = new Set<string>();
+  for (const id of candidates) {
+    if (id && !byProfile.has(id)) missing.add(id);
+  }
+  if (missing.size === 0) return;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select(
+      "id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164, co_reviewer_id",
+    )
+    .in("id", [...missing]);
+
+  for (const person of data ?? []) byProfile.set(person.id, person);
+}
+
+/**
+ * The second reviewer for one participant, or four nulls.
+ *
+ * REFUSED WHERE IT WOULD NOT BE A SECOND OPINION: the same person as the lead,
+ * or the evaluatee themselves. One person filling two manager forms is one
+ * opinion recorded twice, and the evaluatee filling a manager form sees both
+ * sides (§5).
+ *
+ * The identical rule is written into 0084's SQL, deliberately rather than by
+ * oversight: the screen is not a guard (§9), and if only one half had it a
+ * person would appear in the roster carrying a second reviewer that the launch
+ * then silently ignored.
+ */
+function coLeadFields(
+  coReviewerId: string | null,
+  leadId: string | null,
+  evaluateeId: string,
+  byProfile: Map<string, ProfileLike>,
+): Pick<ParticipantSnapshot, "coLeadId" | "coLeadName" | "coLeadEmail" | "coLeadPhone"> {
+  const usable =
+    coReviewerId !== null && coReviewerId !== leadId && coReviewerId !== evaluateeId;
+  if (!usable || coReviewerId === null) {
+    return { coLeadId: null, coLeadName: null, coLeadEmail: null, coLeadPhone: null };
+  }
+  const co = byProfile.get(coReviewerId);
+  return {
+    coLeadId: coReviewerId,
+    coLeadName: co?.full_name ?? null,
+    coLeadEmail: co?.email ?? null,
+    coLeadPhone: co?.phone_e164 ?? null,
+  };
 }
 
 /**
@@ -210,7 +297,9 @@ export async function readinessForRoster(
   const [{ data: profiles, error }, { data: departments }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164")
+      .select(
+      "id, full_name, employee_code, designation, department_id, track, is_active, email, phone_e164, co_reviewer_id",
+    )
       .in("id", ids),
     supabase.from("departments").select("id, name"),
   ]);
@@ -219,6 +308,12 @@ export async function readinessForRoster(
 
   const byProfile = new Map((profiles ?? []).map((p) => [p.id, p]));
   const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));
+
+  await addCoReviewers(
+    supabase,
+    byProfile,
+    roster.map((r) => byProfile.get(r.profileId)?.co_reviewer_id ?? null),
+  );
 
   const participants: ParticipantSnapshot[] = [];
   for (const row of roster) {
@@ -246,6 +341,7 @@ export async function readinessForRoster(
       phone: person.phone_e164,
       leadEmail: lead?.email ?? null,
       leadPhone: lead?.phone_e164 ?? null,
+      ...coLeadFields(person.co_reviewer_id, row.leadId, row.profileId, byProfile),
     });
   }
 
@@ -513,6 +609,28 @@ export async function assessReadiness({
       message:
         "Some HODs have neither an email address nor a phone number, so their half of the form cannot reach them.",
       subjects: [...new Set(leadUnreachable.map((p) => p.leadName ?? "Unknown"))],
+      href: "/admin/settings?tab=users",
+      hrefLabel: "Add contact details",
+    });
+  }
+
+  /* -- The SECOND reviewer, on exactly the terms the first one is on.
+        They receive a form at launch like any other manager (0084), so one who
+        cannot be reached cannot rate — and their layer is one the record now
+        WAITS for: 0083's completion rule holds the appraisal open until all
+        three are in, so an unreachable coordinator does not merely miss a
+        message, they stall the whole evaluation with nothing on screen to say
+        why. That makes it blocking for the same reason PR-9 made the HOD's
+        blocking, only more so. -- */
+  const coLeadUnreachable = participants.filter(
+    (p) => p.coLeadId && !p.coLeadEmail && !p.coLeadPhone,
+  );
+  if (coLeadUnreachable.length > 0) {
+    blocking.push({
+      code: "NO_CO_LEAD_CONTACT",
+      message:
+        "Some second reviewers have neither an email address nor a phone number, so their form cannot reach them — and the appraisal waits for it.",
+      subjects: [...new Set(coLeadUnreachable.map((p) => p.coLeadName ?? "Unknown"))],
       href: "/admin/settings?tab=users",
       hrefLabel: "Add contact details",
     });

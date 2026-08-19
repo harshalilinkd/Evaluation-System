@@ -20,7 +20,10 @@ export const emailSchema = z
  * 72 is bcrypt's ceiling — anything beyond it is silently ignored, and a
  * password that quietly loses its tail is worse than one that was refused.
  */
-/* -- SIX, NOT TEN, AT THE OWNER'S INSTRUCTION.
+/* -- WHY THERE IS A FLOOR AT ALL, AND WHY IT MOVED.
+      It was ten, then six, and is now four — each time at the owner's
+      instruction, and each time because the rule was the thing stopping the
+      plan rather than protecting anything.
       They want everybody started on `firstname123` and changed by the person
       later if they want to. Ten characters refused most of those, so the rule
       was the thing stopping the plan.
@@ -34,11 +37,10 @@ export const emailSchema = z
       reads that person's own form and nothing else. The exposure is real and
       bounded, and it is the owner's call to make.
 
-      SIX IS THE FLOOR AND NOT A PREFERENCE. Supabase Auth enforces a minimum of
-      its own — six by default — and refuses anything shorter with its own
-      message, which would arrive as a provider error rather than a field error.
-      Matching it means the form always answers first, in its own words.
-      `firstname123` clears it for any name of three letters or more.
+      THE PROVIDER HAS ITS OWN FLOOR, six by default, and this no longer
+      matches it — see `MIN_PASSWORD_LENGTH` below for what that means and where
+      it is changed. `firstname123` clears both for any name of three letters or
+      more.
 
       72 is bcrypt's ceiling — anything beyond it is silently ignored, and a
       password that quietly loses its tail is worse than one that was refused. -- */
@@ -65,9 +67,27 @@ export function defaultPasswordFor(fullName: string): string {
   return simple.length >= 6 ? simple : `${first}123456`;
 }
 
+/**
+ * The shortest password this application will accept.
+ *
+ * FOUR, AT THE OWNER'S INSTRUCTION — "4, 5, 6, 10 or more". One constant, read
+ * by the schema, by both `minLength` attributes and by every hint, so the form
+ * cannot promise a rule the server does not apply. That was a real bug once:
+ * one field said ten while the label beside it promised six.
+ *
+ * IT IS NOT THE ONLY FLOOR, AND THAT IS WORTH KNOWING BEFORE IT SURPRISES
+ * SOMEBODY. Supabase Auth enforces a minimum of its own — six by default — and
+ * refuses anything shorter itself. Lowering this alone does not lower that; the
+ * dashboard setting is Authentication → Sign In / Providers → Minimum password
+ * length. Until it is changed, a five-character password is accepted by the
+ * form and refused by the provider — so that refusal is caught and turned into
+ * a sentence naming the setting, rather than arriving as a raw provider error.
+ */
+export const MIN_PASSWORD_LENGTH = 4;
+
 export const newPasswordSchema = z
   .string()
-  .min(6, "Use at least 6 characters")
+  .min(MIN_PASSWORD_LENGTH, `Use at least ${MIN_PASSWORD_LENGTH} characters`)
   .max(72, "Use 72 characters or fewer");
 
 export const signInSchema = z.object({
@@ -221,6 +241,8 @@ export const createUserSchema = z.object({
 
   designation: z.string().trim().max(120).optional().or(z.literal("")),
   reports_to: z.string().uuid().optional().or(z.literal("")),
+  /** 0083's second reviewer. A profile id by the time it reaches here. */
+  co_reviewer_id: z.string().uuid().optional().or(z.literal("")),
   date_of_joining: z.string().optional().or(z.literal("")),
   employment_type: z.enum(["PERMANENT", "PROBATION", "CONTRACT", "TRAINEE"]).default("PERMANENT"),
   last_increment_date: z.string().optional().or(z.literal("")),

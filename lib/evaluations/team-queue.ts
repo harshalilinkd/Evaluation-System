@@ -6,8 +6,19 @@ import { createClient } from "@/lib/supabase/server";
 import type { ChipStatus } from "@/components/appraise/status-chip";
 import type { EvaluationStatus } from "@/lib/evaluations/transitions";
 
+/**
+ * Which manager the signed-in person is ON A GIVEN EVALUATION.
+ *
+ * Not a property of the person: the same HOD can be the reporting lead of one
+ * report and the SECOND reviewer of another, in the same cycle. So it is
+ * decided per row, and every read and write for that row follows it.
+ */
+export type ReviewerLayer = "LEAD" | "LEAD_2";
+
 export type TeamRow = {
   evaluationId: string;
+  /** Which of the two manager forms this row opens for this viewer. */
+  layer: ReviewerLayer;
   employeeId: string;
   name: string;
   employeeCode: string | null;
@@ -162,9 +173,15 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     // `self_submitted_at` is NOT selected. Fetching it and then not rendering
     // it would leave the leak one careless line away; not fetching it means the
     // signal is not in the process at all.
-    .select("id, evaluatee_id, status, lead_submitted_at, department_id, cycle_id")
+    .select(
+      "id, evaluatee_id, status, lead_submitted_at, co_lead_submitted_at, department_id, cycle_id, lead_id, co_lead_id",
+    )
     .in("cycle_id", cycleIds)
-    .eq("lead_id", profileId)
+    /* -- BOTH relationships. A Design Coordinator is nobody's `lead_id`, so
+          filtering on that alone showed them an empty queue while three forms
+          waited for them. `.or` rather than two queries: one round trip, and
+          one place the two conditions can be seen together. -- */
+    .or(`lead_id.eq.${profileId},co_lead_id.eq.${profileId}`)
     // §P10-6: a withdrawal is not a status. An excluded row is not work the
     // organisation is still asking for, so it leaves the queue entirely.
     .is("excluded_at", null);
@@ -211,14 +228,22 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
         A draft is answers somebody actually gave. -- */
   const { data: drafts } = await supabase
     .from("evaluation_responses")
-    .select("evaluation_id, answers")
-    .eq("layer", "LEAD")
+    .select("evaluation_id, answers, layer")
+    /* -- Both manager layers, matched per row below. Reading only LEAD would
+          report every coordinator's started review as untouched; reading them
+          together and NOT matching would report a team leader's draft as the
+          coordinator's, which is worse — it is one manager's progress shown to
+          the other (§5). -- */
+    .in("layer", ["LEAD", "LEAD_2"])
     .in("evaluation_id", rowsRaw.map((r) => r.id));
 
   const draftedIds = new Set(
     (drafts ?? [])
       .filter((d) => Object.keys((d.answers ?? {}) as Record<string, unknown>).length > 0)
-      .map((d) => d.evaluation_id),
+      // Keyed by BOTH, so a team leader's draft can never report as the
+      // coordinator's — that would be one manager's progress read off the
+      // other's screen (§5).
+      .map((d) => `${d.evaluation_id}:${d.layer}`),
   );
 
   const byPerson = new Map((people ?? []).map((p) => [p.id, p]));
@@ -235,12 +260,21 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     const rowCycle = byCycleId.get(row.cycle_id);
     const daysToLeadDue = daysUntil(rowCycle?.lead_due_on ?? null);
 
+    /* -- Which manager the viewer is HERE. The same person can be the reporting
+          lead of one report and the second reviewer of another, so this is a
+          property of the row and everything below follows it. `lead_id` wins
+          when somebody is somehow both: it is the relationship the rest of the
+          system is built around, and 0084 refuses that combination at launch in
+          any case. -- */
+    const layer: ReviewerLayer = row.lead_id === profileId ? "LEAD" : "LEAD_2";
+    const mySubmittedAt = layer === "LEAD" ? row.lead_submitted_at : row.co_lead_submitted_at;
+
     /* -- The lead's own three states, derived from their own timestamp and
           their own draft. Nothing here consults the record's status beyond
           whether the cycle is still open to them. -- */
-    const leadState: TeamRow["leadState"] = row.lead_submitted_at
+    const leadState: TeamRow["leadState"] = mySubmittedAt
       ? "submitted"
-      : draftedIds.has(row.id)
+      : draftedIds.has(`${row.id}:${layer}`)
         ? "in_progress"
         : "not_started";
 
@@ -261,6 +295,7 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
 
     return {
       evaluationId: row.id,
+      layer,
       employeeId: row.evaluatee_id,
       name: person?.full_name ?? "Unknown",
       employeeCode: person?.employee_code ?? null,
@@ -269,7 +304,7 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
       status: row.status,
       chipStatus,
       leadState,
-      leadSubmittedAt: row.lead_submitted_at,
+      leadSubmittedAt: mySubmittedAt,
       daysToLeadDue,
       isOverdue,
       isSelfLed: row.evaluatee_id === profileId,
@@ -332,7 +367,11 @@ export async function leadsAnyEvaluation(profileId: string): Promise<boolean> {
   const { data } = await supabase
     .from("evaluations")
     .select("id")
-    .eq("lead_id", profileId)
+    /* -- Both relationships, or a Design Coordinator gets no My Team link at
+          all: the queue would find their work and nothing would let them
+          reach it — the exact failure this function was written to fix, one
+          relationship later. -- */
+    .or(`lead_id.eq.${profileId},co_lead_id.eq.${profileId}`)
     .is("excluded_at", null)
     .limit(1);
   return (data ?? []).length > 0;

@@ -52,7 +52,11 @@ export type HistoryRow = Views<"v_employee_history">;
       dash and an em dash means "not rated" — which would be a lie, and a more
       confusing one than the leak. -- */
 function withoutLeadLayer(rows: HistoryRow[]): HistoryRow[] {
-  return rows.map((row) => ({ ...row, lead_overall: null }));
+  /* -- BOTH manager figures. 0087 added `manager_overall`, and it is the same
+        thing summarised one step further — the mean of what one or two managers
+        said. Stripping only the older column would have reintroduced this exact
+        leak through the new one, on the same screen, a fortnight later. -- */
+  return rows.map((row) => ({ ...row, lead_overall: null, manager_overall: null }));
 }
 
 export type DashboardAudience = "hr" | "md" | "lead" | "employee";
@@ -204,7 +208,7 @@ export async function getAnalytics(
   if (audience === "hr" || audience === "md") {
     const { data: submitted } = await supabase
       .from("evaluations")
-      .select("self_submitted_at, lead_submitted_at")
+      .select("self_submitted_at, lead_submitted_at, co_lead_submitted_at")
       .eq("cycle_id", cycle.id)
       .is("excluded_at", null);
 
@@ -220,6 +224,11 @@ export async function getAnalytics(
     for (const row of submitted ?? []) {
       bump(row.self_submitted_at, "self");
       bump(row.lead_submitted_at, "lead");
+      /* -- A second reviewer's submission is a MANAGER rating coming in, so it
+            belongs on the manager series (0083). Leaving it out would draw a
+            cycle as stalled on days when the only thing that happened was
+            twelve designers being rated. -- */
+      bump(row.co_lead_submitted_at, "lead");
     }
 
     if (perDay.size > 0) {
@@ -256,7 +265,7 @@ export async function getAnalytics(
     const today = new Date().toISOString().slice(0, 10);
     const { data: late } = await supabase
       .from("evaluations")
-      .select("id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, due_self_on, due_lead_on")
+      .select("id, evaluatee_id, department_id, status, self_submitted_at, lead_submitted_at, co_lead_id, co_lead_submitted_at, co_lead_skipped, due_self_on, due_lead_on")
       .eq("cycle_id", cycle.id)
       .is("excluded_at", null)
       // AMEND-3: OPEN is the only status with work outstanding. The two named
@@ -291,6 +300,9 @@ export async function getAnalytics(
       const lateness = (row: {
         self_submitted_at: string | null;
         lead_submitted_at: string | null;
+        co_lead_id?: string | null;
+        co_lead_submitted_at?: string | null;
+        co_lead_skipped?: boolean | null;
         due_self_on: string | null;
         due_lead_on: string | null;
       }): string | null => {
@@ -300,6 +312,15 @@ export async function getAnalytics(
           if (d) dates.push(d);
         }
         if (!row.lead_submitted_at) {
+          const d = row.due_lead_on ?? cycle.lead_due_on;
+          if (d) dates.push(d);
+        }
+        /* -- A SECOND reviewer who has not answered is a record still waiting,
+              and it would otherwise drop off the chase list entirely: with both
+              other layers in, the two clauses above find no date and the row
+              reads as nothing outstanding. They share the managers' deadline —
+              they were sent the same form on the same day. -- */
+        if (row.co_lead_id && !row.co_lead_submitted_at && !row.co_lead_skipped) {
           const d = row.due_lead_on ?? cycle.lead_due_on;
           if (d) dates.push(d);
         }
@@ -452,7 +473,10 @@ export async function getScorecard(
       .reverse()
       .find(
         (r) =>
-          r.self_overall !== null || r.lead_overall !== null || r.final_overall !== null,
+          r.self_overall !== null ||
+          r.lead_overall !== null ||
+          r.manager_overall !== null ||
+          r.final_overall !== null,
       ) ?? latest;
 
   const { data: sections } = rated

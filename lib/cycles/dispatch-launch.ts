@@ -103,14 +103,16 @@ async function sendLaunchInvites(
       .maybeSingle(),
     supabase
       .from("evaluations")
-      .select("id, evaluatee_id, lead_id, department_id, due_self_on, due_lead_on")
+      .select("id, evaluatee_id, lead_id, co_lead_id, department_id, due_self_on, due_lead_on")
       .eq("cycle_id", cycleId),
   ]);
 
   const byEvaluation = new Map((evaluations ?? []).map((e) => [e.id, e]));
   const personIds = [
     ...new Set(
-      (evaluations ?? []).flatMap((e) => [e.evaluatee_id, e.lead_id]).filter((v): v is string => Boolean(v)),
+      (evaluations ?? [])
+        .flatMap((e) => [e.evaluatee_id, e.lead_id, e.co_lead_id])
+        .filter((v): v is string => Boolean(v)),
     ),
   ];
 
@@ -201,6 +203,58 @@ async function sendLaunchInvites(
       out.sent += result.sent;
       out.failed += result.failed;
     }
+
+    /* -- The SECOND manager -- */
+    //
+    // Governed by the same `LEAD` choice as the HOD, not a third option: HR's
+    // question on the review step is "who is rated by whom in this cycle", and
+    // the second reviewer is a manager. A separate toggle would let a cycle go
+    // out to one of a designer's two managers and not the other, which is not a
+    // decision anybody would mean to take.
+    //
+    // Counted against the SAME per-HOD cap, keyed on their own id: a Design
+    // Coordinator carrying twenty designers is exactly the person the cap
+    // exists for. The remainder is left for the nightly chase, which works from
+    // each evaluation's own due date.
+    const coLead =
+      recipients.includes("LEAD") && evaluation.co_lead_id
+        ? person.get(evaluation.co_lead_id)
+        : undefined;
+    if (coLead && link.coLeadToken) {
+      const already = perLead.get(coLead.id) ?? 0;
+      if (already >= MAX_PER_LEAD_PER_LAUNCH) {
+        out.queued += 1;
+        continue;
+      }
+      perLead.set(coLead.id, already + 1);
+
+      const result = await deliverInvite({
+        evaluationId: link.evaluationId,
+        layer: "LEAD_2",
+        profileId: coLead.id,
+        person: coLead,
+        whatsappToken: link.coLeadToken,
+        // The SAME template as the HOD's. The two managers are asked for the
+        // same thing on the same form, and a second wording is a second place
+        // for the message to drift — and the one most likely to drift into
+        // saying something about the other manager (§5).
+        template: "leadReviewInvite",
+        render: (url) =>
+          leadReviewInvite({
+            leadName: coLead.full_name,
+            employeeName: person.get(evaluation.evaluatee_id)?.full_name ?? "your report",
+            department: evaluation.department_id
+              ? (departmentName.get(evaluation.department_id) ?? "their team")
+              : "their team",
+            period,
+            dueDate: formatDate(evaluation.due_lead_on),
+            link: url,
+          }),
+        context: { cycle: cycle?.name ?? "" },
+      });
+      out.sent += result.sent;
+      out.failed += result.failed;
+    }
   }
 
   return out;
@@ -232,7 +286,7 @@ function inviteLink(token: string): string {
 async function deliverInvite(opts: {
   evaluationId: string;
   /** Whose link. Decides which token is minted for the email channel. */
-  layer: "SELF" | "LEAD";
+  layer: "SELF" | "LEAD" | "LEAD_2";
   profileId: string;
   /* -- The person, not a phone and an email (0081). Both templates this sends
         are invites — somebody's own form or their team's — so both resolve to

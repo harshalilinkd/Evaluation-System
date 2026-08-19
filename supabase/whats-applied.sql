@@ -134,12 +134,31 @@ with expected(migration, kind, object_name, why_it_matters) as (values
         claim: the whole safety argument is that both are optional and blank
         falls back, so a column that existed and were NOT NULL would be a
         different migration wearing the same name. -- */
+  /* -- The second reviewer, 0082 to 0086. Each detector matches what its own
+        migration WROTE, never a token the file happens to contain — 0056
+        reported itself applied because a LIKE found three fragments that were
+        already there in three unrelated places. -- */
+  ('0087_manager_overall', 'manager_overall_fn', 'the manager_overall() function',
+     'Without it a designer''s scorecard, the Team review roster, the printed pack and the department averages all show the REPORTING LEAD''s figure alone — half their review, under a heading that says Manager. Nothing errors; the number is simply one manager short.'),
+  ('0086_cycle_progress_second_reviewer', 'progress_counts_co_lead',
+     'v_cycle_progress waits for BOTH managers',
+     'Without it a designer''s row reports its manager step complete the moment ONE of their two managers submits, so a cycle reads finishable on HR''s board while half its manager ratings are outstanding.'),
+  ('0085_second_reviewer_submits', 'transition_knows_co_lead',
+     'apply_evaluation_transition accepts a LEAD_2 submission',
+     'Without it a second reviewer fills a whole review and Submit is refused. Worse if only half-applied: the patch ALSO adds co_lead_submitted_at to the evaluation-patch whitelist, and a key that is not in that list is dropped in SILENCE — the response row would lock, the evaluation would say nothing had been submitted, and the completion rule would wait for ever.'),
+  ('0084_launch_second_reviewer', 'launch_opens_third_form',
+     'launch_cycle freezes co_lead_id and opens a LEAD_2 row',
+     'Without it, setting a second reviewer in Settings changes nothing: no third form is opened, no third token is issued, and the coordinator never hears about the cycle.'),
+  ('0083_second_reviewer', 'column', 'evaluations.co_lead_id',
+     'Without it nothing about a second reviewer exists — Settings cannot save one, and every screen that reads the column fails with "column does not exist".'),
+  ('0082_second_reviewer_enum', 'enum_value', 'rating_layer.LEAD_2',
+     'Without it 0083 cannot apply at all. An enum value cannot be added and USED in one transaction, which is why this is a migration of its own.'),
   ('0081_work_contact', 'nullable', 'profiles.work_email',
      'Without it nobody can have a second contact pair: HR''s digests and report notices go to the same number and address as her own appraisal, and Settings > Users refuses the two new fields with "column does not exist". Everything else works exactly as before — the pair is optional and blank falls back.'),
   ('0080_undo_0079_exception_splice', 'milestone_returns', 'create_milestone_evaluation reaches its RETURN',
      'Without it 0079 part 3 leaves an exception clause between the INSERT and the return, which ends the function''s block — so the snapshot, both response rows, the tokens and the RETURN all fall outside the normal path and Create and send fails with "control reached end of function without RETURN".'),
   ('0079_rolling_cycle_per_milestone', 'cycle_per_milestone', 'a rolling cycle per milestone, not one per year',
-     'Without it a person can hold only ONE milestone evaluation per financial year — the yearly cycle plus unique (cycle_id, evaluatee_id) — so their second review of the year fails with "duplicate key value violates constraint evaluations_cycle_evaluatee_unique". Under the company schedule everybody has two.'),
+     'Without it a person can hold only ONE milestone evaluation per financial year — the yearly cycle plus unique (cycle_id, evaluatee_id) — so their second review of the year fails with "duplicate key value violates constraint evaluations_cycle_evaluatee_unique". Under the company schedule everybody has two. TRUE is correct; do NOT re-run 0079 once 0080 has run. 0079 part 3 skips itself only when it finds the text "already has this review in", and removing that text is precisely what 0080 does — so a re-run re-splices the exception clause and Create and send fails again with "control reached end of function without RETURN".'),
   ('0078_due_items_second_constraint', 'one_milestone_check', 'no constraint still enumerates MONTH_1',
      'Without it every MONTH_3 and MONTH_9 is refused by 0042''s constraint, which 0076 never widened — so "Check again" errors and Evaluation Due stays empty however many people are due. 0078 also carries 0077''s fix, so it is sufficient on its own.'),
   ('0077_due_sweep_count', 'sweep_count', 'compute_due_items counts all three branches',
@@ -168,7 +187,7 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   --
   -- It now checks the CURRENT correct wording, so TRUE means right.
   ('0055→0061_salary_question_wording','question_text','the salary question asks MONTHLY',
-     'The employee is asked for a MONTHLY figure and it is banked as annual. TRUE is correct — do NOT re-run 0055, which would put the question back to annual while the ×12 conversion stayed.'),
+     'The employee is asked for a MONTHLY figure and it is banked as annual (0061 multiplies by twelve). FALSE means the question has stopped saying "monthly" — answers would then be out by a factor of twelve. TRUE is correct; do NOT re-run 0055, which would put the question back to annual while the conversion stayed.'),
   ('0056_hr_may_close_increment','hr_close_inc','HR may approve and close an INCREMENT',
      'Without it HR pressing Approve and close is refused: "You are not permitted to move this evaluation from HR_APPROVED to MD_REVIEWED".'),
   ('0040_own_current_salary',    'view',       'v_my_current_salary',
@@ -291,7 +310,17 @@ select
          where r.submitted_at is not null
            and ((r.layer = 'SELF' and e.self_submitted_at is null)
              or (r.layer = 'SUPERVISOR' and e.supervisor_submitted_at is null)))
-    when 'none' then null
+    /* -- 'none' IS GONE, and its absence is the guarantee.
+          It returned NULL — "repair, nothing to detect" — and a row that cannot
+          answer is exactly how 0058 sat on the outstanding list for three
+          sessions, reported as a gap that was not there (FIX-16). That entry
+          removed the last ROW using it and left the BRANCH, sitting where the
+          next person adding a repair migration would reach for it.
+
+          With it gone this expression is structurally incapable of returning
+          NULL, so `true` means applied and `false` means not, with no third
+          answer. A repair whose effect is undetectable is not exempt: 0058's
+          own row proves the effect is what to detect, not the running. -- */
     when 'policy' then exists (
       select 1 from pg_policies
        where schemaname = 'public' and policyname = e.object_name)
@@ -315,6 +344,36 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'handle_new_auth_user'
          and pg_get_functiondef(p.oid) like '%raw_app_meta_data%')
+    -- The VIEW's own text, not merely that a view exists: 0027 also creates a
+    -- v_cycle_progress, so `view` would be true before 0086 ran.
+    -- The FUNCTION plus the view that calls it: the function alone would be
+    -- true if somebody created it by hand, and the views are where it bites.
+    when 'manager_overall_fn' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'manager_overall')
+      and exists (
+      select 1 from pg_views
+       where schemaname = 'public' and viewname = 'v_employee_history'
+         and definition like '%manager_overall%')
+    when 'progress_counts_co_lead' then exists (
+      select 1 from pg_views
+       where schemaname = 'public' and viewname = 'v_cycle_progress'
+         and definition like '%co_lead_id IS NULL%')
+    -- The ARM the patch wrote, anchored to the lock layer it gates on. 0085
+    -- adds two things and this is the one that cannot be reached any other way.
+    when 'transition_knows_co_lead' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
+         and pg_get_functiondef(p.oid) like '%co_lead_submitted_at%'
+         and pg_get_functiondef(p.oid) like '%p_lock_layer = ''LEAD_2''%')
+    when 'launch_opens_third_form' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'launch_cycle'
+         and pg_get_functiondef(p.oid) like '%co_reviewer_id%')
+    when 'enum_value' then exists (
+      select 1 from pg_enum e2 join pg_type t on t.oid = e2.enumtypid
+       where t.typname = split_part(e.object_name, '.', 1)
+         and e2.enumlabel = split_part(e.object_name, '.', 2))
     when 'pct_required' then exists (
       select 1 from public.questions
        where id = md5('linkd.q.mgr.hike_percent')::uuid and is_required)
@@ -344,10 +403,32 @@ select
     -- a repair that would have reintroduced the ×12 error. The id deliberately
     -- still reads `..._annual` — 0061 kept it, because the STORED column is
     -- annual; only what the employee types is monthly.
+    /* -- THE WORD, NOT THE PHRASE. This matched '%monthly salary%' and went
+          FALSE against "What is your monthly Expected Salary?" — the two words
+          are no longer adjacent, so a correct database reported a problem it
+          did not have.
+
+          FIX-19 wrote this lesson down and this row still carried the fault:
+          question text is editable in the Form Builder, so any detector keyed
+          to a PHRASE breaks the first time somebody rewords the question. The
+          word is what carries the meaning, and its ABSENCE is the dangerous
+          state worth catching — 0061 multiplies the answer by twelve, so a
+          question that stops saying monthly is one whose answers are out by a
+          factor of twelve, feeding a pay decision.
+
+          Anchored to the deterministic id, as FIX-19 established (F19-8), so a
+          rename cannot move it.
+
+          NO BACKSLASH, deliberately. Postgres spells a word boundary '\m'/'\M',
+          and whether a lone backslash in a string literal survives depends on
+          standard_conforming_strings — which is one setting away from turning
+          this check into a permanent false alarm in a file people PASTE into
+          whatever console they have open. A bracket expression says the same
+          thing and cannot be misread. -- */
     when 'question_text' then exists (
       select 1 from public.questions
        where id = md5('linkd.q.salary_expectation_annual')::uuid
-         and text ilike '%monthly salary%')
+         and text ~* '(^|[^[:alpha:]])monthly([^[:alpha:]]|$)')
     -- A REGEX ANCHORED TO THE ARM, not a LIKE over the whole body.
     --
     -- This read `like '%HR_APPROVED%MD_REVIEWED%is_hr() or public.is_md()%'`,
@@ -385,10 +466,22 @@ select
                     position('returning id into v_eval' in pg_get_functiondef(p.oid))) ~* '\mreturn\M'
          and substr(pg_get_functiondef(p.oid),
                     position('returning id into v_eval' in pg_get_functiondef(p.oid))) !~* '\mexception\s+when\M')
+    /* -- TYPES, NOT THE IDENTITY STRING. This compared
+          pg_get_function_identity_arguments() against 'date, text' and could
+          NEVER be true: that function includes the parameter NAMES, so the real
+          value is 'p_on date, p_milestone text'. It reported 0079 as
+          outstanding on a database where it was fully applied — and the row's
+          own note then sent the reader to re-apply a migration that had already
+          run, whose part 3 splices an exception clause 0080 exists to remove.
+
+          Third false alarm found in this file in one sitting, and the same
+          shape each time: a detector matching a SPELLING rather than the state.
+          oidvectortypes(proargtypes) is the types alone, so renaming a
+          parameter cannot move it. -- */
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'ensure_rolling_cycle'
-         and pg_get_function_identity_arguments(p.oid) = 'date, text')
+         and oidvectortypes(p.proargtypes) = 'date, text')
     when 'one_milestone_check' then not exists (
       select 1 from pg_constraint c
        where c.contype = 'c'

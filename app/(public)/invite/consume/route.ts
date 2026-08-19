@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         // the employee's self-evaluation, where the manager is not the
         // evaluatee: the guard bounced them, and the token was already
         // spent. One tap, a dead end, and a link that cannot be retried.
-        consumed.layer === "LEAD"
+        consumed.layer === "LEAD" || consumed.layer === "LEAD_2"
         ? `/team/${consumed.evaluationId}`
         : `/my-evaluation/${consumed.evaluationId}`
       : consumed.status === "WRONG_RECIPIENT"

@@ -97,7 +97,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     supabase
       .from("profiles")
       .select(
-        "id, full_name, email, employee_code, track, phone_e164, work_email, work_phone_e164, designation, date_of_joining, department_id, reports_to, is_active, departments(name)",
+        "id, full_name, email, employee_code, track, phone_e164, work_email, work_phone_e164, designation, date_of_joining, department_id, reports_to, co_reviewer_id, is_active, departments(name)",
       )
       .order("full_name"),
     supabase.from("departments").select("id, name").eq("is_active", true).order("name"),
@@ -151,6 +151,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       department_id: p.department_id,
       reports_to: p.reports_to,
       reports_to_name: p.reports_to ? (nameById.get(p.reports_to) ?? null) : null,
+      co_reviewer_id: p.co_reviewer_id,
       employment_type: job?.employment_type ?? null,
       confirmation_date: job?.confirmation_date ?? null,
       current_ctc: job?.current_ctc ?? null,

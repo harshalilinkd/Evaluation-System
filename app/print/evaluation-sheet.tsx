@@ -13,7 +13,17 @@ import { formatDate, formatInr, formatScore } from "@/lib/utils/date";
  * That is also what makes a 47-person batch pack possible — the browser
  * receives finished HTML rather than 47 components to hydrate.
  */
+/** The first word of a name, for a 7% column. Blank falls back to "Manager". */
+function firstWord(full: string | null): string {
+  return (full ?? "").trim().split(/\s+/)[0] || "Manager";
+}
+
 export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: number }) {
+  /* -- A second manager rated this person (0083), so the sheet carries a third
+        column and a second written assessment. Null for almost everybody, and
+        the sheet is then exactly the document it has always been. -- */
+  const twoManagers = Boolean(doc.coLeadName);
+
   return (
     // Each evaluation in a pack starts on a fresh sheet. The first does not,
     // or the pack opens on a blank page.
@@ -87,7 +97,12 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
           <h2>{SECTION_LABELS.KPI}</h2>
           <table className="print-table">
             <thead>
-              <tr><th style={{ width: "50%" }}>Measure</th><th>Employee</th><th>Manager</th></tr>
+              <tr>
+                <th style={{ width: "50%" }}>Measure</th>
+                <th>Employee</th>
+                <th>{twoManagers ? firstWord(doc.leadName) : "Manager"}</th>
+                {twoManagers ? <th>{firstWord(doc.coLeadName)}</th> : null}
+              </tr>
             </thead>
             <tbody>
               {doc.kpi.map((row) => (
@@ -95,6 +110,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
                   <td>{row.question}</td>
                   <td>{row.self}</td>
                   <td>{row.lead}</td>
+                  {twoManagers ? <td>{row.coLead ?? "—"}</td> : null}
                 </tr>
               ))}
             </tbody>
@@ -112,7 +128,10 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
               <th style={{ width: "30%" }}>Criteria</th>
               <th style={{ width: "24%" }}>Description</th>
               <th style={{ width: "7%" }}>Self</th>
-              <th style={{ width: "7%" }}>Manager</th>
+              <th style={{ width: "7%" }}>{twoManagers ? firstWord(doc.leadName) : "Manager"}</th>
+              {twoManagers ? (
+                <th style={{ width: "7%" }}>{firstWord(doc.coLeadName)}</th>
+              ) : null}
               <th style={{ width: "7%" }}>Final</th>
               <th>Remarks</th>
             </tr>
@@ -129,7 +148,7 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
                       uppercase caps treatment, which turned a section name into
                       another column heading. The band is styled by its row
                       class instead of an inline colour. */}
-                  <td colSpan={7}>{section.label}</td>
+                  <td colSpan={twoManagers ? 8 : 7}>{section.label}</td>
                 </tr>
                 {section.rows.map((row) => (
                   <tr key={row.questionId}>
@@ -138,6 +157,9 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
                     <td style={{ fontSize: "8.5pt" }}>{row.helpText ?? "—"}</td>
                     <td className="print-num">{row.self ?? "—"}</td>
                     <td className="print-num">{row.lead ?? "—"}</td>
+                    {twoManagers ? (
+                      <td className="print-num">{row.coLead ?? "—"}</td>
+                    ) : null}
                     <td className="print-num"><strong>{row.final ?? "—"}</strong></td>
                     <td style={{ fontSize: "8.5pt" }}>{row.remark ?? ""}</td>
                   </tr>
@@ -174,9 +196,32 @@ export function EvaluationSheet({ doc, index }: { doc: PrintDocument; index?: nu
 
       {doc.leadNarrative.length > 0 ? (
         <div className="print-section">
-          <h2>{SECTION_LABELS.MANAGER_REVIEW}</h2>
+          <h2>
+            {SECTION_LABELS.MANAGER_REVIEW}
+            {twoManagers && doc.leadName ? ` — ${doc.leadName}` : ""}
+          </h2>
           <div className="print-narrative">
             {doc.leadNarrative.map((n) => (
+              <div key={n.heading} className="print-block">
+                <h3>{n.heading}</h3>
+                <p>{n.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* -- The SECOND manager's own written verdict, as its own section on the
+             signed sheet. Running the two together would present one assessment
+             where there are two, and they were written blind to each other —
+             which is the reason both were collected. -- */}
+      {twoManagers && doc.coLeadNarrative.length > 0 ? (
+        <div className="print-section">
+          <h2>
+            {SECTION_LABELS.MANAGER_REVIEW} — {doc.coLeadName}
+          </h2>
+          <div className="print-narrative">
+            {doc.coLeadNarrative.map((n) => (
               <div key={n.heading} className="print-block">
                 <h3>{n.heading}</h3>
                 <p>{n.body}</p>

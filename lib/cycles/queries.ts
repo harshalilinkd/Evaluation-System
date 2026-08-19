@@ -221,7 +221,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     // concatenated: supabase-js infers the row type from this string at compile
     // time and degrades everything it cannot statically parse (P3-11).
     .select(
-      "id, cycle_id, evaluatee_id, lead_id, status, self_submitted_at, lead_submitted_at",
+      "id, cycle_id, evaluatee_id, lead_id, co_lead_id, status, self_submitted_at, lead_submitted_at, co_lead_submitted_at, co_lead_skipped",
     )
     .is("excluded_at", null);
 
@@ -285,12 +285,21 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     });
     employeesIn.set(row.cycle_id, list);
 
-    if (!row.lead_id) continue;
+    /* -- Both managers, each against their OWN form. A Design Coordinator
+          carrying twelve designers is a real chase list and appeared on none
+          of them: this tally was keyed on `lead_id` alone, so their twelve
+          outstanding reviews were invisible to HR. -- */
     const perCycle = managerTally.get(row.cycle_id) ?? new Map();
-    const entry = perCycle.get(row.lead_id) ?? { done: 0, total: 0 };
-    entry.total += 1;
-    if (row.lead_submitted_at) entry.done += 1;
-    perCycle.set(row.lead_id, entry);
+    const count = (managerId: string | null, submittedAt: string | null) => {
+      if (!managerId) return;
+      const entry = perCycle.get(managerId) ?? { done: 0, total: 0 };
+      entry.total += 1;
+      if (submittedAt) entry.done += 1;
+      perCycle.set(managerId, entry);
+    };
+    count(row.lead_id, row.lead_submitted_at);
+    count(row.co_lead_id, row.co_lead_submitted_at);
+    if (!row.lead_id && !row.co_lead_id) continue;
     managerTally.set(row.cycle_id, perCycle);
   }
 
@@ -384,6 +393,10 @@ type ProgressRow = {
   status: Enums<"evaluation_status">;
   self_submitted_at: string | null;
   lead_submitted_at: string | null;
+  /** 0083. Null on the ordinary two-form flow, which is almost everybody. */
+  co_lead_id?: string | null;
+  co_lead_submitted_at?: string | null;
+  co_lead_skipped?: boolean | null;
 };
 
 const PAST_OPEN: ReadonlyArray<Enums<"evaluation_status">> = [
@@ -393,8 +406,24 @@ const PAST_OPEN: ReadonlyArray<Enums<"evaluation_status">> = [
 function reachedSelf(row: ProgressRow) {
   return row.self_submitted_at !== null || PAST_OPEN.includes(row.status);
 }
+/**
+ * The MANAGER side of one person's appraisal, complete.
+ *
+ * Complete means every manager who was asked, which for somebody with a second
+ * reviewer (0083) is two. Counting the reporting lead alone would report a
+ * designer as fully rated while one of their two managers had not started —
+ * and the bar on HR's board is the one number that says whether a cycle can be
+ * closed.
+ *
+ * The columns are per-PERSON out of the participant total, so this stays a
+ * yes/no about that person rather than becoming a count of forms. A skipped
+ * second opinion is done, exactly as a skipped first one is (§8).
+ */
 function reachedLead(row: ProgressRow) {
-  return row.lead_submitted_at !== null || PAST_OPEN.includes(row.status);
+  if (PAST_OPEN.includes(row.status)) return true;
+  if (row.lead_submitted_at === null) return false;
+  if (!row.co_lead_id) return true;
+  return row.co_lead_submitted_at !== null || Boolean(row.co_lead_skipped);
 }
 function reachedFinal(row: ProgressRow) {
   return ["MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"].includes(row.status);
@@ -424,6 +453,15 @@ export type SelectablePerson = {
   lastEvaluationOn: string | null;
   lastIncrementOn: string | null;
   nextIncrementOn: string | null;
+
+  /* -- A SECOND manager, where this person has one (0083).
+        Carried into the wizard because HR is deciding who to launch and who
+        gets messaged, and a designer rated by two people is a materially
+        different launch: three forms open, and the record does not reach HR
+        until all three are in. Setting it in Settings and seeing no trace of
+        it here reads as the setting not having taken. -- */
+  coReviewerId: string | null;
+  coReviewerName: string | null;
 };
 
 /**
@@ -439,7 +477,9 @@ export async function listStaffProfiles(): Promise<CycleResult<SelectablePerson[
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, designation, department_id, reports_to, email, phone_e164")
+    .select(
+      "id, full_name, employee_code, designation, department_id, reports_to, co_reviewer_id, email, phone_e164",
+    )
     .eq("is_active", true)
     .eq("track", "STAFF")
     .order("full_name");
@@ -489,6 +529,9 @@ export async function listStaffProfiles(): Promise<CycleResult<SelectablePerson[
     }
   }
 
+  // Names for the second-reviewer lookup below. Built once rather than per row.
+  const nameById = new Map((data ?? []).map((p) => [p.id, p.full_name] as const));
+
   return {
     ok: true,
     data: (data ?? []).map((p) => {
@@ -507,6 +550,11 @@ export async function listStaffProfiles(): Promise<CycleResult<SelectablePerson[
         lastEvaluationOn: lastEvaluationBy.get(p.id) ?? null,
         lastIncrementOn: job?.last_increment_date ?? null,
         nextIncrementOn: job?.next_increment_date ?? null,
+        coReviewerId: p.co_reviewer_id,
+        /* Resolved from this same list, which is every active STAFF profile —
+           so a second reviewer who is themselves inactive shows as unset rather
+           than as a name nobody can be sent a form. */
+        coReviewerName: p.co_reviewer_id ? (nameById.get(p.co_reviewer_id) ?? null) : null,
       };
     }),
   };
@@ -585,7 +633,7 @@ export async function getCycleBoard(cycleId: string): Promise<CycleResult<CycleB
 
   const { data: evaluations, error: evaluationError } = await supabase
     .from("evaluations")
-    .select("id, evaluatee_id, lead_id, department_id, status, updated_at, self_submitted_at, lead_submitted_at, md_finalized_at, excluded_at, excluded_reason, self_skipped, lead_skipped, due_self_on, due_lead_on")
+    .select("id, evaluatee_id, lead_id, co_lead_id, department_id, status, updated_at, self_submitted_at, lead_submitted_at, co_lead_submitted_at, md_finalized_at, excluded_at, excluded_reason, self_skipped, lead_skipped, co_lead_skipped, due_self_on, due_lead_on")
     .eq("cycle_id", cycleId);
 
   if (evaluationError) {

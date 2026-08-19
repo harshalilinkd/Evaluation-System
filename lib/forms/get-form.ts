@@ -90,7 +90,7 @@ export async function getEvaluationForm(
     supabase
       .from("evaluations")
       .select(
-        "id, status, track, excluded_at, self_submitted_at, lead_submitted_at, self_skipped, lead_skipped",
+        "id, status, track, excluded_at, self_submitted_at, lead_submitted_at, co_lead_submitted_at, self_skipped, lead_skipped, co_lead_skipped",
       )
       .eq("id", evaluationId)
       .maybeSingle(),
@@ -218,6 +218,8 @@ export async function getEvaluationForm(
       : layer === "SELF" && evaluation.self_skipped
         ? "HR marked this side of the appraisal as not required, so it can no longer be edited."
         : layer === "LEAD" && evaluation.lead_skipped
+          ? "HR marked this side of the appraisal as not required, so it can no longer be edited."
+          : layer === "LEAD_2" && evaluation.co_lead_skipped
           ? "HR marked this side of the appraisal as not required, so it can no longer be edited."
           : response?.submitted_at != null
             ? null // Submitted is its own state, already handled by `isSubmitted`.

@@ -40,6 +40,12 @@ export type LaunchPayloadItem = {
   channel: string;
   self_token_hash: string;
   lead_token_hash: string | null;
+  /* -- The SECOND manager's link, where the evaluatee carries one (0083/0084).
+        Its own token, not a copy of the lead's: §10 scopes a token to
+        (evaluation, LAYER, channel), so reusing the lead's would open the LEAD
+        form for the coordinator — not a wrong page but a blindness breach
+        (F12-2 made the same point about the email link). -- */
+  co_lead_token_hash: string | null;
 };
 
 /** The plaintext links, kept beside the payload and never sent to SQL. */
@@ -48,6 +54,8 @@ export type LaunchLink = {
   selfToken: string;
   /** Null when the evaluation has no lead — the launch will refuse it anyway. */
   leadToken: string | null;
+  /** Null for almost everybody: only a person with a second reviewer has one. */
+  coLeadToken: string | null;
 };
 
 export type LaunchPlan = {
@@ -152,6 +160,12 @@ export async function buildLaunchPlan(
 
     const selfToken = generateToken();
     const leadToken = person.leadId ? generateToken() : null;
+    // Minted here even though 0084 decides whether it is USED: the plaintext
+    // must never enter the payload (PR-6), so it has to be generated on this
+    // side of the call whatever SQL then does with the hash. An unused token
+    // is one unread row; the alternative is returning a live secret from a
+    // function, and from there into anything that logs a result set.
+    const coLeadToken = person.coLeadId ? generateToken() : null;
 
     payload.push({
       evaluation_id: person.evaluationId,
@@ -159,8 +173,9 @@ export async function buildLaunchPlan(
       channel: "WHATSAPP",
       self_token_hash: hashToken(selfToken),
       lead_token_hash: leadToken ? hashToken(leadToken) : null,
+      co_lead_token_hash: coLeadToken ? hashToken(coLeadToken) : null,
     });
-    links.push({ evaluationId: person.evaluationId, selfToken, leadToken });
+    links.push({ evaluationId: person.evaluationId, selfToken, leadToken, coLeadToken });
     totalQuestions += rows.length;
   }
 

@@ -1,5 +1,10 @@
 /** CSV parsing for the bulk employee import. Pure — no I/O, no server imports. */
 
+/* -- The hint below states the rule the schema actually applies, rather than a
+      number typed twice. `schemas.ts` is pure as well, so this stays a pure
+      module. -- */
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/schemas";
+
 /**
  * A small RFC 4180 reader.
  *
@@ -113,7 +118,11 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         Production Team row may leave it blank. That rule lives in the row
         validation, because it depends on the track. -- */
   { key: "email", header: "email", hint: "blank for Production Team — they never sign in" },
-  { key: "password", header: "password", hint: "6+ characters — blank is fine for Production Team" },
+  {
+    key: "password",
+    header: "password",
+    hint: `${MIN_PASSWORD_LENGTH}+ characters. Blank gives firstname123 — either way the import shows you what each person got, once.`,
+  },
   /* -- §7: which MODULE somebody is in. Independent of department, because both
         modules have people in the same teams. Blank means Backend Team, so a
         file written before this column existed still imports as it did. -- */
@@ -126,13 +135,34 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         appraisal and their team's reach the personal details above, and the
         administrative messages come here instead. Blank falls back, so a file
         written before these columns existed imports exactly as it did. -- */
-  { key: "work_email", header: "work_email", hint: "optional — HR/management only" },
-  { key: "work_phone", header: "work_phone", hint: "optional — HR/management only" },
+  {
+    key: "work_email",
+    header: "work_email",
+    hint: "official address — optional, blank falls back to the personal one above",
+  },
+  {
+    key: "work_phone",
+    header: "work_phone",
+    hint: "official mobile — optional, blank falls back to the personal one above",
+  },
   { key: "designation", header: "designation", hint: "Senior Designer" },
   /* -- THE EMAIL, never the name. Two people can share a name; an email is what
         the account is keyed on, and it is the only manager identifier a
         spreadsheet reliably carries (P19C-14). -- */
   { key: "reports_to", header: "reports_to", hint: "their manager's EMAIL, not their name" },
+  /* -- A SECOND manager, for the few people who genuinely have two (0083).
+        Blank for almost everybody, and blank means the ordinary two-form flow —
+        so a file written before this column existed imports exactly as it did.
+
+        By EMAIL, for the same reason `reports_to` is: two people can share a
+        name, and an email is what the account is keyed on (P19C-14). Resolved
+        against the database AND against this file, so an org chart that names
+        the Design Coordinator four rows down still works (FIX-56). -- */
+  {
+    key: "second_reviewer",
+    header: "second_reviewer",
+    hint: "a SECOND manager's EMAIL — blank for almost everybody",
+  },
   /* -- THE HINT SAID "Manager", AND THAT VALUE DOES NOT EXIST.
         `roles` is filtered against ROLE_VALUES and anything unrecognised is
         dropped — so somebody following this hint got a person with EMPLOYEE
@@ -195,6 +225,18 @@ export function importTemplate(): string {
         default, so the examples say out loud what a blank column would have
         meant anyway — nobody has to infer it from the hint. -- */
   const rows = [
+    /* -- ONE CELL PER COLUMN, and that had drifted.
+          Both rows were missing `work_email` and `work_phone`, and the second
+          was missing `roles` as well — so every value after `phone` was emitted
+          one or two columns to the LEFT. "Senior Designer" landed in
+          work_email, the joining date in the column beside it, and anybody who
+          filled this template in got a file the importer read as nonsense.
+
+          It fails SILENTLY, which is why it survived: a short row is not a
+          parse error, it is a row whose later fields are blank and whose
+          earlier ones are in the wrong place. The suite counts cells against
+          columns now, and reads the template back through the reader rather
+          than trusting the count. -- */
     [
       "Priya Sharma",
       "priya@linkdprints.com",
@@ -203,19 +245,22 @@ export function importTemplate(): string {
       "LP-014",
       "Design",
       "9876543210",
+      "", // work_email — optional, blank falls back to the personal one
+      "", // work_phone — the same
       "Senior Designer",
       "", // reports_to — blank here, since the manager may not exist yet
-      "",
+      "", // second_reviewer — blank: only a Designer-shaped role has two
+      "", // roles — blank for most people
       "01-04-2022",
       "PERMANENT",
       "01-04-2025",
       "12",
       "MONTHLY",
-      // Per month, matching the unit beside them. 40000 → 4,80,000 a year.
+      // Per month, matching the unit beside them. 40000 -> 4,80,000 a year.
       "33000",
       "40000",
       "7000",
-      // Two earlier rises: 33,000 → 36,000 → 40,000, the last of which is the
+      // Two earlier rises: 33,000 -> 36,000 -> 40,000, the last of which is the
       // `last_increment_*` pair above. The three agree, which is the point.
       "01-04-2024",
       "3000",
@@ -230,9 +275,12 @@ export function importTemplate(): string {
       "PR-08", // required when the email is blank: the account is keyed on it
       "Fusing",
       "9137689996",
+      "", // work_email
+      "", // work_phone
       "Helper",
       "supervisor@linkdprints.com", // who rates them
-      "",
+      "", // second_reviewer
+      "", // roles
       "01-01-2021",
       "PERMANENT",
       "01-02-2025",
@@ -241,9 +289,6 @@ export function importTemplate(): string {
       "15000",
       "22000",
       "5000",
-      // One earlier rise: 15,000 → 17,000 → 22,000. Left deliberately shorter
-      // than the row above, so the columns read as optional rather than as a
-      // set that has to be filled.
       "01-02-2023",
       "2000",
       "",

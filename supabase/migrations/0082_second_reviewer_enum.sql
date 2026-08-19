@@ -1,0 +1,30 @@
+-- 0082 · A second manager layer. THE ENUM VALUE ONLY.
+--
+-- Split from 0083 because `alter type ... add value` cannot be USED in the
+-- transaction that adds it — the same split AMEND-3 needed for 0020/0021, and
+-- the reason a one-file version of this would fail at the first policy that
+-- mentions the new value.
+--
+-- WHY A LAYER AND NOT A SECOND EVALUATION ROW.
+--
+-- Designers are to be rated by two managers independently: their Team Leader
+-- and their Design Coordinator. The obvious shape is a second `evaluations`
+-- row, and it is the wrong one:
+--
+--   · `evaluations` is one row per person per cycle, and every count in the
+--     product leans on that — `v_cycle_progress`, the cycle board, the roster,
+--     the dashboards, the queue, the print pack. Two rows doubles all of them.
+--   · The SELF layer would exist twice, and there is one self-evaluation.
+--   · `evaluation_responses` is unique on (evaluation_id, layer), which is
+--     exactly the key a second layer fits. Nothing about §5's snapshot, the
+--     blindness invariant or §8's machine keys on the reviewer.
+--
+-- So the second manager is a LAYER on the same evaluation, and the layer's own
+-- timestamp says whether they have submitted — the shape §8 already uses.
+--
+-- 'LEAD_2' rather than 'COORDINATOR': the value outlives the job title that
+-- prompted it (§0.2 freezes an enum value once created, and A3-4 records what
+-- it costs to retire one). It says "the second manager layer", which is what it
+-- will still mean if the roles are ever renamed.
+
+alter type public.rating_layer add value if not exists 'LEAD_2';

@@ -5,6 +5,7 @@ import "server-only";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { buildPrintDocument, type PrintDocument } from "@/lib/print/document";
 import { createClient } from "@/lib/supabase/server";
+import { managerFigure, managerOverallByEvaluation } from "@/lib/evaluations/manager-overall";
 
 export type SummaryRow = {
   evaluationId: string;
@@ -107,6 +108,10 @@ export async function buildBatchPack(
     .select("evaluation_id, promotion_recommendation, increment_type, increment_pct")
     .in("evaluation_id", rows.length > 0 ? rows.map((r) => r.id) : ["00000000-0000-0000-0000-000000000000"]);
 
+  // One read for the whole pack, beside the other three. Forty-seven RPC calls
+  // is what P15-5 capped concurrency to avoid.
+  const managerOveralls = await managerOverallByEvaluation(supabase, rows.map((r) => r.id));
+
   const nameOf = new Map((people ?? []).map((p) => [p.id, p]));
   const deptName = new Map((departments ?? []).map((d) => [d.id, d.name]));
   const decisionOf = new Map((decisions ?? []).map((d) => [d.evaluation_id, d]));
@@ -121,7 +126,10 @@ export async function buildBatchPack(
         employeeCode: person?.employee_code ?? null,
         department: row.department_id ? (deptName.get(row.department_id) ?? "—") : "—",
         self: row.self_overall,
-        lead: row.lead_overall,
+        // The MANAGER figure (0087): for a designer, both of their managers.
+        // A summary sheet showing half a review is worse than one showing none,
+        // because nothing about it says a figure is missing.
+        lead: managerFigure(row.id, row.lead_overall, managerOveralls),
         final: row.final_overall,
         promotion: decision?.promotion_recommendation ?? null,
         incrementPct: decision?.increment_pct ?? null,

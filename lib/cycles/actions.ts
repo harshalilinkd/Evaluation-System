@@ -944,7 +944,7 @@ export async function advanceWithoutOneSide(
   const supabase = await createClient();
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, self_submitted_at, lead_submitted_at, status")
+    .select("id, self_submitted_at, lead_submitted_at, co_lead_id, co_lead_submitted_at, status")
     .eq("id", evaluationId)
     .maybeSingle();
 
@@ -952,10 +952,15 @@ export async function advanceWithoutOneSide(
   if (evaluation.status !== "OPEN") {
     return cycleError("WRONG_STATUS", "This evaluation has already moved on.");
   }
-  if (evaluation.self_submitted_at && evaluation.lead_submitted_at) {
+  /* -- "Everyone", not "both": a person with a second reviewer has three
+        layers (0083). Reading this as two would offer HR a Skip on a record
+        where nothing is actually missing — and, worse, the transition would
+        then mark a submitted third layer as skipped on the way past. -- */
+  const coLeadIn = !evaluation.co_lead_id || Boolean(evaluation.co_lead_submitted_at);
+  if (evaluation.self_submitted_at && evaluation.lead_submitted_at && coLeadIn) {
     return cycleError(
       "NOTHING_MISSING",
-      "Both sides are in. This will move to your review on its own.",
+      "Everyone has submitted. This will move to your review on its own.",
     );
   }
 
@@ -968,6 +973,10 @@ export async function advanceWithoutOneSide(
     skip: {
       self: !evaluation.self_submitted_at,
       lead: !evaluation.lead_submitted_at,
+      // Only where there IS a second reviewer. Marking a layer nobody was
+      // asked for as "skipped" would record an intervention that never
+      // happened, on the table §12 exists to keep honest.
+      coLead: Boolean(evaluation.co_lead_id) && !evaluation.co_lead_submitted_at,
     },
   });
 

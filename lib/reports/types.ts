@@ -15,6 +15,13 @@ export type ReportHeader = {
   designation: string | null;
   dateOfJoining: string | null;
   leadName: string | null;
+  /**
+   * The SECOND manager, where the person has one (0083).
+   *
+   * Null is the signal every consumer branches on: no name, no third column,
+   * and the report is exactly the two-column document it has always been.
+   */
+  coLeadName: string | null;
   cycleName: string;
   cycleType: string;
   period: string;
@@ -26,6 +33,12 @@ export type SectionAverages = {
   label: string;
   self: number | null;
   lead: number | null;
+  /**
+   * The SECOND manager, where the person has one (0083). Null for everybody
+   * else, and every consumer renders the column only when the report says
+   * there IS a second manager — so an ordinary report is unchanged.
+   */
+  coLead: number | null;
   gap: number | null;
 };
 
@@ -42,7 +55,18 @@ export type ReportSummary = {
    * set it.
    */
   finalOverall: number | null;
-  /** Lead − Self. §11: a reporting figure, visible to HR and the MD alone. */
+  /** The second manager's overall, where there is one (0083). */
+  coLeadOverall: number | null;
+  /**
+   * Lead − Self. §11: a reporting figure, visible to HR and the MD alone.
+   *
+   * Still measured against the REPORTING lead even where there are two
+   * managers, and deliberately: §11 defines the gap that way, the threshold and
+   * the flags are calibrated to it, and quietly re-defining it as
+   * "average-of-managers − self" would change every flag in the system for one
+   * team without anybody asking for it. The second manager's own difference is
+   * visible beside it in the columns.
+   */
   overallGap: number | null;
   flaggedCount: number;
   sections: SectionAverages[];
@@ -59,6 +83,8 @@ export type ReportRow = {
   /** Rendered for a human — "4 · Effective (Exceeds objective)", "Yes", a date. */
   selfAnswer: string | null;
   leadAnswer: string | null;
+  /** The second manager's answer, where there is one. */
+  coLeadAnswer: string | null;
   /** Numeric only where both sides are scored. Lead − Self. */
   gap: number | null;
   flag: FlagLevel;
@@ -78,6 +104,8 @@ export type NarrativePair = {
   selfAnswer: string | null;
   leadQuestion: string | null;
   leadAnswer: string | null;
+  /** The SECOND manager's answer to the lead's question, where there is one. */
+  coLeadAnswer: string | null;
 };
 
 export type NarrativeBlock = {
@@ -92,6 +120,16 @@ export type ReportNarratives = {
   employeeVoice: NarrativeBlock[];
   /** Band 5 — everything else the lead wrote, in form order. */
   leadAssessment: NarrativeBlock[];
+  /**
+   * Band 5, again, for a SECOND manager (0083).
+   *
+   * Its own band rather than merged into the one above, and that is the point
+   * of collecting two opinions: the two managers write blind to each other, so
+   * running their prose together would present one verdict where there are two
+   * and leave the reader unable to tell who said what. Empty for almost
+   * everybody, and the screen draws nothing when it is.
+   */
+  coLeadAssessment: NarrativeBlock[];
 };
 
 export type ReportMeta = {

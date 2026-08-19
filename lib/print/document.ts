@@ -8,6 +8,7 @@ import { getEvaluationForm } from "@/lib/forms/get-form";
 import { DEPARTMENT_SECTION, SECTION_LABELS, sectionRank } from "@/lib/forms/labels";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
+import { managerFigure, managerOverallByEvaluation } from "@/lib/evaluations/manager-overall";
 
 /**
  * WHO IS THIS COPY FOR?
@@ -33,6 +34,8 @@ export type PrintRatingRow = {
   sectionLabel: string;
   self: number | null;
   lead: number | null;
+  /** The SECOND manager's score, where the person has two (0083). */
+  coLead: number | null;
   final: number | null;
   /** The lead's per-question comment. Absent on an employee copy below FULL. */
   remark: string | null;
@@ -61,7 +64,10 @@ export type PrintDocument = {
   /** §6's fixed wording, printed on the document itself. */
   scaleLegend: Array<{ value: number; label: string }>;
 
-  kpi: Array<{ question: string; self: string; lead: string }>;
+  kpi: Array<{ question: string; self: string; lead: string; coLead: string | null }>;
+  /** Named on the sheet, so two manager columns can be told apart. */
+  leadName: string | null;
+  coLeadName: string | null;
   ratings: PrintRatingRow[];
   sections: Array<{ section: Enums<"question_section">; label: string; rows: PrintRatingRow[] }>;
   finalAverage: number | null;
@@ -70,6 +76,8 @@ export type PrintDocument = {
 
   employeeNarrative: PrintNarrative[];
   leadNarrative: PrintNarrative[];
+  /** The second manager's own written verdict. Empty for almost everybody. */
+  coLeadNarrative: PrintNarrative[];
 
   decision: {
     promotion: string | null;
@@ -103,17 +111,31 @@ export async function buildPrintDocument(
 
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, status, evaluatee_id, lead_id, department_id, cycle_id, self_overall, lead_overall, final_overall, md_finalized_at")
+    .select("id, status, evaluatee_id, lead_id, co_lead_id, department_id, cycle_id, self_overall, lead_overall, final_overall, md_finalized_at")
     .eq("id", evaluationId)
     .maybeSingle();
 
   if (!evaluation) return cycleError("NOT_FOUND", "That evaluation no longer exists.");
 
-  const [selfForm, leadForm, mdForm] = await Promise.all([
+  const [selfForm, leadForm, mdForm, coLeadFormRaw, managerOveralls] = await Promise.all([
     getEvaluationForm(evaluationId, "SELF"),
     getEvaluationForm(evaluationId, "LEAD"),
     getEvaluationForm(evaluationId, "MD"),
+    /* -- The SECOND manager's layer, only where there is one. A signed sheet
+          that omits a manager who rated this person is not the record of the
+          appraisal — and the report already shows both, so the printout would
+          disagree with the screen it was printed from. -- */
+    evaluation.co_lead_id
+      ? getEvaluationForm(evaluationId, "LEAD_2")
+      : Promise.resolve(null),
+    // Issued with the three forms rather than after them: this sheet already
+    // costs five round trips and the batch pack builds forty-seven of them.
+    managerOverallByEvaluation(supabase, [evaluationId]),
   ]);
+
+  // Null unless this person carries a second reviewer, which is what every
+  // branch below reads.
+  const coLeadData = coLeadFormRaw !== null && coLeadFormRaw.ok ? coLeadFormRaw.data : null;
 
   if (!selfForm.ok) return cycleError(selfForm.error.code, selfForm.error.message);
   if (!leadForm.ok) return cycleError(leadForm.error.code, leadForm.error.message);
@@ -127,7 +149,12 @@ export async function buildPrintDocument(
   const { data: people } = await supabase
     .from("profiles")
     .select("id, full_name, employee_code, designation, date_of_joining")
-    .in("id", [evaluation.evaluatee_id, evaluation.lead_id].filter((v): v is string => Boolean(v)));
+    .in(
+      "id",
+      [evaluation.evaluatee_id, evaluation.lead_id, evaluation.co_lead_id].filter(
+        (v): v is string => Boolean(v),
+      ),
+    );
 
   const { data: department } = evaluation.department_id
     ? await supabase.from("departments").select("name").eq("id", evaluation.department_id).maybeSingle()
@@ -141,6 +168,7 @@ export async function buildPrintDocument(
 
   const employee = (people ?? []).find((p) => p.id === evaluation.evaluatee_id);
   const lead = (people ?? []).find((p) => p.id === evaluation.lead_id);
+  const coLead = (people ?? []).find((p) => p.id === evaluation.co_lead_id);
   const disclosure = cycle?.disclosure ?? "SCORE_AND_DECISION";
 
   /* -- §9: what an employee copy may carry -- */
@@ -169,6 +197,7 @@ export async function buildPrintDocument(
         : SECTION_LABELS[q.section],
     self: toScore(selfForm.data.answers[q.questionId]),
     lead: toScore(leadForm.data.answers[q.questionId]),
+    coLead: coLeadData ? toScore(coLeadData.answers[q.questionId]) : null,
     // The MD layer holds an explicit value for every scored question once
     // finalised (§11, P14-2), so this is a read, not a fallback chain.
     final: mdForm.ok ? toScore(mdForm.data.answers[q.questionId]) : null,
@@ -198,6 +227,7 @@ export async function buildPrintDocument(
       question: q.text,
       self: display(selfForm.data.answers[q.questionId]),
       lead: display(leadForm.data.answers[q.questionId]),
+      coLead: coLeadData ? display(coLeadData.answers[q.questionId]) : null,
     }));
 
   /* -- Narrative blocks, printed in full -- */
@@ -222,6 +252,13 @@ export async function buildPrintDocument(
   const leadNarrative = redacted
     ? []
     : narrativeOf(leadForm.data, (section) => section === "MANAGER_REVIEW");
+
+  /* -- Withheld on an employee copy for exactly the reason the lead's is
+        (§9, P15-8): it is a manager's raw written remarks. -- */
+  const coLeadNarrative =
+    redacted || !coLeadData
+      ? []
+      : narrativeOf(coLeadData, (section) => section === "MANAGER_REVIEW");
 
   const finals = ratings.map((r) => r.final).filter((v): v is number => v !== null);
 
@@ -252,9 +289,14 @@ export async function buildPrintDocument(
         evaluation.final_overall ??
         (finals.length === 0 ? null : Math.round((finals.reduce((a, b) => a + b, 0) / finals.length) * 100) / 100),
       selfAverage: evaluation.self_overall,
-      leadAverage: evaluation.lead_overall,
+      // The MANAGER figure (0087). A signed record is the last place to show
+      // one of two managers' averages under a heading that says "Manager".
+      leadAverage: managerFigure(evaluation.id, evaluation.lead_overall, managerOveralls),
+      leadName: lead?.full_name ?? null,
+      coLeadName: coLead?.full_name ?? null,
       employeeNarrative,
       leadNarrative,
+      coLeadNarrative,
       decision: decision
         ? {
             promotion: decision.promotion_recommendation,

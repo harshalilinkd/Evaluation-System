@@ -185,5 +185,8 @@ export type FormDefinition = {
 export const LAYER_ANSWERED_BY: Record<RatingLayer, readonly AnsweredBy[]> = {
   SELF: ["EMPLOYEE_AND_LEAD", "EMPLOYEE_ONLY"],
   LEAD: ["EMPLOYEE_AND_LEAD", "LEAD_ONLY"],
+  // The second reviewer answers the SAME manager form. Anything else would make
+  // the two managers' answers incomparable, and comparing them is the point.
+  LEAD_2: ["EMPLOYEE_AND_LEAD", "LEAD_ONLY"],
   MD: ["EMPLOYEE_AND_LEAD", "LEAD_ONLY", "MD_ONLY"],
 } as const;

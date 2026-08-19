@@ -105,6 +105,8 @@ export type EvaluationAccess = GuardedSession & {
     status: string;
     evaluatee_id: string;
     lead_id: string | null;
+    /** 0083's second reviewer. Null on the ordinary two-form flow. */
+    co_lead_id: string | null;
     cycle_id: string;
     track: string;
     // AMEND-3: a screen must be able to tell whether ITS OWN layer is locked
@@ -113,6 +115,7 @@ export type EvaluationAccess = GuardedSession & {
     // both, and RLS is what stops anybody else acting on the other one.
     self_submitted_at: string | null;
     lead_submitted_at: string | null;
+    co_lead_submitted_at: string | null;
   };
 };
 
@@ -140,7 +143,9 @@ export async function requireEvaluationAccess(
     // AMEND-3: the two layer timestamps come back too. A screen must be able
     // to tell whether ITS OWN layer is locked without consulting the status,
     // because §8 stopped the status carrying that.
-    .select("id, status, evaluatee_id, lead_id, cycle_id, track, self_submitted_at, lead_submitted_at")
+    .select(
+      "id, status, evaluatee_id, lead_id, co_lead_id, cycle_id, track, self_submitted_at, lead_submitted_at, co_lead_submitted_at",
+    )
     .eq("id", evaluationId)
     .maybeSingle();
 
@@ -152,15 +157,21 @@ export async function requireEvaluationAccess(
   const isMd = session.roles.includes("MD");
   const isEvaluatee = evaluation.evaluatee_id === session.profile.id;
   const isLead = evaluation.lead_id === session.profile.id;
+  /* -- 0083's second manager. Admitted by the SAME action as the lead, because
+        they are doing the same thing: rating this person on the same form. A
+        separate action would mean every caller deciding which of two to ask
+        for, and the one that guessed wrong would send a legitimate reviewer to
+        ?error=forbidden. -- */
+  const isCoLead = evaluation.co_lead_id === session.profile.id;
 
   const permitted = (() => {
     switch (action) {
       case "view":
-        return isEvaluatee || isLead || isHr || isMd;
+        return isEvaluatee || isLead || isCoLead || isHr || isMd;
       case "self":
         return isEvaluatee;
       case "lead":
-        return isLead;
+        return isLead || isCoLead;
       case "md":
       case "decide":
         // AMEND-2 REVERSED the 0012 merge. The MD's review and the MD's layer

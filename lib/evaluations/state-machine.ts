@@ -50,7 +50,8 @@ export type TransitionOptions = {
   /** Which layers an HR return unlocks. §8: SELF, LEAD or BOTH. */
   returnedTo?: "SELF" | "LEAD" | "BOTH";
   /** HR advancing past a layer that never came in. Marks it skipped, not done. */
-  skip?: { self?: boolean; lead?: boolean };
+  /** Which layers HR advanced past. `coLead` only where there is one (0083). */
+  skip?: { self?: boolean; lead?: boolean; coLead?: boolean };
   /**
    * Wait for the outbound messages before answering. Defaults to NO.
    *
@@ -139,6 +140,7 @@ function timestampPatch(
   if (transition.from === "OPEN" && transition.to === "OPEN") {
     if (transition.locks === "SELF") return { self_submitted_at: now };
     if (transition.locks === "LEAD") return { lead_submitted_at: now };
+    if (transition.locks === "LEAD_2") return { co_lead_submitted_at: now };
     return {};
   }
 
@@ -177,7 +179,21 @@ export function returnPatch(returnedTo: "SELF" | "LEAD" | "BOTH"): Record<string
 }
 
 /** Which evaluation column receives the overall score for the layer being locked. */
-const OVERALL_COLUMN = {
+/**
+ * The evaluation-level copy of each layer's overall score.
+ *
+ * LEAD_2 is deliberately absent, and that is a decision rather than an omission.
+ * These columns are a denormalised convenience from the two-layer world; the
+ * authoritative figure has always been `evaluation_responses.overall_score`,
+ * which the transition writes for EVERY layer including this one. Adding a
+ * `co_lead_overall` column would mean §0.4 schema, another patch to the
+ * transition function's whitelist, and a fourth number for analytics to keep in
+ * step — and it would still not answer the question a designer's report asks,
+ * which is what the two managers' figures come to TOGETHER.
+ *
+ * So the second reviewer's score is read where it is written.
+ */
+const OVERALL_COLUMN: Partial<Record<RatingLayer, "self_overall" | "lead_overall" | "final_overall">> = {
   SELF: "self_overall",
   LEAD: "lead_overall",
   MD: "final_overall",
@@ -261,6 +277,7 @@ export async function transition(
   if (options.returnedTo) Object.assign(patch, returnPatch(options.returnedTo));
   if (options.skip?.self) patch.self_skipped = true;
   if (options.skip?.lead) patch.lead_skipped = true;
+  if (options.skip?.coLead) patch.co_lead_skipped = true;
 
   /* -- The agreed final score, when HR supplies one.
         `!= null` rather than a truthiness test: 0 is a real score on a 0-5
@@ -294,7 +311,8 @@ export async function transition(
       overallScore = computed.overallScore;
     }
 
-    patch[OVERALL_COLUMN[definition.locks]] = overallScore;
+    const column = OVERALL_COLUMN[definition.locks];
+    if (column) patch[column] = overallScore;
   }
 
   /* -- Commit: status, layer lock, scores and audit, atomically -- */

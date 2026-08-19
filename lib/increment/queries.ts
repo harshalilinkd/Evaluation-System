@@ -63,6 +63,32 @@ export type SalaryBand = {
   managerHikePct: number | null;
   /** Their promotion answer, so a blank percentage can be explained. */
   managerPromotion: string | null;
+  /**
+   * The SECOND manager's recommendation, where the person has two (0083).
+   *
+   * Null for almost everybody, and null also when they have a second reviewer
+   * who has not answered — the screen tells those apart by whether
+   * `coManagerName` is set.
+   */
+  coManagerHikePct: number | null;
+  coManagerPromotion: string | null;
+  coManagerName: string | null;
+  /**
+   * WHAT THE MANAGERS TOGETHER RECOMMEND — the figure the quick-set offers.
+   *
+   * The MEAN of the two where both have answered, at the owner's instruction:
+   * "the final Hike % is the average of the two managers' percentages". With
+   * one manager it IS that manager's figure, so nothing about the ordinary case
+   * changes — which is what makes this safe to put behind the existing button.
+   *
+   * Where a person has two managers and only one has answered, this is that
+   * one's figure and the screen says so. Averaging a submitted recommendation
+   * with a silence would invent a number: half of somebody's opinion is not the
+   * other half's, and the mean of 10 and nothing is not 5.
+   */
+  recommendedHikePct: number | null;
+  /** True only when the mean of two answers actually produced it. */
+  recommendedIsAverage: boolean;
 };
 
 /**
@@ -79,7 +105,7 @@ export async function getSalaryBand(
 
   const { data: evaluation } = await supabase
     .from("evaluations")
-    .select("id, cycle_id, evaluatee_id, department_id")
+    .select("id, cycle_id, evaluatee_id, department_id, co_lead_id")
     .eq("id", evaluationId)
     .maybeSingle();
 
@@ -110,26 +136,66 @@ export async function getSalaryBand(
 
         Both values come from the LEAD answers blob keyed by question id, which
         is why neither needed a column. -- */
-  const { data: leadAnswers } = await supabase
+  // BOTH manager layers. `.in` rather than two queries: one round trip, and
+  // one place the two can be seen to be read the same way.
+  const { data: managerAnswers } = await supabase
     .from("evaluation_responses")
-    .select("answers")
+    .select("layer, answers")
     .eq("evaluation_id", evaluationId)
-    .eq("layer", "LEAD")
-    .maybeSingle();
+    .in("layer", ["LEAD", "LEAD_2"]);
 
-  const leadBlob = (leadAnswers?.answers ?? {}) as Record<string, unknown>;
-  const rawHike = leadBlob[MANAGER_HIKE_QUESTION_ID];
-  const parsedHike = rawHike === null || rawHike === undefined || rawHike === "" ? null : Number(rawHike);
-  // A non-numeric or out-of-range answer scores as absent rather than being
-  // clamped — P4-10's rule, and the figure here feeds a pay proposal.
-  const managerHikePct =
-    parsedHike !== null && Number.isFinite(parsedHike) && parsedHike >= 0 && parsedHike <= 100
-      ? parsedHike
+  const blobFor = (layer: "LEAD" | "LEAD_2") =>
+    ((managerAnswers ?? []).find((r) => r.layer === layer)?.answers ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+  /* A non-numeric or out-of-range answer counts as ABSENT rather than being
+     clamped — P4-10's rule, and it matters more here than anywhere: this figure
+     feeds a pay proposal, and clamping would launder a typo into a real
+     recommendation. */
+  const hikeIn = (blob: Record<string, unknown>): number | null => {
+    const raw = blob[MANAGER_HIKE_QUESTION_ID];
+    const parsed = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+    return parsed !== null && Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+      ? parsed
       : null;
+  };
+  const promotionIn = (blob: Record<string, unknown>): string | null => {
+    const raw = blob[MANAGER_PROMOTION_QUESTION_ID];
+    return typeof raw === "string" && raw.trim() !== "" ? raw : null;
+  };
 
-  const rawPromotion = leadBlob[MANAGER_PROMOTION_QUESTION_ID];
-  const managerPromotion =
-    typeof rawPromotion === "string" && rawPromotion.trim() !== "" ? rawPromotion : null;
+  const leadBlob = blobFor("LEAD");
+  const managerHikePct = hikeIn(leadBlob);
+  const managerPromotion = promotionIn(leadBlob);
+
+  /* -- The second manager's NAME, so the card can attribute two figures.
+        Two recommendations with no names beside them are two numbers nobody can
+        act on: HR chasing a missing one needs to know which manager to ask. Only
+        fetched where there is one, which is almost never. -- */
+  let coManagerName: string | null = null;
+  if (evaluation.co_lead_id) {
+    const { data: coManager } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", evaluation.co_lead_id)
+      .maybeSingle();
+    coManagerName = coManager?.full_name ?? null;
+  }
+
+  const coLeadBlob = blobFor("LEAD_2");
+  const coManagerHikePct = evaluation.co_lead_id ? hikeIn(coLeadBlob) : null;
+  const coManagerPromotion = evaluation.co_lead_id ? promotionIn(coLeadBlob) : null;
+
+  /* -- The settled recommendation. Two answers average; one stands alone.
+        Rounded to two decimals like every other stored percentage (§11), so the
+        quick-set button and the figure it writes cannot differ in the last
+        digit. -- */
+  const bothAnswered = managerHikePct !== null && coManagerHikePct !== null;
+  const recommendedHikePct = bothAnswered
+    ? Math.round(((managerHikePct + coManagerHikePct) / 2) * 100) / 100
+    : (managerHikePct ?? coManagerHikePct);
 
   /* -- THEIR WHOLE PAY HISTORY, oldest first, at the owner's instruction: "show
         all the increments, from joining salary till current".
@@ -151,6 +217,45 @@ export async function getSalaryBand(
     .eq("profile_id", evaluation.evaluatee_id)
     .neq("reason", "JOINING")
     .order("effective_from", { ascending: true });
+
+  /* ---------- WHEN WERE THEY LAST GIVEN A RISE ----------
+     Reported as their JOINING DATE for a new joiner, which is wrong in the way
+     that matters most on this panel: the field says "Last raise", and a date
+     under it asserts that one happened. It also feeds the annualised-percent
+     context, so a first increment was being annualised over the months since
+     they JOINED rather than being shown as a first.
+
+     `employment_records.last_increment_date` is not always trustworthy for this
+     question, and 0068 says why in its own words: it made the ledger
+     authoritative — "where there is a ledger of rises, its latest entry is the
+     answer" — and then deliberately left the bootstrap case alone, "anybody
+     with NO recorded rise keeps whatever was typed". Somebody imported with
+     their joining date in that column therefore keeps it for ever.
+
+     So the ledger decides, on exactly 0068's three reasons:
+
+       · a recorded rise      → its date, which also self-heals a stale column
+       · no rise, and the stored date IS their joining date
+                              → null. A joining date is not an increment.
+       · no rise, some other date
+                              → kept. That is a real increment predating the
+                                ledger, and blanking it would lose a fact
+                                nothing else records.
+
+     CORRECTION is not a rise and is excluded, as 0068 excludes it: fixing a
+     figure that was typed wrong does not restart anybody's increment clock. */
+  const RISE_REASONS = ["ANNUAL_INCREMENT", "PROMOTION", "MARKET_ADJUSTMENT"];
+  const risesOnRecord = (past ?? []).filter((row) => RISE_REASONS.includes(row.reason));
+  const storedLastIncrement = employment?.last_increment_date ?? null;
+
+  const lastIncrementDate =
+    risesOnRecord.length > 0
+      ? // Ordered ascending above, so the last is the newest — the same MAX
+        // 0068 takes in SQL.
+        (risesOnRecord.at(-1)?.effective_from ?? null)
+      : storedLastIncrement && storedLastIncrement === (profile?.date_of_joining ?? null)
+        ? null
+        : storedLastIncrement;
 
   /* -- The department median for this cycle. Computed from the reviews that
         have a final or approved figure, because a proposal nobody has agreed to
@@ -188,8 +293,10 @@ export async function getSalaryBand(
       currentCtc: employment?.current_ctc ?? null,
       joiningCtc: employment?.joining_ctc ?? null,
       dateOfJoining: profile?.date_of_joining ?? null,
-      lastIncrementDate: employment?.last_increment_date ?? null,
-      monthsSinceLastIncrement: monthsSince(employment?.last_increment_date ?? null, new Date()),
+      lastIncrementDate,
+      // Follows the corrected date, or the annualised-percent line would still
+      // count from the day they joined.
+      monthsSinceLastIncrement: monthsSince(lastIncrementDate, new Date()),
       employeeName: profile?.full_name ?? "this employee",
       profileId: evaluation.evaluatee_id,
       review: review ?? null,
@@ -206,6 +313,11 @@ export async function getSalaryBand(
       hikeBands: (settings?.hike_bands ?? [5, 10, 15]).map(Number),
       managerHikePct,
       managerPromotion,
+      coManagerHikePct,
+      coManagerPromotion,
+      coManagerName,
+      recommendedHikePct,
+      recommendedIsAverage: bothAnswered,
     },
   };
 }
