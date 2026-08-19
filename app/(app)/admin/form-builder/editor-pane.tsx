@@ -37,6 +37,19 @@ const WHO = [
   { value: "LEAD_ONLY", label: "Manager" },
 ] as const;
 
+/* -- WHICH CYCLES ASK IT. The column has existed since 0022 and the assembly
+      has filtered on it ever since — an evaluation cycle gets BOTH +
+      EVALUATION_ONLY, an increment cycle BOTH + INCREMENT_ONLY. What was
+      missing was any way to SET it: the salary expectation (0022) and the
+      promotion pair (0072) each needed a migration, which is not a thing HR can
+      do. Labelled in cycle language rather than enum language, because "Every
+      cycle / Evaluation only / Increment only" is the question being asked. -- */
+const CYCLES = [
+  { value: "BOTH", label: "Every cycle" },
+  { value: "EVALUATION_ONLY", label: "Evaluation only" },
+  { value: "INCREMENT_ONLY", label: "Increment only" },
+] as const;
+
 export function EditorPane({
   question,
   options,
@@ -257,6 +270,38 @@ export function EditorPane({
           </div>
           <p className="mt-1.5 text-body-xs leading-snug text-ink-muted">
             Both means the employee rates themselves and the lead rates them, side by side.
+          </p>
+        </div>
+
+        {/* ---------- Which cycles ask it ---------- */}
+        <div>
+          <Label className="mb-2 block text-body-sm font-medium text-ink">
+            Which cycles ask this?
+          </Label>
+          <div className="grid grid-cols-3 gap-1.5">
+            {CYCLES.map((c) => {
+              const active = (question.cycleScope || "BOTH") === c.value;
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => onPatch({ cycleScope: c.value })}
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-control border py-2.5 text-body-sm font-medium transition-colors",
+                    active
+                      ? "border-ink bg-ink text-ink-invert"
+                      : "border-border bg-canvas text-ink hover:border-ink/30",
+                  )}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-body-xs leading-snug text-ink-muted">
+            An evaluation cycle ends when management has read the report; an increment cycle
+            carries on into salary. A question only one of them needs belongs to that one.
           </p>
         </div>
 

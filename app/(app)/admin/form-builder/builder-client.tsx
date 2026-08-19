@@ -51,6 +51,15 @@ export function BuilderClient({
 }) {
   const [departmentId, setDepartmentId] = React.useState(departments[0]?.id ?? "");
   const [audience, setAudience] = React.useState<"SELF" | "LEAD">("SELF");
+
+  /* -- WHICH CYCLE THE PREVIEW IS OF.
+        Setting a question's scope is only half a control: without this, HR
+        marks a question "Evaluation only" and the preview goes on showing every
+        question regardless, so the one thing they wanted to check — what an
+        evaluation cycle actually asks — is the one thing the screen would not
+        show. Mirrors `assembleForDepartment` exactly: an evaluation cycle gets
+        BOTH + EVALUATION_ONLY, an increment cycle BOTH + INCREMENT_ONLY. -- */
+  const [cycleType, setCycleType] = React.useState<"EVALUATION" | "INCREMENT">("EVALUATION");
   const [phone, setPhone] = React.useState(false);
   const [dismissed, setDismissed] = React.useState(false);
   const [undo, setUndo] = React.useState<BuilderQuestion | null>(null);
@@ -83,13 +92,19 @@ export function BuilderClient({
   /* -- The questions this department actually asks. Every other section is
         drawn from the same CORE list regardless of department, which is what
         makes §1's "identical company-wide" true by construction (P9B-3). -- */
-  const forDepartment = React.useMemo(
-    () =>
-      builder.draft.filter((q) =>
+  const forDepartment = React.useMemo(() => {
+    // The same two-value rule the server uses, written the same way round.
+    const scopes =
+      cycleType === "INCREMENT"
+        ? ["BOTH", "INCREMENT_ONLY"]
+        : ["BOTH", "EVALUATION_ONLY"];
+
+    return builder.draft
+      .filter((q) => scopes.includes(q.cycleScope || "BOTH"))
+      .filter((q) =>
         q.section === DEPARTMENT_SECTION ? mappedIds.has(q.id) : q.category === "CORE",
-      ),
-    [builder.draft, mappedIds],
-  );
+      );
+  }, [builder.draft, mappedIds, cycleType]);
 
   const estimate = React.useMemo(() => estimateFill(forDepartment), [forDepartment]);
 
@@ -255,6 +270,8 @@ export function BuilderClient({
           <PreviewPane
             form={previewForm}
             audience={audience}
+            cycleType={cycleType}
+            onCycleTypeChange={setCycleType}
             onAudienceChange={setAudience}
             phone={phone}
             onPhoneChange={setPhone}
@@ -338,6 +355,8 @@ export function BuilderClient({
             <PreviewPane
               form={previewForm}
               audience={audience}
+              cycleType={cycleType}
+              onCycleTypeChange={setCycleType}
               onAudienceChange={setAudience}
               phone={phone}
               onPhoneChange={setPhone}

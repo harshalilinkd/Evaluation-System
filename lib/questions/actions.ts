@@ -65,6 +65,9 @@ function readForm(formData: FormData) {
     answered_by: String(formData.get("answered_by") ?? ""),
     track: String(formData.get("track") ?? ""),
     category: String(formData.get("category") ?? "CORE"),
+    // Defaults to BOTH, which is the column's own default (0022) and what every
+    // question written before this control existed already carries.
+    cycle_scope: String(formData.get("cycle_scope") ?? "BOTH"),
     is_required: formData.get("is_required") === "on" || formData.get("is_required") === "true",
     options,
     depends_on: dependsOn === "" ? null : dependsOn,
@@ -103,6 +106,7 @@ export async function saveQuestion(
     answered_by: input.answered_by as Enums<"answered_by">,
     track: input.track as Enums<"track_type">,
     category: input.category as Enums<"question_category">,
+    cycle_scope: input.cycle_scope,
     is_required: input.is_required,
     depends_on: input.depends_on,
     depends_value: input.depends_value,
@@ -115,7 +119,7 @@ export async function saveQuestion(
   if (questionId) {
     const { data: existing } = await supabase
       .from("questions")
-      .select("text, help_text, section, response_type, answered_by, track, is_required, depends_on, depends_value")
+      .select("text, help_text, section, response_type, answered_by, track, cycle_scope, is_required, depends_on, depends_value")
       .eq("id", questionId)
       .maybeSingle();
     before = existing ?? null;

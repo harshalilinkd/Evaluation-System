@@ -701,6 +701,7 @@ export type Database = {
           track?: Database["public"]["Enums"]["track_type"];
           answered_by?: Database["public"]["Enums"]["answered_by"];
           is_required?: boolean;
+          cycle_scope?: string;
           min_value?: number | null;
           max_value?: number | null;
           depends_on?: string | null;
@@ -721,6 +722,7 @@ export type Database = {
           track?: Database["public"]["Enums"]["track_type"];
           answered_by?: Database["public"]["Enums"]["answered_by"];
           is_required?: boolean;
+          cycle_scope?: string;
           min_value?: number | null;
           max_value?: number | null;
           depends_on?: string | null;

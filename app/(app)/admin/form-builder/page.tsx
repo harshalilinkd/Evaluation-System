@@ -21,7 +21,7 @@ export default async function Page() {
     await Promise.all([
       supabase
         .from("questions")
-        .select("id, text, help_text, section, response_type, category, answered_by, is_required, depends_on, depends_value, sort_order, is_active")
+        .select("id, text, help_text, section, response_type, category, answered_by, cycle_scope, is_required, depends_on, depends_value, sort_order, is_active")
         .eq("is_active", true)
         .order("sort_order"),
       supabase.from("departments").select("id, name, code").eq("is_active", true).order("name"),
@@ -74,6 +74,7 @@ export default async function Page() {
         responseType: q.response_type,
         category: q.category,
         answeredBy: q.answered_by,
+        cycleScope: q.cycle_scope ?? "BOTH",
         isRequired: q.is_required,
         dependsOn: q.depends_on,
         dependsValue: q.depends_value,

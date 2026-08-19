@@ -16,6 +16,8 @@ export type BuilderQuestion = {
   responseType: ResponseType;
   category: string;
   answeredBy: string;
+  /** BOTH | EVALUATION_ONLY | INCREMENT_ONLY — which cycle types ask it (§6). */
+  cycleScope: string;
   isRequired: boolean;
   dependsOn: string | null;
   dependsValue: string | null;
@@ -58,6 +60,7 @@ function buildFormData(
   fd.set("section", q.section);
   fd.set("response_type", q.responseType);
   fd.set("answered_by", q.answeredBy);
+  fd.set("cycle_scope", q.cycleScope);
   // The core module is STAFF-only (§5's module boundary), and 0008's CHECK
   // refuses anything else. Never read from the client.
   fd.set("track", "STAFF");
@@ -254,6 +257,9 @@ export function useBuilder({
         category: isDept ? "DEPARTMENT" : "CORE",
         responseType: "SCALE_0_5",
         answeredBy: "EMPLOYEE_AND_LEAD",
+        // BOTH by default: a new question is asked on every cycle until
+        // somebody narrows it, which is the column default too (0022).
+        cycleScope: "BOTH",
         isRequired: true,
         dependsOn: null,
         dependsValue: null,
