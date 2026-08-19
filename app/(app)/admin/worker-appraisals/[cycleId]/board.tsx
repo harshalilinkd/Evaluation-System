@@ -91,6 +91,7 @@ export function WorkerBoard({
   raters,
   startDue,
   startWorkerId,
+  mdView = false,
 }: {
   /* -- ABSENT MEANS EVERY ROUND, and that is now the ordinary case.
         The rounds LIST is gone at the owner's instruction: Production
@@ -100,6 +101,19 @@ export function WorkerBoard({
         Present means one round, which is what the per-round URL still
         renders — the evaluation detail lives under it, and a link somebody
         bookmarked should not stop working. -- */
+  /* -- TWO VOCABULARIES FOR ONE ROW OF CARDS, which is P7-6's rule applied to
+        a queue instead of a status chip.
+
+        The stages were written from HR's chair: "Ready for you" is the sheet a
+        supervisor has submitted and HR has not yet reviewed. On the MD's screen
+        that is a sheet sitting with HR — nothing to do with them — while the
+        one actually waiting on them is filed under "With management", their own
+        name in the third person.
+
+        So the MD reading their own queue was told the wrong thing twice over.
+        The counts, the filters and the rows are identical; only the two labels
+        that name an AUDIENCE change. -- */
+  mdView?: boolean;
   cycle: {
     id: string;
     name: string;
@@ -479,18 +493,23 @@ export function WorkerBoard({
             active={filter === "waiting"}
           />
           <KpiCard
-            label="Ready for you"
+            label={mdView ? "Under HR review" : "Ready for you"}
             value={readyCount}
-            caption="filled in, not yet reviewed"
+            caption={mdView ? "with HR, not yet sent up" : "filled in, not yet reviewed"}
             tone="final"
             onSelect={() => toggle("ready")}
             active={filter === "ready"}
           />
-          {withMd > 0 ? (
+          {/* -- Hidden at zero for HR, because most rounds never use Send to
+                 MD and a permanent zero teaches people to ignore a column.
+                 ALWAYS shown to the MD: it is THEIR queue, and "nothing needs
+                 you" is the answer they came for. An absent card is not that
+                 answer — it is no answer at all. -- */}
+          {withMd > 0 || mdView ? (
             <KpiCard
-              label="With management"
+              label={mdView ? "Ready for you" : "With management"}
               value={withMd}
-              caption="sent to the MD to sign off"
+              caption={mdView ? "sent up for you to sign off" : "sent to the MD to sign off"}
               tone="lead"
               onSelect={() => toggle("md")}
               active={filter === "md"}

@@ -15,7 +15,14 @@ export default async function Page({
   searchParams: Promise<{ start?: string }>;
 }) {
   // §9: the guard is the first statement.
-  await requireRole(["HR_ADMIN", "MD"]);
+  /* -- The session was being discarded. The board's stage labels are written
+        from HR's point of view — "Ready for you" means ready for HR — and the
+        MD reading that card is being told the wrong thing about their own
+        queue. Which vocabulary to use is a property of the reader, so the
+        reader has to reach the component. -- */
+  const session = await requireRole(["HR_ADMIN", "MD"]);
+  const viewerIsMdOnly =
+    session.roles.includes("MD") && !session.roles.includes("HR_ADMIN");
 
   /* -- `?start=due` — the increment calendar's "Start for Production team". A
         word, never a list of ids: the dialog resolves WHO from the same rule
@@ -139,6 +146,7 @@ export default async function Page({
       /* Null is the whole signal: no single round, so the Round column appears
          and the per-round controls do not. */
       cycle={null}
+      mdView={viewerIsMdOnly}
       rows={(rows ?? []).map((r) => ({
         id: r.id,
         workerId: r.worker_id,
