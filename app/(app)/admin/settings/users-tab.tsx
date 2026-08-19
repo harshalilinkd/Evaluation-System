@@ -846,7 +846,6 @@ function AddPersonDialog({
                   name="phone"
                   type="tel"
                   inputMode="tel"
-                  placeholder="+91 98765 43210"
                   className="min-h-11 tabular"
                 />
               </Field>
@@ -903,7 +902,6 @@ function AddPersonDialog({
                     name="work_phone"
                     type="tel"
                     inputMode="tel"
-                    placeholder="+91 98765 43210"
                     className="min-h-11 tabular"
                   />
                 </Field>
@@ -1010,7 +1008,6 @@ function AddPersonDialog({
                   id="joining_ctc"
                   name="joining_ctc"
                   inputMode="numeric"
-                  placeholder="₹ 4,00,000"
                   className="min-h-11 tabular"
                 />
               </Field>
@@ -1025,7 +1022,6 @@ function AddPersonDialog({
                     id="current_ctc"
                     name="current_ctc"
                     inputMode="numeric"
-                    placeholder="₹ 4,80,000"
                     className="min-h-11 tabular"
                   />
                 </Field>
@@ -1305,7 +1301,6 @@ function EditPersonDialog({
                   inputMode="tel"
                   defaultValue={person.phone_e164 ?? ""}
                   className="min-h-11 tabular"
-                  placeholder="+91 98765 43210"
                 />
               </Field>
             </div>
@@ -1350,7 +1345,6 @@ function EditPersonDialog({
                     inputMode="tel"
                     defaultValue={person.work_phone_e164 ?? ""}
                     className="min-h-11 tabular"
-                    placeholder="+91 98765 43210"
                   />
                 </Field>
               </div>

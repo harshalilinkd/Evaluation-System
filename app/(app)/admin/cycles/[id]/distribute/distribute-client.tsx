@@ -1249,7 +1249,6 @@ function FixNumberDialog({
             className="mt-1.5"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="9876543210"
           />
           <p className="mt-1.5 text-body-sm text-ink-muted">
             Ten digits is enough — +91 is added automatically.

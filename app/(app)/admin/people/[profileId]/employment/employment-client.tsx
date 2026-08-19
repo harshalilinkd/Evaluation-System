@@ -615,7 +615,6 @@ function SalaryDialog({
               <MoneyInput
                 value={newCtc === "" ? null : Number(newCtc)}
                 onValueChange={(annual) => setNewCtc(annual === null ? "" : String(annual))}
-                placeholder="50,000"
               />
               {preview ? (
                 <p className="tabular mt-1.5 text-body-sm text-ink-muted">
@@ -750,7 +749,6 @@ function JoiningSalaryDialog({
                 id="joining_amount"
                 value={amount === "" ? null : Number(amount)}
                 onValueChange={(annual) => setAmount(annual === null ? "" : String(annual))}
-                placeholder="15,000"
               />
               <p className="text-body-sm text-ink-muted">
                 Recorded once and left alone afterwards, because
