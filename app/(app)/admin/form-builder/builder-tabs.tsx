@@ -1,22 +1,31 @@
-/** The Form Builder / Question Bank switch. One job, two ways of working on it. */
+/** The Form Builder / Worker Form switch — the staff form and the tick sheet. */
 
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HardHat, LayoutTemplate, Table2 } from "lucide-react";
+import { HardHat, LayoutTemplate } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * These were two sidebar entries, and two entries for one job read as two jobs.
- * The builder is the default way in (P9B) and shows the form as a person will
- * meet it; the bank is the same questions as a table, which is better for bulk
- * work — filtering, retiring several at once, seeing every department at a
- * glance. Neither replaces the other, so both stay, side by side.
+ * THE QUESTION BANK TAB IS GONE, at the owner's instruction.
  *
- * The bank lives UNDER /admin/form-builder so `activeHref`'s longest-match rule
- * highlights Form Builder on both, with no special case in the nav config.
+ * NAV-1 put it here: it had been its own sidebar entry, and two entries for one
+ * job read as two jobs. The pairing was builder-as-the-form and bank-as-a-table,
+ * two ways of working on the same questions.
+ *
+ * In practice the builder does the job — it edits, adds, removes, reorders and
+ * previews — and a second tab offering the same questions in a different shape
+ * is a fork in the road at the moment somebody has already decided what they
+ * came to do.
+ *
+ * THE ROUTE STAYS. `/admin/form-builder/questions` still renders, and
+ * `/admin/questions` still redirects to it, because a bookmark going nowhere
+ * reads as a broken product (N1-2) and the table is genuinely better for bulk
+ * work — filtering, retiring several at once, the CSV import. It is simply no
+ * longer offered as a peer of the builder. That page carries its own way back
+ * rather than this strip, which would otherwise show with nothing selected.
  */
 const TABS = [
   {
@@ -24,12 +33,6 @@ const TABS = [
     label: "Form Builder",
     hint: "The form as a person meets it",
     icon: LayoutTemplate,
-  },
-  {
-    href: "/admin/form-builder/questions",
-    label: "Question Bank",
-    hint: "Every question as a table",
-    icon: Table2,
   },
   /*
    * §7's second module, and a THIRD tab rather than a mode of the first two.

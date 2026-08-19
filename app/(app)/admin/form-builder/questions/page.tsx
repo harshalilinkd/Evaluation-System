@@ -2,7 +2,8 @@
 
 import type { Metadata } from "next";
 
-import { BuilderTabs } from "@/app/(app)/admin/form-builder/builder-tabs";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { QuestionsClient } from "@/app/(app)/admin/questions/questions-client";
 import type { QuestionRecord } from "@/app/(app)/admin/questions/question-drawer";
 import { requireRole } from "@/lib/auth/guards";
@@ -90,7 +91,22 @@ export default async function QuestionsPage() {
 
     <div className="space-y-5">
 
-      <BuilderTabs />
+      {/* -- ITS OWN WAY BACK, not the tab strip.
+             The Question Bank tab was removed at the owner's instruction, so
+             rendering the strip here would show Form Builder and Worker Form
+             with NEITHER selected — a control that says you are nowhere.
+
+             The route is deliberately kept (a bookmark going nowhere reads as a
+             broken product, N1-2, and /admin/questions still redirects here),
+             so it needs an exit of its own. §13.4: no dead ends. -- */}
+      <Link
+        href="/admin/form-builder"
+        className="inline-flex min-h-11 items-center gap-2 text-body-sm font-medium text-primary underline-offset-2 hover:underline"
+      >
+        <ArrowLeft aria-hidden className="size-4" />
+        Back to Form Builder
+      </Link>
+
     <QuestionsClient
       questions={records}
       departmentsByQuestion={departmentsByQuestion}
