@@ -476,29 +476,52 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
            orientation, not something anybody needs while answering question 22.
            The action bar at the bottom is what has to stay reachable, and it
            still does. */
-        <header className="mb-4 rounded-card-lg bg-ink p-4 sm:p-5">
-          {/* The mark, above the fold on the phone most people open this on. */}
-          <FormLetterhead tone="dark" className="mb-3" />
+        /* -- A LETTERHEAD, NOT A DARK SLAB.
+              It was `bg-ink` — a near-black card at the top of an otherwise
+              light form. A dark band is a fine premium idiom and it is not this
+              product's: the form is light, the printed sheet it mirrors is
+              light, and a black header made the page read as two documents
+              stacked on each other.
 
-          <div className="flex flex-wrap items-start justify-between gap-4">
+              What it says changed as much as how it looks. It named the FORM
+              ("Your self-evaluation") and the deadline, and never named the
+              PERSON — so the one thing a signed record must establish, whose
+              evaluation this is, was missing from its own header. Name,
+              department and designation are all in `meta` and were going
+              unused. -- */
+        <header className="mb-6 rounded-card-lg border border-rule bg-surface p-5 sm:p-7">
+          <FormLetterhead className="mb-5" />
+
+          <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-5">
             <div className="min-w-0">
-              <h1 className="text-display-sm text-ink-invert">Your self-evaluation</h1>
-              <p className="mt-1 text-body-sm text-ink-invert-muted">
-                {meta.periodLabel} · due {formatDate(meta.selfDueOn)}
-                {meta.leadName ? ` · reviewed by ${meta.leadName}` : ""}
+              <h1 className="text-display-md text-ink">Performance evaluation</h1>
+              <p className="mt-1 text-body text-ink-muted">{meta.periodLabel}</p>
+
+              <div className="mt-4 space-y-0.5">
+                <p className="text-body-lg font-medium text-ink">{meta.evaluateeName}</p>
+                <p className="text-body-sm text-ink-muted">
+                  {[meta.departmentName, meta.designation].filter(Boolean).join(" · ") ||
+                    "No department set"}
+                </p>
+              </div>
+
+              <p className="mt-4 text-body-sm text-ink-muted">
+                <span className="type-label text-ink-faint">Due</span>{" "}
+                <span className="tabular">{formatDate(meta.selfDueOn)}</span>
+                {meta.leadName ? ` · reviewed separately by ${meta.leadName}` : ""}
               </p>
             </div>
 
             <div className="text-right">
               {/* §3: one family, tabular figures. DESIGN.md is explicit that
                   there is no separate mono for numerals. */}
-              <p className="tabular text-display-md leading-none text-ink-invert">
+              <p className="tabular text-display-md leading-none text-ink">
                 {answered}/{total}
               </p>
               <p
                 className={cn(
                   "mt-1 text-body-sm",
-                  saveState === "error" ? "text-critical" : "text-ink-invert-muted",
+                  saveState === "error" ? "text-critical" : "text-ink-muted",
                 )}
               >
                 {saveState === "saving"
@@ -515,7 +538,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           {/* Progress in the SELF tier — cyan. §13.1 reserves the tier colours
               for "who said this", and this bar is the employee's own progress,
               which is exactly that. */}
-          <div className="mt-4 h-2 w-full overflow-hidden rounded-pill bg-ink-invert/15">
+          <div className="mt-6 h-1.5 w-full overflow-hidden rounded-pill bg-surface-mute">
             <span
               className="block h-full rounded-pill bg-self transition-all duration-panel"
               style={{ width: `${progress}%` }}
