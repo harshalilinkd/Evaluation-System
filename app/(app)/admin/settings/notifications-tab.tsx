@@ -478,7 +478,7 @@ export function NotificationsTab({
                         it is what tells them why a message does not match the
                         wording they remember. -- */}
                   {t.customised ? (
-                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-body-xs font-medium text-primary">
                       Edited
                     </span>
                   ) : null}

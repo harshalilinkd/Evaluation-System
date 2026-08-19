@@ -55,9 +55,9 @@ const TONE: Record<StatTone, { card: string; label: string; value: string; capti
   },
   night: {
     card: "rounded-card-lg bg-ink shadow-dashboard",
-    label: "text-ink-invert/70",
+    label: "text-ink-invert-muted",
     value: "text-ink-invert",
-    caption: "text-ink-invert/70",
+    caption: "text-ink-invert-muted",
   },
 };
 

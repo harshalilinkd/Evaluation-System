@@ -97,7 +97,7 @@ export function SegmentedLegend({
       {items.map((item) => (
         <li key={item.label} className="flex items-center gap-2">
           <span aria-hidden className={cn("size-2 rounded-pill", item.dot)} />
-          <span className={cn("text-body-sm", invert ? "text-ink-invert/70" : "text-ink-muted")}>
+          <span className={cn("text-body-sm", invert ? "text-ink-invert-muted" : "text-ink-muted")}>
             {item.label}
           </span>
           <span className={cn("tabular text-body-sm font-medium", invert ? "text-ink-invert" : "text-ink")}>

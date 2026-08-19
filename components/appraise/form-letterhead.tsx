@@ -50,7 +50,7 @@ export function FormLetterhead({
         <span
           className={cn(
             "text-body-sm font-medium",
-            tone === "dark" ? "text-ink-invert/80" : "text-ink-muted",
+            tone === "dark" ? "text-ink-invert-muted" : "text-ink-muted",
           )}
         >
           {caption}

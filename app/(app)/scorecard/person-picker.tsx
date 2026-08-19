@@ -45,7 +45,7 @@ export function PersonPicker({
         ))}
       </select>
 
-      <p className="text-[11px] text-ink-muted">
+      <p className="text-body-xs text-ink-muted">
         Everyone on staff. The full roster with stages and scores is under Team review.
       </p>
     </div>

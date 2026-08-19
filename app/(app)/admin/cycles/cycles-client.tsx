@@ -385,7 +385,7 @@ export function CyclesClient({
               {tab.label}
               <span
                 className={cn(
-                  "tabular rounded-pill px-1.5 py-0.5 text-[11px]",
+                  "tabular rounded-pill px-1.5 py-0.5 text-body-xs",
                   active ? "bg-primary/10 text-primary" : "bg-surface-mute text-ink-muted",
                 )}
               >

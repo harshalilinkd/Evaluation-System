@@ -138,7 +138,7 @@ export function IncrementsClient({
           <span className="flex min-w-0 items-center gap-2.5">
             <span
               aria-hidden
-              className="grid size-7 shrink-0 place-items-center rounded-pill bg-primary/10 text-[11px] font-semibold text-primary"
+              className="grid size-7 shrink-0 place-items-center rounded-pill bg-primary/10 text-body-xs font-semibold text-primary"
             >
               {initials(row.original.name)}
             </span>

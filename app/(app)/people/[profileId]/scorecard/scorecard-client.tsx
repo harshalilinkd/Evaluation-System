@@ -491,7 +491,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
                 status={card.current.status}
                 audience={isSelf ? "employee" : "internal"}
               />
-              <p className="mt-3 text-[11px] text-ink-muted">
+              <p className="mt-3 text-body-xs text-ink-muted">
                 {scoredCount === 0
                   ? "No answers have been scored yet. The breakdown below fills in as each layer submits."
                   : `${scoredCount} rated ${scoredCount === 1 ? "question" : "questions"} so far.`}
@@ -1343,7 +1343,7 @@ function QuestionList({
           />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-body text-ink">{q.text}</span>
-            <span className="text-[11px] text-ink-muted">{sectionNames[q.section]}</span>
+            <span className="text-body-xs text-ink-muted">{sectionNames[q.section]}</span>
           </span>
           <span className="tabular shrink-0 text-body-lg font-semibold text-ink">
             {formatScore(settled(q))}
@@ -1357,7 +1357,7 @@ function QuestionList({
 function Due({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-[11px] text-ink-muted">{label}</dt>
+      <dt className="text-body-xs text-ink-muted">{label}</dt>
       <dd className="tabular text-body-sm text-ink">{formatDate(value)}</dd>
     </div>
   );
@@ -1485,7 +1485,7 @@ function DivergingGapChart({
 
               {r.delta === 0 ? (
                 <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 items-center">
-                  <span className="tabular rounded-pill bg-surface-mute px-2 py-0.5 text-[11px] text-ink-muted">
+                  <span className="tabular rounded-pill bg-surface-mute px-2 py-0.5 text-body-xs text-ink-muted">
                     agreed
                   </span>
                 </div>
@@ -1517,7 +1517,7 @@ function DivergingGapChart({
                   )}
                   style={higher ? { marginLeft: `${pct}%` } : { marginRight: `${pct}%` }}
                 >
-                  <span className="tabular text-[11px] font-medium text-ink">
+                  <span className="tabular text-body-xs font-medium text-ink">
                     {signed(r.delta)}
                   </span>
                 </div>
@@ -1528,7 +1528,7 @@ function DivergingGapChart({
       })}
 
       {/* Legend — identity is never colour alone (§13.8). */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-rule pt-3 text-[11px] text-ink-muted">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-rule pt-3 text-body-xs text-ink-muted">
         <span className="inline-flex items-center gap-1.5">
           <span aria-hidden className="size-2.5 rounded-mark bg-self" />
           You rated higher

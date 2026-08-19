@@ -108,7 +108,7 @@ export function EditorPane({
             {/* Naming the section the question would land in, because "Add a
                 question" on a form with eight of them is a button whose result
                 you cannot predict before pressing it. */}
-            <p className="mt-2 text-[11px] text-ink-muted">
+            <p className="mt-2 text-body-xs text-ink-muted">
               It lands at the end of that section and opens here.
             </p>
           </>
@@ -142,7 +142,7 @@ export function EditorPane({
                 form and left this header calling it the old thing. It survived
                 because the guard written to catch it tested `/^"use client"/`
                 against the whole file, and this one opens with a docblock. -- */}
-          <p className="mt-0.5 truncate text-[11px] text-ink-muted">{sectionName}</p>
+          <p className="mt-0.5 truncate text-body-xs text-ink-muted">{sectionName}</p>
         </div>
         <button
           type="button"
@@ -204,7 +204,7 @@ export function EditorPane({
                   >
                     {card.name}
                   </span>
-                  <span className="mt-0.5 block text-[11px] leading-snug text-ink-muted">
+                  <span className="mt-0.5 block text-body-xs leading-snug text-ink-muted">
                     {card.hint}
                   </span>
                 </motion.button>
@@ -255,7 +255,7 @@ export function EditorPane({
               );
             })}
           </div>
-          <p className="mt-1.5 text-[11px] leading-snug text-ink-muted">
+          <p className="mt-1.5 text-body-xs leading-snug text-ink-muted">
             Both means the employee rates themselves and the lead rates them, side by side.
           </p>
         </div>
@@ -294,7 +294,7 @@ export function EditorPane({
               })}
             </div>
             {mappedDepartmentIds.length === 0 ? (
-              <p className="mt-1.5 text-[11px] font-medium text-critical">
+              <p className="mt-1.5 text-body-xs font-medium text-critical">
                 A question here with no team is asked of nobody. Pick at least one.
               </p>
             ) : null}
@@ -319,7 +319,7 @@ export function EditorPane({
             />
             <span>
               <span className="block text-body-sm font-medium text-ink">Only show sometimes</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-ink-muted">
+              <span className="mt-0.5 block text-body-xs leading-snug text-ink-muted">
                 {parents.length === 0
                   ? "Needs a Yes / No question above this one in the same section."
                   : "Show this only when an earlier Yes / No was answered a certain way."}
@@ -369,7 +369,7 @@ export function EditorPane({
                   </div>
                   {/* The rule read back as a sentence, so HR can check it
                       without reconstructing it from two controls. */}
-                  <p className="rounded-control bg-primary/[0.07] px-2.5 py-2 text-[11px] leading-snug text-ink">
+                  <p className="rounded-control bg-primary/[0.07] px-2.5 py-2 text-body-xs leading-snug text-ink">
                     Shown only when{" "}
                     <strong className="font-semibold">
                       “{parents.find((p) => p.id === question.dependsOn)?.text ?? "…"}”
@@ -390,7 +390,7 @@ export function EditorPane({
         <label className="flex cursor-pointer items-center justify-between gap-3 rounded-control border border-border bg-canvas p-3.5">
           <span>
             <span className="block text-body-sm font-medium text-ink">Must be answered</span>
-            <span className="mt-0.5 block text-[11px] text-ink-muted">
+            <span className="mt-0.5 block text-body-xs text-ink-muted">
               Blocks submit until filled
             </span>
           </span>
@@ -425,7 +425,7 @@ function Field({
     <div>
       <Label className="mb-1.5 block text-body-sm font-medium text-ink">{label}</Label>
       {children}
-      {hint ? <p className="mt-1 text-[11px] text-ink-muted">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-body-xs text-ink-muted">{hint}</p> : null}
     </div>
   );
 }
@@ -501,7 +501,7 @@ function OptionEditor({
         Add a choice
       </button>
       {options.length === 0 ? (
-        <p className="mt-1 text-[11px] font-medium text-critical">
+        <p className="mt-1 text-body-xs font-medium text-critical">
           A Pick one question needs at least one choice.
         </p>
       ) : null}

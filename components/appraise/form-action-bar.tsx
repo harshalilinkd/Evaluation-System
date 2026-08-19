@@ -93,7 +93,7 @@ export function FormActionBar({
           </p>
           <p
             className={cn(
-              "mt-1 truncate text-[11px] leading-none",
+              "mt-1 truncate text-body-xs leading-none",
               saveState === "error" ? "text-critical" : "text-ink-muted",
             )}
           >

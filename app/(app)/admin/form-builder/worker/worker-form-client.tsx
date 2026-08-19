@@ -157,7 +157,7 @@ export function WorkerFormClient({
               >
                 {tab.label}
               </span>
-              <span className="text-[11px] text-ink-muted">{tab.hint}</span>
+              <span className="text-body-xs text-ink-muted">{tab.hint}</span>
             </button>
           );
         })}
@@ -229,7 +229,7 @@ export function WorkerFormClient({
                           at all, and the sheet beside them shows the three
                           ticks being drawn. -- */}
                     {q.responseType !== "TICK_3" || !q.isRequired ? (
-                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] font-medium text-ink-muted">
+                      <p className="mt-1 flex flex-wrap items-center gap-x-2 text-body-xs font-medium text-ink-muted">
                         {q.responseType !== "TICK_3" ? <span>Yes / No</span> : null}
                         {!q.isRequired ? <span>Optional</span> : null}
                       </p>

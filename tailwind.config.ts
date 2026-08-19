@@ -43,6 +43,7 @@ const config: Config = {
           muted: color("ink-muted"),
           faint: color("ink-faint"),
           invert: color("ink-invert"),
+          "invert-muted": color("ink-invert-muted"),
         },
 
         /* -- Brand & accents -- */
@@ -193,6 +194,15 @@ const config: Config = {
         "body-lg": ["16px", { lineHeight: "24px", letterSpacing: "0", fontWeight: "400" }],
         body: ["14px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "400" }],
         "body-sm": ["12px", { lineHeight: "16px", letterSpacing: "0", fontWeight: "400" }],
+        /* -- AN EIGHTH STEP, and it documents what was already there.
+              `text-[11px]` appeared 47 times across the product — dense chrome:
+              table gutters, pill counts, axis labels, nav captions. Forty-seven
+              consistent uses is not drift, it is an unnamed step, and an
+              arbitrary value cannot be checked, themed or found. Naming it
+              changes nothing visually and makes the scale the whole truth.
+              16px line-height matches body-sm; the fourteen sites that set
+              their own `leading-*` still override it. */
+        "body-xs": ["11px", { lineHeight: "16px", letterSpacing: "0", fontWeight: "400" }],
 
         // The uppercase half is applied by `.type-label` in globals.css — a
         // fontSize entry cannot set text-transform.

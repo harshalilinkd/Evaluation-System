@@ -63,7 +63,7 @@ export function TickTrend({ points }: { points: TickPoint[] }) {
         {/* The axis: the three words, best at the top. */}
         <div
           aria-hidden
-          className="flex shrink-0 flex-col justify-between py-1 text-right text-[11px] leading-none text-ink-muted"
+          className="flex shrink-0 flex-col justify-between py-1 text-right text-body-xs leading-none text-ink-muted"
         >
           {TICK_3_OPTIONS.map((t) => (
             <span key={t.value} className="h-4 whitespace-nowrap">
@@ -95,10 +95,10 @@ export function TickTrend({ points }: { points: TickPoint[] }) {
                       Identity is never left to shade alone (§13.8), and three
                       steps of one hue is exactly the case where it would be —
                       the ramp is a reading aid, and the word is the reading. -- */}
-                <span className="w-full text-center text-[11px] leading-tight text-ink">
+                <span className="w-full text-center text-body-xs leading-tight text-ink">
                   {WORD[p.tick as string] ?? "—"}
                 </span>
-                <span className="w-full truncate text-center text-[11px] leading-tight text-ink-muted">
+                <span className="w-full truncate text-center text-body-xs leading-tight text-ink-muted">
                   {p.label}
                 </span>
               </li>

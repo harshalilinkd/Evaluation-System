@@ -441,7 +441,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               <h1 className="text-display-sm text-ink-invert">
                 Your evaluation is submitted and locked.
               </h1>
-              <p className="mt-1 text-body text-ink-invert/80">
+              <p className="mt-1 text-body text-ink-invert-muted">
                 {meta.leadName
                   ? `${meta.leadName} rates the same form separately. HR reads both together.`
                   : "Your manager rates the same form separately. HR reads both together."}
@@ -482,7 +482,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-display-sm text-ink-invert">Your self-evaluation</h1>
-              <p className="mt-1 text-body-sm text-ink-invert/80">
+              <p className="mt-1 text-body-sm text-ink-invert-muted">
                 {meta.periodLabel} · due {formatDate(meta.selfDueOn)}
                 {meta.leadName ? ` · reviewed by ${meta.leadName}` : ""}
               </p>
@@ -497,7 +497,7 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
               <p
                 className={cn(
                   "mt-1 text-body-sm",
-                  saveState === "error" ? "text-critical" : "text-ink-invert/70",
+                  saveState === "error" ? "text-critical" : "text-ink-invert-muted",
                 )}
               >
                 {saveState === "saving"

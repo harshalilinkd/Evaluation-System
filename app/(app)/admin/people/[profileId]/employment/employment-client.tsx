@@ -480,7 +480,7 @@ function Field({
         {required ? <span className="text-critical"> *</span> : null}
       </Label>
       {children}
-      {hint ? <p className="mt-1 text-[11px] text-ink-muted">{hint}</p> : null}
+      {hint ? <p className="mt-1 text-body-xs text-ink-muted">{hint}</p> : null}
     </div>
   );
 }

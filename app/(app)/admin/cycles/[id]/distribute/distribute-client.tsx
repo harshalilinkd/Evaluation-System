@@ -758,7 +758,7 @@ export function DistributeClient({
               <span className="tabular font-medium">{selected.size}</span> selected ·{" "}
               {/* Naming the recipients here is the last chance to notice the
                   toggle is set the wrong way before forty messages go out. */}
-              <span className="text-ink-invert/70">
+              <span className="text-ink-invert-muted">
                 {recipients.length === 2
                   ? "employees and HODs"
                   : recipients[0] === "LEAD"
@@ -889,7 +889,7 @@ function ContactIcon({
             }
             className={cn(
               "size-4",
-              problem ? "text-critical" : present ? "text-ink-muted" : "text-ink-faint/40",
+              problem ? "text-critical" : present ? "text-ink-muted" : "text-ink-faint",
             )}
           />
           {/* Struck through when missing — §13.8: colour is never the only

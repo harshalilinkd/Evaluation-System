@@ -82,7 +82,7 @@ export function HistoryTrendChart({ points }: { points: readonly TrendPoint[] })
               x={PAD.left - 6}
               y={y(v) + 3}
               textAnchor="end"
-              className="fill-[rgb(var(--ink-muted))] text-[9px]"
+              className="fill-[rgb(var(--ink-muted))] text-body-xs"
             >
               {v}
             </text>
@@ -138,7 +138,7 @@ export function HistoryTrendChart({ points }: { points: readonly TrendPoint[] })
               x={x(i)}
               y={HEIGHT - 8}
               textAnchor="middle"
-              className="fill-[rgb(var(--ink-muted))] text-[9px]"
+              className="fill-[rgb(var(--ink-muted))] text-body-xs"
             >
               {p.label}
             </text>

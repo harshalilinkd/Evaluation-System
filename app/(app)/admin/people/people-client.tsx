@@ -163,7 +163,7 @@ export function PeopleClient({
             <span
               aria-hidden
               className={cn(
-                "grid size-7 shrink-0 place-items-center rounded-pill text-[11px] font-semibold",
+                "grid size-7 shrink-0 place-items-center rounded-pill text-body-xs font-semibold",
                 row.original.isActive
                   ? "bg-primary/10 text-primary"
                   : "bg-surface-mute text-ink-muted",
@@ -178,7 +178,7 @@ export function PeopleClient({
               {row.original.fullName}
             </span>
             {!row.original.isActive ? (
-              <span className="shrink-0 rounded-pill bg-surface-mute px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
+              <span className="shrink-0 rounded-pill bg-surface-mute px-1.5 py-0.5 text-body-xs font-medium text-ink-muted">
                 Inactive
               </span>
             ) : null}
@@ -233,7 +233,7 @@ export function PeopleClient({
           ) : row.original.excluded ? (
             // P10-6: withdrawal is an `excluded_at`, not a status — somebody
             // nobody is waiting on should not sit in the chase list.
-            <span className="rounded-pill bg-surface-mute px-2.5 py-1 text-[11px] font-medium text-ink-muted">
+            <span className="rounded-pill bg-surface-mute px-2.5 py-1 text-body-xs font-medium text-ink-muted">
               Withdrawn
             </span>
           ) : row.original.status ? (
@@ -575,7 +575,7 @@ function Tally({
   return (
     <div className="rounded-card bg-surface px-3.5 py-2">
       <div className={cn("tabular text-body-lg font-semibold", TALLY_TONE[tone])}>{value}</div>
-      <div className="text-[11px] text-ink-muted">{label}</div>
+      <div className="text-body-xs text-ink-muted">{label}</div>
     </div>
   );
 }

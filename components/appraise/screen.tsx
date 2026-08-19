@@ -167,7 +167,7 @@ export function Tally({
       <div className={cn("tabular text-body-lg font-semibold leading-tight", TALLY_TONE[tone])}>
         {value}
       </div>
-      <div className="text-[11px] leading-tight text-ink-muted">{label}</div>
+      <div className="text-body-xs leading-tight text-ink-muted">{label}</div>
     </div>
   );
 }
@@ -320,7 +320,7 @@ export function KpiCard({
             `break-words` because a single long word — a department name, a
             future label — must wrap rather than widen the tile and push its
             neighbours off the row. -- */}
-      <p className="break-words text-[11px] font-semibold uppercase leading-tight tracking-[0.02em] text-ink-muted sm:text-[12px] sm:tracking-[0.05em]">
+      <p className="break-words text-body-xs font-semibold uppercase leading-tight tracking-[0.02em] text-ink-muted sm:text-body-sm sm:tracking-[0.05em]">
         {label}
       </p>
       <p className="tabular text-display-sm leading-tight text-ink sm:text-display-md">{value}</p>

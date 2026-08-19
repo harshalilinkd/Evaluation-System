@@ -195,7 +195,7 @@ export function ProgressRail({
                 />
                 <span
                   className={cn(
-                    "hidden whitespace-nowrap text-center font-sans text-[11px] leading-tight sm:block",
+                    "hidden whitespace-nowrap text-center font-sans text-body-xs leading-tight sm:block",
                     isCurrent ? "text-ink" : "text-ink-muted",
                   )}
                 >

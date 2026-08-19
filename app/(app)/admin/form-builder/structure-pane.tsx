@@ -315,7 +315,7 @@ export function StructurePane({
               >
                 <span
                   className={cn(
-                    "grid size-6 shrink-0 place-items-center rounded-control text-[11px] font-bold transition-colors",
+                    "grid size-6 shrink-0 place-items-center rounded-control text-body-xs font-bold transition-colors",
                     isOpen
                       ? "bg-primary text-white"
                       : isDept
@@ -332,7 +332,7 @@ export function StructurePane({
                       {labelFor(section)}
                     </span>
                     {isDept ? (
-                      <span className="shrink-0 rounded-pill bg-primary px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                      <span className="shrink-0 rounded-pill bg-primary px-1.5 py-0.5 text-body-xs font-bold uppercase tracking-wide text-white">
                         By team
                       </span>
                     ) : null}
@@ -462,7 +462,7 @@ export function StructurePane({
                                 )}
                               >
                                 <span className="flex items-baseline gap-1.5">
-                                  <span className="tabular shrink-0 text-[11px] text-ink-muted">
+                                  <span className="tabular shrink-0 text-body-xs text-ink-muted">
                                     {index + 1}
                                   </span>
                                   {/* Two lines, not one truncated one. A
@@ -490,7 +490,7 @@ export function StructurePane({
                                       others (P31-11's rule, applied to the
                                       type as well as to the audience). -- */}
                                 <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[1.15rem]">
-                                  <span className="text-[11px] font-medium text-ink-muted">
+                                  <span className="text-body-xs font-medium text-ink-muted">
                                     {TYPE_TAG[q.responseType] ?? "Text"}
                                   </span>
                                   {who ? <Tag title={who.title}>{who.short}</Tag> : null}
@@ -584,7 +584,7 @@ function Tag({ children, title }: { children: React.ReactNode; title?: string })
   return (
     <span
       title={title}
-      className="rounded-sm bg-surface-mute px-1.5 py-0.5 text-[11px] font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-rule"
+      className="rounded-sm bg-surface-mute px-1.5 py-0.5 text-body-xs font-semibold tracking-wide text-ink-muted ring-1 ring-inset ring-rule"
     >
       {children}
     </span>
@@ -627,7 +627,7 @@ function DepartmentPicker({
     <div className="mb-1.5 rounded-control bg-surface-mute p-2 ring-1 ring-inset ring-rule">
       <label
         htmlFor="builder-department"
-        className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-ink-muted"
+        className="mb-1 block text-body-xs font-semibold uppercase tracking-wide text-ink-muted"
       >
         Showing
       </label>

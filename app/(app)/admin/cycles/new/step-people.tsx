@@ -40,11 +40,11 @@ function ContactIcons({
     <span className="flex items-center gap-1">
       <Mail
         aria-label={`${who} ${hasEmail ? "has" : "has no"} email address`}
-        className={cn("size-4", hasEmail ? "text-ink-muted" : "text-ink-faint/40")}
+        className={cn("size-4", hasEmail ? "text-ink-muted" : "text-ink-faint")}
       />
       <Phone
         aria-label={`${who} ${hasPhone ? "has" : "has no"} phone number`}
-        className={cn("size-4", hasPhone ? "text-ink-muted" : "text-ink-faint/40")}
+        className={cn("size-4", hasPhone ? "text-ink-muted" : "text-ink-faint")}
       />
     </span>
   );
@@ -132,7 +132,7 @@ function Reachability({
         <span className="text-body-sm text-ink-muted">—</span>
       )}
       {leadUnreachable ? (
-        <span className="text-[11px] font-medium text-critical">Manager unreachable</span>
+        <span className="text-body-xs font-medium text-critical">Manager unreachable</span>
       ) : null}
     </div>
   );

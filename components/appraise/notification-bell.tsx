@@ -272,7 +272,7 @@ export function NotificationBell({ initial }: { initial: NotificationFeed }) {
               aria-hidden
               className={cn(
                 "absolute -right-0.5 -top-0.5 flex min-w-[1.15rem] items-center justify-center",
-                "rounded-pill bg-primary px-1 py-0.5 text-[11px] font-semibold leading-none",
+                "rounded-pill bg-primary px-1 py-0.5 text-body-xs font-semibold leading-none",
                 "tabular text-primary-foreground ring-2 ring-background",
               )}
             >

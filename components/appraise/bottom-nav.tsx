@@ -122,7 +122,7 @@ export function BottomNav({
                     dropped in favour of the glyph alone: an icon-only tab bar
                     asks everybody to learn eleven glyphs, and the people most
                     affected are the ones using the product least often. */}
-                <span className="w-full truncate text-center text-[11px] leading-tight">
+                <span className="w-full truncate text-center text-body-xs leading-tight">
                   {item.label}
                 </span>
               </Link>

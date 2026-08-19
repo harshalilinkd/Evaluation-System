@@ -42,6 +42,7 @@ Never write a raw hex in a component.
 ```css
 --ink          #111827   /* Primary text, headings (near black for high contrast) */
 --ink-muted    #6B7280   /* Secondary text, labels, chart axes */
+--ink-invert-muted #D6DEE7 /* Muted text on a dark ground; inverts in dark */
 --ink-faint    #9CA3AF   /* Placeholders, disabled states */
 --ink-invert   #FFFFFF   /* Text on solid dark/accent backgrounds */
 ```
@@ -145,6 +146,7 @@ Load via `next/font` with `display: swap`.
 | body-lg | 16 / 24 | 400 (Regular) | 0 | Standard form inputs, primary reading text |
 | body | 14 / 20 | 400 (Regular) | 0 | Table data, standard UI elements |
 | body-sm | 12 / 16 | 400 (Regular) | 0 | Meta text, captions, chart labels |
+| body-xs | 11 / 16 | 400 (Regular) | 0 | Dense chrome: table gutters, pill counts, axis labels, nav captions |
 | label | 12 / 16 | 500 (Medium) | 0.05em, uppercase | Table headers, pill labels |
 
 Rules:

@@ -260,7 +260,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
               once, and "Worker appraisal" on all of them is not a heading. */}
           {isSelf ? "Your appraisal" : sheet.workerName}
         </p>
-        <p className="mt-1 font-sans text-body-sm text-ink-invert/70">
+        <p className="mt-1 font-sans text-body-sm text-ink-invert-muted">
           {sheet.cycleName} · {sheet.periodLabel}
           {sheet.dueOn ? ` · due ${formatDate(sheet.dueOn)}` : ""}
         </p>
@@ -268,7 +268,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
               §13.6 asks for a visible "Saved HH:MM"; the point of showing the
               failure is that a form which has quietly stopped saving looks
               identical to one that is saving fine. -- */}
-        <p className="tabular mt-3 font-sans text-body-sm text-ink-invert/70">
+        <p className="tabular mt-3 font-sans text-body-sm text-ink-invert-muted">
           {answered} of {sheet.questions.length} ticked
           {saveState === "saving"
             ? " · saving…"

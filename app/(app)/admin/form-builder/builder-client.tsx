@@ -442,7 +442,7 @@ function PaneSwitcher({
             </span>
             <span
               className={cn(
-                "relative truncate text-[11px]",
+                "relative truncate text-body-xs",
                 active ? "text-ink-muted" : "text-ink-muted",
               )}
             >

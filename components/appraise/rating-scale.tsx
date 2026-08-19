@@ -206,7 +206,7 @@ export function RatingScale({
                   // w-full + break-words: the last line of defence. Even in a
                   // cell narrower than the word, it wraps inside the border
                   // rather than spilling over it.
-                  "w-full break-words text-center font-sans text-[11px] leading-tight",
+                  "w-full break-words text-center font-sans text-body-xs leading-tight",
                   isSelected ? tierClasses.numeral : "text-ink-muted",
                 )}
               >

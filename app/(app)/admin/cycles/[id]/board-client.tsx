@@ -143,7 +143,7 @@ export function BoardClient({
             <span
               aria-hidden
               className={cn(
-                "flex size-7 shrink-0 items-center justify-center rounded-pill text-[11px] font-medium",
+                "flex size-7 shrink-0 items-center justify-center rounded-pill text-body-xs font-medium",
                 row.original.daysLate > 0
                   ? "bg-critical text-ink-invert"
                   : "bg-accent text-primary",
@@ -738,7 +738,7 @@ function SideState({ done, skipped }: { done: boolean; skipped: boolean }) {
   return (
     <span
       className={cn(
-        "inline-block whitespace-nowrap rounded-pill px-2 py-0.5 text-[11px] font-medium",
+        "inline-block whitespace-nowrap rounded-pill px-2 py-0.5 text-body-xs font-medium",
         skipped
           ? "bg-warning-tint text-warning"
           : done
