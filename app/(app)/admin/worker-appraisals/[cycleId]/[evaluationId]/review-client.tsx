@@ -206,6 +206,26 @@ export function WorkerReviewClient({
     setBusy(true);
     setError(null);
     try {
+      /* -- THE FIGURE AND THE SIGN-OFF ARE ONE ACT.
+            Reported as "the MD has only approve or send back — what if they want
+            to add a salary figure themselves and then close". They could: the
+            fields were editable and the save admitted them. But the amount lived
+            in one card and the approval in another, so the act was two presses in
+            two places and read as though the figure was not theirs.
+
+            Saving here makes it one. It runs FIRST and stops on failure — a
+            close that went through while the figure did not would sign off the
+            previous amount, and §8 has no path back from CLOSED. That is the
+            same reasoning as the `salaryDirty` guard, moved from blocking the
+            button to doing the work. -- */
+      if (salaryDirty) {
+        const saved = await saveWorkerSalaryAsHr(review.evaluationId, { oldCtc, newCtc });
+        if (!saved.ok) {
+          setError(saved.error.message);
+          return;
+        }
+      }
+
       const result = await reviewWorkerAppraisal(review.evaluationId, remarks, outcome);
       if (!result.ok) {
         setError(result.error.message);
@@ -235,59 +255,77 @@ export function WorkerReviewClient({
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
-        <Link
-          href={`/admin/worker-appraisals/${cycleId}`}
-          className="inline-flex items-center gap-1.5 font-sans text-body-sm text-ink-muted"
-        >
-          <ArrowLeft className="size-4" aria-hidden />
-          Back to the round
-        </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-          <h1 className="font-sans text-h2 text-ink">{review.workerName}</h1>
-          {/* -- Available at every stage, not only once closed.
-                A signed-off copy is the common case, but HR printing one to
-                carry into a conversation is exactly as legitimate — and the
-                sheet says which state it is in at its foot, so a draft cannot
-                be mistaken for a final one. -- */}
-          {/* Download and view are two endings of one gesture, so they are two
-              controls rather than one that has to be pressed twice. */}
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="secondary" className="min-h-11">
-              <a
-                href={`/print/worker/${review.evaluationId}?download=1`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Download className="size-4" aria-hidden />
-                Download report
-              </a>
-            </Button>
-            <Button asChild variant="outline" className="min-h-11">
-              <a href={`/print/worker/${review.evaluationId}`} target="_blank" rel="noreferrer">
-                <Printer className="size-4" aria-hidden />
-                Print / View
-              </a>
-            </Button>
-          </div>
+      {/* -- THREE STACKED LINES BECAME TWO.
+            "Back to the round" had a line of its own above the name, and the
+            topbar already says which section you are in — so this screen spent
+            roughly 280px before its first row of data, on a page whose whole
+            content is a table of eight ticks.
+
+            The back arrow moves ONTO the title's line as an icon control, which
+            is the idiom the report screens already use (an `aria-label` carries
+            the words for anybody who cannot see the arrow). Name and meta stack
+            in the middle, actions stay right. One line saved, and the arrow is
+            no less reachable — it is a 44px target either way. -- */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <Button asChild variant="ghost" size="icon" className="-ml-2 mt-0.5 shrink-0">
+          <Link href={`/admin/worker-appraisals/${cycleId}`} aria-label="Back to the round">
+            <ArrowLeft className="size-4" aria-hidden />
+          </Link>
+        </Button>
+
+        <div className="min-w-0 flex-1">
+          {/* -- `text-h2` WAS NOT A CLASS THIS PROJECT DEFINES, so this heading
+                had no size of its own at all — board.tsx already carries two
+                comments recording the same find, and this one was missed.
+                `display-md` is the page-title step (§3). -- */}
+          <h1 className="truncate font-sans text-display-md leading-tight text-ink">
+            {review.workerName}
+          </h1>
+          {/* -- THE PERIOD WAS PRINTED TWICE — "Appraisal · August 2026 August
+                2026" — because the round's NAME already ends in its period and
+                the label was appended anyway. Shown only when it adds
+                something, and joined with the same separator as everything
+                else rather than a bare space. -- */}
+          <p className="font-sans text-body-sm text-ink-muted">
+            {[
+              review.designation,
+              review.department,
+              review.cycleName,
+              review.periodLabel && !review.cycleName.includes(review.periodLabel)
+                ? review.periodLabel
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || "—"}
+          </p>
         </div>
-        {/* -- THE PERIOD WAS PRINTED TWICE — "Appraisal · August 2026 August
-              2026" — because the round's NAME already ends in its period and
-              the label was appended anyway. Shown only when it adds something,
-              and joined with the same separator as everything else rather than
-              a bare space. -- */}
-        <p className="mt-1 font-sans text-body-sm text-ink-muted">
-          {[
-            review.designation,
-            review.department,
-            review.cycleName,
-            review.periodLabel && !review.cycleName.includes(review.periodLabel)
-              ? review.periodLabel
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ") || "—"}
-        </p>
+
+        {/* -- Available at every stage, not only once closed. A signed-off copy
+              is the common case, but HR printing one to carry into a
+              conversation is exactly as legitimate — and the sheet says which
+              state it is in at its foot, so a draft cannot be mistaken for a
+              final one.
+
+              Download and view are two endings of one gesture, so they are two
+              controls rather than one that has to be pressed twice. -- */}
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="secondary" className="min-h-11">
+            <a
+              href={`/print/worker/${review.evaluationId}?download=1`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Download className="size-4" aria-hidden />
+              Download report
+            </a>
+          </Button>
+          <Button asChild variant="outline" className="min-h-11">
+            <a href={`/print/worker/${review.evaluationId}`} target="_blank" rel="noreferrer">
+              <Printer className="size-4" aria-hidden />
+              Print / View
+            </a>
+          </Button>
+        </div>
       </div>
 
       {closed ? (
@@ -432,7 +470,14 @@ export function WorkerReviewClient({
 
               CLOSED stays read-only for everybody: §8 has no path back from it
               and §17 forbids editing a closed record. -- */
-        readOnly={closed || (review.status === "REVIEWED" && !isMd)}
+        /* -- READ-ONLY ONCE IT IS WITH MANAGEMENT, for everyone including the
+              MD. Their editable field moved into the sign-off card below, and
+              two inputs bound to one value is a thing that only ever confuses —
+              even sharing state, a reader cannot tell which one is "the" one.
+              The panel is the record of how the figure got here; the finish
+              card is where it is settled. -- */
+        readOnly={closed || review.status === "REVIEWED"}
+        mdIsSettling={isMd && withMd}
         supervisorName={review.supervisorName}
         mdApproval={review.mdApproval}
         stages={review.stages}
@@ -446,6 +491,34 @@ export function WorkerReviewClient({
       {/* ---------- Finish ---------- */}
       {!done ? (
         <div className="card-surface space-y-4 p-5">
+          {/* -- THE FIGURE, IN THE CARD WHERE IT IS SIGNED OFF.
+                The MD's amount lived in the salary panel further up, so
+                approving was two presses in two cards and read as approving
+                somebody else's number. It is the SAME state as the panel above —
+                one value, shown where each person acts on it — so the two can
+                never disagree, which is what a second input would guarantee
+                eventually (P8P-5).
+
+                Only the NEW salary. The current one is a fact off the
+                employment record and HR's to correct; an MD who thinks it wrong
+                sends the sheet back rather than editing the record from here. -- */}
+          {isMd && withMd ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="md_new_ctc">Salary you are approving</Label>
+              <MoneyInput
+                id="md_new_ctc"
+                value={newCtc}
+                onValueChange={setNewCtc}
+                placeholder=""
+              />
+              <p className="font-sans text-body-sm text-ink-muted">
+                {salaryDirty
+                  ? "Changed from what HR set. Approving saves this figure and closes the appraisal."
+                  : "HR's figure. Change it if you disagree — approving saves whatever is here."}
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="review_remarks">Your remarks</Label>
             <Textarea
@@ -551,8 +624,13 @@ export function WorkerReviewClient({
                     Send back to HR
                   </Button>
                   <Button
+                    /* -- NO LONGER BLOCKED ON `salaryDirty`. It was, because
+                          approving a figure that never left the browser would
+                          sign off the previous amount. `finish` now saves first
+                          and stops if that fails, so the danger is handled by
+                          doing the work rather than by refusing to. -- */
                     onClick={() => void finish("CLOSE")}
-                    disabled={busy || salaryDirty}
+                    disabled={busy}
                     className="min-h-11"
                   >
                     {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
@@ -566,11 +644,7 @@ export function WorkerReviewClient({
                          pay record with nothing on screen to show for it.
                          FIX-44 found this from HR's end; the MD's end is worse
                          because it cannot be undone. -- */}
-                  {salaryDirty ? (
-                    <p className="font-sans text-body-sm text-critical">
-                      Save the salary above first — approving now would sign off the previous figure.
-                    </p>
-                  ) : null}
+
                 </>
               ) : (
                 <p className="font-sans text-body-sm text-ink-muted">
@@ -810,6 +884,10 @@ function WorkerSalaryPanel({
   salary,
   currentCtcOnRecord,
   readOnly,
+  /* -- Management is reading it AND it is their move. `readOnly` cannot say
+        this: it is true both while the MD is deciding and after it closed, and
+        an instruction to set a figure is wrong in the second case. -- */
+  mdIsSettling,
   supervisorName,
   mdApproval,
   stages,
@@ -822,6 +900,8 @@ function WorkerSalaryPanel({
   evaluationId: string;
   salary: { salaryChanged: boolean; oldCtc: number | null; incrementPct: number | null; newCtc: number | null };
   currentCtcOnRecord: number | null;
+  /** Management is reading it and it is their move — not merely read-only. */
+  mdIsSettling: boolean;
   readOnly: boolean;
   supervisorName: string | null;
   mdApproval: WorkerReview["mdApproval"];
@@ -917,9 +997,11 @@ function WorkerSalaryPanel({
               including the MD, who does not — they approve what HR set, and an
               instruction somebody cannot act on is worse than none (§13.4). -- */}
         <p className="font-sans text-body-sm text-ink-muted">
-          {readOnly
-            ? "The supervisor recommends the percentage and HR sets the figures. The supervisor is never shown an amount."
-            : "The supervisor recommends the percentage. You set the figures — they are not shown any salary."}
+          {mdIsSettling
+            ? "The supervisor recommended the percentage and HR priced it. Set the figure you are approving in the panel below, or send it back to HR."
+            : readOnly
+              ? "The supervisor recommends the percentage and HR sets the figures. The supervisor is never shown an amount."
+              : "The supervisor recommends the percentage. You set the figures — they are not shown any salary."}
         </p>
       </div>
 
@@ -1044,7 +1126,9 @@ function WorkerSalaryPanel({
                   : "Not approved yet. Set it below and press Save salary."
                 : readOnly
                   ? "With management. It fills in when they approve it."
-                  : "Not approved yet. Send it to management when the figures are right."}
+                  : mdIsSettling
+                    ? "Not approved yet. Set the figure in the panel below and approve."
+                    : "Not approved yet. Send it to management when the figures are right."}
           </dd>
         </div>
       </dl>
@@ -1209,11 +1293,11 @@ function WorkerSalaryPanel({
             </Button>
             {dirty ? (
               <p className="font-sans text-body-sm text-critical">
-                Not saved yet. Management sees the saved figure, not what is typed here.
+Not saved yet. Management sees the saved figure, not what is typed here.
               </p>
             ) : oldCtc !== null || newCtc !== null ? (
               <p className="font-sans text-body-sm text-ink-muted">
-                Saved. Management will see these figures.
+Saved. Management will see these figures.
               </p>
             ) : null}
           </div>

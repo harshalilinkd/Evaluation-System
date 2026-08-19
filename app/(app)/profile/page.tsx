@@ -23,6 +23,15 @@ export default async function Page() {
   const view: ProfileView = {
     fullName: profile.full_name,
     email: profile.email,
+    /* -- ALL FOUR CONTACTS, none of them resolved against another.
+          `contactFor` (0081) picks work-or-personal when a message is SENT and
+          that stays — it is what keeps somebody with no official address
+          reachable. A SCREEN doing the same thing shows one value and hides
+          another that is on the record, which is how "which number do you have
+          for me?" becomes a question the app cannot answer. -- */
+    phone: profile.phone_e164,
+    workEmail: profile.work_email,
+    workPhone: profile.work_phone_e164,
     employeeCode: profile.employee_code,
     designation: profile.designation,
     departmentName: department?.name ?? null,

@@ -6,6 +6,7 @@ import { useActionState } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
 
 import { changeMyPassword, type PasswordState } from "@/lib/auth/password-actions";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +15,9 @@ import { cn } from "@/lib/utils";
 export type ProfileView = {
   fullName: string;
   email: string | null;
+  phone: string | null;
+  workEmail: string | null;
+  workPhone: string | null;
   employeeCode: string | null;
   designation: string | null;
   departmentName: string | null;
@@ -53,6 +57,13 @@ export function ProfileClient({ view }: { view: ProfileView }) {
         <dl className="mt-3">
           <Row label="Name" value={view.fullName} />
           <Row label="Email" value={view.email ?? "—"} />
+          <Row label="Mobile" value={view.phone ?? "—"} />
+          {/* -- Shown ALWAYS, including when empty. Rendering these only when
+                set would make an absent official address indistinguishable from
+                a feature that does not exist, and this list is the answer to
+                "what do you hold for me". -- */}
+          <Row label="Official email" value={view.workEmail ?? "—"} />
+          <Row label="Official mobile" value={view.workPhone ?? "—"} />
           <Row label="Employee ID" value={view.employeeCode ?? "—"} />
           <Row label="Designation" value={view.designation ?? "—"} />
           <Row label="Department" value={view.departmentName ?? "—"} />
@@ -102,7 +113,9 @@ export function ProfileClient({ view }: { view: ProfileView }) {
                 required
                 className="min-h-11"
               />
-              <p className="font-sans text-body-sm text-ink-muted">At least 6 characters.</p>
+              <p className="font-sans text-body-sm text-ink-muted">
+                At least {MIN_PASSWORD_LENGTH} characters.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm_password" className="type-label text-ink-muted">

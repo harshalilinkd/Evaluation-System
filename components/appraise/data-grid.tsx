@@ -17,6 +17,7 @@ import {
   type RowData,
 } from "@tanstack/react-table";
 
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -104,6 +105,12 @@ const GUTTER_WIDTH = 44;
       the text rather than left to be noticed. -- */
 const ROW_LABEL_WIDTH = 132;
 
+/* -- The tick column, when a screen turns selection on. Leading and frozen, so
+      it stays put while the grid scrolls sideways, and never resizable for the
+      same reason as the gutter: the frozen offsets are measured from it. -- */
+const SELECT_ID = "__select__";
+const SELECT_WIDTH = 44;
+
 /* Widths are a personal preference, not data — they belong to the browser, not
    the database. localStorage is unavailable in some privacy modes and can hold
    stale JSON from an older column set; neither is worth a broken screen. */
@@ -183,6 +190,39 @@ export type DataGridProps<TData> = {
     cell?: (row: TData) => React.ReactNode;
   };
   /**
+   * Ticking rows, for a screen with something to do to several at once.
+   *
+   * OFF UNLESS A SCREEN ASKS FOR IT. A grid carrying checkboxes nobody
+   * requested is a grid that reads as a form; the ordinary job of reading the
+   * table should not be cluttered by a mode somebody is not in (FIX-5).
+   *
+   * The grid owns the CONTROL and nothing else — which rows are ticked, and
+   * what ticking one means, belong to the screen. It renders on the table and
+   * on the phone cards from this one declaration, so a bulk action is not
+   * quietly desktop-only (§13.2).
+   */
+  selection?: {
+    isSelected: (row: TData) => boolean;
+    onToggle: (row: TData) => void;
+    /**
+     * A row that cannot be ticked, and the sentence saying why.
+     *
+     * A tick that silently does nothing is the dead end §13.4 forbids, and the
+     * row this exists for — your own account on the people screen — is one the
+     * server refuses anyway. Better to say so before the press than to report
+     * it afterwards among fifty results.
+     */
+    disabled?: (row: TData) => { reason: string } | null;
+    /** Ticks or clears everything CURRENTLY SHOWN — never rows behind a filter. */
+    onToggleAll: () => void;
+    allSelected: boolean;
+    someSelected: boolean;
+    /** The accessible name of one row's tick. "Select Priya Sharma". */
+    label: (row: TData) => string;
+    /** The accessible name of the header tick. Says how many, and that it is what is shown. */
+    allLabel: string;
+  };
+  /**
    * Actions for the open row, rendered in the dialog footer.
    *
    * The dialog SHOWS; it does not decide what can be done. A screen that wants
@@ -228,6 +268,7 @@ export function DataGrid<TData>({
   rowLabel,
   rowActions,
   rowDetail,
+  selection,
 }: DataGridProps<TData>) {
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   /* -- The open row, by index rather than by value.
@@ -322,9 +363,39 @@ export function DataGrid<TData>({
       ),
   };
 
+  /* -- The tick column sits BEFORE the gutter, where a spreadsheet's selector
+        lives, and carries no heading text of its own — its header IS the
+        select-all control. It is excluded from the card and dialog field lists
+        below by id rather than by that absence, because a checkbox is a
+        control, not a value with a name. -- */
+  const selectColumn: ColumnDef<TData> = {
+    id: SELECT_ID,
+    header: () =>
+      selection ? (
+        <Checkbox
+          checked={selection.allSelected ? true : selection.someSelected ? "indeterminate" : false}
+          onCheckedChange={selection.onToggleAll}
+          aria-label={selection.allLabel}
+        />
+      ) : null,
+    size: SELECT_WIDTH,
+    enableResizing: false,
+    meta: { align: "center", frozen: true },
+    cell: ({ row }) =>
+      selection ? (
+        <Checkbox
+          checked={selection.isSelected(row.original)}
+          onCheckedChange={() => selection.onToggle(row.original)}
+          aria-label={selection.label(row.original)}
+          disabled={Boolean(selection.disabled?.(row.original))}
+          title={selection.disabled?.(row.original)?.reason}
+        />
+      ) : null,
+  };
+
   const table = useReactTable({
     data,
-    columns: [gutter, ...columns],
+    columns: selection ? [selectColumn, gutter, ...columns] : [gutter, ...columns],
     state: { columnSizing },
     onColumnSizingChange: setColumnSizing,
     // `onChange` tracks the pointer live, which is what makes a drag feel like a
@@ -373,7 +444,10 @@ export function DataGrid<TData>({
   const fieldCells = (row: Row<TData>): Cell<TData, unknown>[] =>
     row
       .getVisibleCells()
-      .filter((c) => c.column.id !== GUTTER_ID && hasHeading(c.column.columnDef));
+      .filter(
+        (c) =>
+          c.column.id !== GUTTER_ID && c.column.id !== SELECT_ID && hasHeading(c.column.columnDef),
+      );
 
   const headingFor = (columnId: string) => {
     const header = table.getFlatHeaders().find((h) => h.column.id === columnId);
@@ -408,6 +482,18 @@ export function DataGrid<TData>({
 
               return (
                 <li key={row.id} className="card-surface overflow-hidden">
+                  <div className="flex items-start">
+                    {selection ? (
+                      <span className="shrink-0 py-4 pl-4">
+                        <Checkbox
+                          checked={selection.isSelected(row.original)}
+                          onCheckedChange={() => selection.onToggle(row.original)}
+                          aria-label={selection.label(row.original)}
+                          disabled={Boolean(selection.disabled?.(row.original))}
+                          title={selection.disabled?.(row.original)?.reason}
+                        />
+                      </span>
+                    ) : null}
                   {/* -- COLLAPSED BY DEFAULT, at the owner's instruction: "make
                         each card collapsible — it shows basic info, the user
                         taps to expand and see all details."
@@ -425,7 +511,7 @@ export function DataGrid<TData>({
                     type="button"
                     aria-expanded={open}
                     aria-controls={bodyId}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left"
+                    className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left"
                     onClick={() => toggleRow(row.id)}
                   >
                     <span className="min-w-0 flex-1">
@@ -467,6 +553,7 @@ export function DataGrid<TData>({
                       />
                     </span>
                   </button>
+                  </div>
 
                   {/* Unmounted rather than hidden: twenty collapsed cards each
                       rendering fourteen cells is the cost this change exists to
@@ -743,7 +830,12 @@ export function DataGrid<TData>({
                 /* The gutter is the row number, and a column with no heading is
                    an actions column — neither is a FIELD, and listing them
                    would put a ⋯ menu in a list of values under a blank label. */
-                .filter((cell) => cell.column.id !== GUTTER_ID && hasHeading(cell.column.columnDef))
+                .filter(
+                  (cell) =>
+                    cell.column.id !== GUTTER_ID &&
+                    cell.column.id !== SELECT_ID &&
+                    hasHeading(cell.column.columnDef),
+                )
                 .map((cell) => (
                   <div
                     key={cell.id}
