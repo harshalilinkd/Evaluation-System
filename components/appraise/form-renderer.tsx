@@ -167,7 +167,13 @@ export function FormRenderer({
 
 /* ---------- One question ---------- */
 
-function QuestionField({
+/* -- EXPORTED for the guided form (GuidedForm), and this is what keeps P9-1
+      true. That rule is "exactly one component renders a form", and the test
+      behind it looks for a second thing that imports a scale primitive AND
+      switches on responseType. GuidedForm does neither: it handles progress,
+      navigation and validation, and hands each question to THIS. One question
+      renderer, two ways of walking through the questions. -- */
+export function QuestionField({
   question,
   tier,
   value,
@@ -272,10 +278,18 @@ function QuestionField({
 
       {question.responseType === "TEXT_LONG" ? (
         <div className="space-y-1">
+          {/* -- ROOM TO ACTUALLY WRITE. Four rows is a comment box; these
+                 questions ask what somebody learned, what was difficult, what
+                 support they need. A box that looks like a database field gets
+                 a database field's worth of answer.
+                 Six rows, a comfortable leading, and a placeholder so the empty
+                 state is an invitation rather than a void. -- */}
           <Textarea
             disabled={readOnly}
-            rows={4}
+            rows={6}
             maxLength={1000}
+            placeholder={readOnly ? undefined : "Start typing…"}
+            className="min-h-[9rem] px-3.5 py-3 text-body leading-relaxed"
             value={typeof current === "string" ? current : ""}
             onChange={(e) => set(e.target.value)}
           />

@@ -138,11 +138,15 @@ export function RatingScale({
         aria-describedby={error ? errorId : undefined}
         onKeyDown={onKeyDown}
         className={cn(
-          // One row on desktop; 3x2 at 375px so no cell drops below a usable
-          // width and nothing overflows (§6.1). `compact` holds the 3x2 layout
-          // whatever the viewport says, for callers in a narrow container.
-          "grid gap-2",
-          compact ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-6",
+          /* -- ONE ROW, AT EVERY WIDTH, and the shape change is what buys it.
+                Six LABELLED BOXES could not fit 375px, so they wrapped to 3x2 —
+                which broke the one thing a scale has to communicate, that it is
+                a single run from low to high. Six 44px circles need 264px plus
+                gaps and fit comfortably, so the run survives on a phone.
+                `compact` still tightens the gap for a narrow container beside a
+                form; it no longer has to change the layout. -- */
+          "flex items-start justify-between",
+          compact ? "gap-1" : "gap-1.5 sm:gap-2",
           // Never colour the whole card red — just the group (§6.1).
           error && "rounded-control border border-critical p-2",
         )}
@@ -168,31 +172,35 @@ export function RatingScale({
               onMouseLeave={() => setFocusedValue(null)}
               onFocus={() => setFocusedValue(option.value)}
               onBlur={() => setFocusedValue(null)}
+              /* -- A CIRCLE WITH THE NUMBER IN IT.
+                    The word is gone from the cell: repeating six labels under
+                    every question is 198 lines of the same six words on a
+                    33-question form, and it is what made the control bulky.
+                    §6's wording is not lost — `ScaleLegend` prints all six
+                    verbatim once at the top, and the two ENDS are named under
+                    this control, so the direction is always visible.
+
+                    Selected is a SOLID tier fill rather than a tint: at 44px a
+                    tint reads as "slightly different", and the one thing this
+                    control must answer at a glance is which one is chosen.
+
+                    44px is the circle itself, so the whole target is the thing
+                    you aim at (§13.8) rather than a glyph inside a larger box. -- */
               className={cn(
-                // 48px preferred over the 44px minimum (§6.1, §9).
-                "relative flex min-h-12 flex-col items-center justify-center gap-0.5 rounded-control border px-1 py-2",
-                // min-w-0 is load-bearing: a grid item defaults to
-                // `min-width: auto`, so without it the cell refuses to shrink
-                // below its longest word and the text renders straight through
-                // the border instead.
-                "min-w-0",
-                "transition-colors duration-hover ease-out",
-                "focus-visible:outline-none",
+                "relative grid size-11 shrink-0 place-items-center rounded-pill border",
+                "sm:size-12",
+                "transition-[background-color,border-color,transform] duration-hover ease-out",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 isSelected
-                  ? // Tier tint fill plus a tier border. The 1.5px of §6.1 is
-                    // rendered as a ring so it does not shift the cell by half
-                    // a pixel relative to its unselected neighbours.
-                    cn(tierClasses.selected, "ring-[0.5px]", tierClasses.ring)
-                  : "border-rule bg-surface text-ink-muted",
-                isInteractive && !isSelected && "hover:border-rule hover:bg-surface-mute",
+                  ? cn(tierClasses.fill, "text-ink-invert")
+                  : "border-rule bg-surface text-ink",
+                isInteractive && !isSelected && "hover:border-ink/30 hover:bg-surface-mute",
                 !isInteractive && "cursor-default",
               )}
             >
-              {/* §3: every numeral is mono and tabular. */}
               <span
                 className={cn(
-                  "tabular text-body-lg leading-none",
-                  isSelected ? tierClasses.numeral : "text-ink",
+                  "tabular text-body-lg font-medium leading-none",
                   // The ghost: the lead's score showing through until the MD
                   // picks their own (§6.4).
                   isGhost && "opacity-40",
@@ -200,23 +208,29 @@ export function RatingScale({
               >
                 {option.value}
               </span>
-
-              <span
-                className={cn(
-                  // w-full + break-words: the last line of defence. Even in a
-                  // cell narrower than the word, it wraps inside the border
-                  // rather than spilling over it.
-                  "w-full break-words text-center font-sans text-body-xs leading-tight",
-                  isSelected ? tierClasses.numeral : "text-ink-muted",
-                )}
-              >
-                {option.word}
-              </span>
+              {/* The word still reaches assistive tech, which never saw the
+                  circle. Sighted readers get it from the legend and the ends. */}
+              <span className="sr-only">{option.word}</span>
 
               {isGhost ? <span className="sr-only">Manager&rsquo;s rating</span> : null}
             </button>
           );
         })}
+      </div>
+
+      {/* -- THE TWO ENDS, NAMED, and this is what replaces six repeated words.
+             A run of numbered circles says how many steps there are and says
+             nothing about which way is good. Naming only the ends restores the
+             direction at a fraction of the height, and keeps §6's wording
+             exactly — these are options 0 and 5 verbatim, not a paraphrase of
+             them (§17: never improve wording that came from the source form).
+             The full six are printed once at the top by `ScaleLegend`. -- */}
+      <div
+        aria-hidden
+        className="flex items-baseline justify-between gap-3 text-body-sm text-ink-muted"
+      >
+        <span>{SCALE_0_5_LABELS[0]?.word}</span>
+        <span>{SCALE_0_5_LABELS[5]?.word}</span>
       </div>
 
       {name ? <input type="hidden" name={name} value={value ?? ""} /> : null}

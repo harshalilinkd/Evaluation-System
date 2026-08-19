@@ -18,6 +18,7 @@ import {
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormRenderer } from "@/components/appraise/form-renderer";
+import { GuidedForm } from "@/components/appraise/guided-form";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
@@ -683,15 +684,50 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       />
 
       {/* ---------- The form ---------- */}
-      <FormRenderer
-        form={form}
-        values={values}
-        errors={errors}
-        hiddenQuestionIds={hiddenQuestionIds}
-        readOnly={readOnly}
-        highlightDepartment={meta.departmentName}
-        onChange={onChange}
-      />
+      {/* -- TWO WALKS THROUGH THE SAME QUESTIONS, chosen by cycle type.
+             An INCREMENT cycle is thirty-odd questions in sections that a rater
+             moves around in — a scrolling form is right for that, and it is the
+             one that has been used and tested.
+             An EVALUATION cycle is a short sequence with no sections, and a
+             sequence is better walked than scrolled: one question at a time,
+             progress, Back and Continue.
+             Both draw every question with the same `QuestionField` (P9-1), take
+             the same values and errors, and submit through the same
+             `attemptSubmit`. Nothing about saving, validation or submission
+             differs — only how many questions are on screen at once. -- */}
+      {meta.isIncrement || readOnly ? (
+        <FormRenderer
+          form={form}
+          values={values}
+          errors={errors}
+          hiddenQuestionIds={hiddenQuestionIds}
+          readOnly={readOnly}
+          highlightDepartment={meta.departmentName}
+          onChange={onChange}
+        />
+      ) : (
+        <GuidedForm
+          form={form}
+          values={values}
+          errors={errors}
+          hiddenQuestionIds={hiddenQuestionIds}
+          tier="self"
+          readOnly={readOnly}
+          onChange={onChange}
+          submitLabel="Submit evaluation"
+          onSubmit={attemptSubmit}
+          submitting={submitting}
+          status={
+            saveState === "saving"
+              ? "Saving…"
+              : saveState === "saved"
+                ? "Saved"
+                : saveState === "error"
+                  ? "Not saved — retrying"
+                  : null
+          }
+        />
+      )}
 
       {/* ---------- The end of the form, on a large screen ----------
 
