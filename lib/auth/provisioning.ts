@@ -810,9 +810,41 @@ export async function updatePerson(
 
   const supabase = await createClient();
 
+  /* -- THE OFFICIAL PAIR WAS POSTED AND NEVER READ (0081).
+        The create path took `work_email` and `work_phone` off the form; this
+        one did not, so HR typed both, pressed Save, everything else was
+        written, and the two columns stayed null — which reads as "it saved and
+        then vanished", because that is exactly what happened.
+
+        Same normaliser and the same refusal wording as the personal number, so
+        a landline or a nine-digit typo is named rather than stored. -- */
+  const workPhone = String(formData.get("work_phone") ?? "").trim();
+  let workPhoneE164: string | null = null;
+  if (workPhone) {
+    const { normaliseToE164 } = await import("@/lib/notify/phone");
+    const result = normaliseToE164(workPhone);
+    if (!result.ok) {
+      return { error: `That official mobile number is not usable: ${result.reason}` };
+    }
+    workPhoneE164 = result.e164;
+  }
+
+  const workEmail = String(formData.get("work_email") ?? "").trim();
+  if (workEmail) {
+    const parsedWorkEmail = emailSchema.safeParse(workEmail);
+    if (!parsedWorkEmail.success) {
+      return {
+        error: "Check the highlighted fields.",
+        fieldErrors: {
+          work_email: parsedWorkEmail.error.issues[0]?.message ?? "Enter a valid email address",
+        },
+      };
+    }
+  }
+
   const { data: before } = await supabase
     .from("profiles")
-    .select("full_name, employee_code, designation, department_id, reports_to, date_of_joining, phone_e164")
+    .select("full_name, employee_code, designation, department_id, reports_to, date_of_joining, phone_e164, work_email, work_phone_e164")
     .eq("id", profileId)
     .maybeSingle();
 
@@ -827,9 +859,26 @@ export async function updatePerson(
     reports_to: reportsTo || null,
     date_of_joining: String(formData.get("date_of_joining") ?? "").trim() || null,
     phone_e164: phoneE164,
+    // Null clears the pair, which is what emptying the field means: they fall
+    // back to the personal details rather than becoming unreachable (0081).
+    work_email: workEmail || null,
+    work_phone_e164: workPhoneE164,
   };
 
-  const { error } = await supabase.from("profiles").update(after).eq("id", profileId);
+  /* -- `.select()` so a refused write REPORTS itself. A PostgREST update that
+        matches no row succeeds with zero rows, which is how a save says
+        "Saved" over something it never stored — the class §18 has now recorded
+        eight times (FIX-14, F15-14, F22-5, 0066, 0069). -- */
+  const { data: updated, error } = await supabase
+    .from("profiles")
+    .update(after)
+    .eq("id", profileId)
+    .select("id");
+
+  if (!error && (updated?.length ?? 0) === 0) {
+    return { error: "Those details were not saved — this account may not be yours to edit." };
+  }
+
   if (error) {
     return {
       error: /duplicate|unique/i.test(error.message)
