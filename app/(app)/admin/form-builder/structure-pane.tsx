@@ -180,6 +180,26 @@ export function StructurePane({
     [searching, order, visibleIn],
   );
 
+  /* -- WHERE EACH GROUP STARTS COUNTING, precomputed.
+        `index` inside the map is the position within its own group, which is
+        right when there are headings to reset under and wrong the moment there
+        are not: the flat list read 1, 2, 3, 1, 2, 3.
+
+        A running counter mutated inside the render closure is the obvious fix
+        and the React compiler refuses it — correctly, since a value reassigned
+        during render is not stable across re-renders. A memo answers the same
+        question without mutating anything. -- */
+  const numberFromBySection = React.useMemo(() => {
+    const map: Record<string, number> = {};
+    let drawn = 0;
+    for (const section of order) {
+      map[section] = drawn;
+      drawn += visibleIn(section).length;
+    }
+    return map;
+  }, [order, visibleIn]);
+
+
   /** Drops the dragged row where the pointer left it. */
   function handleDrop(section: QuestionSection, targetId: string) {
     if (!dragId || dragId === targetId) return;
@@ -282,6 +302,13 @@ export function StructurePane({
         ) : null}
       </header>
 
+      {/* -- NUMBERED 1..n ACROSS THE WHOLE LIST when flat.
+             `index` inside the map is the position within its own group, which
+             is right when there are headings to reset under and wrong the
+             moment there are not: the list read 1, 2, 3, 1, 2, 3. The offset is
+             the count of every question drawn before this group starts.
+             Computed once here rather than inside the map, so it is not
+             recounted per row. -- */}
       <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-2.5 pb-2">
         {/* Section EXISTENCE is not editable — the enum is fixed (§0.2) and the
             renderer depends on it. There is deliberately no way to add or
@@ -303,6 +330,12 @@ export function StructurePane({
           // gap with nothing to explain it.
           if (flat && (isAuto || allRows.length === 0)) return null;
           // Flat means always open: there is no header to collapse it with.
+          const numberFrom = numberFromBySection[section] ?? 0;
+          const isLastDrawn =
+            flat &&
+            !order
+              .slice(i + 1)
+              .some((later) => later !== "METADATA" && rowsIn(later).length > 0);
           const isOpen = flat || searching ? true : openSection === section;
           const isEmpty = !isAuto && allRows.length === 0;
 
@@ -318,7 +351,15 @@ export function StructurePane({
                       the reasoning inverts — a white card on the muted rail is
                       the app's own open-drawer idiom, and it is what makes the
                       open section read as the one you are working in. -- */
-                isOpen ? "bg-surface shadow-dashboard" : "bg-transparent",
+                /* -- Flat draws NO card. A white card per group with a gap
+                      between them still reads as sections even with the
+                      headings gone — the boundary is the heading. One surface,
+                      and the questions run straight through it. -- */
+                flat
+                  ? "bg-transparent"
+                  : isOpen
+                    ? "bg-surface shadow-dashboard"
+                    : "bg-transparent",
               )}
             >
               {/* No heading in flat mode: the questions ARE the list. */}
@@ -483,7 +524,7 @@ export function StructurePane({
                               >
                                 <span className="flex items-baseline gap-1.5">
                                   <span className="tabular shrink-0 text-body-xs text-ink-muted">
-                                    {index + 1}
+                                    {flat ? numberFrom + index + 1 : index + 1}
                                   </span>
                                   {/* Two lines, not one truncated one. A
                                       question truncated at four words is not
@@ -540,7 +581,10 @@ export function StructurePane({
 
                       {/* Adding while a search is narrowing the list would drop
                           the new question straight out of view. */}
-                      {searching ? null : (
+                      {/* One Add for the whole list when flat: a button after
+                          every group is the section boundary wearing a
+                          different hat, and there is only one list to add to. */}
+                      {searching || (flat && !isLastDrawn) ? null : (
                         <button
                           type="button"
                           onClick={() => onAdd(section)}
