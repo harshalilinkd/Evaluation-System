@@ -11,11 +11,14 @@ import { MoreHorizontal, Pencil, Plus, Table2, Trash2, Upload, UserCheck, UserX 
 
 import {
   createUser,
+  deletePeople,
   deletePerson,
   getImportTemplate,
   importUsers,
+  setPeopleActive,
   setUserActive,
   updatePerson,
+  type DeletePeopleState,
   type ImportState,
   type ProvisionState,
 } from "@/lib/auth/provisioning";
@@ -85,6 +88,8 @@ export type PersonRow = {
   department_id: string | null;
   reports_to: string | null;
   reports_to_name: string | null;
+  /** 0083's second reviewer. Null for almost everybody. */
+  co_reviewer_id?: string | null;
   employment_type: string | null;
   /**
    * When probation ends — 0023's `confirmation_date`.
@@ -1287,6 +1292,46 @@ function EditPersonDialog({
                 </select>
               </Field>
 
+              {/* -- A SECOND manager, for the people who genuinely have two.
+                     Almost everybody leaves this empty and nothing about their
+                     appraisal changes; setting it gives that person a THIRD
+                     form at the next launch, and the record then waits for all
+                     three before it reaches HR (0083).
+
+                     Not called "Design Coordinator" anywhere in the schema or
+                     here: the rule is "has a second reviewer", so the first
+                     other team that needs the same arrangement is a setting
+                     rather than a migration. -- */}
+              <Field
+                id="e_co_reviewer_id"
+                label="Second reviewer"
+                optional
+                error={state.fieldErrors?.co_reviewer_id}
+                hint="A second manager who rates them independently, on the same form. Leave empty unless they genuinely have two — a Designer rated by both a Team Leader and a Design Coordinator, for instance."
+              >
+                <select
+                  id="e_co_reviewer_id"
+                  name="co_reviewer_id"
+                  defaultValue={person.co_reviewer_id ?? ""}
+                  className={SELECT_CLASS}
+                >
+                  <option value="">Nobody — the usual case</option>
+                  {people
+                    // Neither themselves nor their own manager: rating yourself
+                    // is not a second opinion, and their manager already rates
+                    // them. Both are refused by the action and by 0084's launch
+                    // as well — this is simply not offering what always fails.
+                    .filter(
+                      (p) => p.id !== person.id && p.id !== person.reports_to && p.is_active,
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+
               <Field
                 id="e_phone"
                 label="Mobile No"
@@ -1614,16 +1659,22 @@ function DeletePersonDialog({
   );
 }
 
-function DeleteSubmit() {
+function DeleteSubmit({ label = "Delete account" }: { label?: string }) {
   const { pending } = useFormStatus();
   return (
     <Button type="submit" variant="destructive" className="min-h-11" disabled={pending}>
-      {pending ? "Deleting…" : "Delete account"}
+      {pending ? "Deleting…" : label}
     </Button>
   );
 }
 
 /* ---------- The screen ---------- */
+
+/* -- One object, for the life of the process. See the note at its use site:
+      an inline {} is rebuilt every render, and the bulk-result block compares
+      identity to tell one run from the next — which on the server never
+      settled and looped the renderer. -- */
+const NO_BULK_RESULT: DeletePeopleState = {};
 
 export function UsersTab({
   people,
@@ -1651,6 +1702,58 @@ export function UsersTab({
   const [deleting, setDeleting] = useState<PersonRow | null>(null);
   const [search, setSearch] = useState(initialSearch ?? "");
   const [status, setStatus] = useState("ALL");
+
+  /* -- DELETE MODE.
+        Removing one person and clearing out a roster of test accounts are
+        different jobs, so they get different controls: the row's own ⋯ menu
+        keeps the single delete, and this turns the table into a selection with
+        a select-all in the header. Nothing is tickable until somebody asks for
+        it, so reading the list is never cluttered with checkboxes (FIX-5).
+
+        Select-all covers WHAT IS ON SCREEN, never the whole roster. The search
+        and the status filter are how HR narrows to "the ones I mean", and a
+        toggle reaching past them would select people they cannot see — the
+        classic way a bulk action takes something nobody intended (F5-5). -- */
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  const [confirmingBulk, setConfirmingBulk] = useState(false);
+  /* -- A STABLE INITIAL STATE, and it is not a tidiness point.
+        This was `useActionState(deletePeople, {})`. That literal is built afresh
+        on EVERY render of this component, and the block further down tells one
+        run from the next by comparing `bulkState` by identity. On the client
+        React keeps the first one and the comparison settles after a render. On
+        the SERVER there is no store to keep it in: each pass built a new `{}`,
+        the identity never matched, and the render-phase setState ran again —
+        "Too many re-renders", and the page fell back to client rendering.
+
+        Hoisted to module scope so there is exactly one of it for the life of
+        the process. The identity comparison downstream is then asking what it
+        means to ask: is this a NEW result, or the one I have already handled. -- */
+  const [bulkState, bulkAction] = useActionState<DeletePeopleState, FormData>(
+    deletePeople,
+    NO_BULK_RESULT,
+  );
+  /* -- The other half of the same job. Almost everybody on a real roster is
+        undeletable by design — `audit_log` refuses DELETE for every caller, so
+        once somebody has acted their profile is permanent (P4-4) — and
+        deactivation is what §17 offers instead. Telling HR that fifty times and
+        leaving them to do it one dialog at a time is the complaint the bulk
+        delete was built for, one step further along. -- */
+  const [activeBulkState, activeBulkAction] = useActionState<DeletePeopleState, FormData>(
+    setPeopleActive,
+    {},
+  );
+
+  const toggleSelected = useCallback(
+    (id: string) =>
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
 
   /* -- TABLE EDIT MODE.
         Editing twelve salaries one dialog at a time is the wrong shape for a
@@ -1767,6 +1870,52 @@ export function UsersTab({
       }).sort(byEmployeeCode),
     [people, search, status],
   );
+
+  /* -- Your own account is never tickable. P8-4 refuses self-deactivation for
+        the same reason — locking the last administrator out is a support call
+        the database cannot undo — and the server refuses it too, because a
+        disabled checkbox is not a permission (§9). -- */
+  const selectable = useMemo(() => rows.filter((p) => p.id !== currentProfileId), [rows, currentProfileId]);
+  const allVisibleSelected = selectable.length > 0 && selectable.every((p) => selected.has(p.id));
+  const someVisibleSelected = selectable.some((p) => selected.has(p.id));
+
+  const toggleAllVisible = useCallback(() => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (selectable.every((p) => next.has(p.id))) selectable.forEach((p) => next.delete(p.id));
+      else selectable.forEach((p) => next.add(p.id));
+      return next;
+    });
+  }, [selectable]);
+
+  const selectedPeople = useMemo(() => people.filter((p) => selected.has(p.id)), [people, selected]);
+
+  const leaveDeleteMode = useCallback(() => {
+    setDeleteMode(false);
+    setSelected(new Set());
+    setConfirmingBulk(false);
+  }, []);
+
+  /* -- THE RUN IS OVER: clear the ticks and close the dialog.
+        Leaving them on would offer to delete people who are no longer there.
+
+        Adjusted DURING RENDER against the previous action state, not from an
+        effect. An effect calling setState is the cascading-render shape the
+        React compiler rejects — this log has recorded it nine times — and it
+        also paints once with the stale selection first, which is visible as the
+        count flickering. `bulkState` is a new object per run, so comparing
+        identity is what tells one run from the next (PC-4's device).
+
+        No `router.refresh()`: the action revalidates `/admin/settings`, so the
+        roster arrives as fresh props on its own. -- */
+  const [handledBulk, setHandledBulk] = useState<DeletePeopleState | null>(null);
+  if (bulkState !== handledBulk) {
+    setHandledBulk(bulkState);
+    if (bulkState.ok) {
+      setSelected(new Set());
+      setConfirmingBulk(false);
+    }
+  }
 
   const columns = useMemo<ColumnDef<PersonRow>[]>(
     () => [
@@ -2196,8 +2345,57 @@ export function UsersTab({
                     : `Save ${changedCount} ${changedCount === 1 ? "person" : "people"}`}
               </Button>
             </>
+          ) : deleteMode ? (
+            /* -- Delete mode replaces the other three for the reason edit mode
+                  does: Import, Add and Edit are all ways to change the list, and
+                  offering them mid-selection is offering to navigate away from
+                  it. §13.3 — one job at a time. -- */
+            <>
+              <span className="tabular text-body-sm text-ink-muted">
+                {selected.size} selected
+              </span>
+              <Button variant="ghost" className="min-h-11" onClick={leaveDeleteMode}>
+                Cancel
+              </Button>
+              {/* -- Reversible, so it does not stop to confirm: the same
+                    control switches them back on. The delete beside it is not,
+                    which is why that one does. -- */}
+              <form action={activeBulkAction}>
+                <input type="hidden" name="ids" value={JSON.stringify([...selected])} />
+                <input type="hidden" name="is_active" value="false" />
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={selected.size === 0}
+                  aria-label={`Deactivate ${selected.size} selected`}
+                  title="They stop being able to sign in. The record stays, and this can be undone."
+                >
+                  <UserX className="size-4" aria-hidden />
+                  <span className="hidden sm:inline">Deactivate</span>
+                </Button>
+              </form>
+              <Button
+                variant="destructive"
+                className="min-h-11 flex-1 sm:flex-none"
+                disabled={selected.size === 0}
+                onClick={() => setConfirmingBulk(true)}
+              >
+                <Trash2 className="size-4" aria-hidden />
+                {selected.size === 0 ? "Nobody ticked" : `Delete ${selected.size}`}
+              </Button>
+            </>
           ) : (
             <>
+              <Button
+                variant="outline"
+                className="min-h-11 flex-1 sm:flex-none"
+                onClick={() => setDeleteMode(true)}
+              >
+                <Trash2 className="size-4" aria-hidden />
+                <span className="hidden sm:inline">Delete several</span>
+                <span className="sm:hidden">Delete</span>
+              </Button>
               <Button
                 variant="outline"
                 className="min-h-11 flex-1 sm:flex-none"
@@ -2239,6 +2437,78 @@ export function UsersTab({
         </p>
       ) : null}
 
+      {deleteMode ? (
+        <p className="rounded-control border border-warning/40 bg-warning-tint px-4 py-3 font-sans text-body-sm text-ink">
+          <span className="font-medium">Choosing who to delete.</span> Tick the people to remove, or
+          use the box in the header to tick everyone shown — the search and status filters decide
+          what that means. Only somebody who has done nothing yet can be deleted; anybody already in
+          an evaluation, holding pay history, or with people reporting to them is kept, and you will
+          be told which. <span className="font-medium">Deactivate</span> works on anybody: they stop
+          being able to sign in and drop out of new cycles, the record stays, and it can be undone.
+        </p>
+      ) : null}
+
+      {/* -- The run's outcome, and it has to NAME who was kept. A count of
+            refusals is not something HR can act on; a list with a reason each
+            is (§13.4, and FIX-5's result strip for the question bank). -- */}
+      {bulkState.error || bulkState.message ? (
+        <div
+          role="status"
+          className={cn(
+            "rounded-control px-4 py-3 font-sans text-body-sm",
+            bulkState.error
+              ? "border border-critical/40 bg-critical-tint text-critical"
+              : "border border-final/40 bg-final-tint text-final",
+          )}
+        >
+          <p>{bulkState.error ?? bulkState.message}</p>
+          {bulkState.kept && bulkState.kept.length > 0 ? (
+            <>
+              <ul className="mt-2 space-y-1 text-ink">
+                {bulkState.kept.map((k) => (
+                  <li key={k.id}>
+                    <span className="font-medium">{k.name}</span> — {k.reason}
+                  </li>
+                ))}
+              </ul>
+              {/* -- §13.4: the message names the alternative, so the button that
+                    does it belongs here rather than three clicks away. Your own
+                    account is dropped — it is kept for a different reason and
+                    deactivating it would lock you out. -- */}
+              <form action={activeBulkAction} className="mt-3">
+                <input
+                  type="hidden"
+                  name="ids"
+                  value={JSON.stringify(
+                    bulkState.kept.map((k) => k.id).filter((id) => id !== currentProfileId),
+                  )}
+                />
+                <input type="hidden" name="is_active" value="false" />
+                <Button type="submit" variant="outline" className="min-h-11">
+                  <UserX className="size-4" aria-hidden />
+                  Deactivate the {bulkState.kept.filter((k) => k.id !== currentProfileId).length}{" "}
+                  kept instead
+                </Button>
+              </form>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {activeBulkState.error || activeBulkState.message ? (
+        <p
+          role="status"
+          className={cn(
+            "rounded-control px-4 py-3 font-sans text-body-sm",
+            activeBulkState.error
+              ? "border border-critical/40 bg-critical-tint text-critical"
+              : "border border-final/40 bg-final-tint text-final",
+          )}
+        >
+          {activeBulkState.error ?? activeBulkState.message}
+        </p>
+      ) : null}
+
       {saveResult ? (
         <p
           role="status"
@@ -2277,10 +2547,33 @@ export function UsersTab({
               )
             : undefined,
         }}
-        // Clicking anywhere on a row opens that person's record. The ⋯ menu's
-        // "Edit details" is the same action and stays — it is what a keyboard
-        // or screen-reader user reaches, since a clickable <tr> is neither
-        // focusable nor announced.
+        /* -- Ticks only in delete mode, so the ordinary list is unchanged. The
+              header box covers the people SHOWN — never the whole roster — and
+              your own account is not among them. -- */
+        selection={
+          deleteMode
+            ? {
+                isSelected: (person) => selected.has(person.id),
+                onToggle: (person) => toggleSelected(person.id),
+                onToggleAll: toggleAllVisible,
+                allSelected: allVisibleSelected,
+                someSelected: someVisibleSelected,
+                label: (person) => `Select ${person.full_name}`,
+                allLabel: `Select all ${selectable.length} people shown`,
+                disabled: (person) =>
+                  person.id === currentProfileId
+                    ? { reason: "This is your own account and cannot be deleted." }
+                    : null,
+              }
+            : undefined
+        }
+        /* -- Clicking a row opens that person's record, in every mode.
+              Making it TICK the row while choosing who to delete was the
+              obvious move and is wrong: `onRowClick` is also what the gutter
+              button and the phone card's "Open person" button call, and both
+              say "Open" — a control that ticks a box while announcing that it
+              opens somebody is worse than one extra click. The tick has its own
+              control, on the row and on the card. -- */
         onRowClick={(person) => setEditing(person)}
         empty={
           people.length === 0 ? (
@@ -2324,6 +2617,71 @@ export function UsersTab({
         person={deleting}
         onClose={() => setDeleting(null)}
       />
+
+      {/* -- The rule is stated BEFORE the press, and the result names exactly
+            who was kept afterwards. Whether somebody has an evaluation behind
+            them is a server question this dialog cannot answer, so it explains
+            what happens to each kind rather than pretending to have checked
+            (§13.4, FIX-5's F5-6). -- */}
+      <Dialog open={confirmingBulk} onOpenChange={(open) => !open && setConfirmingBulk(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedPeople.length === 1
+                ? `Delete ${selectedPeople[0]?.full_name}?`
+                : `Delete ${selectedPeople.length} accounts?`}
+            </DialogTitle>
+            <DialogDescription>
+              They can no longer sign in, and this cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <p className="rounded-control border border-warning/40 bg-warning-tint p-3 text-body-sm text-ink">
+            Only somebody who has done nothing yet is deleted. Anybody who appears in an evaluation
+            or a production appraisal, holds pay history, has people reporting to them, or has acted
+            anywhere in the system is kept — deactivate those instead, and they stop being able to
+            sign in while the record stays intact.
+          </p>
+
+          {selectedPeople.length > 0 ? (
+            <ul className="max-h-40 overflow-y-auto rounded-control border border-rule bg-surface-mute p-3 text-body-sm text-ink">
+              {selectedPeople.slice(0, 12).map((person) => (
+                <li key={person.id} className="truncate">
+                  {person.full_name}
+                  {person.employee_code ? ` · ${person.employee_code}` : ""}
+                </li>
+              ))}
+              {selectedPeople.length > 12 ? (
+                <li className="text-ink-muted">and {selectedPeople.length - 12} more</li>
+              ) : null}
+            </ul>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => setConfirmingBulk(false)}
+            >
+              Keep them
+            </Button>
+            <form action={bulkAction}>
+              <input
+                type="hidden"
+                name="ids"
+                value={JSON.stringify(selectedPeople.map((person) => person.id))}
+              />
+              <DeleteSubmit
+                label={
+                  selectedPeople.length === 1
+                    ? "Delete account"
+                    : `Delete ${selectedPeople.length} accounts`
+                }
+              />
+            </form>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* -- WHY A PAY CHANGE STOPS TO ASK.
             Every other cell on this grid is a fact and correcting one is a
