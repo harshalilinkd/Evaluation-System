@@ -741,9 +741,23 @@ export function WizardClient({
       return;
     }
 
-    // Whatever it was created as, everything below is about a real cycle.
-    cycleIdRef.current = result.data.cycleId;
-    setCycleId(result.data.cycleId);
+    /* -- Whatever it was created as, everything below is about a real cycle.
+
+          AND EVERYTHING BELOW MUST USE `launchedId`, NOT `cycleId`.
+          `setCycleId` does not update the variable this closure captured — it
+          schedules a render. On the path that CREATES the cycle (Launch is what
+          creates it now) `cycleId` is still null right here, so a destination
+          built from it read `/admin/cycles/null`, and the board answered
+          "invalid input syntax for type uuid: null". Reported from production:
+          the URL went into history, so pressing Back landed on it.
+
+          The ref two hundred lines above exists for exactly this window and
+          says so — "written the instant the server returns an id, so the next
+          save cannot miss it however soon it starts". It was written and then
+          not read by the two lines that needed it most. -- */
+    const launchedId = result.data.cycleId;
+    cycleIdRef.current = launchedId;
+    setCycleId(launchedId);
 
     /* -- Launched. If nothing could be SENT, hold here and say so rather than
           navigating past it: the cycle is live and nobody has been told, which
@@ -757,7 +771,7 @@ export function WizardClient({
             again — on a cycle that is already live. The server refuses a second
             launch by name, so it was never destructive, but it put an error in
             front of somebody whose launch had worked. -- */
-      setLaunchDestination(`/admin/cycles/${cycleId}?launched=1`);
+      setLaunchDestination(`/admin/cycles/${launchedId}?launched=1`);
       return;
     }
 
@@ -784,7 +798,7 @@ export function WizardClient({
       total: result.data.messagesSent + result.data.messagesQueued,
       failed: result.data.messagesFailed,
     });
-    setLaunchDestination(`/admin/cycles/${cycleId}?${outcome.toString()}`);
+    setLaunchDestination(`/admin/cycles/${launchedId}?${outcome.toString()}`);
   };
 
   /* -- CHOOSING THE TYPE RESHAPES THE CYCLE. All of it, in one handler.

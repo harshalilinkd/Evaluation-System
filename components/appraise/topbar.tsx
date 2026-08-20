@@ -106,7 +106,7 @@ export function Topbar({
             type="search"
             placeholder="Search"
             aria-label="Search"
-            className="h-9 min-h-9 rounded-input border-rule bg-surface-mute pl-9 text-body"
+            className="min-h-11 rounded-input border-rule bg-surface-mute pl-9 text-body lg:h-9 lg:min-h-9"
           />
         </div>
       </div>
@@ -163,7 +163,7 @@ export function Topbar({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="h-9 min-h-9 gap-2 px-2 font-sans text-body"
+              className="min-h-11 gap-2 px-2 font-sans text-body lg:h-9 lg:min-h-9"
               aria-label="Account"
             >
               <span

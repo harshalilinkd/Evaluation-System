@@ -619,7 +619,25 @@ export type CycleBoard = {
   totals: { participants: number; self: number; lead: number; final: number };
 };
 
+/**
+ * A uuid, or it never reaches Postgres.
+ *
+ * A malformed id is not a database problem and must not be reported as one:
+ * PostgREST answers `invalid input syntax for type uuid: "null"`, which reached
+ * a screen verbatim when the launch wizard built `/admin/cycles/null` from a
+ * state variable that had not updated yet. The wizard is fixed; this is so the
+ * NEXT badly-built link — a typo, a stale bookmark, a URL somebody edited —
+ * reads as "no such cycle" rather than as the product leaking its own plumbing
+ * (§0.7 says fail loudly, and a Postgres type error is not loudly, it is
+ * incomprehensibly).
+ *
+ * Checked shape-only. Whether the row exists is still the database's answer.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getCycleBoard(cycleId: string): Promise<CycleResult<CycleBoard>> {
+  if (!UUID.test(cycleId)) return cycleError("CYCLE_NOT_FOUND", "That cycle no longer exists.");
+
   const supabase = await createClient();
 
   const { data: cycle, error: cycleReadError } = await supabase

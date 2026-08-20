@@ -292,7 +292,7 @@ export function NotificationBell({ initial }: { initial: NotificationFeed }) {
             <Button
               variant="ghost"
               size="icon"
-              className="size-8 rounded-input"
+              className="size-11 rounded-input lg:size-8"
               aria-label={soundOn ? "Turn notification sound off" : "Turn notification sound on"}
               aria-pressed={soundOn}
               onClick={(event) => {
@@ -318,7 +318,7 @@ export function NotificationBell({ initial }: { initial: NotificationFeed }) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 rounded-input px-2"
+                className="min-h-11 rounded-input px-2 lg:h-8 lg:min-h-8"
                 onClick={(event) => {
                   event.preventDefault();
                   void onMarkAll();

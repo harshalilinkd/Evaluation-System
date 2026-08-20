@@ -350,7 +350,11 @@ export function DistributeClient({
             ).map((option) => (
               <label
                 key={option.value}
-                className="flex cursor-pointer items-center gap-1.5 text-body-sm text-ink"
+                /* -- THE LABEL IS THE TAP TARGET, not the 16px box inside it.
+                      A checkbox is drawn small on purpose; what has to be 44px
+                      is the thing a thumb lands on (§13.8), and without a
+                      height this row was about as tall as its text. -- */
+                className="flex min-h-11 cursor-pointer items-center gap-1.5 pr-2 text-body-sm text-ink"
               >
                 <input
                   type="checkbox"

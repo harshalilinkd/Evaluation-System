@@ -330,7 +330,7 @@ export function QuestionsClient({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 text-ink-muted hover:text-critical"
+                  className="size-11 text-ink-muted hover:text-critical lg:size-8"
                   aria-label={`Delete "${row.original.text}"`}
                   onClick={() => setConfirming([row.original])}
                 >
@@ -672,7 +672,7 @@ export function QuestionsClient({
           <Button
             variant="ghost"
             size="icon"
-            className="size-9 shrink-0"
+            className="size-11 shrink-0 lg:size-9"
             aria-label="Stop deleting"
             onClick={exitDeleteMode}
           >

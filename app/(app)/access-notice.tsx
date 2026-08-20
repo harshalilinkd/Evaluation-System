@@ -52,7 +52,7 @@ export function AccessNotice() {
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 shrink-0"
+        className="size-11 shrink-0 lg:size-8"
         aria-label="Dismiss"
         onClick={() => {
           // The parameter goes with the notice. Left in place it would come

@@ -455,7 +455,7 @@ function QuestionForm({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-9 shrink-0"
+                        className="size-11 shrink-0 lg:size-9"
                         aria-label={`Move "${option.label}" up`}
                         disabled={index === 0}
                         onClick={() => moveOption(index, index - 1)}
@@ -466,7 +466,7 @@ function QuestionForm({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-9 shrink-0"
+                        className="size-11 shrink-0 lg:size-9"
                         aria-label={`Move "${option.label}" down`}
                         disabled={index === options.length - 1}
                         onClick={() => moveOption(index, index + 1)}
@@ -477,7 +477,7 @@ function QuestionForm({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-9 shrink-0 hover:text-critical"
+                        className="size-11 shrink-0 hover:text-critical lg:size-9"
                         aria-label={`Remove "${option.label}"`}
                         onClick={() => setOptions(options.filter((_, i) => i !== index))}
                       >

@@ -7796,3 +7796,60 @@ never been applied, which would take the whole diagnostic down on a fresh
 database. Harmless where 0031 is applied — which is everywhere it currently
 runs — and a `to_regclass` guard is the fix whenever somebody points this at a
 new project.
+
+---
+
+### FIX-65 — The phone: dialogs off the screen, cards clipped, and a wrong unit in thirteen places
+
+`components/ui/dialog.tsx`, `components/appraise/data-grid.tsx`, and thirteen
+panels across `app/`. No migration.
+
+Reported from a handset with three screenshots: "grids modals are not fixed at
+screens". Three distinct faults, all fixed at the shared level so every screen
+inherits the fix rather than one being patched.
+
+| # | Decision | Why |
+|---|---|---|
+| F65-1 | **A dialog is capped to the visible viewport and scrolls inside itself** | shadcn centres the panel with a translate and sets NO max-height, so a tall form ran off the top AND the bottom with nothing to scroll — the buttons at its foot could not be reached at all. Every dialog in the product had this. |
+| F65-2 | …and that meant editing a shadcn PRIMITIVE, which §3 keeps untouched | Recorded as a deliberate exception rather than absorbed. The alternative was the same three classes on forty callers, which is forty chances to miss one, and §13.2 is not optional — a control that cannot be reached on a phone is not a styling preference. Callers that set their own sizing still win, because `cn` merges last-wins. |
+| F65-3 | **`vh` is the LARGE viewport on mobile — thirteen panels used it** | It measures the window as if the browser chrome were hidden, so a panel at `92vh` runs under the URL bar and past the bottom of the screen. `dvh` tracks what is actually visible. This is what put the edit dialog's Save button off the bottom in the screenshot. |
+| F65-4 | The dialog leaves a margin at 375px | `w-full max-w-lg` on a fixed element means the panel touches both edges of a phone. `max-w-[min(32rem,calc(100vw-1.5rem))]` keeps the desktop width and gives the phone a gutter. |
+| F65-5 | **A control in a phone card now fits the card** | The card's value cell sized to its content, so an input or a select was wider than the space beside its label and was clipped by the card's own `overflow-hidden` — visible as half-cut boxes down the right edge. `flex-1` gives it exactly what is left. One line in the shared grid; every screen that uses cards gets it. |
+| F65-6 | The roster reserves room for the mobile tab bar | `globals.css` defines `--bottom-nav-h` for this and `.table-screen` already subtracts it; Settings › Users wrote its own height calculation and forgot. The result was a status bar stranded mid-screen with dead space under it. |
+| F65-7 | A 420px MINIMUM width on a phone makes the PAGE scroll sideways | The cycle wizard's rail carried one so it would wrap rather than crush the title — right above `sm`, wrong below it, where the minimum is wider than the screen. Responsive now. Wide TABLES keep theirs: they scroll inside their own container, which is the documented exception. |
+
+**Verification — 11 checks, 0 failed.** Each is a defect that actually shipped
+rather than a generic checklist item: the dialog's cap, its scroll containment
+and its gutter; no `vh` left anywhere; the card cell; the tab-bar reservation;
+and a width scan that allows a table its minimum and nothing else, with a
+self-test proving it still catches a bare one.
+
+**The comment trap, thirteenth occurrence.** The width scan matched the wizard's
+own comment EXPLAINING why its rail carries a 420px minimum, and reported the
+line I had just fixed as still broken. It strips comments now.
+
+#### And then the pass I said had not been done
+
+Rebuilt FIX-23's audit and ran it over **175 screens**, checking only the faults
+this codebase has actually shipped — a fixed bar under the navigation (FIX-15),
+a table with no scroll container (FIX-21), a hover-only control (P31-8), type
+below the 11px floor (P31-6), a tap target under 44px (§13.8), a full-width
+select with no `min-w-0` (F13-4), and FIX-65's two. **Twelve findings, all in
+one rule. All fixed. The audit now returns 0.**
+
+| # | Decision | Why |
+|---|---|---|
+| F65-8 | **The 44px input default belonged in the PRIMITIVE, not in 96 call sites** | shadcn ships 36px and 60 inputs had forgotten to override it — including the self-evaluation form, the salary band, the cycle wizard and the employment screen. Fixing the sites leaves the next one wrong; fixing the default cannot. A THIRD deliberate exception to §3, and the same reasoning as the dialog: §13.8 is a constitution rule of equal standing, and a caller that wants something else still overrides. |
+| F65-9 | Chrome buttons are 44px on touch and compact where there is a mouse | `size-11 lg:size-8`, F23-4's pattern. The notification bell, the theme toggle, the topbar search and the question-bank icon buttons are all things people tap on a phone; a dense admin toolbar on a laptop is not the case §13.8 was written for. |
+| F65-10 | **A checkbox is drawn small on purpose; the LABEL is the tap target** | The distribution screen's recipient checkboxes were 16px in a label with no height, so the row was about as tall as its text. The box is unchanged and the label is 44px — and the audit rule follows that pattern rather than the pixel, so a bare box with no such label is still a finding. |
+| F65-11 | Print is exempt from the audit, deliberately | §7a inverts the design system for paper — A4, millimetres, no touch targets. Auditing it against phone rules would report the print pack as broken for being a print pack. |
+
+**Verification — the audit at 0 findings across 175 screens, plus 11 checks on
+the specific fixes.** The scanner carries a self-test proving it can still
+detect a small target, because a clean run from a broken scanner is worse than
+no run. Typecheck 0, lint 0 errors, build clean; the six other suites from this
+session all still pass.
+
+**Scope, stated plainly.** This is a static audit of the classes of fault that
+have reached a phone before. It is not the same as opening 175 screens on a
+handset, and it cannot see a layout that is merely ugly.
