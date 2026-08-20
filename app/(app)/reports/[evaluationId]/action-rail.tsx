@@ -320,7 +320,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
           />
           <p className="font-sans text-body-sm text-ink-muted">
             {report.isIncrement
-              ? "Required before this can go to the MD."
+              ? "Needed before you can send this."
               : "Required either way — to complete this yourself, or to send it to the MD."}
           </p>
         </div>
@@ -367,10 +367,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
               className="resize-y rounded-card border-rule bg-surface px-3.5 py-2.5 text-body shadow-none placeholder:text-ink-faint focus-visible:border-primary/50 focus-visible:ring-4 focus-visible:ring-primary/10"
             />
             <p className="font-sans text-body-sm text-ink-muted">
-              A monthly figure. Saved with the record when you send. Leave blank to let the MD set
-              the figure —
-              either way they approve it, and the full salary panel is in section{" "}
-              {report.narratives.paired.length > 0 ? 5 : 4} below.
+              Per month. Leave blank and the MD sets it.
             </p>
 
             <div className="space-y-1.5 pt-1">
@@ -389,7 +386,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                 className="tabular min-h-11"
               />
               <p className="font-sans text-body-sm text-ink-muted">
-                When you and the MD are due to discuss this. Kept with the record.
+                The date you will discuss this.
               </p>
             </div>
           </div>
@@ -468,7 +465,7 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                   the field would be the same sentence twice. -- */}
             {summaryMissing ? (
               <p className="rounded-control border border-rule bg-surface-mute px-3 py-2 font-sans text-body-sm text-ink-muted">
-                Write your summary above first. It is what the MD reads before the report.
+                Write the summary first.
               </p>
             ) : null}
 

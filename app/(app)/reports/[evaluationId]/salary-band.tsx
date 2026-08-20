@@ -491,7 +491,9 @@ function HrProposal({
                 ask" is kept because the number below is a DIFFERENCE, and a
                 heading of "Manager proposal" over a gap would name the wrong
                 thing. -- */}
-          <h3 className="type-label text-ink-muted">Compared with what they asked for</h3>
+          {/* Renamed at the owner's instruction, to match the question the
+              employee answered ("What is your monthly Expected Salary?"). */}
+          <h3 className="type-label text-ink-muted">Compared with their expected salary</h3>
           {gap.amount === null ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
               {review?.employee_expectation_ctc
@@ -652,7 +654,7 @@ function HrProposal({
             <dd className="font-sans text-body-sm text-ink-muted">
               {data.monthsSinceLastIncrement
                 ? `What ${pctText(pct)} over ${data.monthsSinceLastIncrement} months is worth per year. Context only — the money paid is ${pctText(pct)}.`
-                : "No last-increment date to annualise against."}
+                : "No previous rise to compare against."}
             </dd>
           </div>
           <div>
@@ -677,7 +679,7 @@ function HrProposal({
             placeholder="Why is this the right figure?"
           />
           <p className="font-sans text-body-sm text-ink-muted">
-            Optional. It goes to the MD with the number.
+            Optional. Sent to the MD with the figure.
           </p>
         </div>
 

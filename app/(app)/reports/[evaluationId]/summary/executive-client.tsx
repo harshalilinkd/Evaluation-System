@@ -214,12 +214,39 @@ export function ExecutiveSummary({
                 — and "Promotion recommendation Yes" beside an employee's
                 average is ambiguous about who recommended it. A card, with a
                 title, in the same rhythm as everything under it. -- */}
-          {lead.verdicts.length > 0 ? (
-            <Card title="The manager's answers">
-              <div className="flex flex-wrap gap-1.5">
-                {lead.verdicts.map((v) => (
-                  <VerdictTag key={v.question} block={v} />
-                ))}
+          {/* -- ONE GROUP PER MANAGER, and that is a CRASH FIX as much as a
+                 clarity one. Pooling the two managers put the same question in
+                 the list twice — both answer "Promotion recommendation" — and
+                 React refused it: "Encountered two children with the same key".
+                 Keying on the question was safe while there was one manager and
+                 stopped being safe the moment there were two.
+
+                 Naming the manager also answers the question the chips raised:
+                 "Promotion recommendation · Yes" beside an average says nothing
+                 about WHO recommended it, and with two reviewers that is the
+                 whole point. -- */}
+          {leadOwn.verdicts.length > 0 || coLeadOwn.verdicts.length > 0 ? (
+            <Card title={secondManager ? "What each manager answered" : "What the manager answered"}>
+              <div className="space-y-3">
+                {[
+                  { who: header.leadName ?? "Manager", items: leadOwn.verdicts },
+                  ...(secondManager
+                    ? [{ who: secondManager, items: coLeadOwn.verdicts }]
+                    : []),
+                ]
+                  .filter((g) => g.items.length > 0)
+                  .map((g) => (
+                    <div key={g.who}>
+                      {secondManager ? (
+                        <p className="type-label mb-1.5 text-ink-muted">{g.who}</p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.items.map((v) => (
+                          <VerdictTag key={`${g.who}:${v.question}`} block={v} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
               </div>
             </Card>
           ) : null}

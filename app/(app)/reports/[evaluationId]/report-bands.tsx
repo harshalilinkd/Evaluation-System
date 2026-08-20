@@ -214,6 +214,17 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
         name is in the header card above. -- */
   const secondManager = header.coLeadName ? firstName(header.coLeadName) : null;
 
+  /* -- A NAME IS NOT A ROLE. Reported: "only reviewers name mentioned their
+        role not mentioned like lead/HOD/Manager or Design coordinator". Two
+        columns headed "HARSHALI.LINKD" and "HARSHALI" tell the reader nothing
+        about which of them is the reporting manager and which is the second
+        reviewer — and on a pay decision that is the first thing anybody needs
+        to know. The role leads, the name follows it. -- */
+  const leadHeading = secondManager
+    ? `Manager · ${firstName(header.leadName)}`
+    : "Manager";
+  const coLeadHeading = secondManager ? `2nd reviewer · ${secondManager}` : null;
+
   /* -- THE FINAL SCORE, BEFORE IT IS STORED.
         `final_overall` is written at the close and not a moment earlier, so the
         tile was absent for the whole life of a record and appeared only once
@@ -319,7 +330,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           <figure className="relative px-6 py-5">
             <span aria-hidden className="absolute inset-y-4 left-0 w-0.5 rounded-pill bg-lead" />
             <figcaption>
-              <TierTag tier="lead">{secondManager}&apos;s average</TierTag>
+              <TierTag tier="lead">{coLeadHeading}</TierTag>
             </figcaption>
             <p className="tabular mt-1 text-display-lg text-ink">
               {score(summary.coLeadOverall)}
@@ -409,7 +420,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   <TierTag tier="self">Self</TierTag>
                 </th>
                 <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
-                  <TierTag tier="lead">{secondManager ? firstName(header.leadName) : "Manager"}</TierTag>
+                  <TierTag tier="lead">{leadHeading}</TierTag>
                 </th>
                 {/* -- The SECOND manager, only where there is one (0083). Named
                        rather than numbered: "Manager 2" tells nobody which of
@@ -420,7 +431,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                        which is the opposite of why both were asked. -- */}
                 {secondManager ? (
                   <th className={cn("px-4 py-3 text-right", TIER_CELL)}>
-                    <TierTag tier="lead">{secondManager}</TierTag>
+                    <TierTag tier="lead">{coLeadHeading}</TierTag>
                   </th>
                 ) : null}
                 {/* Added at the owner's instruction — a deliberate amendment to
@@ -508,13 +519,13 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
                   </div>
                   <div>
                     <dt className="type-label text-lead">
-                      {secondManager ? firstName(header.leadName) : "Manager"}
+                      {leadHeading}
                     </dt>
                     <dd className="tabular text-body font-semibold text-ink">{score(s.lead)}</dd>
                   </div>
                   {secondManager ? (
                     <div>
-                      <dt className="type-label text-lead">{secondManager}</dt>
+                      <dt className="type-label text-lead">{coLeadHeading}</dt>
                       <dd className="tabular text-body font-semibold text-ink">
                         {score(s.coLead)}
                       </dd>
@@ -556,6 +567,11 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
   // Same rule as the header band: no second manager, no third column, and the
   // table is the one this screen has always drawn.
   const secondManager = report.header.coLeadName ? firstName(report.header.coLeadName) : null;
+  // The role leads, the name follows — same rule as the band above (see there).
+  const leadHeading = secondManager
+    ? `Manager · ${firstName(report.header.leadName)}`
+    : "Manager";
+  const coLeadHeading = secondManager ? `2nd reviewer · ${secondManager}` : null;
 
   const sections = report.sections
     .map((s) => ({ ...s, rows: flaggedOnly ? s.rows.filter((r) => r.flag !== "none") : s.rows }))
@@ -636,12 +652,12 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                     </th>
                     <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
                       <TierTag tier="lead">
-                        {secondManager ? firstName(report.header.leadName) : "Manager"}
+                        {leadHeading}
                       </TierTag>
                     </th>
                     {secondManager ? (
                       <th className={cn("px-4 py-3 text-left", TIER_CELL)}>
-                        <TierTag tier="lead">{secondManager}</TierTag>
+                        <TierTag tier="lead">{coLeadHeading}</TierTag>
                       </th>
                     ) : null}
                     <th className="type-label px-5 py-3 text-right font-bold text-ink">Gap</th>
@@ -756,7 +772,7 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                     </div>
                     <div className="min-w-0">
                       <dt className="type-label text-lead">
-                        {secondManager ? firstName(report.header.leadName) : "Manager"}
+                        {leadHeading}
                       </dt>
                       <dd className="font-sans text-body-sm text-ink">
                         {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
@@ -764,7 +780,7 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                     </div>
                     {secondManager ? (
                       <div className="col-span-2 min-w-0">
-                        <dt className="type-label text-lead">{secondManager}</dt>
+                        <dt className="type-label text-lead">{coLeadHeading}</dt>
                         <dd className="font-sans text-body-sm text-ink">
                           {row.coLeadAnswer ?? <span className="text-ink-muted">—</span>}
                         </dd>
