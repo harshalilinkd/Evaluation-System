@@ -147,7 +147,7 @@ export function FormSectionNav({
       </button>
 
       {open ? (
-        <ul className="mt-2 max-h-[60vh] overflow-y-auto rounded-control border border-rule bg-surface">
+        <ul className="mt-2 max-h-[60dvh] overflow-y-auto rounded-control border border-rule bg-surface">
           {sections.map((s, i) => {
             const done = s.total > 0 && s.answered === s.total;
             return (

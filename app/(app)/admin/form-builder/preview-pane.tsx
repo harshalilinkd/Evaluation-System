@@ -167,7 +167,7 @@ export function PreviewPane({
           >
             {/* p-4 because `.app-main` is px-4 — the preview must not be
                 roomier than the screen it claims to be. */}
-            <div className={cn(phone && "max-h-[70vh] overflow-y-auto p-4")}>
+            <div className={cn(phone && "max-h-[70dvh] overflow-y-auto p-4")}>
               {/* The mark the real form carries, so the preview is the whole
                   document rather than only its questions. */}
               <FormLetterhead caption="Performance evaluation" className="mb-4" />

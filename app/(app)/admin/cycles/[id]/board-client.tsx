@@ -605,7 +605,7 @@ export function BoardClient({
 
         {/* max-h, not h: with one person the grid is one row tall, and with
             forty it scrolls. A fixed height left most of the card empty. */}
-        <div className="flex max-h-[58vh] flex-col">
+        <div className="flex max-h-[58dvh] flex-col">
           <DataGrid
             data={laneFiltered}
             columns={boardColumns}

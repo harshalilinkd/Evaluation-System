@@ -124,7 +124,7 @@ export function QuestionImportDialog({
       }}
     >
       <DialogContent
-        className="max-h-[88vh] w-[min(96vw,900px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
+        className="max-h-[88dvh] w-[min(96vw,900px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
@@ -236,7 +236,7 @@ export function QuestionImportDialog({
                 </label>
               ) : null}
 
-              <div className="max-h-[42vh] overflow-auto rounded-card border border-rule">
+              <div className="max-h-[42dvh] overflow-auto rounded-card border border-rule">
                 <table className="w-full border-collapse text-body-sm">
                   <thead className="sticky top-0 bg-surface-mute">
                     <tr>

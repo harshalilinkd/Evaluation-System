@@ -919,7 +919,12 @@ export function WizardClient({
           </h1>
         </div>
 
-        <div className="min-w-[420px] flex-1">
+        {/* -- The 420px minimum is what makes the rail WRAP to its own line
+              rather than crush the title — but it is a minimum, and on a 375px
+              phone a minimum wider than the screen makes the whole PAGE scroll
+              sideways. Below `sm` it may shrink; above it the wrap behaviour is
+              exactly as it was. -- */}
+        <div className="min-w-0 flex-1 sm:min-w-[420px]">
           <StepRail steps={STEPS} current={step} furthest={furthest} onSelect={(i) => void goTo(i)} />
         </div>
 

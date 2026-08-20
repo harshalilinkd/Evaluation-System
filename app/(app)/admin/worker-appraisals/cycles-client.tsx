@@ -303,7 +303,7 @@ export function StartRoundDialog({
           event.preventDefault();
           (event.currentTarget as HTMLElement | null)?.focus();
         }}
-        className="flex max-h-[92vh] w-[min(96vw,720px)] max-w-none flex-col gap-0 overflow-hidden p-0"
+        className="flex max-h-[92dvh] w-[min(96vw,720px)] max-w-none flex-col gap-0 overflow-hidden p-0"
       >
         <DialogHeader className="shrink-0 border-b border-rule px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
@@ -699,7 +699,7 @@ export function AddWorkersDialog({
             Everybody on the Production Team is already in this round.
           </p>
         ) : (
-          <ul className="max-h-[50vh] space-y-1 overflow-y-auto py-1">
+          <ul className="max-h-[50dvh] space-y-1 overflow-y-auto py-1">
             {available.map((w) => (
               <li key={w.id}>
                 <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-2 py-2 hover:bg-surface-mute">

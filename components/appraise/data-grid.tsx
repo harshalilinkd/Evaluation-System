@@ -569,7 +569,7 @@ export function DataGrid<TData>({
                             <dt className="type-label shrink-0 text-ink-muted">
                               {headingFor(cell.column.id)}
                             </dt>
-                            <dd className="min-w-0 text-right font-sans text-body-sm text-ink">
+                            <dd className="min-w-0 flex-1 text-right font-sans text-body-sm text-ink">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </dd>
                           </div>

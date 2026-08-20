@@ -405,7 +405,7 @@ function ImportDialog({
         // the action returns — closing on a stray backdrop click would throw
         // away the only record of which rows landed.
         onInteractOutside={(event) => event.preventDefault()}
-        className="flex max-h-[92vh] w-[min(96vw,760px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className="flex max-h-[92dvh] w-[min(96vw,760px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
       >
         <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
           <DialogTitle className="text-display-sm text-ink">Import from a spreadsheet</DialogTitle>
@@ -734,7 +734,7 @@ function AddPersonDialog({
         // unsaved fields and a stray backdrop click throwing them away is the
         // kind of loss people do not report, they just stop trusting the screen.
         onInteractOutside={(event) => event.preventDefault()}
-        className="flex max-h-[92vh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className="flex max-h-[92dvh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
       >
         <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
           <DialogTitle className="text-display-sm text-ink">Add someone</DialogTitle>
@@ -1220,7 +1220,7 @@ function EditPersonDialog({
         // 900px, the add form's width. The bands need the label column, and two
         // dialogs about the same person at two different widths read as two
         // different screens.
-        className="flex max-h-[92vh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className="flex max-h-[92dvh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
       >
         <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
           <DialogTitle className="text-display-sm text-ink">Edit {person.full_name}</DialogTitle>
@@ -2419,7 +2419,7 @@ export function UsersTab({
     // scrolls inside itself.
     <div
       data-full-bleed
-      className="flex h-[calc(100dvh-theme(spacing.topbar)-5rem)] min-h-[24rem] flex-col overflow-hidden border-t border-rule bg-surface"
+      className="flex h-[calc(100dvh-theme(spacing.topbar)-5rem-var(--bottom-nav-h))] min-h-[24rem] flex-col overflow-hidden border-t border-rule bg-surface"
     >
       {activeState.error || activeState.message ? (
         <div className="shrink-0 border-b border-rule px-3 py-2">

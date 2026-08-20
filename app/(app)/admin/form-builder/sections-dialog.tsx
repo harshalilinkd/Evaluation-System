@@ -82,7 +82,7 @@ export function SectionsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[88vh] w-[min(96vw,640px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
+        className="max-h-[88dvh] w-[min(96vw,640px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>

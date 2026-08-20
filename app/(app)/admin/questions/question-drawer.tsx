@@ -167,7 +167,7 @@ export function QuestionDrawer({
         // all three are deliberate acts.
         onInteractOutside={(event) => event.preventDefault()}
         className={cn(
-          "flex max-h-[92vh] w-[min(96vw,1040px)] max-w-none flex-col gap-0 overflow-hidden",
+          "flex max-h-[92dvh] w-[min(96vw,1040px)] max-w-none flex-col gap-0 overflow-hidden",
           "rounded-card-lg border-rule bg-background p-0",
         )}
       >

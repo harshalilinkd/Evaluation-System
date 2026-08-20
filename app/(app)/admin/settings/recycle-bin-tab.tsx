@@ -186,7 +186,7 @@ export function RecycleBinTab({ cycles }: { cycles: BinnedCycleRow[] }) {
   return (
     // max-h, not h: with one row the card is one row tall. A fixed 68vh left
     // most of it empty, which is the complaint the board had too.
-    <div className="flex max-h-[70vh] flex-col overflow-hidden rounded-card bg-surface shadow-dashboard">
+    <div className="flex max-h-[70dvh] flex-col overflow-hidden rounded-card bg-surface shadow-dashboard">
       <div className="shrink-0 border-b border-rule px-4 py-3">
         <h2 className="text-body font-medium text-ink">Recycle bin</h2>
         <p className="mt-0.5 max-w-[90ch] text-body-sm text-ink-muted">
