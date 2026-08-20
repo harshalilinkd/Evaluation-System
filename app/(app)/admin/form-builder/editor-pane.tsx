@@ -225,11 +225,24 @@ export function EditorPane({
                What was wrong is that nothing said so, and there was no way to
                choose otherwise. Now both are true — the notice states it, and
                the button gives this form its own copy. -- */}
+        {/* -- NO "which cycles ask this" CONTROL, at the owner's instruction:
+               "we already segregated evaluation and increment forms then why
+               this showing Which cycles ask this?" — and they are right. The
+               TAB is the answer to that question. A per-question scope picker
+               asks HR to reason about the mechanism underneath two screens that
+               already say which form they are.
+
+               What stays is the CONSEQUENCE, because it is real: most of the
+               bank predates the split and is shared, so editing a shared
+               question here does change the other form. Saying so, and offering
+               this form its own copy, is the difference between behaviour
+               somebody can predict and the bug this started as. -- */}
         {question.cycleScope === "BOTH" ? (
           <div className="rounded-card border border-warning/40 bg-warning-tint p-3">
             <p className="font-sans text-body-sm text-ink">
-              This question is asked on <strong>both</strong> forms. Editing it here changes it on
-              the {cycleType === "INCREMENT" ? "Evaluation" : "Increment"} form too.
+              This question is <strong>shared</strong> with the{" "}
+              {cycleType === "INCREMENT" ? "Evaluation" : "Increment"} form. Editing it here
+              changes it there too.
             </p>
             <button
               type="button"
@@ -253,38 +266,6 @@ export function EditorPane({
           />
         </Field>
 
-        <Field
-          label="Which cycles ask this?"
-          hint="An evaluation cycle and an increment cycle are two different exercises (§1). Most questions belong to one of them."
-        >
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ["EVALUATION_ONLY", "Evaluation only"],
-                ["INCREMENT_ONLY", "Increment only"],
-                ["BOTH", "Both forms"],
-              ] as const
-            ).map(([value, label]) => {
-              const active = question.cycleScope === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onPatch({ cycleScope: value })}
-                  aria-pressed={active}
-                  className={cn(
-                    "min-h-11 rounded-control border px-3 text-body-sm",
-                    active
-                      ? "border-primary bg-primary/10 font-medium text-primary"
-                      : "border-rule text-ink-muted hover:bg-surface-mute",
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
 
         <Field label="Helper text shown below it" hint="Optional. One line of plain guidance.">
           <Textarea
