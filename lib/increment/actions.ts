@@ -17,6 +17,18 @@ async function requireHr() {
   return { ok: true as const, session: auth.session };
 }
 
+async function requireMd() {
+  const auth = await checkRole(["MD"]);
+  if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
+  return { ok: true as const, session: auth.session };
+}
+
+/* -- HR or the MD, for `confirmIncrement` alone. This is the ORIGINAL §8
+      design (MD_REVIEWED -> INTERVIEW_DONE -> CLOSED is "HR_ADMIN or MD" for
+      recording the interview and the final confirmed amount) and is untouched
+      by 0090's reversal — that migration narrows only the approval step
+      itself (`saveApproval` / `approveAndClose`), which used to share this
+      helper and no longer does. -- */
 async function requireHrOrMd() {
   const auth = await checkRole(["HR_ADMIN", "MD"]);
   if (!auth.ok) return cycleError("FORBIDDEN", auth.error.message);
@@ -149,11 +161,10 @@ export async function saveApproval(input: {
   approvedCtc: number;
   remarks?: string;
 }): Promise<CycleResult<{ hikePct: number | null }>> {
-  /* -- HR OR THE MD (0056), at the owner's instruction. This is the second
-        pair of eyes on a pay decision going away — the column guard that
-        refused HR is relaxed in the same migration, and the audit row still
-        records who actually pressed it. -- */
-  const auth = await requireHrOrMd();
+  /* -- MD-ONLY AGAIN (0090), reversing 0056 at the owner's explicit
+        instruction. The column guard that refused HR is restored in the same
+        migration (P5-1) — a client-side check alone is not a guard. -- */
+  const auth = await requireMd();
   if (!auth.ok) return auth;
 
   const parsed = approvalSchema.safeParse(input);
@@ -336,8 +347,8 @@ export async function approveAndClose(input: {
   remarks?: string;
   effectiveFrom: string;
 }): Promise<CycleResult<{ closed: true; effectiveFrom: string }>> {
-  // HR or the MD (0056). See saveApproval.
-  const auth = await requireHrOrMd();
+  // MD-only again (0090). See saveApproval.
+  const auth = await requireMd();
   if (!auth.ok) return auth;
 
   const approval = await saveApproval({

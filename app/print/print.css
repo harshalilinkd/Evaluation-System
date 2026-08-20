@@ -577,10 +577,9 @@ dl.print-meta dd {
 
 /*
   The signature block is what the whole sheet exists for, so it is given room
-  and its own rule above it rather than being tacked onto the last section.
-  The line spans its column instead of a fixed 40mm — three cramped stubs in a
-  row is what made this look like a form to fill in rather than a record to
-  sign.
+  rather than being tacked onto the last section. The line spans its column
+  instead of a fixed 40mm — three cramped stubs in a row is what made this
+  look like a form to fill in rather than a record to sign.
 */
 /*
   6mm, not 10mm — the report carries FOUR cells now (manager, HR, MD, company
@@ -589,12 +588,19 @@ dl.print-meta dd {
   lines, which drops that cell's rule out of line with its neighbours. Shared by
   both sheets: three cells at 6mm still read as three separate columns.
 */
+/*
+  NO BORDER-TOP, at the owner's instruction — reported as "showing unnecessary
+  line" on the printed footer. It used to draw a full-width rule of its own,
+  the same weight as a SECTION HEADING'S rule, with no heading attached to
+  justify it — every other rule on this sheet sits directly under a labelled
+  h2, so this one read as a heading whose title had gone missing rather than
+  as a deliberate divider. The 12mm margin above is what now separates the
+  block from Review; each cell's own 0.5pt line is still what says "sign here".
+*/
 .print-signatures {
   display: flex;
   gap: 6mm;
   margin-top: 12mm;
-  padding-top: 5mm;
-  border-top: 0.75pt solid #000;
 }
 
 
@@ -876,8 +882,21 @@ dl.print-meta dd {
 /*
   The signature panel. Four cells of equal width so the rules line up with each
   other — the owner's "align all signature authority fields".
+
+  SCOPED TO THE WORKER SHEET, and that scoping is itself the fix for a bug
+  found while removing the report sheet's stray footer rule. This selector was
+  bare `.print-block.print-signatures` — two classes, specificity (0,0,2,0) —
+  and `report-sheet.tsx`'s own signature section carries BOTH of those classes
+  too (`className="print-signatures print-block"`), which is a coincidental
+  overlap nothing here intended. Being MORE specific than that sheet's own
+  `.print-signatures` rule, this one was silently winning: the report's
+  signature row was rendering an 8mm gap and a border-top neither its own CSS
+  block nor its own comments describe, which is exactly the "unnecessary line"
+  reported on the printed footer. The `--worker` ancestor is what the sibling
+  rule two blocks below already scopes its own follow-up with; this base rule
+  had simply never been given the same scope.
 */
-.print-block.print-signatures {
+.print-sheet--worker .print-block.print-signatures {
   display: flex;
   gap: 8mm;
   /* -- THIS BLOCK IS WHAT BROKE TO A SECOND PAGE, and it carries

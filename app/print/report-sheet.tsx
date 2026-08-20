@@ -58,10 +58,6 @@ function managerMean(lead: number | null, coLead: number | null): number | null 
   return (lead + coLead) / 2;
 }
 
-function firstName(full: string | null): string {
-  return (full ?? "").trim().split(/\s+/)[0] || "they";
-}
-
 export function ReportSheet({ report }: { report: EvaluationReport }) {
   const { header, summary, narratives, meta, review } = report;
 
@@ -74,9 +70,6 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
   const secondManager = header.coLeadName
     ? coLeadRole(header.coLeadDesignation, header.coLeadName)
     : null;
-  const employee = firstName(header.employeeName);
-
-
   return (
     <article className="print-sheet">
       {/* ---------- Masthead ---------- */}
@@ -284,32 +277,13 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
         </section>
       ))}
 
-      {/* ---------- Band 3 ---------- */}
-      {narratives.paired.length > 0 ? (
-        <section className="print-section print-block">
-          <h2>Learning and improvement</h2>
-          <table className="print-table">
-            <thead>
-              <tr>
-                <th>Topic</th>
-                <th>What {employee} said</th>
-                <th>What {LEAD_ROLE} said</th>
-                {secondManager ? <th>What {secondManager} said</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {narratives.paired.map((pair) => (
-                <tr key={pair.topic}>
-                  <td>{pair.topic}</td>
-                  <td>{pair.selfAnswer ?? "—"}</td>
-                  <td>{pair.leadAnswer ?? "—"}</td>
-                  {secondManager ? <td>{pair.coLeadAnswer ?? "—"}</td> : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      ) : null}
+      {/* -- THE LEARNING TABLE IS GONE, at the owner's instruction: it
+            showed the same questions "repeated in both table and questions".
+            Every topic it compared reaches the sheet in full a few lines
+            below — once in the employee's own words, once in each manager's
+            assessment — so the table was the compressed, truncated copy of
+            content the reader was about to meet again in full. Nothing here
+            is lost; only the redundant middle copy is. -- */}
 
       {/* ---------- Band 4 ---------- */}
       {narratives.employeeVoice.length > 0 ? (

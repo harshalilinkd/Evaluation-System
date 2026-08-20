@@ -223,13 +223,18 @@ export const TRANSITIONS: readonly TransitionDefinition[] = [
        To restore: put "requireMdRemarks" back here, and back in guards.ts. */
     from: "HR_APPROVED",
     to: "MD_REVIEWED",
-    /* -- HR added (0056), at the owner's instruction. HR may record the MD's
-          review so they can carry an increment through to close on their own.
-          This is the second pair of eyes on a pay decision being removed —
-          AMEND-2 restored it deliberately after AMEND-1 took it away, and it is
-          going again knowingly. The SQL half moves in the same change (P5-1),
-          and `audit_log` still records who actually pressed it. -- */
-    actors: ["HR_ADMIN", "MD"],
+    /* -- MD-ONLY AGAIN (0090), AT THE OWNER'S EXPLICIT INSTRUCTION.
+          0056 widened this to HR_ADMIN as well, twice instructed at the time,
+          on the reasoning that HR should be able to carry an increment
+          through to close on their own. Reported back from the HR screen as
+          wrong — "hr dont have access to approve and close" — and confirmed
+          directly: MD-only.
+
+          AMEND-2 restored the second pair of eyes on a pay decision after
+          AMEND-1 took it away; 0056 gave it up again deliberately; this puts
+          it back the same way. The SQL half moves in the same migration
+          (P5-1) — a guard that lives only in TypeScript is not a guard. -- */
+    actors: ["MD"],
     guards: [],
     isReturn: false,
     action: "evaluation.md_review",

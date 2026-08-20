@@ -730,7 +730,7 @@ function MdApproval({
   evaluationId: string;
   currentCtc: number;
   firstName: string;
-  /** Changes the wording only. Both roles may act here since 0056. */
+  /** MD-only again (0090). For HR this renders read-only, with the reason shown. */
   isHr: boolean;
   /* -- Tells "approved" from "approved and closed". Approving now closes, so a
         record with a figure on it and a status short of CLOSED means the close
@@ -792,8 +792,17 @@ function MdApproval({
         PENDING_HR_REVIEW is not one of them and there is no path from it —
         §8's PENDING_HR_REVIEW -> CLOSED row refuses an INCREMENT outright,
         deliberately, because HR proposing and HR approving the same increment
-        is what the second pair of eyes exists to prevent. -- */
-  const canApprove = status === "HR_APPROVED" || status === "MD_REVIEWED";
+        is what the second pair of eyes exists to prevent.
+
+        AND NOW `!isHr` AS WELL (0090). 0056 gave HR this control and the
+        status gate above was the only thing keeping it in check; reported back
+        as "hr dont have access to approve and close" and confirmed directly:
+        MD-only. `saveApproval` and `approveAndClose` refuse HR server-side
+        (§9 — client code is never the only guard), so this is what stops HR
+        pressing a button that would fail anyway, and what turns the panel
+        below into a read-only view rather than a dead end with no
+        explanation. -- */
+  const canApprove = !isHr && (status === "HR_APPROVED" || status === "MD_REVIEWED");
 
 
   const approved = ctcText === "" ? null : Number(ctcText.replace(/[₹,\s]/g, ""));
@@ -1051,12 +1060,15 @@ function MdApproval({
             uppercase in muted, the three redundant notes deleted outright, and
             the two that carry real information kept and shortened. -- */}
       <article className="card-surface space-y-6 p-6 sm:p-8">
+        {/* -- MD-ONLY AGAIN (0090). The heading no longer offers HR an action
+              they cannot take — "Approve and close" read as an instruction on
+              a control that was about to refuse them, which is exactly what
+              was reported back as wrong. -- */}
         <h3 className="font-sans text-display-sm text-ink">
-          {isHr ? "Approve and close" : "Your approval"}
+          {isHr ? "Management's approval" : "Your approval"}
         </h3>
-        {/* -- KEPT. HR needs to know whether the MD has already set a figure,
-              because theirs is the same control — without it they would be
-              typing over an approval they cannot see. -- */}
+        {/* -- KEPT. HR needs to know whether the MD has already set a figure —
+              that much is still theirs to read, only not theirs to write. -- */}
         <p className="font-sans text-body text-ink-muted">
           {review?.md_approved_ctc
             ? `Management approved ${money(review.md_approved_ctc)}${
@@ -1069,7 +1081,7 @@ function MdApproval({
                   : ". Not closed yet — approving again closes it."
               }`
             : isHr
-              ? "Management has not set a figure. You can approve and close this yourself."
+              ? "Waiting on management to approve and close this."
               : "The manager recommends, you approve. Both figures are kept."}
         </p>
         {error ? <Notice tone="error">{error}</Notice> : null}
@@ -1159,14 +1171,21 @@ function MdApproval({
               §13.4: a disabled button with no explanation is a dead end, and a
               tooltip is not an explanation on a touch screen. It names the step
               that is missing rather than the status, because "PENDING_HR_REVIEW"
-              is not something anybody can act on. -- */}
+              is not something anybody can act on.
+
+              ROLE COMES FIRST. For HR the real reason is always who they are,
+              never where the record has got to — a status-only message would
+              have told HR the record is ready to approve and then refused
+              them anyway, which is a worse dead end than a grey button. -- */}
         {!settled && !canApprove ? (
           <p className="font-sans text-body text-ink-muted">
-            {status === "PENDING_HR_REVIEW"
-              ? "Still with HR. It can be approved once they send it on. Anything typed here is kept."
-              : status === "OPEN"
-                ? "Both sides are still filling in the form. The salary is settled after HR reviews it."
-                : "This record has not reached the approval step yet."}
+            {isHr
+              ? "This step is the Managing Director's. You can review the figures above; approving and closing needs their sign-in."
+              : status === "PENDING_HR_REVIEW"
+                ? "Still with HR. It can be approved once they send it on. Anything typed here is kept."
+                : status === "OPEN"
+                  ? "Both sides are still filling in the form. The salary is settled after HR reviews it."
+                  : "This record has not reached the approval step yet."}
           </p>
         ) : null}
 

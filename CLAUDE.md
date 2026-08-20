@@ -8147,3 +8147,116 @@ directly rather than through another script.
 **Noted, not mine.** `app/(app)/admin/increments/increments-client.tsx`
 changed in the tree during this session — parallel work, left untouched and
 unstaged.
+
+---
+
+### FIX-67 — Two reset files one word apart, and the one that keeps pay proved to keep it
+
+`supabase/RESET-CYCLES-AND-PAY-ARMED.sql`. No migration, and no change at all to
+the cycles-only file.
+
+Reported as: "last time I ran RESET-CYCLE-DATA-ARMED.sql and lost all pay data
+of employees — please check."
+
+**It was the other file.** Earlier in the same session the owner named
+`RESET-CYCLES-AND-PAY-ARMED.sql` as the one they had run, and that file deletes
+the pay ledger on purpose. But "check" deserved a check rather than a
+recollection, so the cycles-only file was RUN over a fixture with real pay in it.
+
+| # | Decision | Why |
+|---|---|---|
+| F67-1 | **The claim was tested by running the file, not by reading it** | A grep proves a string is absent; it does not prove a cascade cannot reach the ledger. `salary_history.evaluation_id` references `evaluations` with no ON DELETE clause (0023) — so a delete REFUSES rather than cascading, and that is a property of the schema the file cannot see. The fixture carries the append-only triggers lifted from 0023 for the same reason (FIX-12). |
+| F67-2 | **The two filenames are the actual fault, and a header does not fix it** | `RESET-CYCLE-DATA-ARMED` and `RESET-CYCLES-AND-PAY-ARMED` differ by one word; one keeps every salary figure and one destroys them. The destructive file already opened with a capitalised warning, and warnings are read after pasting rather than before. It now REFUSES unless a confirmation line is uncommented — the same device the people-reset uses for its keep list, and for the same reason: a run that does nothing is recoverable and a run that deletes payroll is not. |
+| F67-3 | The refusal names the file to run instead | "Wrong file" is only useful with the right one beside it (§13.4). |
+| F67-4 | The cycles-only file is UNCHANGED | It was correct. Adding a gate there too would train somebody to uncomment a line without reading which file they are in, which is exactly the habit that caused this. |
+
+**Verification — 32 checks on real Postgres, 0 failed.** The fixture is a
+company mid-cycle with two pay rows, one of them tied to the CLOSED evaluation
+being deleted. Proved, in order: the cycles-only file STOPS while that link
+exists and deletes nothing; the detach clears the link and leaves both figures
+exact; the reset then removes evaluations, cycles including the closed one,
+answers, frozen question sets, invite links and the message log — and **every
+pay row survives with previous, new, amount and percentage intact**, the
+employment record keeps its salary columns and dates, the increment reminder
+survives, and `salary_history` is append-only again and still refuses a rewrite.
+
+Then the gate, both ways: as it ships the pay-deleting file stops having changed
+nothing and names the alternative, and with the line uncommented it runs and the
+ledger really is emptied — which is what that file is for.
+
+---
+
+### FIX-70 — MD-only approval restored; the printed Learning table dropped; a real CSS leak found while fixing a footer
+
+Migration `0090_md_only_approves_increment.sql`. `lib/evaluations/transitions.ts`,
+`lib/increment/actions.ts`, `lib/reports/actions.ts`,
+`app/(app)/reports/[evaluationId]/salary-band.tsx`, `app/print/report-sheet.tsx`,
+`app/print/print.css`.
+
+#### The second pair of eyes, restored
+
+Reported from the HR screen: "hr dont have access to approve and close" — the
+panel's own wording, "Management has not set a figure. You can approve and
+close this yourself.", was read back and rejected. Asked directly whether HR's
+ability should be removed so only the MD can approve and close, the answer was
+explicit: **"Yes, MD-only from now on."**
+
+This reverses `0056_hr_may_close_increment.sql` and `0060`, both of which were
+themselves explicitly instructed twice at the time and recorded in §18 as a
+standing risk: *"HR can approve and close an increment without the MD… removes
+the second pair of eyes AMEND-2 restored."* That risk is now closed.
+
+| # | Decision | Why |
+|---|---|---|
+| F70-1 | **0090 is written with ANCHORED REGEX (`~`), never `LIKE '%A%B%C%'`** | 0056's own bug — the reason 0060 had to exist at all — was an existence check asking only whether three fragments appeared IN ORDER somewhere in a huge CASE statement, not whether they belonged to the same arm. §8's CASE has several arms shaped like "HR_APPROVED … MD_REVIEWED … is_hr() or is_md()" scattered across unrelated rows (0060's own comment names three). A loose membership check here could either report success while touching nothing — 0056's exact failure — or raise a false failure on a correct run by matching fragments borrowed from a neighbouring arm. Every check in 0090 is a single regex with the from/to clause and its `then` immediately adjacent (`\s+` as the only gap), which structurally cannot span two different arms. |
+| F70-2 | **Verified against a fixture that reproduces 0060's documented trap on purpose** | The PGlite test builds a CASE with THREE arms: the target row, an unrelated MD-only row, and — critically — a row that is legitimately `is_hr() or is_md()` and must survive untouched (MD_REVIEWED → INTERVIEW_DONE, per §8's ORIGINAL design, not 0056's overreach). The migration is proved to narrow only the target arm, at the SQL level and at runtime (an HR session is refused, an MD session is admitted, and the decoy arm still admits either). |
+| F70-3 | **The column guard is restored VERBATIM from 0030**, not reworded | `increment_reviews_guard_columns`'s HR branch is copied character-for-character from before 0056 widened it, so the two migrations are exact inverses. Matched on 0056's own distinctive sentence ("who really pressed it"), which cannot appear in any other block, so the non-greedy span cannot run past the HR branch into the MD's identically-shaped one beneath it. |
+| F70-4 | **`confirmIncrement` keeps `requireHrOrMd()` — this is NOT part of the reversal** | §8's ORIGINAL table gives `MD_REVIEWED → INTERVIEW_DONE → CLOSED` to "HR_ADMIN or MD" for recording the interview and the final confirmed amount — that was true before 0056 existed and 0056 never touched it. Only the APPROVAL step (`saveApproval`, `approveAndClose`, `mdApprove`) — which 0056 specifically widened — narrows to `requireMd()`. Conflating the two would have removed a capability that was never in question. |
+| F70-5 | The now-dead `requireHrOrMd` helper in `lib/reports/actions.ts` was **removed, not left orphaned** | It had exactly one caller (`mdApprove`), which now uses the pre-existing `requireMd`. `lib/increment/actions.ts` keeps its own `requireHrOrMd`, since `confirmIncrement` still needs it. |
+| F70-6 | **The panel stays visible for HR, read-only, with the reason stated first** | `canApprove = !isHr && (…)`. Hiding the panel outright would reintroduce the OTHER bug this exact file's history records — before 0056, an if/else hid the whole approval control from HR, and 0056's fix was to stop hiding it. HR still needs to READ what has been approved, to know when to chase the MD; only the write is gone. The disabled-reason block now checks role BEFORE status, because for HR the real reason is always who they are, never where the record has got to — a status-only message would say "ready to approve" and then refuse them anyway, a worse dead end than a plain one. |
+| F70-7 | The heading and empty-state message stopped instructing HR to act | "Approve and close" → "Management's approval" for HR; "You can approve and close this yourself" → "Waiting on management to approve and close this." |
+
+#### The printed Learning and improvement table, removed
+
+Reported: "in report print also Learning and improvement questions showing
+repeated in both table and questions remove table if it is unnecesary."
+
+| # | Decision | Why |
+|---|---|---|
+| F70-8 | **The table is removed; nothing it compared is lost** | Every topic it condensed into a cell reaches the sheet in full a few lines below — once in the employee's own words, once in each manager's assessment. The table was the compressed, truncated middle copy of content the reader was about to meet again in full; only the redundant copy is gone. |
+| F70-9 | Two locals (`employee`, `firstName`) went dead with it and were removed | The table was their only caller on this sheet. |
+
+#### The footer's stray line — and a real CSS bug found while removing it
+
+Reported: "the footer part not looking good in report its showing unnecessary
+line and ui is not good."
+
+| # | Decision | Why |
+|---|---|---|
+| F70-10 | **`.print-signatures`'s own `border-top` is removed** | It drew a full-width rule the same weight as a section heading's, with no heading attached to justify it — every OTHER rule on the sheet sits directly under a labelled `<h2>`, so this one read as a heading whose title had gone missing. The 12mm margin above is what now separates the block from Review; each cell's own line still says "sign here". |
+| F70-11 | **Removing it exposed a genuine specificity bug, unrelated to what was asked but confirmed real** | `report-sheet.tsx`'s signature section carries BOTH `print-signatures` AND `print-block` classes. A second, entirely separate rule — `.print-block.print-signatures`, written for `worker-sheet.tsx` and gated nowhere — has higher specificity than the plain `.print-signatures` rule and was silently winning on every shared property. The report's signature row had been rendering an 8mm gap and a border-top that neither its own CSS block nor its own comments describe; removing the border from the plain rule alone would have changed nothing, because the compound rule would still supply it. |
+| F70-12 | **Fixed by scoping the compound rule to `.print-sheet--worker`**, matching its own follow-up override | A sibling rule two blocks below (`.print-sheet--worker .print-block.print-signatures { margin-top: auto; }`) already used that exact ancestor scope for one property; the base rule had simply never been given the same scope. Confirmed against the BUILT stylesheet, not just source (UI-5's lesson) — the compiled CSS shows exactly two rules now: the plain, unscoped one (report + evaluation sheets, no border) and the worker-scoped one (unchanged for the worker sheet). |
+
+**Verification — 16 checks (md-only-approve.mjs, the PGlite migration test) + 29
+checks (md-only.mjs, source-level), 0 failed.** Fourteen other suites re-run;
+seven older assertions across `approve.mjs`, `hrgate.mjs`, `verifyapproved.mjs`,
+`roles.mjs` and `coreviewer-report.mjs` were stale — five from renames earlier
+in this session ("What {firstName} asked for" → "Expected salary", "Manager
+proposed" → "Manager recommended", "Write your summary above first" → "Write
+the summary first") and two from the Learning table's removal in this same
+change. All were corrected to assert the current claim rather than a retyped
+string. Mobile audit clean at 84 screens; typecheck 0, lint 0 errors, build
+clean.
+
+**One of my own mistakes, twice.** `pg_get_functiondef` returns a function's
+SOURCE text, where an apostrophe inside a plpgsql STRING LITERAL is stored
+doubled (`''`) but an apostrophe inside a `--` COMMENT is stored singly, as
+typed — the same distinction 0056's own verification relied on when it picked
+a fragment with no apostrophe at all. Two of my own PGlite assertions checked
+the wrong form of one and had to be corrected against the actual captured
+output rather than my assumption of what it would look like.
+
+**Action required.** `0090_md_only_approves_increment.sql` is **not applied**.
+Until it is, the database still permits HR to approve and close — the SQL side
+is the actual guard (§9); the TypeScript and UI changes narrow the paths that
+reach it but are not the enforcement on their own.
