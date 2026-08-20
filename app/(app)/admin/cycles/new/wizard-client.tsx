@@ -1264,9 +1264,17 @@ export function WizardClient({
           new Set(
             people
               .filter((p) => state[p.id]?.included)
-              .map((p) => state[p.id]?.leadId)
+              // BOTH managers. A second reviewer receives a form of their own
+              // (0083), so a dialog counting only reporting leads tells HR it
+              // is about to message fewer people than it will.
+              .flatMap((p) => [state[p.id]?.leadId, p.coReviewerId])
               .filter((v): v is string => Boolean(v)),
           ).size
+        }
+        /* How many people are rated by TWO managers, so the dialog can say
+           three forms rather than two where that is what happens. */
+        twoManagerCount={
+          people.filter((p) => state[p.id]?.included && p.coReviewerId).length
         }
         cycleKind={basics.cycle_kind}
         pending={launching}

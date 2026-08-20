@@ -38,6 +38,7 @@ export function LaunchDialog({
   cycleName,
   participantCount,
   leadCount,
+  twoManagerCount = 0,
   cycleKind,
   pending,
   error,
@@ -51,6 +52,8 @@ export function LaunchDialog({
   participantCount: number;
   /** How many distinct HODs will receive a form. Item 12 names both counts. */
   leadCount: number;
+  /** How many participants are rated by two managers (0083). */
+  twoManagerCount?: number;
   cycleKind: "BATCH" | "ROLLING";
   pending: boolean;
   error: string | null;
@@ -110,10 +113,19 @@ export function LaunchDialog({
               <>
                 This creates {participantCount} evaluations and freezes the current question set for
                 each person, including their department&rsquo;s Job Specific Skills questions.{" "}
-                {participantCount} employees and {leadCount} HODs will each receive their own form
-                link right away. They fill the same questions separately and neither can see the
-                other&rsquo;s answers. You will be able to open the combined report once both sides
-                are in. Question changes made after this will not affect this cycle.
+                {participantCount} employees and {leadCount} managers will each receive their own
+                form link right away.{" "}
+                {twoManagerCount > 0 ? (
+                  <>
+                    {twoManagerCount === 1
+                      ? "One of them is rated by two managers, so three forms open for that person"
+                      : `${twoManagerCount} of them are rated by two managers, so three forms open for each of those`}
+                      , and their appraisal reaches you once all three are in.{" "}
+                  </>
+                ) : null}
+                They fill the same questions separately and none of them can see another&rsquo;s
+                answers. You will be able to open the combined report once every side is in.
+                Question changes made after this will not affect this cycle.
               </>
             )}
           </DialogDescription>

@@ -138,6 +138,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
         migration WROTE, never a token the file happens to contain — 0056
         reported itself applied because a LIKE found three fragments that were
         already there in three unrelated places. -- */
+  ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
+     'invite_tokens accepts a LEAD_2 link',
+     'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
   ('0087_manager_overall', 'manager_overall_fn', 'the manager_overall() function',
      'Without it a designer''s scorecard, the Team review roster, the printed pack and the department averages all show the REPORTING LEAD''s figure alone — half their review, under a heading that says Manager. Nothing errors; the number is simply one manager short.'),
   ('0086_cycle_progress_second_reviewer', 'progress_counts_co_lead',
@@ -348,6 +351,16 @@ select
     -- v_cycle_progress, so `view` would be true before 0086 ran.
     -- The FUNCTION plus the view that calls it: the function alone would be
     -- true if somebody created it by hand, and the views are where it bites.
+    -- BOTH halves: the constraint and the function's own guard. Either alone
+    -- would report the migration applied while a launch still failed.
+    when 'invite_layer_lead2' then exists (
+      select 1 from pg_constraint
+       where conname = 'invite_tokens_layer_valid'
+         and pg_get_constraintdef(oid) like '%LEAD_2%')
+      and exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'issue_invite_token'
+         and pg_get_functiondef(p.oid) like '%''SELF'', ''LEAD'', ''LEAD_2''%')
     when 'manager_overall_fn' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'manager_overall')
