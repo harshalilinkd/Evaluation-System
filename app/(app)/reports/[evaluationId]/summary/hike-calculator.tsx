@@ -156,7 +156,7 @@ export function HikeCalculator({
     setSaved(true);
     /* A toast as well as the inline state, at the owner's instruction — one
        corner to learn to look at for every action in the product. */
-    toast.success(isHr ? "Manager proposal saved." : "Approval saved.");
+    toast.success(isHr ? "Manager recommendation saved." : "Approval saved.");
   }
 
   /* -- APPROVE AND CLOSE, on the summary too.

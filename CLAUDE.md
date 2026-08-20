@@ -7968,3 +7968,63 @@ each asserts the reversal from both sides.
 Python into a JavaScript string arrived as a real newline and the file would not
 parse. §18's standing remedy — prefer a plain edit over a string escaped through
 another language — was ignored, again, and then followed.
+
+---
+
+### FIX-68 — The scale stated once, and a salary panel a person can read
+
+No migration. `report-bands.tsx`, `lib/reports/{types,build}.ts`,
+`salary-band.tsx`, and the two summary files.
+
+#### Forty-five cells repeating six words
+
+At the owner's instruction: "we are showing 1 to 5 rating meaning at every field
+and its consuming too much space and make screen feels like overfilled — so we
+can display each rating meaning once at the top and then in rating ans we can
+show as 1 2 3 4 5". They chose the numeral with a five-segment strength bar from
+three options.
+
+| # | Decision | Why |
+|---|---|---|
+| F68-1 | **§6's wording is RELOCATED, never shortened** | §6 calls it fixed and §17 forbids paraphrasing it. The key reads all six labels in full from `SCALE_0_5_LABELS`, which P7-4 asserts against CLAUDE.md itself, so the two cannot drift. What changes is where they are printed: once at the head of the ratings instead of forty-five times inside the table. The printed pack has done exactly this since P15-9. |
+| F68-2 | The full label survives on **hover and for a screen reader**, per cell | The key answers "what does 4 mean" for somebody reading the page; the tooltip and the `sr-only` text answer it for somebody who lands on one cell. Nothing is lost — it is said once instead of in every cell. |
+| F68-3 | **The number is CARRIED, not parsed back out of the display string** | `readableAnswer` builds "4 · Effective (Exceeds objective)", so reading the leading digit back would work today and would be a second definition of what the answer IS — one that breaks silently the first time that separator changes. `ReportRow` gained three numeric fields and the builder computes them from the raw answer. |
+| F68-4 | …by its OWN helper, not `scoreValue` | That one also maps a TICK_3 answer onto 5/3/1 for analytics, and a worker-style tick drawn as four segments out of five would state a precision the tick sheet does not have (§6.2). An out-of-range value returns null rather than being clamped, matching P4-10: a 9 on a 0-5 question is corrupt data, and clamping it to 5 would launder it into a full bar. |
+| F68-5 | **The bar is neutral ink, never a tier hue** | The column heading already carries the tier dot, which is what says who spoke (§13.1). Three differently-coloured bars in one row would make the row read as three kinds of thing — and it would put the only magnitude signal into colour, which §13.8 forbids as the sole channel. One hue, light to dark, which is what a magnitude encoding is. |
+| F68-6 | A **0 is five empty segments**; an unanswered question is an em dash and no bar | §11 is explicit that missing is not zero, and the two must not look alike. |
+| F68-7 | The columns went 300px → 132px, and the table's minimum 900 → 720 | The 300 was measured against "5 · Outstanding (Well exceeds objective)" and still wrapped in every row. A numeral and a bar is about 70. The question column gets back everything the wording was costing it, and on a laptop the table stops scrolling sideways at all. |
+| F68-8 | On a phone all three answers now sit **on one row** | Three across never fitted §6's wording, so a second reviewer used to stack below. Comparing the three is the reason somebody opens this on a phone. |
+
+#### The salary section
+
+Reported as "not readable and feels confusing to users". Asked what was wrong,
+the owner named four things: too many explanation lines, wording too heavy,
+physically hard to read, and "its not looking professional like MD level
+report".
+
+| # | Decision | Why |
+|---|---|---|
+| F68-9 | **Every input label was 12px uppercase, and that is most of it** | `type-label text-ink-muted` is 12px with letterspacing on top. It is the right treatment for a caption above a big figure — which is what it stays on the stat rows, because that is the pattern the whole product uses — and the wrong one for the label on a box somebody types a salary into. Those are 14px sentence case in full ink now. |
+| F68-10 | **Three of the five notes were deleted outright** | "When the new salary starts being paid." under a field labelled *Effective from*; "Approving without a note is fine…" under one marked *optional*; "Defaults to the manager's proposal, once one has been saved." shown even with a proposal already on the record — telling the reader how to reach a state they were already in. Each said what the field beside it already said. |
+| F68-11 | The two that carry real information are **kept and shortened** | HR must know whether management has already set a figure, because theirs is the same control — without it they would type over an approval they cannot see. And a disabled button must say why (§13.4). |
+| F68-12 | "Justification" became **"Why this figure"** | A heavy word on a label, on a screen the owner has now twice said uses words a beginner-level English reader cannot follow. The hint below it stopped saying "Optional" a second time when the label already says so. |
+| F68-13 | The annualised caption stopped printing the same percentage twice | It read "What 10% over 12 months is worth per year. Context only — the money paid is 10%." Two sentences, one figure, said twice. |
+
+#### And a rename
+
+| # | Decision | Why |
+|---|---|---|
+| F68-14 | **"Manager proposed" → "Manager recommended"**, everywhere it is visible | At the owner's explicit instruction (§0.2). Seven strings moved together across three files — the panel heading, the card heading, the save button, both toast confirmations, the executive summary's card, and the empty-approval sentence. A rename that stops at one heading leaves the app arguing with itself, which FIX-29 had to unpick when two error messages went on saying "CTC" after the label above them had changed. |
+
+**Verification — 42 checks, 0 failed**, plus the mobile audit at 84 screens and
+0 findings and six other suites green. The scale helper is **extracted from the
+builder and run** rather than restated: 4 comes back as 4, 0 as 0, a 9 and a −1
+as null, a tick and a Yes/No as null.
+
+**Two of my own assertions were wrong, and both are recorded shapes.** One
+pinned `"Manager recommended\n"` against a CRLF file, so it matched nothing —
+FIX-10's addendum recorded that trap on a migration patch and P35 hit it again
+on a source edit. The other tested "no arithmetic in the component" unscoped and
+matched the mean of two SCORES that mirrors 0046's SQL; **FIX-46 corrected
+exactly this assertion and I reintroduced it.** It is scoped to salary
+identifiers again.

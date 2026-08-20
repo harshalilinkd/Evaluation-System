@@ -547,7 +547,7 @@ export function ExecutiveSummary({
                     letting the heading claim an authorship the number does not
                     have. -- */}
               <Card
-                title={role === "HR_ADMIN" ? "Manager proposed salary hike" : "Approval"}
+                title={role === "HR_ADMIN" ? "Manager recommended hike" : "Approval"}
                 note={
                   role === "HR_ADMIN"
                     ? salary.managerHikePct === null

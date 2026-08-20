@@ -256,6 +256,18 @@ export async function buildEvaluationReport(
             question.answeredBy === "EMPLOYEE_ONLY"
               ? null
               : readableAnswer(question, leadAnswers[question.questionId]),
+          selfScale:
+            question.answeredBy === "LEAD_ONLY"
+              ? null
+              : scaleValueOf(question, selfAnswers[question.questionId]),
+          leadScale:
+            question.answeredBy === "EMPLOYEE_ONLY"
+              ? null
+              : scaleValueOf(question, leadAnswers[question.questionId]),
+          coLeadScale:
+            !coLeadData || question.answeredBy === "EMPLOYEE_ONLY"
+              ? null
+              : scaleValueOf(question, coLeadAnswers[question.questionId]),
           coLeadAnswer:
             !coLeadData || question.answeredBy === "EMPLOYEE_ONLY"
               ? null
@@ -502,6 +514,25 @@ export async function buildEvaluationReport(
   }
 
   return { ok: true, data: report };
+}
+
+/**
+ * The 0-5 integer behind a scale answer, for the report's strength bar.
+ *
+ * Deliberately NOT `scoreValue` from scoring.ts: that one also maps a TICK_3
+ * answer onto 5/3/1 for analytics, and a worker-style tick drawn as four
+ * segments out of five would state a precision the tick sheet does not have
+ * (§6.2 keeps that number off any worker-facing surface).
+ *
+ * An out-of-range value returns null rather than being clamped, matching P4-10:
+ * a 9 on a 0-5 question is corrupt data, and clamping it to 5 would launder it
+ * into a full bar.
+ */
+function scaleValueOf(question: FormQuestion, answer: unknown): number | null {
+  if (question.responseType !== "SCALE_0_5") return null;
+  if (answer === null || answer === undefined || answer === "") return null;
+  const value = Number(answer);
+  return Number.isInteger(value) && value >= 0 && value <= 5 ? value : null;
 }
 
 function rank(section: string): number {

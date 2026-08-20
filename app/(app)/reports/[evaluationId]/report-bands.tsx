@@ -9,6 +9,7 @@ import { ArrowLeft, ChevronRight, Flag, LayoutDashboard, Lock } from "lucide-rea
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
+import { SCALE_0_5_LABELS } from "@/components/appraise/tier";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { EvaluationReport } from "@/lib/reports/types";
 import { formatDate, formatDateTime } from "@/lib/utils/date";
@@ -294,6 +295,92 @@ function CollapsibleBand({
         {children}
       </div>
     </details>
+  );
+}
+
+/**
+ * §6's six anchors, stated ONCE.
+ *
+ * AT THE OWNER'S INSTRUCTION: "we are showing 1 to 5 rating meaning at every
+ * field and its consuming too much space and makes the screen feel overfilled
+ * — so we can display each rating meaning once at the top and then in rating
+ * answers we can show as 1 2 3 4 5".
+ *
+ * §6 calls the wording fixed and §17 forbids paraphrasing it, so nothing is
+ * shortened — the labels are read from `SCALE_0_5_LABELS`, which P7-4 asserts
+ * against CLAUDE.md itself. What changes is WHERE they are printed: once, at
+ * the head of the ratings, instead of forty-five times inside the table. The
+ * printed pack has done exactly this since P15-9.
+ */
+function ScaleKey() {
+  return (
+    <section
+      aria-label="What each rating means"
+      className="card-surface px-5 py-4 print:break-inside-avoid"
+    >
+      <h3 className="type-label text-ink-muted">What each rating means</h3>
+      <ol className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+        {SCALE_0_5_LABELS.map((label) => (
+          <li key={label.value} className="flex items-baseline gap-2.5">
+            <span
+              aria-hidden
+              className="tabular inline-flex size-6 shrink-0 items-center justify-center rounded-control bg-ink/5 text-body-sm font-semibold text-ink"
+            >
+              {label.value}
+            </span>
+            <span className="font-sans text-body-sm text-ink">{label.full}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+/**
+ * One rating, as a numeral and a strength bar.
+ *
+ * The numeral is the answer and the bar is the same fact drawn — so a reader
+ * comparing a column sees the shape without reading six words per cell, and a
+ * reader who wants the words has them in the key above, in the tooltip, and in
+ * the screen-reader text. Nothing is lost; it is stated once instead of in
+ * every cell.
+ *
+ * NEUTRAL INK, NOT A TIER HUE. The column heading already carries the tier dot,
+ * which is what says who spoke (§13.1). A bar in three different colours across
+ * one row would make the row read as three kinds of thing, and it would put the
+ * only magnitude signal into colour — which §13.8 forbids as the sole channel.
+ * The bar is one hue, light to dark, which is what a magnitude encoding is.
+ */
+function RatingValue({ value, answer }: { value: number | null; answer: string | null }) {
+  // Anything that is not a 0-5 scale answer — Yes/No, a date, a chosen option —
+  // renders as it always did. The band holds more than ratings.
+  if (value === null) {
+    return answer ? <>{answer}</> : <span className="text-ink-muted">—</span>;
+  }
+
+  const label = SCALE_0_5_LABELS.find((l) => l.value === value);
+
+  return (
+    <span className="flex items-center gap-2.5" title={label ? `${value} · ${label.full}` : undefined}>
+      <span className="tabular text-display-xs font-semibold leading-none text-ink">{value}</span>
+      {/* -- Five segments, so a 0 is an empty bar rather than no bar at all.
+             §11 is explicit that missing is not zero, and the two have to look
+             different: a 0 draws five empty segments, an unanswered question
+             draws an em dash and no bar. -- */}
+      <span aria-hidden className="flex shrink-0 gap-0.5">
+        {[1, 2, 3, 4, 5].map((step) => (
+          <span
+            key={step}
+            className={cn(
+              "h-3.5 w-1 rounded-[1px]",
+              step <= value ? "bg-ink" : "bg-ink/12",
+            )}
+          />
+        ))}
+      </span>
+      {/* The full §6 wording, for anybody not reading the key visually. */}
+      <span className="sr-only">{label ? label.full : `Rating ${value}`}</span>
+    </span>
   );
 }
 
@@ -711,45 +798,33 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
           {flaggedOnly ? "Nothing is flagged on this report." : "No ratings were recorded."}
         </p>
       ) : (
-        sections.map((section) => (
+        <>
+        <ScaleKey />
+        {sections.map((section) => (
           <article key={section.section} className="card-surface overflow-hidden print:break-inside-avoid">
             <header className="border-b border-rule px-6 py-3">
               <h3 className="font-sans text-body font-semibold text-ink">{section.label}</h3>
             </header>
 
             <div className="hidden overflow-x-auto lg:block">
-              {/* `table-fixed` with explicit widths: the two answer columns hold
-                  wording like "4 · Effective (Exceeds objective)", and with auto
-                  layout one long question text squeezed them to nothing. */}
-              <table className="w-full min-w-[900px] table-fixed border-collapse">
+              {/* -- MUCH NARROWER NOW, and the reason is the whole point of
+                    the change. These columns used to hold "5 · Outstanding
+                    (Well exceeds objective)" — 284px of text, so two of them
+                    plus the gap left the question under 280px on a 1440 page,
+                    and the two longest labels wrapped in every row regardless.
+
+                    A numeral and a five-segment bar is about 70px. 132 leaves
+                    room for the column heading, which is now the widest thing
+                    in the column ("DESIGN COORDINATOR"), and the question gets
+                    back everything the wording was costing it. The minimum
+                    width drops with it, so on a laptop the table stops
+                    scrolling sideways at all. -- */}
+              <table className="w-full min-w-[720px] table-fixed border-collapse">
                 <colgroup>
-                  {/* -- 300, not 190, and the number is measured rather than
-                        chosen. §6's six labels run from "3 · Adequate (Meets
-                        objective)" at ~213px to "5 · Outstanding (Well exceeds
-                        objective)" at ~284px, so a 190px column — 150px of text
-                        after padding — guaranteed that EVERY answer in the
-                        product wrapped to two lines. The ragged rows were an
-                        arithmetic result, not a styling one.
-
-                        300 with `px-4` leaves 268px, which holds four of the
-                        six on one line. Sizing for all six would need 324 each,
-                        and two of those plus the gap column would leave the
-                        question under 280px on a 1440 page — trading a common
-                        problem for a worse one. The two extremes still wrap;
-                        the table no longer looks uniformly broken.
-
-                        §6's wording is untouched. It is fixed and §17 forbids
-                        paraphrasing it, so the column moves, not the label. -- */}
                   <col />
-                  <col className={secondManager ? "w-[240px]" : "w-[300px]"} />
-                  <col className={secondManager ? "w-[240px]" : "w-[300px]"} />
-                  {/* -- Three answer columns at 300 would leave the question
-                         under 280px on a 1440 page, which the note above
-                         rejects as trading a common problem for a worse one. At
-                         240 each the two extremes of §6's wording wrap and the
-                         other four do not — the same compromise, re-struck for
-                         a third column. -- */}
-                  {secondManager ? <col className="w-[240px]" /> : null}
+                  <col className="w-[132px]" />
+                  <col className="w-[132px]" />
+                  {secondManager ? <col className="w-[132px]" /> : null}
                   <col className="w-[104px]" />
                 </colgroup>
                 <thead>
@@ -812,14 +887,14 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                       {/* Ink, always. The heading's dot says who spoke; the
                           wording stays readable (§13.8's 4.5:1). */}
                       <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
-                        {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
+                        <RatingValue value={row.selfScale} answer={row.selfAnswer} />
                       </td>
                       <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
-                        {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
+                        <RatingValue value={row.leadScale} answer={row.leadAnswer} />
                       </td>
                       {secondManager ? (
                         <td className={cn("px-4 py-4 font-sans text-body text-ink", TIER_CELL)}>
-                          {row.coLeadAnswer ?? <span className="text-ink-muted">—</span>}
+                          <RatingValue value={row.coLeadScale} answer={row.coLeadAnswer} />
                         </td>
                       ) : null}
                       <td className="px-5 py-4 text-right">
@@ -871,26 +946,31 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
                          answer columns at 375px is about 110px each, which is
                          narrower than §6's shortest label. A third manager
                          stacks as its own row instead. -- */}
-                  <dl className="mt-2 grid grid-cols-2 gap-3">
+                  {/* -- A numeral and a bar fit at 375px where §6's wording
+                         never did, so a third manager no longer needs a row of
+                         its own. Three across, which also puts the three
+                         answers on one line to be compared — which is the
+                         reason somebody opens this on a phone at all. -- */}
+                  <dl className="mt-2 grid grid-cols-3 gap-3">
                     <div className="min-w-0">
                       <dt className="type-label text-self">Self</dt>
-                      <dd className="font-sans text-body-sm text-ink">
-                        {row.selfAnswer ?? <span className="text-ink-muted">—</span>}
+                      <dd className="mt-1 font-sans text-body-sm text-ink">
+                        <RatingValue value={row.selfScale} answer={row.selfAnswer} />
                       </dd>
                     </div>
                     <div className="min-w-0">
                       <dt className="type-label text-lead">
                         {leadHeading}
                       </dt>
-                      <dd className="font-sans text-body-sm text-ink">
-                        {row.leadAnswer ?? <span className="text-ink-muted">—</span>}
+                      <dd className="mt-1 font-sans text-body-sm text-ink">
+                        <RatingValue value={row.leadScale} answer={row.leadAnswer} />
                       </dd>
                     </div>
                     {secondManager ? (
-                      <div className="col-span-2 min-w-0">
+                      <div className="min-w-0">
                         <dt className="type-label text-lead">{coLeadHeading}</dt>
-                        <dd className="font-sans text-body-sm text-ink">
-                          {row.coLeadAnswer ?? <span className="text-ink-muted">—</span>}
+                        <dd className="mt-1 font-sans text-body-sm text-ink">
+                          <RatingValue value={row.coLeadScale} answer={row.coLeadAnswer} />
                         </dd>
                       </div>
                     ) : null}
@@ -905,7 +985,8 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
               ))}
             </ul>
           </article>
-        ))
+        ))}
+        </>
       )}
     </CollapsibleBand>
   );

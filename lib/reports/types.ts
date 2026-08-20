@@ -91,6 +91,20 @@ export type ReportRow = {
   leadAnswer: string | null;
   /** The second manager's answer, where there is one. */
   coLeadAnswer: string | null;
+  /**
+   * The 0-5 integer behind a scale answer, so the report can draw a strength
+   * bar rather than repeat §6's wording in every cell.
+   *
+   * CARRIED, NOT PARSED. The rendered string always begins with the numeral, so
+   * reading it back out would work today and would be a second definition of
+   * what the answer IS — one that breaks silently the moment `readableAnswer`
+   * changes its separator. Null for anything that is not a valid SCALE_0_5
+   * answer, including an out-of-range value (P4-10 scores those as null, and a
+   * bar must not draw nine segments out of five).
+   */
+  selfScale: number | null;
+  leadScale: number | null;
+  coLeadScale: number | null;
   /** Numeric only where both sides are scored. Lead − Self. */
   gap: number | null;
   flag: FlagLevel;

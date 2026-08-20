@@ -465,7 +465,7 @@ function HrProposal({
             long panel — it is below the fold as often as not — and the toast
             appears in the same corner for every action in the product, so
             there is one place to learn to look. -- */
-      toast.success("Manager proposal saved.");
+      toast.success("Manager recommendation saved.");
       router.refresh();
     }
   }
@@ -572,7 +572,7 @@ function HrProposal({
               and then a heading reading "Manager proposed" would be untrue. The
               line beneath says which it is, so the label can never claim an
               authorship the number does not have. -- */}
-        <h3 className="font-sans text-body font-medium text-ink">Manager proposed salary hike</h3>
+        <h3 className="font-sans text-display-sm text-ink">Manager recommended hike</h3>
         {managerPct !== null ? (
           <p className="font-sans text-body-sm text-ink-muted">
             {pctInput.trim() !== "" && Number(pctInput) !== managerPct
@@ -620,7 +620,9 @@ function HrProposal({
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="hike_pct" className="type-label text-ink-muted">Hike percent</Label>
+            <Label htmlFor="hike_pct" className="font-sans text-body font-medium text-ink">
+              Hike percent
+            </Label>
             <Input
               id="hike_pct"
               value={pctInput}
@@ -630,7 +632,9 @@ function HrProposal({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new_ctc" className="type-label text-ink-muted">New salary</Label>
+            <Label htmlFor="new_ctc" className="font-sans text-body font-medium text-ink">
+              New salary
+            </Label>
             <MoneyInput
               id="new_ctc"
               value={ctcText === "" ? null : Number(ctcText)}
@@ -653,7 +657,7 @@ function HrProposal({
             <dd className="tabular text-body text-ink">{pctText(annualised)}</dd>
             <dd className="font-sans text-body-sm text-ink-muted">
               {data.monthsSinceLastIncrement
-                ? `What ${pctText(pct)} over ${data.monthsSinceLastIncrement} months is worth per year. Context only — the money paid is ${pctText(pct)}.`
+                ? `Over ${data.monthsSinceLastIncrement} months. The money paid is ${pctText(pct)}.`
                 : "No previous rise to compare against."}
             </dd>
           </div>
@@ -666,10 +670,10 @@ function HrProposal({
         <div className="space-y-2">
           <Label
             htmlFor="justification"
-            className="flex items-baseline gap-1.5 type-label text-ink-muted"
+            className="flex items-baseline gap-2 font-sans text-body font-medium text-ink"
           >
-            Justification
-            <span className="font-normal normal-case tracking-normal">optional</span>
+            Why this figure
+            <span className="font-normal text-ink-muted">optional</span>
           </Label>
           <Textarea
             id="justification"
@@ -679,7 +683,7 @@ function HrProposal({
             placeholder="Why is this the right figure?"
           />
           <p className="font-sans text-body-sm text-ink-muted">
-            Optional. Sent to the MD with the figure.
+            Sent to management with the figure.
           </p>
         </div>
 
@@ -695,7 +699,7 @@ function HrProposal({
             ? "Saving…"
             : !dirty && proposed !== null
               ? "Proposal saved"
-              : "Save manager proposal"}
+              : "Save manager recommendation"}
         </Button>
       </article>
     </>
@@ -905,7 +909,7 @@ function MdApproval({
             {review?.hr_proposed_ctc ? (
               <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.proposed)} />
             ) : null}
-            Manager proposed
+            Manager recommended
           </h3>
           {/* -- AN EMPTY CARD HAS TO SAY WHY IT IS EMPTY (§13.4).
                 This read "—" over "— a year · —": three dashes and no sentence,
@@ -1028,63 +1032,77 @@ function MdApproval({
               <p className="font-sans text-body-sm text-ink-muted">
                 {review?.hr_proposed_ctc
                   ? "Waiting on management. It fills in when they approve and close."
-                  : "Nothing to approve yet — the manager's proposal has to be saved first."}
+                  : "Nothing to approve yet. Save the manager's recommendation first."}
               </p>
             </>
           )}
         </article>
       </div>
 
-      <article className="card-surface space-y-4 p-6">
-        <h3 className="font-sans text-body font-medium text-ink">
+      {/* -- READABLE, AT THE OWNER'S INSTRUCTION. Reported as "not readable
+            and feels confusing", "too many explanation lines", "wording is too
+            heavy", "physically hard to read" and "not looking professional like
+            MD level report".
+
+            Every label and every note in this panel was `text-body-sm`, which
+            is 12px, and three of the five notes said something the field beside
+            them already said. So: labels at 14px in ink rather than 12px
+            uppercase in muted, the three redundant notes deleted outright, and
+            the two that carry real information kept and shortened. -- */}
+      <article className="card-surface space-y-6 p-6 sm:p-8">
+        <h3 className="font-sans text-display-sm text-ink">
           {isHr ? "Approve and close" : "Your approval"}
         </h3>
-        {/* -- HR needs to know whether the MD has already set a figure, because
-              theirs is the same control. Without this they would be typing over
-              an approval they could not see. -- */}
-        <p className="font-sans text-body-sm text-ink-muted">
+        {/* -- KEPT. HR needs to know whether the MD has already set a figure,
+              because theirs is the same control — without it they would be
+              typing over an approval they cannot see. -- */}
+        <p className="font-sans text-body text-ink-muted">
           {review?.md_approved_ctc
-            ? `MD approved ${money(review.md_approved_ctc)}${
+            ? `Management approved ${money(review.md_approved_ctc)}${
                 review.md_approved_hike_pct === null
                   ? ""
                   : ` (${pctText(review.md_approved_hike_pct)})`
               }${
                 settled
-                  ? " and closed."
-                  : ". Not closed yet — approving again will close it."
+                  ? " and closed this increment."
+                  : ". Not closed yet — approving again closes it."
               }`
             : isHr
-              ? "The MD has not set a figure. You may approve and close this yourself."
-              : "HR proposes; you approve. Both figures are kept."}
+              ? "Management has not set a figure. You can approve and close this yourself."
+              : "The manager recommends, you approve. Both figures are kept."}
         </p>
         {error ? <Notice tone="error">{error}</Notice> : null}
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="approved_ctc" className="type-label text-ink-muted">Approved salary</Label>
+            <Label htmlFor="approved_ctc" className="font-sans text-body font-medium text-ink">
+              Approved salary
+            </Label>
             <MoneyInput
               id="approved_ctc"
               value={ctcText === "" ? null : Number(ctcText)}
               onValueChange={(annual) => setCtcText(annual === null ? "" : String(annual))}
               disabled={settled || !canApprove}
             />
-            {/* -- A SENTENCE, or nothing. It read "Defaults to the manager's
-                  proposal. — on the current salary." whenever no percentage
-                  could be worked out — an em dash dropped into the middle of a
-                  sentence, which reads as a rendering fault rather than as a
-                  missing figure. An absent value is an absent CLAUSE. -- */}
-            <p className="font-sans text-body-sm text-ink-muted">
-              {pct === null
-                ? "Defaults to the manager's proposal, once one has been saved."
-                : `Defaults to the manager's proposal. ${pctText(pct)} on the current salary.`}
-            </p>
+            {/* -- ONE CLAUSE, and only where there is a figure to state. It used
+                  to say "Defaults to the manager's proposal, once one has been
+                  saved." even with a proposal already on the record — telling
+                  the reader how to reach a state they were already in. -- */}
+            {pct === null ? null : (
+              <p className="font-sans text-body text-ink-muted">
+                {pctText(pct)} on the current salary.
+              </p>
+            )}
 
             {/* -- The close needs a start date; the approval did not. Defaulted
                   to the first of next month, which is what payroll does unless
                   somebody says otherwise, so the common case is one press and
                   no typing. -- */}
             <div className="space-y-2 pt-2">
-              <Label htmlFor="md_effective_from" className="type-label text-ink-muted">
+              <Label
+                htmlFor="md_effective_from"
+                className="font-sans text-body font-medium text-ink"
+              >
                 Effective from
               </Label>
               <Input
@@ -1095,18 +1113,15 @@ function MdApproval({
                 disabled={settled || !canApprove}
                 className="min-h-11 tabular"
               />
-              <p className="font-sans text-body-sm text-ink-muted">
-                When the new salary starts being paid.
-              </p>
             </div>
           </div>
           <div className="space-y-2">
             <Label
               htmlFor="md_salary_remarks"
-              className="flex items-baseline gap-1.5 type-label text-ink-muted"
+              className="flex items-baseline gap-2 font-sans text-body font-medium text-ink"
             >
               Remarks
-              <span className="font-normal normal-case tracking-normal">optional</span>
+              <span className="font-normal text-ink-muted">optional</span>
             </Label>
             <Textarea
               id="md_salary_remarks"
@@ -1116,9 +1131,7 @@ function MdApproval({
               disabled={settled || !canApprove}
               placeholder="Anything the record should carry."
             />
-            <p className="font-sans text-body-sm text-ink-muted">
-              Approving without a note is fine — the figure is still dated and attributed to you.
-            </p>
+
           </div>
         </div>
 
@@ -1147,11 +1160,11 @@ function MdApproval({
               that is missing rather than the status, because "PENDING_HR_REVIEW"
               is not something anybody can act on. -- */}
         {!settled && !canApprove ? (
-          <p className="font-sans text-body-sm text-ink-muted">
+          <p className="font-sans text-body text-ink-muted">
             {status === "PENDING_HR_REVIEW"
-              ? "This is still with HR. It can be approved once they have reviewed the report and sent it on — nothing typed here is lost in the meantime."
+              ? "Still with HR. It can be approved once they send it on. Anything typed here is kept."
               : status === "OPEN"
-                ? "Both sides are still filling in the form. The salary is settled after HR has reviewed it."
+                ? "Both sides are still filling in the form. The salary is settled after HR reviews it."
                 : "This record has not reached the approval step yet."}
           </p>
         ) : null}
@@ -1294,7 +1307,9 @@ function InterviewCard({
 
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="final_ctc" className="type-label text-ink-muted">Final salary</Label>
+          <Label htmlFor="final_ctc" className="font-sans text-body font-medium text-ink">
+            Final salary
+          </Label>
           <MoneyInput
             id="final_ctc"
             value={finalText === "" ? null : Number(finalText)}
@@ -1303,7 +1318,9 @@ function InterviewCard({
           <p className="font-sans text-body-sm text-ink-muted">{pctText(finalPct)} on the current salary.</p>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="effective_from" className="type-label text-ink-muted">Effective from</Label>
+          <Label htmlFor="effective_from" className="font-sans text-body font-medium text-ink">
+            Effective from
+          </Label>
           <Input id="effective_from" type="date" value={effectiveFrom}
             onChange={(e) => setEffectiveFrom(e.target.value)} className="min-h-11 tabular" />
         </div>
