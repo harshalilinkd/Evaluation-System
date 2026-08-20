@@ -28,6 +28,14 @@ const MESSAGES: Record<string, { title: string; body: string }> = {
       // to find out who is being evaluated.
       "You have been brought back to your own. If you were trying to open somebody else's evaluation, a report you supervise is under My Team.",
   },
+  // 0091: a later milestone review supersedes an earlier one still open. This
+  // is the message somebody sees if they follow a link to the one that was
+  // withdrawn — unlike "forbidden" this is safe to be specific about, because
+  // it is always about the visitor's OWN record, never somebody else's.
+  withdrawn: {
+    title: "This review is no longer needed",
+    body: "A later review has taken its place. Check your dashboard for what's open now.",
+  },
 };
 
 export function AccessNotice() {

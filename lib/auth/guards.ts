@@ -144,13 +144,31 @@ export async function requireEvaluationAccess(
     // to tell whether ITS OWN layer is locked without consulting the status,
     // because §8 stopped the status carrying that.
     .select(
-      "id, status, evaluatee_id, lead_id, co_lead_id, cycle_id, track, self_submitted_at, lead_submitted_at, co_lead_submitted_at",
+      "id, status, evaluatee_id, lead_id, co_lead_id, cycle_id, track, self_submitted_at, lead_submitted_at, co_lead_submitted_at, excluded_at",
     )
     .eq("id", evaluationId)
     .maybeSingle();
 
   if (!evaluation) {
     redirect(`${landingPathFor(session.roles)}?error=not_found`);
+  }
+
+  /* -- WITHDRAWN, NOT FORBIDDEN, and only for the two actions that mean
+        FILLING one in. 0091 started excluding a milestone evaluation
+        automatically when a later one supersedes it — P10-6's own mechanism,
+        "the organisation is no longer asking for it" — and nothing here had
+        ever checked `excluded_at` at all. A stale link, sent before the
+        exclusion or simply left open in a browser tab, would still land on a
+        fully live form: the person could keep typing into a review the system
+        had already decided not to ask for, which is the exact waste 0091 was
+        written to stop.
+
+        Scoped to "self" and "lead" only. `exclude_evaluation`'s own comment
+        calls this "archived, not deleted" — HR and the MD may still have a
+        legitimate reason to VIEW a withdrawn record (why was this excluded,
+        what had been answered), so "view"/"md"/"decide" are untouched. -- */
+  if (evaluation.excluded_at && (action === "self" || action === "lead")) {
+    redirect(`${landingPathFor(session.roles)}?error=withdrawn`);
   }
 
   const isHr = session.roles.includes("HR_ADMIN");

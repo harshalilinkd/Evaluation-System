@@ -8260,3 +8260,55 @@ output rather than my assumption of what it would look like.
 Until it is, the database still permits HR to approve and close — the SQL side
 is the actual guard (§9); the TypeScript and UI changes narrow the paths that
 reach it but are not the enforcement on their own.
+
+---
+
+### FIX-71 — A later milestone review supersedes an earlier one still open
+
+Migration `0091_supersede_earlier_milestone.sql`. `lib/auth/guards.ts`,
+`app/(app)/access-notice.tsx`.
+
+Reported: "i sent one evaluation link for employee but they get 2 links at a
+time — if employees 1 month review not done and their 6 months review time
+came then we'll only send one form link for 6months review not 2 links its
+time waste for employees to fill 2 forms."
+
+**Why it happens.** `ensure_rolling_cycle` files one cycle per MILESTONE per
+financial year (0079) — "1-month reviews FY 26-27" and "6-month reviews
+FY 26-27" are two separate cycles by design, which is exactly what the
+screenshot showed. Nothing in `create_milestone_evaluation` ever checked
+whether the same employee already had an earlier milestone open when a later
+one was confirmed, so an employee whose 1-month review was never finished
+ended up holding two live evaluations — and two invite links — the moment
+their 6-month review came due.
+
+| # | Decision | Why |
+|---|---|---|
+| F71-1 | **A later MONTH_ confirmation withdraws any earlier, still-open MONTH_ evaluation for the same employee, through the EXISTING `exclude_evaluation` function (0009)** | P10-6 already built this mechanism for exactly this meaning — "the organisation is no longer asking for it" — archived, never deleted, and audited. Reusing it rather than writing a second withdrawal path means one implementation and one audit trail for both reasons an evaluation can be withdrawn. |
+| F71-2 | **Scoped to MONTH_ milestones on BOTH sides, never INCREMENT or PRE_INCREMENT** | Those are a different exercise entirely — a pay decision, not a review — and neither supersedes an evaluation nor is superseded by one. Nobody has asked that question yet, and this migration does not answer it by accident. |
+| F71-3 | Only a **still-open** earlier evaluation is touched — `status <> 'CLOSED'` and `excluded_at is null` | A CLOSED review is finished, not stale, and excluding a completed record would be destroying evidence rather than tidying a queue. |
+| F71-4 | The comparison is by the **month NUMBER**, not string order | `substring(milestone_type from '[0-9]+')::int`, so a future MONTH_10 correctly out-ranks MONTH_9 once the schedule is configured that widely — string comparison would get that backwards. |
+| F71-5 | **Confirming an earlier milestone after a later one already exists does NOT touch the later one** | The rule is one-directional on purpose: a later review supersedes an earlier unfinished one, not the reverse. Confirming milestones out of order is unusual and not something this migration should punish by deleting somebody's further-along review. |
+| F71-6 | **Anchored on the 0079-PATCHED call**, `ensure_rolling_cycle(v_item.due_on, v_item.milestone_type)`, not 0031's original one-argument form | 0079 rewrote this exact line to add the milestone argument — which is the reason two separate cycles exist in the first place. Anchoring on the pre-0079 text would raise "could not find the call" against every database this migration will actually run on. |
+| F71-7 | **A stale link on the now-withdrawn evaluation is closed too**, at `requireEvaluationAccess` | Nothing had ever checked `excluded_at` — a link already delivered, or a browser tab left open on the earlier form, would still land on a fully live evaluation. Scoped to `"self"` and `"lead"` only: `exclude_evaluation`'s own comment calls this "archived, not deleted", so HR and the MD may still have a legitimate reason to VIEW a withdrawn record — `"view"`/`"md"`/`"decide"` are untouched. |
+| F71-8 | The notice is allowed to be **specific**, unlike `forbidden`'s deliberately vague wording | P6-11 keeps `forbidden` generic because it might be about somebody else's record. A withdrawn notice is always about the visitor's OWN evaluation, so naming what happened — "A later review has taken its place" — is safe and more useful. |
+
+**Verification — 20 checks (supersede-milestone.mjs, PGlite, against the REAL
+functions), 14 checks (supersede-source.mjs), 0 failed.** The migration test
+loads `create_milestone_evaluation` verbatim from 0031, applies 0079's own
+`replace()` patch exactly as production receives it, then 0091's patch on top —
+a probe that reimplemented this chain would not be a check of it (FIX-12). The
+reported bug is reproduced first (two open evaluations, two cycles, matching
+the screenshot's own naming), then the fix is proved, then four cases that must
+NOT trigger it: a CLOSED earlier milestone, the reverse confirmation order, and
+an INCREMENT confirmation neither superseding nor being superseded.
+
+Fourteen other suites re-run; three assertions in `leadaccess.mjs` were stale
+from the second-reviewer work landing earlier this session (`leadsAnyEvaluation`
+widened to admit the co-lead, `isLead` becoming `isLead || isCoLead`) and one
+hit a CRLF line-ending mismatch — all four corrected. Mobile audit clean at 84
+screens; typecheck 0, lint 0 errors, build clean.
+
+**Action required.** `0091_supersede_earlier_milestone.sql` is **not applied**.
+Until it is, a later milestone confirmation still leaves an earlier open one
+standing, and the reported behaviour continues.
