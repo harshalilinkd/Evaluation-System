@@ -138,6 +138,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
         migration WROTE, never a token the file happens to contain — 0056
         reported itself applied because a LIKE found three fragments that were
         already there in three unrelated places. -- */
+  ('0089_narrative_last', 'narrative_is_last',
+     'Support & Expectations sits last on the employee''s form',
+     'Without it the section renders wherever it currently sits — on this database, above Learning & Development. Nothing breaks; the form simply asks for what somebody expects before asking what they learned.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -353,6 +356,14 @@ select
     -- true if somebody created it by hand, and the views are where it bites.
     -- BOTH halves: the constraint and the function's own guard. Either alone
     -- would report the migration applied while a launch still failed.
+    -- The finished ORDER, not the migration's own literal: 0089 computes the
+    -- value from what is there, so a fixed number would not tell you anything.
+    when 'narrative_is_last' then (
+      select coalesce(
+        (select sort_order from public.form_sections where section = 'NARRATIVE')
+          > (select max(sort_order) from public.form_sections
+              where section not in ('NARRATIVE', 'MANAGER_REVIEW')),
+        false))
     when 'invite_layer_lead2' then exists (
       select 1 from pg_constraint
        where conname = 'invite_tokens_layer_valid'
