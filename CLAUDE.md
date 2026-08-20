@@ -7853,3 +7853,69 @@ session all still pass.
 **Scope, stated plainly.** This is a static audit of the classes of fault that
 have reached a phone before. It is not the same as opening 175 screens on a
 handset, and it cannot see a layout that is merely ugly.
+
+---
+
+### FIX-66 — Two bands that open on request, and a role nobody holds
+
+No migration. `app/(app)/reports/[evaluationId]/{page,report-bands}.tsx` and the
+summary's manager cards.
+
+#### "2nd reviewer is not a designation or role of person"
+
+The change before this one put each reviewer's designation on their column and
+fell back to the generic role where somebody had none. So the report read
+**"2ND REVIEWER · HARSHALI"** beside **"HR-ADMIN · HARSHALI.LINKD"**, and the
+owner's objection is exact.
+
+| # | Decision | Why |
+|---|---|---|
+| F66-1 | **No fallback. A designation, or the name alone.** | "2nd reviewer" is this system's word for a SLOT, not a fact about a person, and printing it where a job title goes says the two are the same kind of fact — which is precisely what the column beside it, carrying a real designation, makes the reader assume. The name alone is honest, and which column is which is already carried by the order and by the header band above. A label that has to be invented to fill a space is worse than the space. |
+| F66-2 | The one-manager column is **untouched** | It has always read plainly "Manager", there is nothing to tell apart, and a job title in a 7% column would wrap for no gain. The fallback survives for exactly that case and can now reach no other. |
+| F66-3 | The co-lead's hint and the summary's two cards moved with it | The same rule in three places: their designation where they have one. Where they have none the fallback describes the RELATIONSHIP — "their other manager" — rather than naming the slot. Unlike the report's narrow columns, two adjacent cards each have to be identifiable, so a fallback earns its place there and a factual one is available. |
+
+#### The two long bands collapse
+
+At the owner's instruction: "make this sections 1 ratings 2 Learning and
+improvement sections collapsable means user will expand if they need to see
+this information".
+
+| # | Decision | Why |
+|---|---|---|
+| F66-4 | **A real `<details>`, not a div with state** | It is keyboard-operable and announced to a screen reader for free, it survives with JavaScript disabled, and the browser's own find-in-page opens it to reach a match inside — three things a hand-rolled disclosure has to be given and usually is not (§13.8). |
+| F66-5 | **The closed line carries a COUNT** | A section that does not say how much is inside is a section nobody opens. "15 questions · 2 where the two sides differed" is either the reason to open it or the reason not to — and the flagged figure is the one that has to survive the collapse, since it is why the band exists. Counted over every row, never the filtered view. |
+| F66-6 | The "Flagged only" button is **inside**, never on the summary line | A control in a `<summary>` is one click that both toggles the section and presses the button, and the reader cannot tell which they got. |
+
+#### And a numbering collision the restructure exposed
+
+Each band computed its own number as `paired.length > 0 ? 5 : 4` — four
+ternaries to re-derive by hand whenever a band moved, and one had already
+drifted: **the second reviewer's assessment and the salary band both came out
+as 5** on a designer's report.
+
+| # | Decision | Why |
+|---|---|---|
+| F66-7 | A number is a **position in the list of bands this report has** | An absent band never takes one, so everything after it closes up on its own. |
+| F66-8 | **A running counter is what this wanted, and the React compiler refuses it** | `bandNo += 1` reads far better and is a reassignment during render, which is exactly the pattern that rule exists to stop. The list is built first and each band asks for its position — pure, and the same answer. |
+| F66-9 | Each condition is written **once** and shared by the list and the JSX | Two copies would let the numbering describe a report that is not on screen. |
+
+**Verification — 30 checks (collapse), 0 failed**, plus the mobile audit at 84
+screens and 0 findings. **Four older assertions were rewritten, not deleted** —
+three pinned spellings the product deliberately changed (the designation
+fallback, the pooled verdict classification, the co-lead render condition), and
+each now asserts the reversal from both sides so quietly restoring the old
+behaviour fails.
+
+**Two dead locals were removed from the summary**, left behind when the pooled
+verdicts became per-manager groups. They had shipped: `npx tsc` was being run
+here with `grep -v 6133`, so an unused-local error was filtered out of my own
+verification. A filter that hides a class of error is a verification step that
+does not cover it.
+
+**One of my own assertions was wrong for the usual reason.** It counted
+`managerCardTitle(` and expected three, because I had counted the DECLARATION —
+which reads `const managerCardTitle = (` and does not match. Pinning a number I
+remembered rather than the claim I meant: the substring trap, now asserting two
+call sites. A second wrote a regex literal across two lines, which does not
+parse; rewritten as plain `includes`, the standing remedy §18 already carries
+and which I did not follow.

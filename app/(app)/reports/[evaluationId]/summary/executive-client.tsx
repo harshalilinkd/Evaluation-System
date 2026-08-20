@@ -59,17 +59,21 @@ export function ExecutiveSummary({
 }) {
   const { header, summary, narratives } = report;
 
-  /* -- BOTH managers' written verdicts. Reading only the reporting lead's
-        would drop half of a designer's review from the summary that exists to
-        be read instead of the full report — which is the worst place to lose
-        it. Concatenated HERE rather than merged in the builder, because the
-        detailed report keeps them apart and names each; a summary is a summary,
-        and what it needs is every point made, not who made it. -- */
-  const lead = classifyNarratives([
-    ...narratives.leadAssessment,
-    ...narratives.coLeadAssessment,
-  ]);
   const secondManager = header.coLeadName;
+
+  /* -- How each manager's card is headed.
+        Their DESIGNATION where they have one — a job title says why this
+        person's opinion is on the page, which a name alone does not. Where
+        there is none the fallback describes the RELATIONSHIP ("their other
+        manager") rather than naming the slot: the owner's objection to "2nd
+        reviewer" is that it is not a designation or a role, and putting it
+        where a job title goes claims that it is. Unlike the detailed report's
+        narrow columns, these two cards sit side by side and each has to be
+        identifiable, so the fallback earns its place here. -- */
+  const managerCardTitle = (designation: string | null, name: string | null, fallback: string) => {
+    const role = designation?.trim() || fallback;
+    return name ? `${role} · ${name}` : role;
+  };
 
   /* -- What the employee's own answer COMES TO. They are asked for a salary,
         not a percentage (0061), so the rise it implies has to be derived — and
@@ -94,10 +98,6 @@ export function ExecutiveSummary({
 
   const self = classifyNarratives(narratives.employeeVoice);
   const tenure = tenureLabel(header.dateOfJoining, new Date());
-  // "Employee requested" is a form label; the person has a name and it reads as
-  // a sentence. Same device the detailed report uses.
-  const firstName = header.employeeName.trim().split(/\s+/)[0] || "They";
-
   return (
     /* -- ONE SCROLL, NOT TWO. This was a fixed-height flex column holding two
           panes that each scrolled on their own, and that is most of what read
@@ -362,7 +362,7 @@ export function ExecutiveSummary({
                  Named rather than tinted: both managers share the manager hue
                  (§13.1 reserves three), so the NAME is what tells them apart —
                  and it survives greyscale and a colourblind reader (§13.8). -- */}
-          <Card title={header.leadName ? `Manager · ${header.leadName}` : "Manager"}>
+          <Card title={managerCardTitle(header.leadDesignation, header.leadName, "Manager")}>
             <Blocks
               groups={[
                 { label: "Main strengths", items: leadOwn.strengths },
@@ -374,7 +374,7 @@ export function ExecutiveSummary({
           </Card>
 
           {secondManager ? (
-            <Card title={`Second reviewer · ${secondManager}`}>
+            <Card title={managerCardTitle(header.coLeadDesignation, secondManager, "Their other manager")}>
               <Blocks
                 groups={[
                   { label: "Main strengths", items: coLeadOwn.strengths },

@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Flag, LayoutDashboard, Lock } from "lucide-react";
+import { ArrowLeft, ChevronRight, Flag, LayoutDashboard, Lock } from "lucide-react";
 
 import { ProgressRail } from "@/components/appraise/progress-rail";
 import { StatusChip } from "@/components/appraise/status-chip";
@@ -110,9 +110,13 @@ function managerMean(lead: number | null, coLead: number | null): number | null 
  * and with two managers side by side it is the only thing that tells the reader
  * which opinion is which.
  *
- * The generic role is the FALLBACK, not the label: somebody with no designation
- * on their record still has to be identifiable, and "2nd reviewer · Harshali"
- * is better than a bare name.
+ * AND NOTHING WHERE THERE IS NO DESIGNATION. The first version of this fell
+ * back to the generic role, so a column read "2nd reviewer · Harshali" beside
+ * "Design Coordinator · Priya" — and the owner's objection is exact: "2nd
+ * reviewer is not a designation or role of person". It is this system's word
+ * for a slot, and printing it in the position a real job title occupies says
+ * the two are the same kind of fact. The name alone is honest; which column is
+ * which is already carried by the order and by the header band above.
  *
  * With ONE manager the heading stays plain "Manager". There is nothing to tell
  * apart, the column has always read that way, and a job title in a 7% column
@@ -125,7 +129,18 @@ function reviewerHeading(
   twoManagers: boolean,
 ): string {
   if (!twoManagers) return fallbackRole;
-  return `${designation?.trim() || fallbackRole} · ${firstName(name)}`;
+  /* -- NO INVENTED ROLE. "2nd reviewer" was standing in as a designation for
+        somebody who has none, and the owner's objection is exact: it is not
+        their designation or their role, it is this system's word for a slot.
+        Printing it beside a real designation on the next column implies the two
+        are the same kind of fact.
+
+        So a designation where there is one, and the NAME ALONE where there is
+        not. Which column is which is already carried by the order and by the
+        header band above; a label that has to be invented to fill a space is
+        worse than the space. -- */
+  const role = designation?.trim();
+  return role ? `${role} · ${firstName(name)}` : firstName(name);
 }
 
 function firstName(full: string | null): string {
@@ -226,6 +241,65 @@ export function BandHeading({
       </div>
       {action}
     </div>
+  );
+}
+
+/**
+ * A band that opens when somebody asks for it.
+ *
+ * AT THE OWNER'S INSTRUCTION: the ratings table and the learning topics are the
+ * two longest things on this page and the two least often needed — "user will
+ * expand if they need to see this information". Closed, each is one line the
+ * reader can pass over; open, it is exactly what it was.
+ *
+ * A REAL <details>, not a div with state. It is keyboard-operable and announced
+ * to a screen reader for free, it survives with JavaScript disabled, and the
+ * browser's own find-in-page opens it to reach a match inside — three things a
+ * hand-rolled disclosure has to be given and usually is not (§13.8).
+ *
+ * The summary carries a COUNT, because a closed section that does not say how
+ * much is inside is a section nobody opens. "15 questions · 2 flagged" is either
+ * the reason to open it or the reason not to.
+ */
+function CollapsibleBand({
+  index,
+  title,
+  summary,
+  action,
+  children,
+}: {
+  index: number;
+  title: string;
+  summary: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className="card-surface group overflow-hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          aria-hidden
+          className="size-4 shrink-0 text-ink-muted transition-transform group-open:rotate-90"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-baseline gap-2 font-sans text-display-sm text-ink">
+            <span aria-hidden className="tabular text-body-sm font-semibold text-ink-muted">
+              {index}
+            </span>
+            {title}
+          </span>
+          <span className="block font-sans text-body-sm text-ink-muted">{summary}</span>
+        </span>
+      </summary>
+
+      {/* -- The action sits INSIDE, never on the summary line: a button in a
+             <summary> is one click that both toggles the section and presses the
+             button, and the reader cannot tell which they got. -- */}
+      <div className="space-y-4 border-t border-rule p-5">
+        {action ? <div className="flex justify-end">{action}</div> : null}
+        {children}
+      </div>
+    </details>
   );
 }
 
@@ -605,13 +679,25 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
     .map((s) => ({ ...s, rows: flaggedOnly ? s.rows.filter((r) => r.flag !== "none") : s.rows }))
     .filter((s) => s.rows.length > 0);
 
+  /* -- What the closed line says. A count and the number flagged: the flagged
+        figure is the reason to open this at all, so it is the one that has to
+        survive the collapse. -- */
+  const allRows = report.sections.flatMap((s) => s.rows);
+  const flaggedCount = allRows.filter((r) => r.flag !== "none").length;
+  const summary =
+    allRows.length === 0
+      ? "No ratings were recorded."
+      : `${allRows.length} question${allRows.length === 1 ? "" : "s"}` +
+        (flaggedCount > 0
+          ? ` · ${flaggedCount} where the two sides differed`
+          : " · the two sides broadly agreed");
+
   return (
-    <section className="space-y-4">
-      <BandHeading
-        index={index}
-        title="Ratings"
-        hint="Every question both sides answered, in the order they were asked."
-        action={
+    <CollapsibleBand
+      index={index}
+      title="Ratings"
+      summary={summary}
+      action={
           <Button
             type="button"
             variant={flaggedOnly ? "default" : "secondary"}
@@ -623,9 +709,8 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
             <Flag className="mr-2 size-4" aria-hidden />
             Flagged only
           </Button>
-        }
-      />
-
+      }
+    >
       {sections.length === 0 ? (
         <p className="card-surface p-6 font-sans text-body-sm text-ink-muted">
           {flaggedOnly ? "Nothing is flagged on this report." : "No ratings were recorded."}
@@ -827,7 +912,7 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
           </article>
         ))
       )}
-    </section>
+    </CollapsibleBand>
   );
 }
 
@@ -846,13 +931,15 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
     : null;
 
   return (
-    <section className="space-y-4">
-      <BandHeading
-        index={index}
-        title="Learning and improvement"
-        hint="The two sides on one topic, for reading together. Nothing here is scored or matched, and every answer below also appears in full in its own side's section."
-      />
-
+    <CollapsibleBand
+      index={index}
+      title="Learning and improvement"
+      summary={
+        `${paired.length} topic${paired.length === 1 ? "" : "s"} · ` +
+        "each side's answer side by side. Nothing here is scored, and every " +
+        "answer also appears in full in its own side's section below."
+      }
+    >
       {paired.map((pair) => (
         <article key={pair.topic} className="card-surface overflow-hidden print:break-inside-avoid">
           <h3 className="border-b border-rule px-6 py-3 font-sans text-body font-semibold text-ink">
@@ -907,7 +994,7 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
           </div>
         </article>
       ))}
-    </section>
+    </CollapsibleBand>
   );
 }
 

@@ -46,6 +46,32 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
         one place: if the block is not the caller's to see, the query never
         runs. -- */
   const salary = data.salary ? await getSalaryBand(evaluationId) : null;
+
+  /* -- Band numbers, DERIVED from which bands this report has.
+        The previous form was a `paired.length > 0 ? 5 : 4` at each call site —
+        four ternaries to re-derive by hand whenever a band moved, and one had
+        already drifted: the second reviewer's assessment and the salary band
+        both came out as 5 on a designer's report.
+
+        A running counter reads better and the React compiler refuses it, quite
+        rightly: reassigning during render is exactly the pattern it exists to
+        stop. So the list is built first and each band asks for its position —
+        pure, and an absent band never takes a number, so everything after it
+        closes up on its own. The conditions here MUST match the ones the JSX
+        renders on; they are written once each and referenced below rather than
+        repeated, so the two cannot disagree. -- */
+  const hasLearning = data.narratives.paired.length > 0;
+  const hasCoLead =
+    Boolean(data.header.coLeadName) && data.narratives.coLeadAssessment.length > 0;
+  const bands = [
+    "ratings",
+    hasLearning ? "learning" : null,
+    "employeeVoice",
+    "leadAssessment",
+    hasCoLead ? "coLeadAssessment" : null,
+    salary?.ok ? "salary" : null,
+  ].filter((b): b is string => b !== null);
+  const bandNo = (key: string) => bands.indexOf(key) + 1;
   const employeeFirst = data.header.employeeName.trim().split(/\s+/)[0] ?? "the employee";
 
   /* -- The bands are NUMBERED, and the numbers are assigned here rather than
@@ -107,13 +133,11 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
                 Counting also survives a band being absent — the comparison band
                 renders nothing when no topic is in the snapshot, and everything
                 after it now closes up instead of leaving a hole. -- */}
-          <RatingsBand report={data} index={1} />
-          {data.narratives.paired.length > 0 ? (
-            <LearningBand report={data} index={2} />
-          ) : null}
+          <RatingsBand report={data} index={bandNo("ratings")} />
+          {hasLearning ? <LearningBand report={data} index={bandNo("learning")} /> : null}
 
           <NarrativeBand
-            index={data.narratives.paired.length > 0 ? 3 : 2}
+            index={bandNo("employeeVoice")}
             title={`${employeeFirst}'s own words`}
             hint="Every free-text answer they gave, in the order the questions were asked."
             blocks={data.narratives.employeeVoice}
@@ -121,7 +145,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
           />
 
           <NarrativeBand
-            index={data.narratives.paired.length > 0 ? 4 : 3}
+            index={bandNo("leadAssessment")}
             title={
               data.header.coLeadName
                 ? `${data.header.leadName ?? "The manager"}'s assessment`
@@ -138,11 +162,20 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
                  report whose whole purpose is that the two rated blind to each
                  other. Named, because that is what tells them apart (§13.8:
                  never colour alone, and both managers share the manager hue). -- */}
-          {data.header.coLeadName && data.narratives.coLeadAssessment.length > 0 ? (
+          {hasCoLead ? (
             <NarrativeBand
-              index={data.narratives.paired.length > 0 ? 5 : 4}
+              index={bandNo("coLeadAssessment")}
               title={`${data.header.coLeadName}'s assessment`}
-              hint="The same questions, answered independently by their second reviewer."
+              hint={
+                /* -- Their DESIGNATION where they have one. "their second
+                      reviewer" is this system's word for the slot, not a fact
+                      about the person (see reviewerHeading) — true enough in a
+                      sentence, but a job title tells the reader why this
+                      opinion is on the page. -- */
+                data.header.coLeadDesignation?.trim()
+                  ? `The same questions, answered independently by their ${data.header.coLeadDesignation.trim()}.`
+                  : "The same questions, answered independently by their other manager."
+              }
               blocks={data.narratives.coLeadAssessment}
               tone="lead"
             />
@@ -154,7 +187,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               evaluationId={evaluationId}
               status={data.header.status}
               isHr={isHr}
-              index={data.narratives.paired.length > 0 ? 5 : 4}
+              index={bandNo("salary")}
               selfOverall={data.summary.selfOverall}
               leadOverall={data.summary.leadOverall}
             />
