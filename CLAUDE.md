@@ -8028,3 +8028,122 @@ on a source edit. The other tested "no arithmetic in the component" unscoped and
 matched the mean of two SCORES that mirrors 0046's SQL; **FIX-46 corrected
 exactly this assertion and I reintroduced it.** It is scoped to salary
 identifiers again.
+
+---
+
+### FIX-66 — Five columns do not fit on a phone
+
+`app/(app)/reports/[evaluationId]/report-bands.tsx`,
+`.../summary/executive-client.tsx`, `app/(app)/admin/increments/increments-client.tsx`.
+No migration.
+
+Reported from a handset, of the report screen. The section scores read:
+
+```
+SELF   MANAGER   DESIGN     AVERAGE   GAP
+4.33   3.67      COORDINATOR 4.00     -0.66
+                 3.67
+```
+
+**The fault is not a squeeze, it is a MISALIGNMENT.** Each figure is its own
+grid item, so a heading that wraps to two lines pushes ITS value down while the
+ones beside it stay on the first line. "Design Coordinator" ran over "Average"
+and its 3.67 sat a row below the other numbers — on the one screen whose whole
+job is comparing four figures across.
+
+| # | Decision | Why |
+|---|---|---|
+| F66-1 | **Three across when there is a second manager, not five** | The three RATERS on one row — which is the reason somebody opens this on a phone — and Average and Gap, which are derived from them, on the next. Four short labels still fit on one row when there is no second manager, so that case is untouched. |
+| F66-2 | The same fault was on the executive summary, and it goes to ONE per row | Those four labels are people's NAMES. There is no width at which a name is guaranteed to fit a quarter of 375px, so the column becomes a stack — and the dividers turn with the axis, horizontal while it is a column and vertical once it is a row. |
+| F66-3 | The increments filters go from four across to two | Its own comment recorded what four did: the search field was ~80px, the icon took 36 of them, and the placeholder had to be EMPTIED to stop it arriving as "Search by ". Half a row is ~170px, which is a field somebody can read what they typed into — so the placeholder comes back, as the single word "Search" with the sentence on the label. |
+| F66-4 | **The audit gained the rule, and it draws the line at FIVE** | Four is where the labels still work; a fifth column is only ever there because somebody has a job title. A rule that flagged four would have been noise, and a noisy rule is one nobody reads twice (FIX-23). |
+
+**Verification — the audit at 0 findings across 175 screens**, now including the
+column rule. Typecheck clean for these files; `npm run build` fails on an unused
+import in `app/print/report-sheet.tsx`, which belongs to the print work being
+edited in parallel and is untouched here.
+
+**Worth recording about the audit itself.** It returned 0 the run before this
+one, and the reported fault was real — a static scan sees the classes of defect
+it was taught and nothing else. This screen was found by somebody looking at it,
+which is how every mobile fault in this log has been found.
+
+---
+
+### FIX-69 — Roles instead of names, everywhere; Learning removed; the sheet tightened
+
+No migration. `lib/reports/reviewer.ts` is new; `report-bands.tsx`, `page.tsx`,
+`salary-band.tsx`, `summary/executive-client.tsx`, `lib/increment/queries.ts`
+and `app/print/report-sheet.tsx` edited.
+
+#### One module, so the screen and the printed sheet cannot disagree
+
+At the owner's instruction, across the whole report: "instead of names use
+their designations like Managers Assessment Designer Coordinator Assessment";
+"in salary section also Manager 10% · Harshali Bhopale 6% … instead of Harshali
+bhopale mention their designations"; "in report print also instead of their
+names manager and design coordinator … their designation should mention
+everywhere".
+
+| # | Decision | Why |
+|---|---|---|
+| F69-1 | **`lib/reports/reviewer.ts` is new, and every surface imports from it** | FIX-67 and FIX-68 had already put the rule — the reporting lead is "Manager", the second reviewer takes their designation, a name is the fallback — in `report-bands.tsx` alone. Asking for it "everywhere" meant the salary panel, the executive summary and the printed sheet each needed the identical rule, and three independent copies is three chances for one to drift, which is exactly what had happened: the salary card still said "Harshali Bhopale 6%" and the printed sheet still printed "harshali.linkd · HR-Admin". |
+| F69-2 | **`reviewerPhrase`, as a fourth primitive, because a heading and a sentence need different grammar** | `coLeadRole` answers "what goes in this column" and is right for a heading. "What their Design Coordinator said about them" needs "their" in front of a role and nothing in front of a name — "their Harshali" is not English. One function, so the distinction is made once rather than re-derived at each of the report's several such sentences. |
+| F69-3 | **The salary query now fetches the second manager's `designation`, not only their name** | It had never been selected — `coManagerName` existed for exactly one purpose, telling HR whom to chase, and the comment said so. The name is still fetched, because it is the fallback where a profile carries no designation. |
+| F69-4 | **The printed sheet's identity block cell changed shape**, not only its content | It read "harshali.linkd · HR-Admin" — a name with the designation appended, which is the pattern P27/FIX-34 built for an identity VALUE. The label-value roles are reversed here: the label (`<dt>`) is now the role, and the value (`<dd>`) is the name — the right way round for a row whose job is to say who signed. |
+| F69-5 | The print sheet's Learning table and its two assessment headings took the same correction | `<th>What {lead} said</th>` and `{header.leadName}'s assessment` were two of the four surfaces still naming the reporting lead — found by grepping for every remaining `firstName(header.leadName)` and `header.coLeadName` render rather than trusting the earlier pass had caught them all. |
+
+#### The Record block, removed from the printed sheet
+
+At the owner's instruction: "remove record fields from report" — the block
+naming when each side submitted and how many times HR sent the form back.
+
+| # | Decision | Why |
+|---|---|---|
+| F69-6 | **Removed from the document, not from the record** | Every fact it carried is still on `/reports` for anybody who needs it, and the timestamps live in `audit_log`, which §12 makes append-only for every caller. This takes it off a signed sheet where it read as process filler beside the sections that carry the actual decision; nothing is destroyed. |
+
+#### The rating scale, said once — now true on paper as well
+
+FIX-68 moved the on-screen ratings table from six words per cell to a numeral,
+with the wording stated once at the top. The printed sheet's own copy of the
+same table still repeated the full label forty-five times, for the identical
+reason the owner gave again this round: "we have mentioned rating scale at top
+then why me mention in each que field … please show only no".
+
+| # | Decision | Why |
+|---|---|---|
+| F69-7 | **The printed table now prints the numeral**, falling back to the answer text for anything that is not a 0-5 scale question | `row.selfScale ?? row.selfAnswer`, using the same `selfScale`/`leadScale`/`coLeadScale` fields FIX-68 already added to `ReportRow` for the screen. §6's wording is untouched — the grading scale table above it still states all six in full, per P15-9, and §17 forbids paraphrasing it. It is said once, where a reader meets it, instead of three times per row. |
+
+#### Learning and improvement, removed from the on-screen report
+
+At the owner's instruction: "remove learning and improvement section from
+report".
+
+| # | Decision | Why |
+|---|---|---|
+| F69-8 | **The page stops importing and rendering `LearningBand`; the component stays defined, unused** | Every answer it compared is still on the page in full — once in the employee's own words, once in each manager's assessment — so nothing is lost, only the side-by-side pairing of the two. §18 has recorded repeatedly that an orphaned component left where the next reader will reach for it is a landmine (P22); this one is a deliberate exception, stated as such at the call site: it may return on the owner's word, and idle source costs less than rewriting it from nothing. The printed sheet's own Learning table is untouched — the instruction named "report", and the two surfaces have been treated separately throughout this session. |
+| F69-9 | The band numbering **derives itself** from which bands exist, so removing one needed no renumbering | P30's device, already in place: `bands.indexOf(key) + 1`. Deleting the `"learning"` entry from the list is the whole change; every band after it closes up on its own. |
+
+#### And two more, in the same message
+
+| # | Decision | Why |
+|---|---|---|
+| F69-10 | **"Designer's own words" → "Employee Self Evaluation", as a fixed title** | It interpolated the employee's first name — `${employeeFirst}'s own words` — which the owner asked to replace outright rather than reword, and the new title names what the band is rather than whose it is, matching the plain register of the other band names. |
+| F69-11 | **The vertical gap between bands went from 32px to 20px** | "This taking too much space dont keep unnecessary extra spaces between grids." Six cards each carrying their own internal padding and a rule at their own edge only need the gap between them to separate, not to breathe a second time. |
+
+**Verification — 23 checks (roles.mjs), 0 failed**, plus the mobile audit at 84
+screens and 0 findings and eight other suites green. Several older assertions
+were rewritten across three suites to match this round's extraction and the
+removal — each records what it replaced and why, rather than being silently
+loosened.
+
+**The escaping trap, again, twice in one sitting.** A `\n` written through a
+Python string into a JavaScript regex source arrived as a real newline and the
+file would not parse — once in a multi-line `assert`, once in an `.includes()`
+check. §18's standing remedy is written down and was ignored both times: prefer
+a plain edit over a string escaped through another language. Both were fixed
+directly rather than through another script.
+
+**Noted, not mine.** `app/(app)/admin/increments/increments-client.tsx`
+changed in the tree during this session — parallel work, left untouched and
+unstaged.

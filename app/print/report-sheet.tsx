@@ -8,7 +8,8 @@
 
 import { SCALE_0_5_LABELS } from "@/components/appraise/tier";
 import type { EvaluationReport } from "@/lib/reports/types";
-import { formatDate, formatDateTime } from "@/lib/utils/date";
+import { coLeadRole, LEAD_ROLE, possessive } from "@/lib/reports/reviewer";
+import { formatDate } from "@/lib/utils/date";
 
 function score(value: number | null): string {
   return value === null ? "—" : value.toFixed(2);
@@ -66,9 +67,15 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
 
   // No second manager, no third column — every sheet printed to date is
   // byte-identical.
-  const secondManager = header.coLeadName ? firstName(header.coLeadName) : null;
+  /* -- ROLES, NOT NAMES, at the owner's instruction: "instead of their names
+        manager and design coordinator means their designation should mention
+        everywhere". Read from the one shared module so this sheet and the
+        screen cannot say different things about the same person. -- */
+  const secondManager = header.coLeadName
+    ? coLeadRole(header.coLeadDesignation, header.coLeadName)
+    : null;
   const employee = firstName(header.employeeName);
-  const lead = firstName(header.leadName);
+
 
   return (
     <article className="print-sheet">
@@ -121,15 +128,17 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <dd>{header.dateOfJoining ? formatDate(header.dateOfJoining) : "—"}</dd>
           </div>
           <div>
-            <dt>Rated by</dt>
-            {/* -- The designation beside the name, so a signed sheet says what
-                   each reviewer IS and not only who they are. Held to one cell
-                   rather than a row of its own: the grid is three columns and
-                   its last-row rule keys on the last three children (FIX-34). -- */}
-            <dd>
-              {header.leadName ?? "—"}
-              {header.leadDesignation ? ` · ${header.leadDesignation}` : ""}
-            </dd>
+            <dt>Manager</dt>
+            {/* -- The ROLE is the label and the NAME is the value, which is the
+                   right way round for an identity block: this row exists to say
+                   who signed, and the column heading in the table below is
+                   where the role belongs.
+
+                   `leadDesignation` is deliberately not printed. It is a
+                   free-text profile field holding whatever was typed there, and
+                   on the report that prompted this it held "HR-Admin" — an
+                   access level rather than a job. -- */}
+            <dd>{header.leadName ?? "—"}</dd>
           </div>
           {/* -- A second reviewer is a fact about who rated this person, so it
                 belongs in the identity block and not only in a column heading.
@@ -139,11 +148,8 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 across the foot of the block (FIX-34). -- */}
           {header.coLeadName ? (
             <div>
-              <dt>Second reviewer</dt>
-              <dd>
-                {header.coLeadName}
-                {header.coLeadDesignation ? ` · ${header.coLeadDesignation}` : ""}
-              </dd>
+              <dt>{secondManager}</dt>
+              <dd>{header.coLeadName}</dd>
             </div>
           ) : null}
           {/* -- THE CYCLE, as a third row rather than a corner block.
@@ -170,7 +176,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <tr>
               <th>Section</th>
               <th className="print-num">Self</th>
-              <th className="print-num">{secondManager ? firstName(header.leadName) : "Manager"}</th>
+              <th className="print-num">{LEAD_ROLE}</th>
               {secondManager ? <th className="print-num">{secondManager}</th> : null}
               <th className="print-num">Average</th>
               <th className="print-num">Gap</th>
@@ -232,7 +238,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <tr>
                 <th>Question</th>
                 <th>Self</th>
-                <th>{secondManager ? firstName(header.leadName) : "Manager"}</th>
+                <th>{LEAD_ROLE}</th>
                 {secondManager ? <th>{secondManager}</th> : null}
                 <th>Gap</th>
               </tr>
@@ -250,9 +256,26 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                       </>
                     ) : null}
                   </td>
-                  <td>{row.selfAnswer ?? "—"}</td>
-                  <td>{row.leadAnswer ?? "—"}</td>
-                  {secondManager ? <td>{row.coLeadAnswer ?? "—"}</td> : null}
+                  {/* -- THE NUMERAL, because the scale is printed in full
+                         directly above this table. At the owner's instruction:
+                         "we have mentioned rating scale at top then why me
+                         mention in each que field ... please show only no".
+
+                         §6's wording is untouched — §17 forbids paraphrasing it
+                         and nothing here does. It is stated once, where a
+                         reader meets it, instead of three times per row. That
+                         also lets the three answer columns hold a numeral
+                         instead of 284px of text, which is what made every row
+                         wrap.
+
+                         A non-scale answer — Yes/No, a date, a chosen option —
+                         still prints as itself: `selfScale` is null for those
+                         and the band holds more than ratings. -- */}
+                  <td className="print-num">{row.selfScale ?? row.selfAnswer ?? "—"}</td>
+                  <td className="print-num">{row.leadScale ?? row.leadAnswer ?? "—"}</td>
+                  {secondManager ? (
+                    <td className="print-num">{row.coLeadScale ?? row.coLeadAnswer ?? "—"}</td>
+                  ) : null}
                   <td className="print-num">{gapText(row.gap)}</td>
                 </tr>
               ))}
@@ -270,7 +293,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
               <tr>
                 <th>Topic</th>
                 <th>What {employee} said</th>
-                <th>What {lead} said</th>
+                <th>What {LEAD_ROLE} said</th>
                 {secondManager ? <th>What {secondManager} said</th> : null}
               </tr>
             </thead>
@@ -304,11 +327,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
       {/* ---------- Band 5 ---------- */}
       {narratives.leadAssessment.length > 0 ? (
         <section className="print-section print-block">
-          <h2>
-            {secondManager && header.leadName
-              ? `${header.leadName}’s assessment`
-              : "The lead’s assessment"}
-          </h2>
+          <h2>{possessive(LEAD_ROLE)} assessment</h2>
           {narratives.leadAssessment.map((block) => (
             <div key={block.question} className="print-narrative">
               <h3>{block.question}</h3>
@@ -325,7 +344,7 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
              reason both were collected. -- */}
       {secondManager && narratives.coLeadAssessment.length > 0 ? (
         <section className="print-section print-block">
-          <h2>{header.coLeadName}&rsquo;s assessment</h2>
+          <h2>{possessive(secondManager ?? "")} assessment</h2>
           {narratives.coLeadAssessment.map((block) => (
             <div key={block.question} className="print-narrative">
               <h3>{block.question}</h3>
@@ -363,50 +382,16 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
         </div>
       </section>
 
-      {/* ---------- Meta ---------- */}
-      <section className="print-block">
-        <h2>Record</h2>
-        <dl className="print-meta">
-          <div>
-            <dt>Self submitted</dt>
-            <dd>
-              {meta.selfSkipped
-                ? "Skipped"
-                : meta.selfSubmittedAt
-                  ? formatDateTime(meta.selfSubmittedAt)
-                  : "—"}
-            </dd>
-          </div>
-          <div>
-            <dt>Manager submitted</dt>
-            <dd>
-              {meta.leadSkipped
-                ? "Skipped"
-                : meta.leadSubmittedAt
-                  ? formatDateTime(meta.leadSubmittedAt)
-                  : "—"}
-            </dd>
-          </div>
-          {/* -- SAID IN WORDS, because "Returned · Never" was a fair question.
-                It counts the times HR sent this form BACK to be redone — §8's
-                return transitions — and neither the label nor the value said so.
-                "Returned" alone does not say returned by whom or to where, and
-                "3 time(s)" is a programmer counting rather than a document
-                reading. On a sheet somebody signs, an unexplained word is worse
-                than a longer one. -- */}
-          <div>
-            <dt>Sent back for changes</dt>
-            <dd>
-              {meta.returns.length === 0
-                ? "Not once"
-                : meta.returns.length === 1
-                  ? "Once"
-                  : `${meta.returns.length} times`}
-            </dd>
-          </div>
-        </dl>
-      </section>
+      {/* -- THE RECORD BLOCK IS GONE, at the owner's instruction: "remove
+            record fields from report". It printed when each side submitted and
+            how many times the form had been sent back — process, not appraisal,
+            and on a signed sheet it read as filler beside the sections that
+            carry the decision.
 
+            NOTHING WAS LOST. Every one of those facts is on `/reports` for
+            anybody who needs it, and the timestamps live in `audit_log`, which
+            is append-only for every caller (§12). This removes them from a
+            document, never from the record. -- */}
       {/* ---------- Signatures ----------
 
           THE ATTESTATION WAS ALREADY HERE AND WAS BEING THROWN AWAY.

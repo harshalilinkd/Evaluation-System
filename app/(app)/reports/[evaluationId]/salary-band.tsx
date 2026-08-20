@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { BandHeading } from "@/app/(app)/reports/[evaluationId]/report-bands";
 import { SALARY_DOT, SALARY_TINT, type SalaryTone } from "@/components/appraise/salary-tones";
 import { Button } from "@/components/ui/button";
+import { coLeadRole } from "@/lib/reports/reviewer";
 import {
   Dialog,
   DialogContent,
@@ -593,8 +594,8 @@ function HrProposal({
               : "Manager — not answered"}
             {" · "}
             {data.coManagerHikePct !== null
-              ? `${data.coManagerName} ${data.coManagerHikePct}%`
-              : `${data.coManagerName} — not answered`}
+              ? `${coLeadRole(data.coManagerDesignation, data.coManagerName)} ${data.coManagerHikePct}%`
+              : `${coLeadRole(data.coManagerDesignation, data.coManagerName)} — not answered`}
             {data.recommendedIsAverage
               ? `. The average is ${data.recommendedHikePct}%.`
               : ". Waiting on the second reviewer before an average can be taken."}

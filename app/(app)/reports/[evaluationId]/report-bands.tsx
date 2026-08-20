@@ -10,6 +10,7 @@ import { ProgressRail } from "@/components/appraise/progress-rail";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
 import { SCALE_0_5_LABELS } from "@/components/appraise/tier";
+import { coLeadRole, LEAD_ROLE, reviewerPhrase } from "@/lib/reports/reviewer";
 import { SECTION_LABELS } from "@/lib/forms/labels";
 import type { EvaluationReport } from "@/lib/reports/types";
 import { formatDate, formatDateTime } from "@/lib/utils/date";
@@ -126,11 +127,9 @@ function managerMean(lead: number | null, coLead: number | null): number | null 
  * column falls back to the person's NAME, which is honest and still identifies
  * them.
  */
-const LEAD_HEADING = "Manager";
+const LEAD_HEADING = LEAD_ROLE;
 
-function coReviewerHeading(designation: string | null, name: string | null): string {
-  return designation?.trim() || firstName(name);
-}
+const coReviewerHeading = coLeadRole;
 
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
@@ -500,7 +499,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
           </figcaption>
           <p className="tabular mt-1 text-display-lg text-ink">{score(summary.leadOverall)}</p>
           <p className="font-sans text-body-sm text-ink-muted">
-            What {firstName(header.leadName)} said about them
+            What their manager said about them
           </p>
         </figure>
 
@@ -520,7 +519,7 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
               {score(summary.coLeadOverall)}
             </p>
             <p className="font-sans text-body-sm text-ink-muted">
-              What {firstName(header.coLeadName)} said about them
+              What {reviewerPhrase(header.coLeadDesignation, header.coLeadName)} said about them
             </p>
           </figure>
         ) : null}
@@ -696,7 +695,20 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
             return (
               <li key={s.section} className="px-4 py-3">
                 <p className="font-sans text-body text-ink">{s.label}</p>
-                <dl className={cn("mt-2 grid gap-2", secondManager ? "grid-cols-5" : "grid-cols-4")}>
+                {/* -- FIVE COLUMNS DO NOT FIT AT 375px, and the failure is not
+                       a squeeze — it is a misalignment. Each figure is its own
+                       grid item, so a heading that wraps to two lines pushes ITS
+                       value down while the ones beside it stay on the first
+                       line: "Design Coordinator" ran over "Average" and its 3.67
+                       sat a line below the other numbers.
+
+                       Three across when there is a second manager: the three
+                       RATERS on one row to be compared — which is the reason
+                       somebody opens this on a phone — and Average and Gap,
+                       which are derived from them, on the next. Four short
+                       labels still fit on one row when there is no second
+                       manager, so that case is unchanged. -- */}
+                <dl className={cn("mt-2 grid gap-2", secondManager ? "grid-cols-3" : "grid-cols-4")}>
                   <div>
                     <dt className="type-label text-self">Self</dt>
                     <dd className="tabular text-body font-semibold text-ink">{score(s.self)}</dd>
@@ -999,11 +1011,13 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
   if (paired.length === 0) return null;
 
   const employee = firstName(report.header.employeeName);
-  const lead = firstName(report.header.leadName);
+  // AT THE OWNER'S INSTRUCTION: the manager's column is headed by their ROLE,
+  // not their name — the same rule every other surface on this report follows.
+  const lead = LEAD_ROLE;
   // Same rule as everywhere else on this report: no second manager, no third
   // answer, and the band is what it has always been.
   const secondManager = report.header.coLeadName
-    ? firstName(report.header.coLeadName)
+    ? coLeadRole(report.header.coLeadDesignation, report.header.coLeadName)
     : null;
 
   return (
@@ -1060,7 +1074,9 @@ export function LearningBand({ report, index }: { report: EvaluationReport; inde
                      manager's own answer. -- */}
               {secondManager ? (
                 <div className="mt-3 border-t border-rule pt-3">
-                  <TierTag tier="lead">What {secondManager} said</TierTag>
+                  <TierTag tier="lead">
+                    What {reviewerPhrase(report.header.coLeadDesignation, report.header.coLeadName)} said
+                  </TierTag>
                   <p className="mt-1.5 whitespace-pre-wrap font-sans text-body text-ink">
                     {pair.coLeadAnswer ?? <span className="text-ink-muted">Left blank.</span>}
                   </p>

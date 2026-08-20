@@ -5,7 +5,6 @@ import type { Metadata } from "next";
 import { HrRail, MdRail } from "@/app/(app)/reports/[evaluationId]/action-rail";
 import {
   HeaderBand,
-  LearningBand,
   MetaPanel,
   NarrativeBand,
   RatingsBand,
@@ -15,6 +14,7 @@ import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { SalaryBand } from "@/app/(app)/reports/[evaluationId]/salary-band";
 import { getSalaryBand } from "@/lib/increment/queries";
+import { coLeadRole, LEAD_ROLE, possessive } from "@/lib/reports/reviewer";
 import { buildEvaluationReport } from "@/lib/reports/build";
 
 export const metadata: Metadata = { title: "Report" };
@@ -60,19 +60,16 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
         closes up on its own. The conditions here MUST match the ones the JSX
         renders on; they are written once each and referenced below rather than
         repeated, so the two cannot disagree. -- */
-  const hasLearning = data.narratives.paired.length > 0;
   const hasCoLead =
     Boolean(data.header.coLeadName) && data.narratives.coLeadAssessment.length > 0;
   const bands = [
     "ratings",
-    hasLearning ? "learning" : null,
     "employeeVoice",
     "leadAssessment",
     hasCoLead ? "coLeadAssessment" : null,
     salary?.ok ? "salary" : null,
   ].filter((b): b is string => b !== null);
   const bandNo = (key: string) => bands.indexOf(key) + 1;
-  const employeeFirst = data.header.employeeName.trim().split(/\s+/)[0] ?? "the employee";
 
   /* -- The bands are NUMBERED, and the numbers are assigned here rather than
         inside each band. Band 6 only exists on an increment cycle, so a band
@@ -91,7 +88,13 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
       <ReportTopBar report={data} />
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="space-y-8">
+        {/* -- TIGHTER, at the owner's instruction: "this taking too much
+              space dont keep unnecessary extra spaces between grids". 32px
+              between six cards read as padding rather than structure — each
+              card already carries its own internal space and a rule at its
+              own edge, so the gap between them only has to separate, not
+              breathe. -- */}
+        <div className="space-y-5">
           {/* No heading over this one, at the owner's instruction. It is the
               identity card — the employee's name IS its title, and "1 · At a
               glance" above their name read as a label on a form rather than the
@@ -134,11 +137,22 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
                 renders nothing when no topic is in the snapshot, and everything
                 after it now closes up instead of leaving a hole. -- */}
           <RatingsBand report={data} index={bandNo("ratings")} />
-          {hasLearning ? <LearningBand report={data} index={bandNo("learning")} /> : null}
+
+          {/* -- AT THE OWNER'S EXPLICIT INSTRUCTION (§0.2): "remove learning and
+                improvement section from report". Every answer it compared is
+                still on the page in full — in this band and in the manager
+                assessment bands below — so nothing is lost, only the side-by-
+                side comparison of the two. `LearningBand` and its collapsible
+                shell stay in report-bands.tsx unused rather than deleted:
+                P22's lesson is that an orphaned component left in the tree is
+                a landmine for the next reader, but this one differs from that
+                case in the one way that matters — it may come back on the
+                owner's word, and its only cost sitting idle is a few hundred
+                lines nobody imports. -- */}
 
           <NarrativeBand
             index={bandNo("employeeVoice")}
-            title={`${employeeFirst}'s own words`}
+            title="Employee Self Evaluation"
             hint="Every free-text answer they gave, in the order the questions were asked."
             blocks={data.narratives.employeeVoice}
             tone="self"
@@ -146,11 +160,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
 
           <NarrativeBand
             index={bandNo("leadAssessment")}
-            title={
-              data.header.coLeadName
-                ? `${data.header.leadName ?? "The manager"}'s assessment`
-                : "The lead's assessment"
-            }
+            title={`${possessive(LEAD_ROLE)} assessment`}
             hint="Every question the manager answered, in the order they were asked. Ratings are in section 1 with their scores."
             blocks={data.narratives.leadAssessment}
             tone="lead"
@@ -165,7 +175,9 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
           {hasCoLead ? (
             <NarrativeBand
               index={bandNo("coLeadAssessment")}
-              title={`${data.header.coLeadName}'s assessment`}
+              title={`${possessive(
+                coLeadRole(data.header.coLeadDesignation, data.header.coLeadName),
+              )} assessment`}
               hint={
                 /* -- Their DESIGNATION where they have one. "their second
                       reviewer" is this system's word for the slot, not a fact

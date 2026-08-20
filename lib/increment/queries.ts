@@ -73,6 +73,8 @@ export type SalaryBand = {
   coManagerHikePct: number | null;
   coManagerPromotion: string | null;
   coManagerName: string | null;
+  /** Their designation, which is what every surface actually shows. */
+  coManagerDesignation: string | null;
   /**
    * WHAT THE MANAGERS TOGETHER RECOMMEND — the figure the quick-set offers.
    *
@@ -175,13 +177,21 @@ export async function getSalaryBand(
         act on: HR chasing a missing one needs to know which manager to ask. Only
         fetched where there is one, which is almost never. -- */
   let coManagerName: string | null = null;
+  let coManagerDesignation: string | null = null;
   if (evaluation.co_lead_id) {
     const { data: coManager } = await supabase
       .from("profiles")
-      .select("full_name")
+      .select("full_name, designation")
       .eq("id", evaluation.co_lead_id)
       .maybeSingle();
     coManagerName = coManager?.full_name ?? null;
+    /* -- THEIR DESIGNATION, at the owner's instruction: "instead of
+          Harshali bhopale mention their designations". A name says
+          nothing about why a second percentage is on the page; "Design
+          Coordinator" says it in two words. The NAME is still fetched
+          because it is the fallback where a profile carries no
+          designation (see lib/reports/reviewer.ts). -- */
+    coManagerDesignation = coManager?.designation ?? null;
   }
 
   const coLeadBlob = blobFor("LEAD_2");
@@ -316,6 +326,7 @@ export async function getSalaryBand(
       coManagerHikePct,
       coManagerPromotion,
       coManagerName,
+      coManagerDesignation,
       recommendedHikePct,
       recommendedIsAverage: bothAnswered,
     },

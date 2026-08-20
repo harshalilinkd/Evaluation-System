@@ -17,6 +17,7 @@ import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
 import { hikePct, newCtcFromPct } from "@/lib/increment/calc";
 import type { SalaryBand } from "@/lib/increment/queries";
+import { coLeadRole, LEAD_ROLE } from "@/lib/reports/reviewer";
 import type { NarrativeBlock, EvaluationReport } from "@/lib/reports/types";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,14 @@ export function ExecutiveSummary({
     const role = designation?.trim() || fallback;
     return name ? `${role} · ${name}` : role;
   };
+  /* -- AT THE OWNER'S INSTRUCTION: "instead of names use their designations".
+        The grouped verdicts below used to key on the person's NAME — the group
+        label AND the React key. Both move to the ROLE, from the one shared
+        module every other surface reads. -- */
+  const leadRoleLabel = LEAD_ROLE;
+  const coLeadRoleLabel = secondManager
+    ? coLeadRole(header.coLeadDesignation, header.coLeadName)
+    : null;
   /* -- The REPORTING lead is headed "Manager", never their designation. It is a
         free-text field holding whatever was typed there, and on the report that
         prompted this it held "HR-Admin" — an access level, not a job. The
@@ -182,9 +191,15 @@ export function ExecutiveSummary({
                 report's own column headings use — so identity is stated without
                 a coloured border round every figure. -- */}
           <div
+            /* -- ONE PER ROW ON A PHONE. Four cells across 375px is about
+                  90px each, and these labels are people's NAMES — so the label
+                  wraps to two lines and its value drops below the ones beside
+                  it, which is the same misalignment the report's section scores
+                  had. The dividers turn with the axis: horizontal while it is a
+                  column, vertical once it is a row. -- */
             className={cn(
-              "card-surface grid divide-x divide-rule",
-              secondManager ? "grid-cols-4" : "grid-cols-3",
+              "card-surface grid divide-y divide-rule sm:divide-x sm:divide-y-0",
+              secondManager ? "grid-cols-1 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3",
             )}
           >
             <Headline label="Employee" value={score(summary.selfOverall)} accent="self" />
@@ -235,9 +250,9 @@ export function ExecutiveSummary({
             <Card title={secondManager ? "What each manager answered" : "What the manager answered"}>
               <div className="space-y-3">
                 {[
-                  { who: header.leadName ?? "Manager", items: leadOwn.verdicts },
-                  ...(secondManager
-                    ? [{ who: secondManager, items: coLeadOwn.verdicts }]
+                  { who: leadRoleLabel, items: leadOwn.verdicts },
+                  ...(coLeadRoleLabel
+                    ? [{ who: coLeadRoleLabel, items: coLeadOwn.verdicts }]
                     : []),
                 ]
                   .filter((g) => g.items.length > 0)
