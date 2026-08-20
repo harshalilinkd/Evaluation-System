@@ -111,13 +111,21 @@ export function BuilderClient({
         ? ["EMPLOYEE_AND_LEAD", "LEAD_ONLY"]
         : ["EMPLOYEE_AND_LEAD", "EMPLOYEE_ONLY"];
 
+    /* -- Ordered by HR'S sections where they have set an order, so the flat
+          list agrees with the grouped one below it. The renderer draws the
+          groups, but this list is what the validator walks, and "scroll to the
+          first error" has to mean the topmost question on the page. -- */
+    const order = sections ? sections.map((row) => row.section) : SECTION_ORDER;
+    const rank = (section: BuilderQuestion["section"]) => {
+      const at = order.indexOf(section);
+      // A section with no configured position sorts last rather than first,
+      // which is what `indexOf` would give it (P25-7's rule).
+      return at === -1 ? order.length : at;
+    };
+
     const visible = forDepartment
       .filter((q) => allowed.includes(q.answeredBy))
-      .sort(
-        (a, b) =>
-          SECTION_ORDER.indexOf(a.section) - SECTION_ORDER.indexOf(b.section) ||
-          a.sortOrder - b.sortOrder,
-      );
+      .sort((a, b) => rank(a.section) - rank(b.section) || a.sortOrder - b.sortOrder);
 
     const toFormQuestion = (q: BuilderQuestion): FormQuestion => ({
       questionId: q.id,
@@ -142,10 +150,28 @@ export function BuilderClient({
       layer: audience,
       evaluationStatus: "CYCLE_ACTIVE",
       track: "STAFF",
-      sections: SECTION_ORDER.map((section) => ({
-        section,
-        questions: visible.filter((q) => q.section === section).map(toFormQuestion),
-      })).filter((s) => s.questions.length > 0),
+      /* -- HR'S OWN NAMES AND ORDER, not the shipped constant.
+            Reported: a section renamed in the builder still showed its old
+            name in the preview beside it. The rename had saved and the real
+            form was already showing it — this pane was building its sections
+            from `SECTION_ORDER` and setting no `label`, so `FormRenderer` fell
+            back to the shipped default (its own line reads
+            `section.label ?? sectionLabel(section.section)`).
+
+            That made the preview say something the employee's form does not,
+            which is the one thing this pane must never do: P9B-1's whole claim
+            is "if it renders here, it renders identically for the employee".
+
+            The order and the parked sections come with it, and for the same
+            reason — `sections` is already ordered by HR's own `sort_order` and
+            already excludes anything they have parked. -- */
+      sections: (sections ?? SECTION_ORDER.map((section) => ({ section, label: undefined })))
+        .map((row) => ({
+          section: row.section,
+          label: row.label,
+          questions: visible.filter((q) => q.section === row.section).map(toFormQuestion),
+        }))
+        .filter((s) => s.questions.length > 0),
       questions: visible.map(toFormQuestion),
       answers: {},
       comments: {},
@@ -156,7 +182,7 @@ export function BuilderClient({
       // parent is the one they most need to see (P9-4).
       hiddenQuestionIds: [],
     };
-  }, [forDepartment, builder.options, audience]);
+  }, [forDepartment, builder.options, audience, sections]);
 
   const selected = builder.draft.find((q) => q.id === builder.selectedId) ?? null;
   const departmentName = departments.find((d) => d.id === departmentId)?.name ?? "";
