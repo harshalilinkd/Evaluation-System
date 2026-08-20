@@ -15,6 +15,7 @@ import {
 import { SALARY_DOT, SALARY_TINT, type SalaryTone } from "@/components/appraise/salary-tones";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
+import { hikePct, newCtcFromPct } from "@/lib/increment/calc";
 import type { SalaryBand } from "@/lib/increment/queries";
 import type { NarrativeBlock, EvaluationReport } from "@/lib/reports/types";
 import { formatDate, formatInr } from "@/lib/utils/date";
@@ -22,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { moneyMonthly } from "@/components/appraise/money-input";
 
 const score = (v: number | null) => (v === null ? "—" : v.toFixed(2));
+/** A percentage, or an em dash. Two decimals, like every stored one (§11). */
+const pctText = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)}%`);
 const signed = (v: number | null) => {
   if (v === null) return "—";
   if (v === 0) return "0.00";
@@ -68,12 +71,27 @@ export function ExecutiveSummary({
   ]);
   const secondManager = header.coLeadName;
 
+  /* -- What the employee's own answer COMES TO. They are asked for a salary,
+        not a percentage (0061), so the rise it implies has to be derived — and
+        derived through §11's one implementation rather than worked out here,
+        or the figure on this screen could disagree with the one on the panel
+        HR sets it from (P21-2). -- */
+  const expectedCtc = salary?.review?.employee_expectation_ctc ?? null;
+  const expectedPct = hikePct(salary?.currentCtc ?? null, expectedCtc);
+
   /** What the managers TOGETHER say — the mean of the two, or the one there is. */
   const managerMean = (a: number | null, b: number | null): number | null => {
     if (a === null) return b;
     if (b === null) return a;
     return (a + b) / 2;
   };
+  /* -- Each manager on their own, for the cards below. `lead` above stays
+        POOLED because the strengths/improvements panels are a summary and want
+        every point made, not who made it — but a card headed with somebody's
+        name must contain only that person's words. -- */
+  const leadOwn = classifyNarratives(narratives.leadAssessment);
+  const coLeadOwn = classifyNarratives(narratives.coLeadAssessment);
+
   const self = classifyNarratives(narratives.employeeVoice);
   const tenure = tenureLabel(header.dateOfJoining, new Date());
   // "Employee requested" is a form label; the person has a name and it reads as
@@ -307,17 +325,39 @@ export function ExecutiveSummary({
             </ul>
           </Card>
 
-          {/* The manager's words */}
-          <Card title={`Manager${header.leadName ? ` · ${header.leadName}` : ""}`}>
+          {/* -- ONE CARD PER MANAGER, NAMED.
+                 Merging them presented one verdict where there are two, on the
+                 screen whose whole job is to carry an independent second
+                 opinion into an interview. The two rated blind to each other,
+                 so running their words together loses the only thing that made
+                 collecting both worth doing.
+
+                 Named rather than tinted: both managers share the manager hue
+                 (§13.1 reserves three), so the NAME is what tells them apart —
+                 and it survives greyscale and a colourblind reader (§13.8). -- */}
+          <Card title={header.leadName ? `Manager · ${header.leadName}` : "Manager"}>
             <Blocks
               groups={[
-                { label: "Main strengths", items: lead.strengths },
-                { label: "Areas for improvement", items: lead.improvements },
-                { label: "Other notes", items: lead.other },
+                { label: "Main strengths", items: leadOwn.strengths },
+                { label: "Areas for improvement", items: leadOwn.improvements },
+                { label: "Other notes", items: leadOwn.other },
               ]}
-              empty="The manager recorded no written feedback."
+              empty="This manager recorded no written feedback."
             />
           </Card>
+
+          {secondManager ? (
+            <Card title={`Second reviewer · ${secondManager}`}>
+              <Blocks
+                groups={[
+                  { label: "Main strengths", items: coLeadOwn.strengths },
+                  { label: "Areas for improvement", items: coLeadOwn.improvements },
+                  { label: "Other notes", items: coLeadOwn.other },
+                ]}
+                empty="This reviewer recorded no written feedback."
+              />
+            </Card>
+          ) : null}
 
           {/* The employee's own words */}
           <Card title="In the employee's own words">
@@ -391,35 +431,74 @@ export function ExecutiveSummary({
                 </dl>
               </Card>
 
-              <Card title="What was asked for">
-                <dl className="grid gap-3 sm:grid-cols-2">
+              {/* -- THE DECISION, IN ONE ROW.
+                     This card was "what was asked for" and a team median, which
+                     is half a question. The MD is comparing three positions —
+                     what the employee wants, what their managers recommend, and
+                     what HR has put up for approval — and was being asked to
+                     hold two of them in their head while reading the third.
+
+                     Every column is the SAME TWO FACTS in the same order: a
+                     percentage and the salary it comes to. That is what makes
+                     them comparable at a glance; a column that showed only one
+                     of the two would send the reader back to arithmetic.
+
+                     The employee's percentage is DERIVED, never asked for: they
+                     type a salary (0061) and the rise against their current pay
+                     is what that means. Through `hikePct`, which is the one
+                     implementation of it (P21-2) — a percentage worked out in a
+                     component is one nobody can reproduce. -- */}
+              <Card title="The three positions">
+                <dl className="grid gap-3 sm:grid-cols-3">
                   <Fact
                     tone="asked"
-                    label={`${firstName} asked for`}
-                    // Monthly: the unit the employee typed it in (0061).
-                    value={moneyMonthly(salary.review?.employee_expectation_ctc ?? null)}
+                    label="Expected salary"
+                    value={moneyMonthly(expectedCtc)}
                     caption={
-                      salary.review?.employee_expectation_ctc
-                        ? undefined
-                        : "Not specified by employee."
+                      expectedCtc === null
+                        ? "Not specified by employee."
+                        : expectedPct === null
+                          ? "No current salary on record to compare against."
+                          : `A rise of ${expectedPct.toFixed(2)}% on ${moneyMonthly(salary.currentCtc)}.`
                     }
                   />
                   <Fact
-                    label="Typical in this team"
+                    tone="proposed"
+                    label={
+                      salary.recommendedIsAverage ? "Managers recommend" : "Manager recommends"
+                    }
                     value={
-                      salary.departmentMedianPct === null
+                      salary.recommendedHikePct === null
                         ? "—"
-                        : `${salary.departmentMedianPct.toFixed(1)}%`
+                        : `${salary.recommendedHikePct.toFixed(2)}%`
                     }
                     caption={
-                      salary.departmentSampleSize > 0
-                        ? `Median across ${salary.departmentSampleSize} agreed ${
-                            salary.departmentSampleSize === 1 ? "figure" : "figures"
-                          }.`
-                        : "Not enough figures in this team yet to give an average."
+                      salary.recommendedHikePct === null
+                        ? "No percentage recommended yet."
+                        : `${moneyMonthly(newCtcFromPct(salary.currentCtc, salary.recommendedHikePct))}${
+                            salary.recommendedIsAverage
+                              ? ` — the mean of ${salary.managerHikePct}% and ${salary.coManagerHikePct}%.`
+                              : "."
+                          }`
+                    }
+                  />
+                  <Fact
+                    tone="approved"
+                    label="HR put up for approval"
+                    value={moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}
+                    caption={
+                      salary.review?.hr_proposed_ctc
+                        ? `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary.`
+                        : "Nothing proposed yet."
                     }
                   />
                 </dl>
+
+                <p className="mt-3 font-sans text-body-sm text-ink-muted">
+                  {salary.departmentSampleSize > 0 && salary.departmentMedianPct !== null
+                    ? `For context, the median agreed rise in this team is ${salary.departmentMedianPct.toFixed(1)}% across ${salary.departmentSampleSize} ${salary.departmentSampleSize === 1 ? "figure" : "figures"}.`
+                    : "There are not enough agreed figures in this team yet to give a median for context."}
+                </p>
               </Card>
 
               {/* -- THE SAME NAME AS THE DETAILED REPORT.
@@ -797,11 +876,22 @@ function Blocks({
         .map((g) => (
           <div key={g.label}>
             <p className="type-label text-ink-muted">{g.label}</p>
-            <dl className="mt-1 space-y-1.5">
+            {/* -- THE ANSWER IS THE POINT, so it is the thing that reads as
+                   text: the question sits above it small and muted, the answer
+                   below it at body size against a rule. Both were `body-sm` in
+                   the same weight, which made a question and its answer one
+                   grey paragraph — and this is the section the MD said matters
+                   most, read minutes before an interview.
+
+                   `whitespace-pre-wrap` because these are free-text answers and
+                   somebody who wrote three lines meant three lines. -- */}
+            <dl className="mt-1.5 space-y-3">
               {g.items.map((b) => (
-                <div key={b.question}>
+                <div key={b.question} className="border-l-2 border-rule pl-3">
                   <dt className="font-sans text-body-sm text-ink-muted">{b.question}</dt>
-                  <dd className="font-sans text-body-sm leading-snug text-ink">{b.answer}</dd>
+                  <dd className="mt-0.5 whitespace-pre-wrap font-sans text-body leading-snug text-ink">
+                    {b.answer}
+                  </dd>
                 </div>
               ))}
             </dl>
