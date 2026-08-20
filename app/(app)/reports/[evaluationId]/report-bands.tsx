@@ -101,6 +101,33 @@ function managerMean(lead: number | null, coLead: number | null): number | null 
   return (lead + coLead) / 2;
 }
 
+/**
+ * How a reviewer's column is headed.
+ *
+ * THEIR DESIGNATION FIRST, at the owner's instruction — "2nd reviewer
+ * designation should also show". A name alone says nothing about why that
+ * person's opinion is on the page; "Design Coordinator" says it in two words,
+ * and with two managers side by side it is the only thing that tells the reader
+ * which opinion is which.
+ *
+ * The generic role is the FALLBACK, not the label: somebody with no designation
+ * on their record still has to be identifiable, and "2nd reviewer · Harshali"
+ * is better than a bare name.
+ *
+ * With ONE manager the heading stays plain "Manager". There is nothing to tell
+ * apart, the column has always read that way, and a job title in a 7% column
+ * would wrap for no gain.
+ */
+function reviewerHeading(
+  designation: string | null,
+  name: string | null,
+  fallbackRole: string,
+  twoManagers: boolean,
+): string {
+  if (!twoManagers) return fallbackRole;
+  return `${designation?.trim() || fallbackRole} · ${firstName(name)}`;
+}
+
 function firstName(full: string | null): string {
   return (full ?? "").trim().split(/\s+/)[0] || "they";
 }
@@ -220,10 +247,10 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
         about which of them is the reporting manager and which is the second
         reviewer — and on a pay decision that is the first thing anybody needs
         to know. The role leads, the name follows it. -- */
-  const leadHeading = secondManager
-    ? `Manager · ${firstName(header.leadName)}`
-    : "Manager";
-  const coLeadHeading = secondManager ? `2nd reviewer · ${secondManager}` : null;
+  const leadHeading = reviewerHeading(header.leadDesignation, header.leadName, "Manager", secondManager !== null);
+  const coLeadHeading = secondManager
+    ? reviewerHeading(header.coLeadDesignation, header.coLeadName, "2nd reviewer", true)
+    : null;
 
   /* -- THE FINAL SCORE, BEFORE IT IS STORED.
         `final_overall` is written at the close and not a moment earlier, so the
@@ -567,11 +594,12 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
   // Same rule as the header band: no second manager, no third column, and the
   // table is the one this screen has always drawn.
   const secondManager = report.header.coLeadName ? firstName(report.header.coLeadName) : null;
-  // The role leads, the name follows — same rule as the band above (see there).
-  const leadHeading = secondManager
-    ? `Manager · ${firstName(report.header.leadName)}`
-    : "Manager";
-  const coLeadHeading = secondManager ? `2nd reviewer · ${secondManager}` : null;
+  // Same rule as the band above (see there).
+  const leadHeading = reviewerHeading(
+    report.header.leadDesignation, report.header.leadName, "Manager", secondManager !== null);
+  const coLeadHeading = secondManager
+    ? reviewerHeading(report.header.coLeadDesignation, report.header.coLeadName, "2nd reviewer", true)
+    : null;
 
   const sections = report.sections
     .map((s) => ({ ...s, rows: flaggedOnly ? s.rows.filter((r) => r.flag !== "none") : s.rows }))

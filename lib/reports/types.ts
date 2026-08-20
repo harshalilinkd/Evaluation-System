@@ -15,6 +15,12 @@ export type ReportHeader = {
   designation: string | null;
   dateOfJoining: string | null;
   leadName: string | null;
+  /* -- WHAT EACH REVIEWER IS, not only who. A column headed with a name says
+        nothing about why that person's opinion is on the page; "Design
+        Coordinator" does. Already fetched with the names — it was simply never
+        carried out of the query. -- */
+  leadDesignation: string | null;
+  coLeadDesignation: string | null;
   /**
    * The SECOND manager, where the person has one (0083).
    *

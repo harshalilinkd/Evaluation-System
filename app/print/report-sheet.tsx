@@ -120,7 +120,17 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             <dt>Date of joining</dt>
             <dd>{header.dateOfJoining ? formatDate(header.dateOfJoining) : "—"}</dd>
           </div>
-          <div><dt>Rated by</dt><dd>{header.leadName ?? "—"}</dd></div>
+          <div>
+            <dt>Rated by</dt>
+            {/* -- The designation beside the name, so a signed sheet says what
+                   each reviewer IS and not only who they are. Held to one cell
+                   rather than a row of its own: the grid is three columns and
+                   its last-row rule keys on the last three children (FIX-34). -- */}
+            <dd>
+              {header.leadName ?? "—"}
+              {header.leadDesignation ? ` · ${header.leadDesignation}` : ""}
+            </dd>
+          </div>
           {/* -- A second reviewer is a fact about who rated this person, so it
                 belongs in the identity block and not only in a column heading.
                 Rendered only where there is one: the grid is three columns and
@@ -128,7 +138,13 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 children, so an always-present empty row would put two rules
                 across the foot of the block (FIX-34). -- */}
           {header.coLeadName ? (
-            <div><dt>Second reviewer</dt><dd>{header.coLeadName}</dd></div>
+            <div>
+              <dt>Second reviewer</dt>
+              <dd>
+                {header.coLeadName}
+                {header.coLeadDesignation ? ` · ${header.coLeadDesignation}` : ""}
+              </dd>
+            </div>
           ) : null}
           {/* -- THE CYCLE, as a third row rather than a corner block.
                 Three fields, so the grid stays a clean multiple of its three
