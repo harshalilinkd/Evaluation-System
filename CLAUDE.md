@@ -7697,7 +7697,7 @@ eleventh.** "Nothing anywhere still says six" matched the comment quoting the
 provider's own message. It strips comments now.
 ---
 
-### FIX-65 — A correct database reported a problem it did not have
+### DIAGNOSTIC-1 — A correct database reported a problem it did not have
 
 No migration. `supabase/whats-applied.sql` only.
 
@@ -7719,9 +7719,9 @@ recommending it.
 
 | # | Decision | Why |
 |---|---|---|
-| F65-1 | **The word, not the phrase** | FIX-19 wrote this lesson down (F19-8) and this row still carried the fault: question text is editable in the Form Builder, so any detector keyed to a PHRASE breaks the first time somebody rewords the question. The word is what carries the meaning, and its ABSENCE is the state worth catching. |
-| F65-2 | **No backslash, deliberately** | Postgres spells a word boundary `\m`/`\M`, and whether a lone backslash in a string literal survives depends on `standard_conforming_strings` — one setting away from turning the check into a permanent false alarm, in a file people PASTE into whatever console they have open. A bracket expression says the same thing and cannot be misread. Proved on real Postgres: it passed against `\m…\M` in one engine and failed in another before the pattern was changed. |
-| F65-3 | The row's note now describes **what false would mean**, not what to re-run | "TRUE is correct" was true and useless to somebody staring at a false. It names the consequence — answers out by twelve — so the reader chases the wording rather than the migration. |
+| D1-1 | **The word, not the phrase** | FIX-19 wrote this lesson down (F19-8) and this row still carried the fault: question text is editable in the Form Builder, so any detector keyed to a PHRASE breaks the first time somebody rewords the question. The word is what carries the meaning, and its ABSENCE is the state worth catching. |
+| D1-2 | **No backslash, deliberately** | Postgres spells a word boundary `\m`/`\M`, and whether a lone backslash in a string literal survives depends on `standard_conforming_strings` — one setting away from turning the check into a permanent false alarm, in a file people PASTE into whatever console they have open. A bracket expression says the same thing and cannot be misread. Proved on real Postgres: it passed against `\m…\M` in one engine and failed in another before the pattern was changed. |
+| D1-3 | The row's note now describes **what false would mean**, not what to re-run | "TRUE is correct" was true and useless to somebody staring at a false. It names the consequence — answers out by twelve — so the reader chases the wording rather than the migration. |
 
 #### The second false alarm, and the more dangerous one
 
@@ -7749,9 +7749,9 @@ the reader it had never run.
 
 | # | Decision | Why |
 |---|---|---|
-| F65-8 | `oidvectortypes(proargtypes)`, which is the types alone | Name-agnostic, so renaming a parameter cannot move it — proved by a check that renames both and still reads true. |
-| F65-9 | The row carries a **do-not-re-run** note, like the 0055 one | Two rows in one file have now invited a destructive repair by reporting a healthy state as missing. A detector that can go stale needs the consequence written beside it, not just the fix. |
-| F65-10 | Found by testing the ASSUMPTION, not the migration | I believed `pg_get_function_identity_arguments` excluded names and was wrong. One query against real Postgres settled it in seconds; three rounds of reasoning about why a correct migration had not applied would not have. |
+| D1-8 | `oidvectortypes(proargtypes)`, which is the types alone | Name-agnostic, so renaming a parameter cannot move it — proved by a check that renames both and still reads true. |
+| D1-9 | The row carries a **do-not-re-run** note, like the 0055 one | Two rows in one file have now invited a destructive repair by reporting a healthy state as missing. A detector that can go stale needs the consequence written beside it, not just the fix. |
+| D1-10 | Found by testing the ASSUMPTION, not the migration | I believed `pg_get_function_identity_arguments` excluded names and was wrong. One query against real Postgres settled it in seconds; three rounds of reasoning about why a correct migration had not applied would not have. |
 
 #### `when 'none' then null` — the landmine FIX-16 half-removed
 
@@ -7763,8 +7763,8 @@ for it.
 
 | # | Decision | Why |
 |---|---|---|
-| F65-4 | The branch is **deleted**, so the expression is structurally incapable of returning NULL | `true` means applied and `false` means not, with no third answer. A repair whose effect seems undetectable is not exempt — 0058's own row proves the EFFECT is what to detect, not the running. |
-| F65-5 | `'policy'` is **kept** although equally unused | The rule is "no branch may answer NULL", not "no branch is unused". A correct generic detector with no current user is reusable and harmless; a null-returning one is how a gap gets invented. |
+| D1-4 | The branch is **deleted**, so the expression is structurally incapable of returning NULL | `true` means applied and `false` means not, with no third answer. A repair whose effect seems undetectable is not exempt — 0058's own row proves the EFFECT is what to detect, not the running. |
+| D1-5 | `'policy'` is **kept** although equally unused | The rule is "no branch may answer NULL", not "no branch is unused". A correct generic detector with no current user is reusable and harmless; a null-returning one is how a gap gets invented. |
 
 #### The file is RUN now, not only read
 
@@ -7773,8 +7773,8 @@ tables the file reads and executes the whole thing.
 
 | # | Decision | Why |
 |---|---|---|
-| F65-6 | It asserts **no row answers NULL**, every kind a row asks for is defined, and the changed row behaves in **both** directions | TRUE on the live wording and FALSE when the word is dropped. A detector proved only in the passing direction is one that cannot fail. |
-| F65-7 | The runner prints **only the message** | PGlite prints its entire minified bundle in a stack trace, and a runner that reports that instead of the error ends the investigation before it starts. P19B-9 fixed this once; it was not in this harness. |
+| D1-6 | It asserts **no row answers NULL**, every kind a row asks for is defined, and the changed row behaves in **both** directions | TRUE on the live wording and FALSE when the word is dropped. A detector proved only in the passing direction is one that cannot fail. |
+| D1-7 | The runner prints **only the message** | PGlite prints its entire minified bundle in a stack trace, and a runner that reports that instead of the error ends the investigation before it starts. P19B-9 fixed this once; it was not in this harness. |
 
 **Verification — 14 checks, 0 failed**, plus 8 on the pattern itself against real
 Postgres: the live wording, the older wording, a parenthesised form and a
@@ -7796,6 +7796,8 @@ never been applied, which would take the whole diagnostic down on a fresh
 database. Harmless where 0031 is applied — which is everywhere it currently
 runs — and a `to_regclass` guard is the fix whenever somebody points this at a
 new project.
+
+*(Named rather than numbered: a second session was appending to §18 at the same time, and two rounds of renumbering were overtaken mid-edit. A descriptive prefix cannot collide — the same device WORKER-1, SECOND-REVIEWER and NAV-1 already use.)*
 
 ---
 
@@ -8312,3 +8314,98 @@ screens; typecheck 0, lint 0 errors, build clean.
 **Action required.** `0091_supersede_earlier_milestone.sql` is **not applied**.
 Until it is, a later milestone confirmation still leaves an earlier open one
 standing, and the reported behaviour continues.
+
+---
+
+### CONTACT-1 — A Backend Team person must be reachable
+
+*(Named rather than numbered: a second session was appending to §18 at the same time, and two rounds of renumbering were overtaken mid-edit. A descriptive prefix cannot collide — the same device WORKER-1, SECOND-REVIEWER and NAV-1 already use.)*
+
+No migration. `lib/auth/schemas.ts`, `lib/auth/provisioning.ts`,
+`app/(app)/admin/settings/users-tab.tsx`.
+
+Asked for as "we should not able to add users if atleast one mobile no or email
+is not added — one is compulsory for our messages and emails", then narrowed at
+the owner's word to **Backend Team only**.
+
+**The literal ask was already met, and saying so mattered.** `createUserSchema`
+has always required an email, on the form and in the import alike, so "at least
+one of the two" could not fail for anybody. What was genuinely missing is the
+MOBILE — and §10 sends every invite over WhatsApp and/or email, with P28
+recording that WhatsApp is the channel that works without SMTP configured. A
+Backend Team person with no number has one way for their form link to arrive
+instead of two.
+
+| # | Decision | Why |
+|---|---|---|
+| C1-1 | **Production Team are exempt, and that is not an oversight** | Checked rather than assumed: `lib/notify/templates.ts` contains no worker template and no notify path addresses one, because their supervisor fills the sheet (WORKER-1). Requiring a number they will never be written to on would block a real import for no benefit — F53 deliberately made even their EMAIL optional. |
+| C1-2 | The rule sits in **`createUserSchema`**, which the form and the import share | One definition. A second copy in the action would be the drift PC-1 keeps having to unpick. |
+| C1-3 | …restated in `updatePerson`, because that path validates by hand | Without it the rule is cosmetic: somebody could be created with a number and have it cleared on the next screen. Two copies is the cost of two validation styles, so the suite asserts both carry the identical sentence — a change to one that misses the other fails. |
+| C1-4 | **The importer NOTES it; only the form refuses** | One bad row imports nothing (P19C-8), so refusing here would fail a 52-row payroll file over a blank cell, at the one moment HR most wants it to go in. `phone_required` defaults true and the importer sets it false — the same idiom `email_supplied` already uses for a rule the form always meets — and the row lands carrying "no mobile number — their form link can only go by email". FIX-64 made exactly this call for an unresolvable manager one entry earlier. |
+| C1-5 | The field says it **before** the press, not after | §13.4. Whether it is required depends on which form they fill, so the selector's value is held in state rather than left to the DOM, and the label drops its "optional" badge the moment Backend Team is chosen. Both dialogs, one rule. |
+| C1-6 | The hint says **why** it is optional for a worker | "Nothing is ever sent to Production Team — their supervisor fills the sheet in for them." A field that is required on one setting and not the other, with no explanation, reads as a bug. |
+| C1-7 | `track` is derived **once** in `updatePerson` | It was re-derived inline for the audit payload, which is two answers to one question. The contact rule needs it too, so both now read the same constant. |
+
+**Verification — 17 checks, 0 failed.** The rule is exercised as BEHAVIOUR
+rather than matched as text: Backend Team with no number refused and the error
+landed on the phone field, a whitespace-only number refused, a real number
+accepted, Production Team accepted with and without one, and the importer's
+relaxed call accepted. Plus: the edit path refuses it with the identical
+sentence and that sentence appears exactly once in each file; the import relaxes
+and reports; and neither Mobile field is unconditionally optional any more.
+
+Typecheck 0 errors, lint 0 errors, build clean.
+
+**Not changed, and worth stating.** Nothing sweeps the people already on the
+system. Anybody imported before this with no number keeps none until somebody
+opens them — and then the edit refuses to save until it is filled in, which is
+the rule working, but it arrives as friction on an unrelated edit. A one-off
+report of Backend Team people with no mobile would be the kinder way to close
+that, and is a separate piece of work.
+
+---
+
+### FIX-72 — Both rating forms scroll again
+
+`app/(app)/my-evaluation/[id]/self-form.tsx`, `app/(app)/team/[evaluationId]/review-screen.tsx`.
+No migration.
+
+Reported: "evaluation form not looking good why you make it like this earlier
+it was scrollable form."
+
+**What changed underneath it.** A later phase ("The evaluation form is walked
+one question at a time…", carried through to the manager's side by "The
+manager walks the evaluation form the same way the employee does") replaced
+the scrolling `FormRenderer` with a paginated `GuidedForm` — one question per
+screen, a progress counter, Back and Continue — for EVALUATION cycles
+specifically. Its own stated reasoning was that "an EVALUATION cycle is a
+short sequence with no sections, and a sequence is better walked than
+scrolled". The owner's own screenshot, sent with this report, is the
+disproof: 16 questions, WITH section headings ("Behavioural, Team Skills &
+Learning" visible on screen), on the exact form the reasoning was written
+about. The premise the wizard was built on did not hold for the form it was
+applied to.
+
+| # | Decision | Why |
+|---|---|---|
+| F72-1 | **Both forms now render through `FormRenderer` unconditionally** | The `meta.isIncrement || readOnly ? FormRenderer : GuidedForm` branch is gone from both `self-form.tsx` and `review-screen.tsx`. There is no longer a cycle-type distinction in how a form is walked — only in what it contains (the salary section, gated separately and untouched). |
+| F72-2 | **`GuidedForm` stays defined, unused, rather than deleted** | F69's precedent for `LearningBand`: it may return on the owner's word for a form that genuinely IS a short sequence, and idle source in the tree costs less than writing it again from nothing. `QuestionField` — the shared single-renderer component P9-1 requires, which `GuidedForm` was built to reuse rather than duplicate — is untouched either way. |
+| F72-3 | **Nothing about saving, validation or submission needed to change** | Both files already carried a complete, working scrolling-form submit UI — a header Submit, an end-of-form desktop card, a mobile sticky bar — that predates the wizard and was never removed by it; it had simply gone unreachable behind the `GuidedForm` branch on an evaluation cycle. Removing the branch is what makes it reachable again; no new submit path was written. |
+| F72-4 | The rating control's OWN redesign (six 44px circles, one row at every width, replacing six labelled boxes that wrapped on a phone) is **kept** | That change solved a real mobile problem (a 6-box grid wrapping to 3×2 below its own stated width, breaking the single low-to-high run a scale has to read as) and was not what was reported. Only the one-question-at-a-time WALK is reverted; how a single question is rendered is untouched. |
+
+**Verification — 14 checks, 0 failed**, plus the mobile audit at 84 screens
+and 0 findings, and every adjacent suite touching these two files re-run
+clean. Typecheck 0, lint 0 errors, build clean.
+
+**On the two other things raised in the same message** — a 10-question core
+bank producing a 16-question form, and a suspicion of increment content on an
+evaluation cycle — see the reply in conversation rather than a repeat here:
+department-mapped Job Specific Skills questions are additive by design (§1),
+and every department in the reseeded bank carries 5–7 of them (P2-RESEED), so
+10 core + a department's own is exactly the documented range: nothing here
+points to a bug. Section headings are structural and cannot be turned off
+(P9B-2 — `SECTION_ORDER` is fixed, there is no way to remove one). Whether
+genuine INCREMENT_ONLY content is reaching an evaluation form turns on
+whether `0072_promotion_is_increment_only.sql` has been applied — that fact
+could not be checked without database access, so it was asked rather than
+guessed.

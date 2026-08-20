@@ -18,7 +18,6 @@ import {
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
 import { ScaleLegend } from "@/components/appraise/rating-scale";
 import { FormRenderer } from "@/components/appraise/form-renderer";
-import { GuidedForm } from "@/components/appraise/guided-form";
 import { FormSectionNav } from "@/components/appraise/form-section-nav";
 import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
@@ -713,50 +712,30 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
       />
 
       {/* ---------- The form ---------- */}
-      {/* -- TWO WALKS THROUGH THE SAME QUESTIONS, chosen by cycle type.
-             An INCREMENT cycle is thirty-odd questions in sections that a rater
-             moves around in — a scrolling form is right for that, and it is the
-             one that has been used and tested.
-             An EVALUATION cycle is a short sequence with no sections, and a
-             sequence is better walked than scrolled: one question at a time,
-             progress, Back and Continue.
-             Both draw every question with the same `QuestionField` (P9-1), take
-             the same values and errors, and submit through the same
-             `attemptSubmit`. Nothing about saving, validation or submission
-             differs — only how many questions are on screen at once. -- */}
-      {meta.isIncrement || readOnly ? (
-        <FormRenderer
-          form={form}
-          values={values}
-          errors={errors}
-          hiddenQuestionIds={hiddenQuestionIds}
-          readOnly={readOnly}
-          highlightDepartment={meta.departmentName}
-          onChange={onChange}
-        />
-      ) : (
-        <GuidedForm
-          form={form}
-          values={values}
-          errors={errors}
-          hiddenQuestionIds={hiddenQuestionIds}
-          tier="self"
-          readOnly={readOnly}
-          onChange={onChange}
-          submitLabel="Submit evaluation"
-          onSubmit={attemptSubmit}
-          submitting={submitting}
-          status={
-            saveState === "saving"
-              ? "Saving…"
-              : saveState === "saved"
-                ? "Saved"
-                : saveState === "error"
-                  ? "Not saved — retrying"
-                  : null
-          }
-        />
-      )}
+      {/* -- REVERTED AT THE OWNER'S EXPLICIT INSTRUCTION: "evaluation form not
+             looking good why you make it like this earlier it was scrollable
+             form". The one-question-at-a-time GuidedForm walk was built on the
+             premise that "an EVALUATION cycle is a short sequence with no
+             sections" — stated in the comment this replaced. It is not: the
+             core bank alone runs the length shown in the screenshot that
+             prompted this, WITH section headings (Core Performance,
+             Behavioural/Team Skills, and more once Job Specific Skills adds a
+             department's own), so the wizard's own reason for existing did not
+             hold for the form it was applied to. Both cycle types now render
+             through the same scrolling FormRenderer — GuidedForm stays defined,
+             unused, in `components/appraise/guided-form.tsx` rather than
+             deleted (F69's precedent: it may return on the owner's word for a
+             form that genuinely IS a short sequence, and idle source costs
+             less than writing it again). -- */}
+      <FormRenderer
+        form={form}
+        values={values}
+        errors={errors}
+        hiddenQuestionIds={hiddenQuestionIds}
+        readOnly={readOnly}
+        highlightDepartment={meta.departmentName}
+        onChange={onChange}
+      />
 
       {/* -- WHERE IT BELONGS NOW: after the questions, beside the answer it
              relates to. It used to sit at the TOP, which anchored somebody on a
