@@ -290,6 +290,80 @@ export function useBuilder({
     [commit, departmentId, draft, cycleType],
   );
 
+  /* ---------- Detach ---------- */
+
+  /**
+   * Give THIS form its own copy of a question that is currently on both.
+   *
+   * REPORTED: "when I'm making changes in evaluation form that changes getting
+   * applied to increment form also". It does, and it is not a rendering fault —
+   * a question with `cycle_scope = 'BOTH'` is ONE ROW that both builders show,
+   * so editing its wording on either tab edits the same row. Almost every
+   * question predates the split (0022 defaulted the column to BOTH), so almost
+   * every question behaves this way.
+   *
+   * `removeQuestion` was already scope-aware and its comment states the intent
+   * outright — "editing the other, which is the whole reason the builders were
+   * separated" — but nothing did the equivalent for an EDIT. This is that.
+   *
+   * A SPLIT, not a rename: the original is narrowed to the OTHER cycle and
+   * keeps working there, and a copy carrying the current wording is created
+   * here. Nothing is deleted (§17), answers already filed against the original
+   * id stay valid on the form that still asks it, and launched evaluations hold
+   * their own frozen copy either way (§5).
+   *
+   * Both writes go through `saveQuestion` — the audited path every other edit
+   * uses (PC-1) — rather than touching the table.
+   */
+  const detachQuestion = React.useCallback(
+    async (id: string) => {
+      const original = draft.find((q) => q.id === id);
+      if (!original || original.cycleScope !== "BOTH") return;
+
+      const otherCycle = cycleType === "INCREMENT" ? "EVALUATION_ONLY" : "INCREMENT_ONLY";
+      const thisCycle = cycleType === "INCREMENT" ? "INCREMENT_ONLY" : "EVALUATION_ONLY";
+      const extras = {
+        departmentIds: mappings.filter((m) => m.questionId === id).map((m) => m.departmentId),
+        options: options.filter((o) => o.questionId === id),
+      };
+
+      /* -- The ORIGINAL first. If the copy were created first and this failed,
+            the question would be on both forms twice — one of them a duplicate
+            nobody meant to make. This way the worst outcome is the question
+            leaving this form, which is visible and undoable. -- */
+      const narrowed = await saveQuestion(
+        {},
+        buildFormData({ ...original, cycleScope: otherCycle }, extras),
+      );
+      if (narrowed.error) {
+        setSave({ kind: "error", message: narrowed.error });
+        return;
+      }
+
+      // The copy carries everything about the question except its id and its
+      // scope — same wording, type, section, condition, options, departments.
+      const localId = `draft:${globalThis.crypto.randomUUID()}`;
+      const copy: BuilderQuestion = { ...original, id: localId, cycleScope: thisCycle };
+
+      setDraft((prev) => prev.map((q) => (q.id === id ? copy : q)));
+      setOptions((prev) => [
+        ...prev,
+        ...extras.options.map((o) => ({ ...o, questionId: localId })),
+      ]);
+      setMappings((prev) => [
+        ...prev,
+        ...extras.departmentIds.map((departmentIdValue) => ({
+          departmentId: departmentIdValue,
+          questionId: localId,
+          sortOrder: original.sortOrder,
+        })),
+      ]);
+      setSelectedId(localId);
+      await commit(copy);
+    },
+    [commit, cycleType, draft, mappings, options],
+  );
+
   /* ---------- Remove ---------- */
 
   /**
@@ -516,6 +590,7 @@ export function useBuilder({
     save,
     pendingIds,
     patch,
+    detachQuestion,
     addQuestion,
     removeQuestion,
     restoreQuestion,

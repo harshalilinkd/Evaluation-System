@@ -245,6 +245,8 @@ export function BuilderClient({
           />
 
           <EditorPane
+            onDetach={() => selected && void builder.detachQuestion(selected.id)}
+            cycleType={cycleType}
             question={selected}
             options={builder.options}
             allQuestions={builder.draft}
@@ -327,6 +329,8 @@ export function BuilderClient({
             />
           ) : mobilePane === "editor" ? (
             <EditorPane
+              onDetach={() => selected && void builder.detachQuestion(selected.id)}
+              cycleType={cycleType}
               question={selected}
               options={builder.options}
               allQuestions={builder.draft}

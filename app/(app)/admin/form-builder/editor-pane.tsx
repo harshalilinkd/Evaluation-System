@@ -60,6 +60,8 @@ export function EditorPane({
   mappedDepartmentIds,
   onPatch,
   onRemove,
+  onDetach,
+  cycleType,
   onOptionsChange,
   onDepartmentsChange,
   onAdd,
@@ -72,6 +74,10 @@ export function EditorPane({
   mappedDepartmentIds: string[];
   onPatch: (changes: Partial<BuilderQuestion>) => void;
   onRemove: () => void;
+  /** Give THIS form its own copy of a question currently asked on both. */
+  onDetach: () => void;
+  /** Which builder this is, so the wording can name the OTHER form. */
+  cycleType: "EVALUATION" | "INCREMENT";
   onOptionsChange: (next: Array<{ label: string; value: string }>) => void;
   onDepartmentsChange: (ids: string[]) => void;
   /* -- The zero state carries the action rather than describing it. Both
@@ -208,12 +214,76 @@ export function EditorPane({
           correct initial state with no effect syncing props into state — the
           cascading-render pattern the React compiler rejects (P8-9, P10-11). */}
       <div key={question.id} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        {/* -- SAID BEFORE THE EDIT, NOT AFTER IT.
+               Reported as "changes in the evaluation form get applied to the
+               increment form also". They do: a question asked on both forms is
+               ONE row, and almost every question is — the column defaulted to
+               BOTH when the two forms were separated, so most of the bank
+               predates the split.
+
+               That is often what somebody wants: one wording, kept in step.
+               What was wrong is that nothing said so, and there was no way to
+               choose otherwise. Now both are true — the notice states it, and
+               the button gives this form its own copy. -- */}
+        {question.cycleScope === "BOTH" ? (
+          <div className="rounded-card border border-warning/40 bg-warning-tint p-3">
+            <p className="font-sans text-body-sm text-ink">
+              This question is asked on <strong>both</strong> forms. Editing it here changes it on
+              the {cycleType === "INCREMENT" ? "Evaluation" : "Increment"} form too.
+            </p>
+            <button
+              type="button"
+              onClick={onDetach}
+              className="mt-2 min-h-11 rounded-control px-3 text-body-sm font-medium text-primary underline underline-offset-2"
+            >
+              Give this form its own copy
+            </button>
+            <p className="mt-1 font-sans text-body-sm text-ink-muted">
+              The other form keeps the question exactly as it is now, and nothing already answered
+              is affected.
+            </p>
+          </div>
+        ) : null}
+
         <Field label="Question">
           <Input
             value={question.text}
             onChange={(e) => onPatch({ text: e.target.value })}
             placeholder="Write it the way a supervisor would say it on the floor"
           />
+        </Field>
+
+        <Field
+          label="Which cycles ask this?"
+          hint="An evaluation cycle and an increment cycle are two different exercises (§1). Most questions belong to one of them."
+        >
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                ["EVALUATION_ONLY", "Evaluation only"],
+                ["INCREMENT_ONLY", "Increment only"],
+                ["BOTH", "Both forms"],
+              ] as const
+            ).map(([value, label]) => {
+              const active = question.cycleScope === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => onPatch({ cycleScope: value })}
+                  aria-pressed={active}
+                  className={cn(
+                    "min-h-11 rounded-control border px-3 text-body-sm",
+                    active
+                      ? "border-primary bg-primary/10 font-medium text-primary"
+                      : "border-rule text-ink-muted hover:bg-surface-mute",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <Field label="Helper text shown below it" hint="Optional. One line of plain guidance.">
