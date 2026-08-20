@@ -789,7 +789,12 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
             </div>
 
             <div className="rounded-control bg-surface-mute p-4">
-              <dt className="type-label text-ink-muted">You asked for</dt>
+              {/* -- RENAMED AT THE OWNER'S EXPLICIT INSTRUCTION (§0.2 fixes a
+                     label once created, and an instruction is what it asks
+                     for). It reads back the answer to "What is your monthly
+                     Expected Salary?" a few lines above, so it now carries that
+                     question's own wording rather than a paraphrase of it. -- */}
+              <dt className="type-label text-ink-muted">Expected salary</dt>
               <dd className="tabular mt-1 text-display-sm text-ink">
                 {expectedMonthly === null ? "—" : formatInr(expectedMonthly)}
               </dd>
