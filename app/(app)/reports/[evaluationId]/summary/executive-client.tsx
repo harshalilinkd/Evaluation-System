@@ -74,6 +74,12 @@ export function ExecutiveSummary({
     const role = designation?.trim() || fallback;
     return name ? `${role} · ${name}` : role;
   };
+  /* -- The REPORTING lead is headed "Manager", never their designation. It is a
+        free-text field holding whatever was typed there, and on the report that
+        prompted this it held "HR-Admin" — an access level, not a job. The
+        position they hold on THIS evaluation is the one thing reliably true of
+        that card. Their name follows it, because unlike the report's narrow
+        columns these two cards are prose blocks with room for it. -- */
 
   /* -- What the employee's own answer COMES TO. They are asked for a salary,
         not a percentage (0061), so the rise it implies has to be derived — and
@@ -362,7 +368,7 @@ export function ExecutiveSummary({
                  Named rather than tinted: both managers share the manager hue
                  (§13.1 reserves three), so the NAME is what tells them apart —
                  and it survives greyscale and a colourblind reader (§13.8). -- */}
-          <Card title={managerCardTitle(header.leadDesignation, header.leadName, "Manager")}>
+          <Card title={managerCardTitle(null, header.leadName, "Manager")}>
             <Blocks
               groups={[
                 { label: "Main strengths", items: leadOwn.strengths },

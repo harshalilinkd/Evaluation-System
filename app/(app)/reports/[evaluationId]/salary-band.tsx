@@ -544,7 +544,7 @@ function HrProposal({
                     a number the reader has to go and look something up for. -- */}
               {review?.employee_expectation_ctc ? (
                 <p className="mt-1 font-sans text-body-sm text-ink-muted">
-                  They asked for {moneyMonthly(review.employee_expectation_ctc)}
+                  Expected salary {moneyMonthly(review.employee_expectation_ctc)}
                   {review.employee_expectation_note ? ` — ${review.employee_expectation_note}` : "."}
                 </p>
               ) : null}
@@ -869,7 +869,7 @@ function MdApproval({
             {review?.employee_expectation_ctc ? (
               <span aria-hidden className={cn("size-2 shrink-0 rounded-pill", SALARY_DOT.asked)} />
             ) : null}
-            What {firstName} asked for
+            Expected salary
           </h3>
           {review?.employee_expectation_ctc ? (
             <>

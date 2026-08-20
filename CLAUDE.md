@@ -7919,3 +7919,52 @@ remembered rather than the claim I meant: the substring trap, now asserting two
 call sites. A second wrote a regex literal across two lines, which does not
 parse; rewritten as plain `includes`, the standing remedy §18 already carries
 and which I did not follow.
+
+---
+
+### FIX-67 — Self · Manager · Design Coordinator, and five bands that open on request
+
+No migration. `report-bands.tsx`, the summary's manager cards, and the salary
+band's first card.
+
+#### Three labels, no names
+
+At the owner's instruction: "instead of this it should be self manager Design
+Coordinator". The columns read **"SELF · HR-ADMIN · HARSHALI.LINKD · DESIGN
+COORDINATOR · HARSHALI"**.
+
+| # | Decision | Why |
+|---|---|---|
+| F67-1 | **The reporting lead is always "Manager". Their designation is not used at all.** | It is a free-text field on a profile holding whatever was typed there, and on the report that prompted this it held "HR-Admin" — an access level rather than a job. The one thing reliably true of that column is the position the person holds on THIS evaluation, and it fits in one word. FIX-66 had put the designation there and it was the wrong field to trust. |
+| F67-2 | The second reviewer keeps theirs | It is the whole point of that column: "Design Coordinator" says in two words why a second opinion is on the page, which "Manager" beside "Manager" could not. |
+| F67-3 | …and still falls back to the NAME, never an invented role | FIX-66's rule, unchanged. "2nd reviewer" is this system's word for a slot and printing it where a job title goes says the two are the same kind of fact. |
+| F67-4 | The name no longer follows the role in either column | Three short headings against a table of figures. Who they are is in the identity block above and on the printed sheet. |
+| F67-5 | The summary's lead card took the same correction | It was headed through the same helper and would have read "HR-Admin · harshali.linkd". The name stays there — unlike the report's narrow columns, those two cards are prose blocks with room for it. |
+| F67-6 | The PRINTED sheet was left alone | It reads "Manager: harshali.linkd · HR-Admin" — a labelled identity value, not a column heading claiming to be a role. Showing what is on the record is right there; the wrong value in that field is a data correction on the profile. |
+
+#### Sections 3, 4 and 5 collapse too
+
+Asked for in the same message. FIX-66 collapsed Ratings and Learning; the three
+narrative bands are all one component, so one change covers them.
+
+| # | Decision | Why |
+|---|---|---|
+| F67-7 | **The SUMMARY is the card, not the whole `<details>`** | Every band inside already draws its own cards — the ratings tables, the paired topics, the narrative block — so wrapping the lot in another one put a card inside a card. Closed is now one card; open is that card followed by exactly the content the band drew before. |
+| F67-8 | Each closed line says how many answers are inside | The rule from F66-5, applied to a band whose length varies most. |
+
+#### And the rename
+
+| # | Decision | Why |
+|---|---|---|
+| F67-9 | **"What {name} asked for" → "Expected salary"** | At the owner's instruction (§0.2). The name went with it: the two cards beside it are headed "Manager proposed" and "Management approved", which name nobody either, and a heading that varies with the person is the odd one in a row of three. The prose beneath the gap card was changed with it, so the same figure is not called two things on one screen — the fix-one-leave-the-sibling mistake this log has recorded three times. The executive summary already said "Expected salary" and is untouched. |
+
+**Verification — 37 checks (collapse) and 25 (readable), 0 failed**, plus the
+mobile audit at 84 screens and 0 findings. **Three older assertions were
+rewritten, not deleted** — each pinned the rule the owner has now reversed, and
+each asserts the reversal from both sides.
+
+**One of my own mistakes, and it is the recorded one.** A `
+` written through
+Python into a JavaScript string arrived as a real newline and the file would not
+parse. §18's standing remedy — prefer a plain edit over a string escaped through
+another language — was ignored, again, and then followed.

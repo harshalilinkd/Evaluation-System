@@ -102,45 +102,33 @@ function managerMean(lead: number | null, coLead: number | null): number | null 
 }
 
 /**
- * How a reviewer's column is headed.
+ * How the two manager columns are headed.
  *
- * THEIR DESIGNATION FIRST, at the owner's instruction — "2nd reviewer
- * designation should also show". A name alone says nothing about why that
- * person's opinion is on the page; "Design Coordinator" says it in two words,
- * and with two managers side by side it is the only thing that tells the reader
- * which opinion is which.
+ * AT THE OWNER'S INSTRUCTION: "instead of this it should be self manager Design
+ * Coordinator". Three short labels, no names.
  *
- * AND NOTHING WHERE THERE IS NO DESIGNATION. The first version of this fell
- * back to the generic role, so a column read "2nd reviewer · Harshali" beside
- * "Design Coordinator · Priya" — and the owner's objection is exact: "2nd
- * reviewer is not a designation or role of person". It is this system's word
- * for a slot, and printing it in the position a real job title occupies says
- * the two are the same kind of fact. The name alone is honest; which column is
- * which is already carried by the order and by the header band above.
+ * THE REPORTING LEAD IS ALWAYS "MANAGER". Their designation is not used and
+ * that is deliberate: it is a free-text field on a profile and it holds
+ * whatever was typed there — on the report that prompted this it held
+ * "HR-Admin", which is an access level rather than a job. The one thing that is
+ * reliably true of that column is the position the person holds on THIS
+ * evaluation, and it fits in one word.
  *
- * With ONE manager the heading stays plain "Manager". There is nothing to tell
- * apart, the column has always read that way, and a job title in a 7% column
- * would wrap for no gain.
+ * THE SECOND REVIEWER TAKES THEIR DESIGNATION, because that is the whole point
+ * of the column — "Design Coordinator" says in two words why a second opinion
+ * is on the page, which "Manager" beside "Manager" could not.
+ *
+ * AND NEVER AN INVENTED ROLE. An earlier version fell back to the literal words
+ * "2nd reviewer", and the owner's objection was exact: it is not a designation
+ * or a role, it is this system's word for a slot, and printing it where a job
+ * title goes says the two are the same kind of fact. With no designation the
+ * column falls back to the person's NAME, which is honest and still identifies
+ * them.
  */
-function reviewerHeading(
-  designation: string | null,
-  name: string | null,
-  fallbackRole: string,
-  twoManagers: boolean,
-): string {
-  if (!twoManagers) return fallbackRole;
-  /* -- NO INVENTED ROLE. "2nd reviewer" was standing in as a designation for
-        somebody who has none, and the owner's objection is exact: it is not
-        their designation or their role, it is this system's word for a slot.
-        Printing it beside a real designation on the next column implies the two
-        are the same kind of fact.
+const LEAD_HEADING = "Manager";
 
-        So a designation where there is one, and the NAME ALONE where there is
-        not. Which column is which is already carried by the order and by the
-        header band above; a label that has to be invented to fill a space is
-        worse than the space. -- */
-  const role = designation?.trim();
-  return role ? `${role} · ${firstName(name)}` : firstName(name);
+function coReviewerHeading(designation: string | null, name: string | null): string {
+  return designation?.trim() || firstName(name);
 }
 
 function firstName(full: string | null): string {
@@ -275,8 +263,14 @@ function CollapsibleBand({
   children: React.ReactNode;
 }) {
   return (
-    <details className="card-surface group overflow-hidden">
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+    /* -- The SUMMARY is the card, not the whole <details>.
+          Every band inside this already draws its own cards — the ratings
+          tables, the paired topics, the narrative block — so wrapping the lot
+          in another one puts a card inside a card. This way the closed state is
+          one card, and the open state is that card followed by exactly the
+          content the band drew before. -- */
+    <details className="group">
+      <summary className="card-surface flex cursor-pointer list-none items-center gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
         <ChevronRight
           aria-hidden
           className="size-4 shrink-0 text-ink-muted transition-transform group-open:rotate-90"
@@ -295,7 +289,7 @@ function CollapsibleBand({
       {/* -- The action sits INSIDE, never on the summary line: a button in a
              <summary> is one click that both toggles the section and presses the
              button, and the reader cannot tell which they got. -- */}
-      <div className="space-y-4 border-t border-rule p-5">
+      <div className="space-y-4 pt-4">
         {action ? <div className="flex justify-end">{action}</div> : null}
         {children}
       </div>
@@ -318,12 +312,14 @@ export function HeaderBand({ report }: { report: EvaluationReport }) {
   /* -- A NAME IS NOT A ROLE. Reported: "only reviewers name mentioned their
         role not mentioned like lead/HOD/Manager or Design coordinator". Two
         columns headed "HARSHALI.LINKD" and "HARSHALI" tell the reader nothing
-        about which of them is the reporting manager and which is the second
-        reviewer — and on a pay decision that is the first thing anybody needs
-        to know. The role leads, the name follows it. -- */
-  const leadHeading = reviewerHeading(header.leadDesignation, header.leadName, "Manager", secondManager !== null);
+        about which is the reporting manager and which is the second reviewer —
+        and on a pay decision that is the first thing anybody needs to know.
+
+        The role is now the WHOLE heading; the name is not repeated. See
+        coReviewerHeading for why the lead's designation is not used. -- */
+  const leadHeading = LEAD_HEADING;
   const coLeadHeading = secondManager
-    ? reviewerHeading(header.coLeadDesignation, header.coLeadName, "2nd reviewer", true)
+    ? coReviewerHeading(header.coLeadDesignation, header.coLeadName)
     : null;
 
   /* -- THE FINAL SCORE, BEFORE IT IS STORED.
@@ -669,10 +665,9 @@ export function RatingsBand({ report, index }: { report: EvaluationReport; index
   // table is the one this screen has always drawn.
   const secondManager = report.header.coLeadName ? firstName(report.header.coLeadName) : null;
   // Same rule as the band above (see there).
-  const leadHeading = reviewerHeading(
-    report.header.leadDesignation, report.header.leadName, "Manager", secondManager !== null);
+  const leadHeading = LEAD_HEADING;
   const coLeadHeading = secondManager
-    ? reviewerHeading(report.header.coLeadDesignation, report.header.coLeadName, "2nd reviewer", true)
+    ? coReviewerHeading(report.header.coLeadDesignation, report.header.coLeadName)
     : null;
 
   const sections = report.sections
@@ -1016,9 +1011,11 @@ export function NarrativeBand({
   if (blocks.length === 0) return null;
 
   return (
-    <section className="space-y-4">
-      <BandHeading index={index} title={title} hint={hint} />
-
+    <CollapsibleBand
+      index={index}
+      title={title}
+      summary={`${blocks.length} answer${blocks.length === 1 ? "" : "s"} · ${hint}`}
+    >
       <article className="card-surface overflow-hidden print:break-inside-avoid">
         {/* One tier rule down the left of the whole block, rather than tinting
             each question. The question was `type-label text-self` — small caps
@@ -1041,7 +1038,7 @@ export function NarrativeBand({
           ))}
         </div>
       </article>
-    </section>
+    </CollapsibleBand>
   );
 }
 
