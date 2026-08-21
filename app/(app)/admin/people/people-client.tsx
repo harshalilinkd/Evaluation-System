@@ -46,6 +46,10 @@ export type PersonRow = {
   self: number | null;
   lead: number | null;
   final: number | null;
+  /** The second reviewer's OWN score — not blended into `lead`, which is the
+   *  mean of both once both are in (0087). Null for anybody with no second
+   *  reviewer, or whose second reviewer has not submitted yet. */
+  coReviewerScore: number | null;
 };
 
 const ANY = "__any__";
@@ -274,6 +278,26 @@ export function PeopleClient({
             <span className="text-body-sm text-ink-faint">—</span>
           ) : (
             <Score value={row.original.lead} className={TIER_CLASSES.lead.numeral} />
+          ),
+      },
+      {
+        // HOD, above, is the manager FIGURE (0087) — the reporting lead alone,
+        // or the mean of both once both are in. Somebody asking "what did the
+        // coordinator actually give them" could not tell that apart from "what
+        // did the two average to". This is the second reviewer's OWN number,
+        // never blended — an em dash for anybody with no second reviewer, or
+        // whose second reviewer has not submitted yet. Same tier hue as HOD
+        // (§13.1 reserves it for "a manager said this", and a second reviewer
+        // is one) — told apart by the header, not a fourth colour (SR-11).
+        id: "coReviewerScore",
+        header: "2nd rating",
+        size: 92,
+        meta: { align: "right" },
+        cell: ({ row }) =>
+          row.original.track === "WORKER" ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : (
+            <Score value={row.original.coReviewerScore} className={TIER_CLASSES.lead.numeral} />
           ),
       },
       /* -- AVERAGE, NOT "FINAL", and the difference is real rather than a

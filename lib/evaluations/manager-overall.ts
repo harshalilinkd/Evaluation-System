@@ -68,6 +68,43 @@ export async function managerOverallByEvaluation(
 }
 
 /**
+ * The SECOND REVIEWER's own figure, per evaluation — not blended with the
+ * reporting lead's the way `managerOverallByEvaluation` deliberately is.
+ *
+ * Team review shows the reporting manager's score and the mean of both
+ * together (HOD, Average) but had nowhere to show the second reviewer's OWN
+ * number on its own — the person asking "what did the coordinator actually
+ * give them" could not tell that apart from "what did the two average to".
+ * Genuinely absent — not just null — for anybody with no second reviewer,
+ * which the caller renders as an em dash exactly like an unset HOD figure.
+ *
+ * A second query rather than deriving this from `managerOverallByEvaluation`'s
+ * own fetch: that function's whole job is to throw the per-layer breakdown
+ * away, and reaching into it to get it back would make its own "blended,
+ * never per-layer" contract a lie the moment somebody needed both.
+ */
+export async function coReviewerScoreByEvaluation(
+  supabase: SupabaseClient<Database>,
+  evaluationIds: readonly string[],
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (evaluationIds.length === 0) return out;
+
+  const { data } = await supabase
+    .from("evaluation_responses")
+    .select("evaluation_id, overall_score, submitted_at")
+    .in("evaluation_id", [...evaluationIds])
+    .eq("layer", "LEAD_2");
+
+  for (const row of data ?? []) {
+    if (row.submitted_at === null || row.overall_score === null) continue;
+    out.set(row.evaluation_id, Number(row.overall_score));
+  }
+
+  return out;
+}
+
+/**
  * The figure to show, with the stored column as the fallback.
  *
  * The two agree by construction where there is one manager — the transition

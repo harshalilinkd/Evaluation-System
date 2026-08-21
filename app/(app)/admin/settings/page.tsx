@@ -20,7 +20,11 @@ import { NotificationsTab } from "@/app/(app)/admin/settings/notifications-tab";
 import { BinnedRounds } from "@/app/(app)/admin/settings/binned-rounds";
 import { RecycleBinTab } from "@/app/(app)/admin/settings/recycle-bin-tab";
 import { listBinnedCycles } from "@/lib/cycles/queries";
-import { managerFigure, managerOverallByEvaluation } from "@/lib/evaluations/manager-overall";
+import {
+  coReviewerScoreByEvaluation,
+  managerFigure,
+  managerOverallByEvaluation,
+} from "@/lib/evaluations/manager-overall";
 import { getMessageLog, getOutboundState } from "@/lib/notify/settings";
 import { listTemplates } from "@/lib/notify/template-actions";
 import { requireRole } from "@/lib/auth/guards";
@@ -269,10 +273,14 @@ export default async function SettingsPage({
         .eq("cycle_id", teamCycle.id)
     : { data: [] };
 
-  const teamManagerOveralls = await managerOverallByEvaluation(
-    supabase,
-    (teamEvaluations ?? []).map((e) => e.id),
-  );
+  const teamEvaluationIds = (teamEvaluations ?? []).map((e) => e.id);
+  const [teamManagerOveralls, teamCoReviewerScores] = await Promise.all([
+    managerOverallByEvaluation(supabase, teamEvaluationIds),
+    // The second reviewer's OWN figure, never blended into the HOD column —
+    // a second query rather than reaching into the blended one above, because
+    // that one's whole job is to throw the per-layer breakdown away.
+    coReviewerScoreByEvaluation(supabase, teamEvaluationIds),
+  ]);
 
   const teamDepartmentName = new Map((teamDepartments ?? []).map((d) => [d.id, d.name]));
   const teamLeadName = new Map((teamPeople ?? []).map((p) => [p.id, p.full_name]));
@@ -303,6 +311,9 @@ export default async function SettingsPage({
       lead: evaluation
         ? managerFigure(evaluation.id, evaluation.lead_overall, teamManagerOveralls)
         : null,
+      // The second reviewer's OWN score, separate from the blended figure
+      // above — null for anybody with no second reviewer.
+      coReviewerScore: evaluation ? (teamCoReviewerScores.get(evaluation.id) ?? null) : null,
       final: evaluation?.final_overall ?? null,
     };
   });
