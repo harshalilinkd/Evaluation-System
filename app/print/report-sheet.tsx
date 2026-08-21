@@ -237,11 +237,30 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 <td className="print-num">{gapText(s.gap)}</td>
               </tr>
             ))}
+            {/* -- THE MISSING CELL, found while chasing a report that "why is
+                  there a 4.05 when the coordinator has not answered". There
+                  was no bug in the arithmetic — 4.05 IS mean(4.27, 3.83),
+                  correctly excluding an unanswered coordinator, exactly as
+                  the sentence below the table already said. The actual fault
+                  was here: with a second reviewer, every SECTION row above
+                  has six cells (Section, Self, Manager, Coordinator, Average,
+                  Gap) and this row had five — so Average landed physically
+                  UNDER the Coordinator header, which is what made "4.05"
+                  look like it was claiming to be her rating. Restored to the
+                  same six cells the section rows use, and Average now blends
+                  both managers the same way the section rows do
+                  (managerMean), rather than the reporting lead alone — a
+                  second, quieter bug this would otherwise have kept once she
+                  does answer, silently dropping her figure from the one
+                  number the whole table exists to produce. -- */}
             <tr className="print-total">
               <td>Overall</td>
               <td className="print-num">{score(summary.selfOverall)}</td>
               <td className="print-num">{score(summary.leadOverall)}</td>
-              <td className="print-num">{average(summary.selfOverall, summary.leadOverall)}</td>
+              {secondManager ? <td className="print-num">{score(summary.coLeadOverall)}</td> : null}
+              <td className="print-num">
+                {average(summary.selfOverall, managerMean(summary.leadOverall, summary.coLeadOverall))}
+              </td>
               <td className="print-num">{gapText(summary.overallGap)}</td>
             </tr>
           </tbody>

@@ -304,13 +304,19 @@ export function ExecutiveSummary({
                     outline, since bg-surface-mute alone was barely there at
                     6px against the card's own near-white surface.
 
-                    Same pink as Manager (§13.1 reserves the hue for "a
-                    manager said this", and a second reviewer is one) — told
-                    apart by the NAME, not a fourth colour, same as the two
-                    narrative cards above (SR-11). -- */}
+                    Same pink FAMILY as Manager (§13.1 reserves the hue for
+                    "a manager said this", and a second reviewer is one) —
+                    told apart by the NAME first. But reported again even
+                    with the name in place: two identically solid pink bars
+                    sitting one above the other, five rows down, meant
+                    constantly tracing back up to this legend to remember
+                    which position was which. A lighter TINT of the same
+                    hue (bg-lead/55, matched on the Track below) is not a
+                    fourth colour — the family and its meaning are unchanged
+                    — it is what lets every row read on its own. -- */}
               {secondManager ? (
                 <span className="flex items-center gap-1.5 type-label text-ink-muted">
-                  <span aria-hidden className="size-2 rounded-pill bg-lead" />
+                  <span aria-hidden className="size-2 rounded-pill bg-lead/55" />
                   {secondManager}
                 </span>
               ) : null}
@@ -365,7 +371,14 @@ export function ExecutiveSummary({
                       <span className="mt-1.5 block space-y-1">
                         <Track value={s.self} className="bg-self" />
                         <Track value={s.lead} className="bg-lead" />
-                        {secondManager ? <Track value={s.coLead} className="bg-lead" /> : null}
+                        {/* -- Lighter tint of the same manager hue, matching the
+                              legend swatch above — not a fourth colour, a
+                              distinguishable SHADE of the one §13.1 reserves for
+                              "a manager said this". Reported as unreadable even
+                              once both managers were named: two solid pink bars
+                              stacked in every one of five rows still needed
+                              tracing back to the legend each time. -- */}
+                        {secondManager ? <Track value={s.coLead} className="bg-lead/55" /> : null}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-baseline gap-3">
@@ -963,24 +976,19 @@ function VerdictTag({ block }: { block: NarrativeBlock }) {
 }
 
 /**
- * Is this question's own text just the group's generic bucket name again?
+ * ONLY THE FORM'S OWN QUESTION AND ANSWER, at the owner's instruction —
+ * "Main strengths" / "Areas for improvement" / "Other notes" are generic
+ * bucket names chosen at the CALL SITE, not read from the form, and a
+ * bucket usually holding one question put its own name directly above
+ * that question's REAL wording — "Challenges and goals" over "Areas for
+ * Improvement" is not the same string, but it is the same idea said twice,
+ * which reads as a mistake rather than as two facts.
  *
- * Reported as confusing, and it was: the group label is a fixed, generic
- * heading ("Areas for improvement") chosen at the CALL SITE, not read from
- * the form — and where a section has exactly one question, its own text is
- * very often close to that same phrase, because that IS what the question
- * asks. Showing both then reads as a mistake, not as two facts.
- *
- * §17 forbids paraphrasing question text, so the fix is not to shorten or
- * reword it — it is to stop saying it TWICE. Normalised (case, trailing
- * punctuation) rather than exact, since "Areas for improvement" and "Areas
- * for Improvement?" are the same collision with different capitalisation.
+ * The buckets still decide the ORDER items appear in (strengths, then
+ * improvements, then everything else) — only the heading naming each
+ * bucket is gone. `groups` therefore still exists as the caller's input
+ * shape; this flattens it into one list rather than three.
  */
-function looksLikeGroupLabel(question: string, groupLabel: string): boolean {
-  const norm = (s: string) => s.trim().toLowerCase().replace(/[?.!]+$/, "");
-  return norm(question) === norm(groupLabel);
-}
-
 function Blocks({
   groups,
   empty,
@@ -988,60 +996,29 @@ function Blocks({
   groups: Array<{ label: string; items: NarrativeBlock[] }>;
   empty: string;
 }) {
-  const any = groups.some((g) => g.items.length > 0);
-  if (!any) return <p className="font-sans text-body-sm text-ink-muted">{empty}</p>;
+  const items = groups.flatMap((g) => g.items);
+  if (items.length === 0) return <p className="font-sans text-body-sm text-ink-muted">{empty}</p>;
 
   return (
-    <div className="space-y-2.5">
-      {groups
-        .filter((g) => g.items.length > 0)
-        .map((g) => (
-          <div key={g.label}>
-            <p className="type-label text-ink-muted">{g.label}</p>
-            {/* -- THREE LEVELS, EACH LOOKING LIKE A DIFFERENT KIND OF THING.
-                   Reported as not readable at a glance, and it was not:
-                   `type-label` above is the GROUP ("Areas for improvement"),
-                   and the question ("Areas for improvement" — genuinely the
-                   same words, on this form) and its answer were both plain
-                   `body-sm` ink-muted-then-ink, one grey paragraph after
-                   another with only a hairline between them.
+    <dl className="space-y-2.5">
+      {/* -- QUESTION AS A PROMPT, ANSWER AS THE POINT.
+             Italic and muted so it never reads as content itself — the real,
+             verbatim form question (§17 forbids paraphrasing it) — with the
+             answer inside its own tinted card, the one thing here with any
+             weight, so the eye lands there first. This is the section the MD
+             said matters most, read minutes before an interview.
 
-                   Now the question reads as a PROMPT — italic, small, muted,
-                   never mistaken for the group label above it because it is
-                   sentence case where that one is uppercase — and the answer
-                   is the one thing on the card with any weight to it, inside
-                   its own tinted block so the eye lands there first. This is
-                   the section the MD said matters most, read minutes before
-                   an interview: the answer has to be the thing that is
-                   readable from across the desk.
-
-                   `whitespace-pre-wrap` because these are free-text answers and
-                   somebody who wrote three lines meant three lines. -- */}
-            <dl className="mt-2 space-y-2.5">
-              {g.items.map((b) => {
-                const redundant = looksLikeGroupLabel(b.question, g.label);
-                return (
-                  <div key={b.question} className="rounded-card bg-surface-mute/70 p-3">
-                    {redundant ? null : (
-                      <dt className="font-sans text-body-sm italic leading-snug text-ink-muted">
-                        {b.question}
-                      </dt>
-                    )}
-                    <dd
-                      className={cn(
-                        "whitespace-pre-wrap font-sans text-body font-medium leading-snug text-ink",
-                        redundant ? undefined : "mt-1",
-                      )}
-                    >
-                      {b.answer}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </div>
-        ))}
-    </div>
+             `whitespace-pre-wrap` because these are free-text answers and
+             somebody who wrote three lines meant three lines. -- */}
+      {items.map((b) => (
+        <div key={b.question} className="rounded-card bg-surface-mute/70 p-3">
+          <dt className="font-sans text-body-sm italic leading-snug text-ink-muted">{b.question}</dt>
+          <dd className="mt-1 whitespace-pre-wrap font-sans text-body font-medium leading-snug text-ink">
+            {b.answer}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
