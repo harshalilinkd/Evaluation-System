@@ -4,7 +4,9 @@
 
 import * as React from "react";
 import { AlertTriangle, ChevronDown, Mail, Phone, Search } from "lucide-react";
+import { toast } from "sonner";
 
+import { setSecondReviewer } from "@/lib/auth/provisioning";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -56,6 +58,20 @@ function ContactIcons({
 export { isIncrementDue } from "@/lib/utils/increment-due";
 
 /**
+ * Due AND not already being handled.
+ *
+ * `isIncrementDue` is a date check alone — it does not know whether a round
+ * for that date already exists. Kept as a SEPARATE, local combination rather
+ * than folded into the shared utility: that one is also used by the
+ * production round, which has no concept of "already in an increment cycle"
+ * to begin with, and widening a shared rule for one caller's extra condition
+ * is how the other caller ends up silently affected by it.
+ */
+function dueAndAvailable(person: SelectablePerson): boolean {
+  return isIncrementDue(person.nextIncrementOn) && !person.hasOpenIncrementCycle;
+}
+
+/**
  * Who will rate this person.
  *
  * Extracted so the table and the phone cards render the SAME control. It is the
@@ -99,6 +115,59 @@ function ManagerSelect({
         // Themselves is not offered at all: an option that always blocks the
         // launch is not a choice.
         .filter((c) => c.id !== person.id && !mdIds.has(c.id))
+        .map((candidate) => (
+          <option key={candidate.id} value={candidate.id}>
+            {candidate.name}
+          </option>
+        ))}
+    </select>
+  );
+}
+
+/**
+ * The second reviewer (0083) — a THIRD form, where a person has two managers.
+ *
+ * Unlike `ManagerSelect`, this is not part of the launch payload: 0084's
+ * `launch_cycle` reads `profiles.co_reviewer_id` straight from the person's
+ * own record, so there is no per-cycle override to collect here the way there
+ * is for the reporting manager. Choosing a name in this dropdown WRITES that
+ * profile column directly and immediately — pre-filled from the same column,
+ * so what is on screen is always their real, current assignment, not
+ * something scoped to this one round.
+ *
+ * "No second reviewer" is a real, common choice, not an error state: the
+ * ordinary two-form flow is right for almost everybody, and this column
+ * exists for the minority who genuinely have two raters.
+ */
+function CoReviewerSelect({
+  person,
+  people,
+  managerId,
+  value,
+  saving,
+  onChange,
+}: {
+  person: SelectablePerson;
+  people: SelectablePerson[];
+  /** Whoever is currently chosen as their manager — excluded here too, matching
+      the server's own rule: a second reviewer who is also the manager is one
+      opinion recorded twice, on two forms. */
+  managerId: string | null;
+  value: string | null;
+  saving: boolean;
+  onChange: (coReviewerId: string | null) => void;
+}) {
+  return (
+    <select
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value || null)}
+      disabled={saving}
+      aria-label={`Second reviewer for ${person.name}`}
+      className="h-11 w-full rounded-input border border-rule bg-surface px-2 text-body-sm text-ink disabled:opacity-50"
+    >
+      <option value="">No second reviewer</option>
+      {people
+        .filter((c) => c.id !== person.id && c.id !== managerId)
         .map((candidate) => (
           <option key={candidate.id} value={candidate.id}>
             {candidate.name}
@@ -191,6 +260,45 @@ export function StepPeople({
      by anything else — it is the opening view, not a lock. */
   const [chosenOnly, setChosenOnly] = React.useState(preset === "chosen");
 
+  /* -- SECOND REVIEWER: optimistic, and independent of `state`/`onChange`.
+        Those two carry the LAUNCH payload; this writes `profiles.co_reviewer_id`
+        directly the moment it changes (see `setSecondReviewer`), so it needs its
+        own local override — keyed by person id, present only where HR has
+        changed it FROM what the prop says, so a person nobody has touched keeps
+        reading straight from their real record. -- */
+  const [coReviewerOverrides, setCoReviewerOverrides] = React.useState<
+    Map<string, string | null>
+  >(new Map());
+  const [savingCoReviewer, setSavingCoReviewer] = React.useState<Set<string>>(new Set());
+
+  const coReviewerFor = React.useCallback(
+    (person: SelectablePerson) =>
+      coReviewerOverrides.has(person.id) ? (coReviewerOverrides.get(person.id) ?? null) : person.coReviewerId,
+    [coReviewerOverrides],
+  );
+
+  const handleCoReviewerChange = React.useCallback(
+    async (person: SelectablePerson, next: string | null) => {
+      const previous = coReviewerFor(person);
+      // Optimistic: HR sees the choice land instantly, not after a round trip.
+      setCoReviewerOverrides((prev) => new Map(prev).set(person.id, next));
+      setSavingCoReviewer((prev) => new Set(prev).add(person.id));
+      const result = await setSecondReviewer(person.id, next);
+      setSavingCoReviewer((prev) => {
+        const copy = new Set(prev);
+        copy.delete(person.id);
+        return copy;
+      });
+      if (!result.ok) {
+        // Reverted rather than left wrong on screen — a failed write that still
+        // shows the new name is worse than the retry this invites.
+        setCoReviewerOverrides((prev) => new Map(prev).set(person.id, previous));
+        toast.error(result.error);
+      }
+    },
+    [coReviewerFor],
+  );
+
   const departments = React.useMemo(() => {
     const map = new Map<string, string>();
     for (const p of appraisable) if (p.departmentId) map.set(p.departmentId, p.departmentName ?? "Unnamed");
@@ -214,7 +322,7 @@ export function StepPeople({
     const matching = appraisable.filter((p) => {
       if (chosenOnly && !tickedAtOpen.has(p.id)) return false;
       if (department !== "all" && p.departmentId !== department) return false;
-      if (dueOnly && !isIncrementDue(p.nextIncrementOn)) return false;
+      if (dueOnly && !dueAndAvailable(p)) return false;
       if (!needle) return true;
       return (
         p.name.toLowerCase().includes(needle) ||
@@ -242,7 +350,7 @@ export function StepPeople({
   }, [appraisable, search, department, dueOnly, chosenOnly, tickedAtOpen]);
 
   const dueCount = React.useMemo(
-    () => appraisable.filter((p) => isIncrementDue(p.nextIncrementOn)).length,
+    () => appraisable.filter((p) => dueAndAvailable(p)).length,
     [appraisable],
   );
 
@@ -459,6 +567,7 @@ export function StepPeople({
               <TableHead className="whitespace-nowrap">Last increment</TableHead>
               <TableHead className="whitespace-nowrap">Next increment</TableHead>
               <TableHead className="min-w-[11rem]">Manager who will rate them</TableHead>
+              <TableHead className="min-w-[11rem]">Second reviewer</TableHead>
               {/*
                 One column, not two. These were "Employee" and "HOD", each
                 holding nothing but a mail and a phone glyph — two headings
@@ -524,13 +633,17 @@ export function StepPeople({
                           // Due or overdue is the one thing on this row that
                           // should catch the eye — paired with the word "due"
                           // so it is never colour alone (§13.8).
-                          isIncrementDue(person.nextIncrementOn)
+                          dueAndAvailable(person)
                             ? "font-medium text-critical"
                             : "text-ink-muted",
                         )}
                       >
                         {formatDate(person.nextIncrementOn)}
-                        {isIncrementDue(person.nextIncrementOn) ? " · due" : ""}
+                        {dueAndAvailable(person)
+                          ? " · due"
+                          : person.hasOpenIncrementCycle
+                            ? " · already in a round"
+                            : ""}
                       </span>
                     ) : (
                       <span className="text-ink-muted">—</span>
@@ -553,6 +666,17 @@ export function StepPeople({
                         Needs a different rater — this person cannot rate themselves
                       </p>
                     ) : null}
+                  </TableCell>
+
+                  <TableCell>
+                    <CoReviewerSelect
+                      person={person}
+                      people={people}
+                      managerId={row.leadId}
+                      value={coReviewerFor(person)}
+                      saving={savingCoReviewer.has(person.id)}
+                      onChange={(coReviewerId) => handleCoReviewerChange(person, coReviewerId)}
+                    />
                   </TableCell>
 
                   {/* Both sides' reachability in one cell: the person, a
@@ -656,7 +780,7 @@ export function StepPeople({
                   <dd
                     className={cn(
                       "tabular text-body-sm",
-                      person.nextIncrementOn && isIncrementDue(person.nextIncrementOn)
+                      person.nextIncrementOn && dueAndAvailable(person)
                         ? "font-medium text-critical"
                         : "text-ink-muted",
                     )}
@@ -664,7 +788,11 @@ export function StepPeople({
                     {person.nextIncrementOn ? (
                       <>
                         {formatDate(person.nextIncrementOn)}
-                        {isIncrementDue(person.nextIncrementOn) ? " · due" : ""}
+                        {dueAndAvailable(person)
+                          ? " · due"
+                          : person.hasOpenIncrementCycle
+                            ? " · already in a round"
+                            : ""}
                       </>
                     ) : (
                       "—"
@@ -693,6 +821,18 @@ export function StepPeople({
                     Needs a different rater — this person cannot rate themselves
                   </p>
                 ) : null}
+              </div>
+
+              <div className="mt-3 border-t border-rule pt-3">
+                <span className="type-label mb-1.5 block text-ink-muted">Second reviewer</span>
+                <CoReviewerSelect
+                  person={person}
+                  people={people}
+                  managerId={row.leadId}
+                  value={coReviewerFor(person)}
+                  saving={savingCoReviewer.has(person.id)}
+                  onChange={(coReviewerId) => handleCoReviewerChange(person, coReviewerId)}
+                />
               </div>
 
               <div className="mt-3 flex items-center gap-2 border-t border-rule pt-3">

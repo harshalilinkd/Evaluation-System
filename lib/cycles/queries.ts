@@ -462,6 +462,16 @@ export type SelectablePerson = {
         it here reads as the setting not having taken. -- */
   coReviewerId: string | null;
   coReviewerName: string | null;
+
+  /* -- ALREADY IN A LIVE INCREMENT CYCLE.
+        "Increment due" is a DATE check alone — it says nothing about whether a
+        round for that date has already been started. Without this, somebody
+        HR launched a round for last week is still offered again under "due",
+        and starting a second one for the same rise is not a correction, it is
+        two pay decisions open on one person at once. Scoped to INCREMENT
+        cycles only: an ordinary evaluation running at the same time is a
+        different exercise and does not make this person any less due a rise. */
+  hasOpenIncrementCycle: boolean;
 };
 
 /**
@@ -498,27 +508,43 @@ export async function listStaffProfiles(): Promise<CycleResult<SelectablePerson[
   const mdIds = new Set((mdRoles ?? []).map((r) => r.profile_id));
 
   /* -- The three dates HR decides on. --
-        Two queries for everybody rather than three per row: forty people would
-        otherwise be a hundred and twenty round trips to render one list. */
-  const [{ data: employment }, { data: pastEvaluations }] = await Promise.all([
-    // Dates only. §5 confines the FIGURES to HR and the MD, and this list has
-    // no business carrying a CTC even though the screen is admin-guarded —
-    // a column that is never selected cannot leak.
-    supabase
-      .from("employment_records")
-      .select("profile_id, last_increment_date, next_increment_date"),
-    // When each person was last part of a cycle. `created_at` is when their
-    // evaluation was raised, which is the honest "last appraised" date whether
-    // or not it finished — a cycle somebody was in but never completed still
-    // means they were asked.
-    supabase
-      .from("evaluations")
-      .select("evaluatee_id, created_at")
-      .is("excluded_at", null)
-      .order("created_at", { ascending: false }),
-  ]);
+        Three queries for everybody rather than one-plus per row: forty people
+        would otherwise be well over a hundred round trips to render one list. */
+  const [{ data: employment }, { data: pastEvaluations }, { data: openIncrementRows }] =
+    await Promise.all([
+      // Dates only. §5 confines the FIGURES to HR and the MD, and this list has
+      // no business carrying a CTC even though the screen is admin-guarded —
+      // a column that is never selected cannot leak.
+      supabase
+        .from("employment_records")
+        .select("profile_id, last_increment_date, next_increment_date"),
+      // When each person was last part of a cycle. `created_at` is when their
+      // evaluation was raised, which is the honest "last appraised" date whether
+      // or not it finished — a cycle somebody was in but never completed still
+      // means they were asked.
+      supabase
+        .from("evaluations")
+        .select("evaluatee_id, created_at")
+        .is("excluded_at", null)
+        .order("created_at", { ascending: false }),
+      /* -- WHO IS ALREADY MID-INCREMENT.
+            `evaluations.status` and `evaluation_cycles.cycle_type` are on
+            different tables; the embedded filter (`evaluation_cycles!inner`)
+            is what lets one request ask "is the CYCLE this evaluation belongs
+            to an increment, and is it still open" without a second round trip
+            per person. Excluded participants do not count — P10-6 makes
+            exclusion mean the organisation is no longer asking for it, which
+            is exactly the case where a fresh round should be offered again. -- */
+      supabase
+        .from("evaluations")
+        .select("evaluatee_id, evaluation_cycles!inner(cycle_type)")
+        .eq("evaluation_cycles.cycle_type", "INCREMENT")
+        .neq("status", "CLOSED")
+        .is("excluded_at", null),
+    ]);
 
   const employmentBy = new Map((employment ?? []).map((row) => [row.profile_id, row] as const));
+  const openIncrementIds = new Set((openIncrementRows ?? []).map((row) => row.evaluatee_id));
 
   // First wins: the select above is newest-first, so the first row seen for a
   // person is their most recent evaluation.
@@ -555,6 +581,7 @@ export async function listStaffProfiles(): Promise<CycleResult<SelectablePerson[
            so a second reviewer who is themselves inactive shows as unset rather
            than as a name nobody can be sent a form. */
         coReviewerName: p.co_reviewer_id ? (nameById.get(p.co_reviewer_id) ?? null) : null,
+        hasOpenIncrementCycle: openIncrementIds.has(p.id),
       };
     }),
   };

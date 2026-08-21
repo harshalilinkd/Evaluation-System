@@ -9,16 +9,28 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Your profile" };
 
-export default async function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   /* -- §9: the guard is the first statement. NO ROLE, deliberately — this is
         the one screen that belongs to whoever is signed in, and gating it would
         mean somebody could not change their own password. -- */
   const { profile, roles } = await requireAuth();
+  const { error } = await searchParams;
 
   const supabase = await createClient();
   const { data: department } = profile.department_id
     ? await supabase.from("departments").select("name").eq("id", profile.department_id).maybeSingle()
     : { data: null };
+
+  /* -- WHICH GOOGLE ACCOUNTS ARE ALREADY LINKED, so the screen can say
+        "linked" instead of showing the same button twice. `getUserIdentities`
+        reads the caller's own session, so there is nothing to guard here that
+        `requireAuth` above has not already covered. -- */
+  const { data: identityData } = await supabase.auth.getUserIdentities();
+  const googleLinked = (identityData?.identities ?? []).some((i) => i.provider === "google");
 
   const view: ProfileView = {
     fullName: profile.full_name,
@@ -44,5 +56,5 @@ export default async function Page() {
       .map((r) => ROLE_LABELS[r]),
   };
 
-  return <ProfileClient view={view} />;
+  return <ProfileClient view={view} googleLinked={googleLinked} linkError={error} />;
 }

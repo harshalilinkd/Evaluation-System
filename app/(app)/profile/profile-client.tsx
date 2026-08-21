@@ -3,12 +3,14 @@
 /** Your own account: what we hold, and the one thing you can change. */
 
 import { useActionState } from "react";
-import { KeyRound, Loader2 } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2 } from "lucide-react";
 
+import { linkGoogleIdentity } from "@/lib/auth/actions";
 import { changeMyPassword, type PasswordState } from "@/lib/auth/password-actions";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { GoogleMark } from "@/components/appraise/google-mark";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +35,15 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function ProfileClient({ view }: { view: ProfileView }) {
+export function ProfileClient({
+  view,
+  googleLinked,
+  linkError,
+}: {
+  view: ProfileView;
+  googleLinked: boolean;
+  linkError?: string;
+}) {
   const [state, action, pending] = useActionState<PasswordState, FormData>(changeMyPassword, {});
 
   /* -- The form is KEYED on a successful change, so it remounts empty.
@@ -72,6 +82,12 @@ export function ProfileClient({ view }: { view: ProfileView }) {
             value={view.roleLabels.length > 0 ? view.roleLabels.join(" · ") : "Employee"}
           />
         </dl>
+        {view.workEmail ? (
+          <p className="mt-3 font-sans text-body-sm text-ink-muted">
+            You can sign in with either email above, with your password. To sign in with Google
+            using your official one, link it below.
+          </p>
+        ) : null}
       </section>
 
       {/* ---------- The one thing they can change ---------- */}
@@ -158,6 +174,48 @@ export function ProfileClient({ view }: { view: ProfileView }) {
             Change password
           </Button>
         </form>
+      </section>
+
+      {/* ---------- Google sign-in ----------
+          `linkIdentity`, not a second `signInWithGoogle` — this attaches an
+          ADDITIONAL Google account to the session already open, which is the
+          supported way to make a second address work for Google without
+          weakening 0074's refusal of an unrecognised one (§9). */}
+      <section className="card-surface p-5">
+        <h2 className="flex items-center gap-2 font-sans text-display-sm text-ink">
+          <GoogleMark />
+          Sign in with Google
+        </h2>
+        <p className="mt-0.5 max-w-prose font-sans text-body-sm text-ink-muted">
+          {view.workEmail
+            ? "Your personal Google account already works. Link your official one below to use either."
+            : "Your personal Google account already works — nothing else to do here."}
+        </p>
+
+        {linkError ? (
+          <p
+            role="alert"
+            className="mt-4 rounded-control border border-critical/40 bg-critical-tint px-3 py-2 font-sans text-body-sm text-critical"
+          >
+            {linkError}
+          </p>
+        ) : null}
+
+        {view.workEmail ? (
+          googleLinked ? (
+            <p className="mt-4 flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 font-sans text-body-sm text-ink">
+              <CheckCircle2 aria-hidden className="size-4 shrink-0 text-success" />
+              A second Google account is linked to your sign-in.
+            </p>
+          ) : (
+            <form action={linkGoogleIdentity} className="mt-4">
+              <Button type="submit" variant="outline" className="min-h-11 gap-2.5">
+                <GoogleMark />
+                Link {view.workEmail}
+              </Button>
+            </form>
+          )
+        ) : null}
       </section>
     </div>
   );

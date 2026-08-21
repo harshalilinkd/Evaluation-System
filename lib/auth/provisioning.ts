@@ -2541,3 +2541,61 @@ export async function getImportTemplate(): Promise<string> {
   const { importTemplate } = await import("@/lib/auth/csv");
   return importTemplate();
 }
+
+/**
+ * Sets one person's second reviewer (0083) from a single control, rather than
+ * the whole `updatePerson` form — the cycle wizard needs to change ONE field
+ * on ONE profile from a table row, and dragging in twenty other fields for
+ * that is how a screen ends up overwriting things nobody meant to touch.
+ *
+ * WRITES `profiles.co_reviewer_id` DIRECTLY. `launch_cycle` (0084) reads it
+ * straight from the profile at launch time — there is no separate per-cycle
+ * override the way there is for the reporting manager (P3-6) — so this is
+ * the one and only place a second reviewer assignment lives, and changing it
+ * here is exactly as permanent as changing it in Settings. Pre-filling the
+ * wizard from this same column is what makes that true rather than
+ * surprising: HR is looking at the person's actual, current assignment and
+ * correcting it, not setting something scoped to one round.
+ *
+ * The SAME two refusals `updatePerson` enforces, because a second reviewer
+ * that fails one of them there and succeeds here is a rule with two answers:
+ * rating yourself is not a second opinion (§5), and the same person as their
+ * manager is one opinion recorded twice on two forms.
+ */
+export async function setSecondReviewer(
+  profileId: string,
+  coReviewerId: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const auth = await checkRole(ADMIN_ROLES);
+  if (!auth.ok) return { ok: false, error: auth.error.message };
+
+  if (coReviewerId === profileId) {
+    return { ok: false, error: "Somebody cannot be their own second reviewer." };
+  }
+
+  const supabase = await createClient();
+
+  if (coReviewerId) {
+    const { data: current } = await supabase
+      .from("profiles")
+      .select("reports_to")
+      .eq("id", profileId)
+      .maybeSingle();
+    if (current?.reports_to === coReviewerId) {
+      return {
+        ok: false,
+        error: "The second reviewer has to be somebody other than their manager.",
+      };
+    }
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ co_reviewer_id: coReviewerId })
+    .eq("id", profileId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/admin/cycles/new");
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
