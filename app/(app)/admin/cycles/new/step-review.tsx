@@ -188,48 +188,36 @@ export function StepReview({
             {plural(included.length, "person")} · about to be appraised
           </p>
 
-          <ul className="mt-4 space-y-2.5">
+          {/* -- STRIPPED TO THREE FACTS, at the owner's instruction: name,
+                designation, last increment. It read as a wall of text —
+                department repeated what the People card already breaks down
+                per department, the second-reviewer line and the closing
+                paragraph explaining it were two more sentences on top of
+                that, and none of the four is what this card exists to
+                answer, which is WHO is about to be appraised. -- */}
+          <ul className="mt-4 divide-y divide-rule">
             {included.length === 0 ? (
               <li className="text-body-sm text-ink-muted">Nobody is included yet.</li>
             ) : (
               included.map((p) => (
-                <li key={p.id} className="border-b border-rule pb-2.5 last:border-b-0 last:pb-0">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-body-sm font-medium text-ink">{p.name}</span>
-                    {/* §5: a DATE, never a figure. The amount is HR-and-MD-only
-                        and does not belong on a launch screen at all. */}
-                    <span className="tabular shrink-0 text-body-sm text-ink-muted">
-                      {p.lastIncrementOn ? formatDate(p.lastIncrementOn) : "No rise on record"}
+                <li key={p.id} className="flex items-baseline justify-between gap-3 py-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-body-sm font-medium text-ink">
+                      {p.name}
                     </span>
-                  </div>
-                  <p className="truncate text-body-sm text-ink-muted">
-                    {[p.designation, p.departmentName].filter(Boolean).join(" · ") || "—"}
-                  </p>
-                  {/* -- A SECOND manager changes what this launch DOES: three
-                         forms open instead of two, and the record does not reach
-                         HR until all three are in. Setting one in Settings and
-                         seeing no trace of it on the screen that launches the
-                         cycle reads as the setting not having taken — which is
-                         exactly how it was reported. -- */}
-                  {p.coReviewerName ? (
-                    <p className="truncate text-body-sm text-ink-muted">
-                      Rated by two: their manager and{" "}
-                      <span className="text-ink">{p.coReviewerName}</span>
-                    </p>
-                  ) : null}
+                    <span className="block truncate text-body-sm text-ink-muted">
+                      {p.designation ?? "—"}
+                    </span>
+                  </span>
+                  {/* §5: a DATE, never a figure. The amount is HR-and-MD-only
+                      and does not belong on a launch screen at all. */}
+                  <span className="tabular shrink-0 text-body-sm text-ink-muted">
+                    {p.lastIncrementOn ? formatDate(p.lastIncrementOn) : "No rise on record"}
+                  </span>
                 </li>
               ))
             )}
           </ul>
-
-          {included.length > 0 ? (
-            <p className="mt-3 text-body-sm text-ink-faint">
-              Last increment shown on the right. Go back to People to add or remove somebody.
-              {included.some((p) => p.coReviewerName)
-                ? " Anybody rated by two managers gets a third form, and their appraisal reaches you once all three are in."
-                : ""}
-            </p>
-          ) : null}
         </section>
       </div>
 
