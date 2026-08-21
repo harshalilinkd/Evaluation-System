@@ -40,11 +40,31 @@ function average(self: number | null, lead: number | null): string {
   return ((self + lead) / 2).toFixed(2);
 }
 
+/** Full month name -> the three-letter form, for `incrementPeriod` below. A
+ *  fixed table rather than round-tripping through `Date` and a locale format:
+ *  this only ever has to be right for twelve known English names, and a table
+ *  carries no timezone or parsing risk to get right (§0.10's whole reason for
+ *  being careful with dates in this codebase). */
+const MONTH_ABBR: Record<string, string> = {
+  january: "Jan",
+  february: "Feb",
+  march: "Mar",
+  april: "Apr",
+  may: "May",
+  june: "Jun",
+  july: "Jul",
+  august: "Aug",
+  september: "Sep",
+  october: "Oct",
+  november: "Nov",
+  december: "Dec",
+};
+
 /**
  * "August 2026" reads as ONE month; an increment round actually looks back
  * twelve, at the owner's instruction — the review covers the year since the
  * last one, not the month it happens to land in. Reformats to
- * "August 2025-2026" when the label parses as a month and a year, which is
+ * "Aug 2025 - Aug 2026" when the label parses as a month and a year, which is
  * what the wizard always generates it as (thisMonthLabel(), wizard-client.tsx)
  * — and leaves anything else exactly as typed rather than guess at a format
  * HR may have overwritten it with.
@@ -52,9 +72,12 @@ function average(self: number | null, lead: number | null): string {
 function incrementPeriod(period: string): string {
   const match = /^([A-Za-z]+)\s+(\d{4})$/.exec(period.trim());
   if (!match) return period;
-  const [, month, yearText] = match;
+  const [, monthName, yearText] = match;
+  if (!monthName || !yearText) return period;
+  const abbr = MONTH_ABBR[monthName.toLowerCase()];
+  if (!abbr) return period;
   const year = Number(yearText);
-  return `${month} ${year - 1}-${year}`;
+  return `${abbr} ${year - 1} - ${abbr} ${year}`;
 }
 
 /**
@@ -229,6 +252,16 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
             ? `${summary.flaggedCount} question${summary.flaggedCount === 1 ? " differs" : "s differ"} by ${summary.flagThreshold} or more.`
             : "No question differs by the flagging threshold."}{" "}
           This figure is for HR and management only.
+          {/* -- WHY "AVERAGE" CAN BE A REAL NUMBER WHILE A COORDINATOR COLUMN
+                READS "—". Reported as a contradiction: it is not one, but
+                nothing said so. "Manager" is the combined managers' figure —
+                blank until the coordinator answers, then the mean of both —
+                so "Average" (Self and Manager, AMEND-5) already accounts for
+                the coordinator the moment they DO answer. It does not need a
+                third input of its own to explain in the meantime. -- */}
+          {secondManager
+            ? ` "Manager" already includes ${secondManager} once they answer — "Average" does not need a separate figure from them.`
+            : null}
         </p>
       </section>
 

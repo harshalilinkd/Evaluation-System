@@ -275,7 +275,7 @@ export function ExecutiveSummary({
           {/* Section comparison — bars, not a list of numbers */}
           <Card title="Section by section">
             {/* A key, once, rather than a legend repeated per row. */}
-            <div className="mb-2 flex items-center justify-end gap-3 border-b border-rule pb-1.5">
+            <div className="mb-2 flex flex-wrap items-center justify-end gap-3 border-b border-rule pb-1.5">
               <span className="flex items-center gap-1.5 type-label text-ink-muted">
                 <span aria-hidden className="size-2 rounded-pill bg-self" />
                 Self
@@ -284,6 +284,23 @@ export function ExecutiveSummary({
                 <span aria-hidden className="size-2 rounded-pill bg-lead" />
                 Manager
               </span>
+              {/* -- THE THIRD TRACK, NAMED. Reported as "missing completely" —
+                    it was not: `s.coLead` has drawn a third bar and a third
+                    number below since 0087, `secondManager ? <Track .../> :
+                    null` a few lines down. What was missing was THIS line, so
+                    an empty third bar (true right now — the coordinator has
+                    not submitted) read as nothing being there at all rather
+                    than as a labelled column waiting on an answer. Same pink
+                    as Manager (§13.1 reserves the hue for "a manager said
+                    this", and a second reviewer is one) — told apart by the
+                    role, not a fourth colour, same as the two narrative cards
+                    above (SR-11). -- */}
+              {secondManager ? (
+                <span className="flex items-center gap-1.5 type-label text-ink-muted">
+                  <span aria-hidden className="size-2 rounded-pill bg-lead" />
+                  {coLeadRoleLabel}
+                </span>
+              ) : null}
               {/* -- AMEND-5's Average, so this table says the same as the
                     detailed report and the printed sheet. Plain ink and no
                     swatch: self is cyan and manager is pink because those say
@@ -924,6 +941,25 @@ function VerdictTag({ block }: { block: NarrativeBlock }) {
   );
 }
 
+/**
+ * Is this question's own text just the group's generic bucket name again?
+ *
+ * Reported as confusing, and it was: the group label is a fixed, generic
+ * heading ("Areas for improvement") chosen at the CALL SITE, not read from
+ * the form — and where a section has exactly one question, its own text is
+ * very often close to that same phrase, because that IS what the question
+ * asks. Showing both then reads as a mistake, not as two facts.
+ *
+ * §17 forbids paraphrasing question text, so the fix is not to shorten or
+ * reword it — it is to stop saying it TWICE. Normalised (case, trailing
+ * punctuation) rather than exact, since "Areas for improvement" and "Areas
+ * for Improvement?" are the same collision with different capitalisation.
+ */
+function looksLikeGroupLabel(question: string, groupLabel: string): boolean {
+  const norm = (s: string) => s.trim().toLowerCase().replace(/[?.!]+$/, "");
+  return norm(question) === norm(groupLabel);
+}
+
 function Blocks({
   groups,
   empty,
@@ -961,16 +997,26 @@ function Blocks({
                    `whitespace-pre-wrap` because these are free-text answers and
                    somebody who wrote three lines meant three lines. -- */}
             <dl className="mt-2 space-y-2.5">
-              {g.items.map((b) => (
-                <div key={b.question} className="rounded-card bg-surface-mute/70 p-3">
-                  <dt className="font-sans text-body-sm italic leading-snug text-ink-muted">
-                    {b.question}
-                  </dt>
-                  <dd className="mt-1 whitespace-pre-wrap font-sans text-body font-medium leading-snug text-ink">
-                    {b.answer}
-                  </dd>
-                </div>
-              ))}
+              {g.items.map((b) => {
+                const redundant = looksLikeGroupLabel(b.question, g.label);
+                return (
+                  <div key={b.question} className="rounded-card bg-surface-mute/70 p-3">
+                    {redundant ? null : (
+                      <dt className="font-sans text-body-sm italic leading-snug text-ink-muted">
+                        {b.question}
+                      </dt>
+                    )}
+                    <dd
+                      className={cn(
+                        "whitespace-pre-wrap font-sans text-body font-medium leading-snug text-ink",
+                        redundant ? undefined : "mt-1",
+                      )}
+                    >
+                      {b.answer}
+                    </dd>
+                  </div>
+                );
+              })}
             </dl>
           </div>
         ))}
