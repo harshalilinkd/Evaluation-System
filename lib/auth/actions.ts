@@ -136,14 +136,23 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
 
   /* -- The address Google returns to is OURS, not Supabase's. Google redirects
         to Supabase (`/auth/v1/callback`, the one URI in the console) and
-        Supabase then redirects here with a code to exchange. This must be in
-        Supabase's Redirect URLs allow-list or it silently falls back to the
-        Site URL and the `next` is lost.
+        Supabase then redirects here with a code to exchange. This must be
+        BYTE-FOR-BYTE what is in Supabase's Redirect URLs allow-list, or it
+        silently falls back to the Site URL and the `next` is lost — and in
+        team-apps that Site URL belongs to a DIFFERENT app entirely (the CRM),
+        so a mismatch here does not just lose `next`, it lands somebody on the
+        wrong product altogether.
 
-        Built from the request's own origin rather than a configured URL, so
-        localhost, a preview deployment and production each come back to
-        themselves with nothing to set (P10-B). -- */
-  const origin = (await headers()).get("origin") ?? resolveAppUrl() ?? "";
+        `resolveAppUrl()` FIRST now, not the request's `Origin` header — that
+        was the reported bug. team-apps sits behind Vercel's own edge network,
+        and whatever exact string that layer puts in `Origin` is not
+        guaranteed to be the identical string typed into the allow-list by
+        hand; `resolveAppUrl()` is the one stable, predictable address this
+        deployment has (P10-B), and being predictable is what matters once
+        this has to match another system's list exactly. The `Origin` header
+        stays as the fallback, for local dev, where there is no Vercel URL to
+        resolve at all. -- */
+  const origin = resolveAppUrl() ?? (await headers()).get("origin") ?? "";
   const callback = new URL("/auth/callback", origin);
   if (next) callback.searchParams.set("next", next);
 
@@ -191,7 +200,11 @@ export async function signInWithGoogle(formData: FormData): Promise<void> {
 export async function linkGoogleIdentity(): Promise<void> {
   const supabase = await createClient();
 
-  const origin = (await headers()).get("origin") ?? resolveAppUrl() ?? "";
+  // `resolveAppUrl()` first — same reason `signInWithGoogle` takes it first
+  // now: it has to match Supabase's allow-list byte-for-byte, and that list
+  // is shared with other apps in team-apps, so a mismatched Origin header
+  // does not just fail quietly, it can land somebody on a different product.
+  const origin = resolveAppUrl() ?? (await headers()).get("origin") ?? "";
   const callback = new URL("/auth/callback", origin);
   callback.searchParams.set("next", "/profile");
 
