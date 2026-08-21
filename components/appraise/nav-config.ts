@@ -21,8 +21,6 @@ export type NavIcon =
   | "questions"
   | "departments"
   | "cycles"
-  | "increments"
-  | "people"
   | "settings";
 
 export type NavItem = {
@@ -128,7 +126,7 @@ export const NAV: readonly NavGroup[] = [
   {
     heading: "Admin",
     // AMENDED at the owner's explicit instruction. §0.2 fixes a menu label once
-    // created, so the three changes here are recorded rather than absorbed:
+    // created, so the changes here are recorded rather than absorbed:
     //
     //   "Question Bank"               → removed. It is now a TAB inside Form
     //                                   Builder, which is where somebody editing
@@ -139,19 +137,37 @@ export const NAV: readonly NavGroup[] = [
     //                                   separately. Departments are now a tab in
     //                                   Settings, beside Users — both are "who
     //                                   and what the company is made of".
-    //   "People"                      → "Team review". It was an empty
-    //                                   placeholder; it is now the staff roster
-    //                                   and the way into anybody's scorecard.
+    //   "People"                      → "Team review", then REMOVED from here
+    //                                   entirely — it is a tab in Settings now,
+    //                                   beside Recycle bin. Reasoning below.
+    //   "Evaluation Due"              → removed. It is a sub-screen reached from
+    //                                   Evaluation Cycles now. Reasoning below.
+    //   "Increments"                  → removed. Same move, same reasoning.
     //
-    // Both retired routes still resolve — they redirect to their new home rather
-    // than 404, because a bookmark going nowhere reads as a broken product.
+    // Every retired route still resolves — Team review and the two retired
+    // question/department paths REDIRECT to their new home rather than 404,
+    // because a bookmark going nowhere reads as a broken product. Evaluation
+    // Due and Increments are NOT redirects: they stay real, independent routes
+    // (`/admin/due`, `/admin/increments`) — only their SIDEBAR entry is gone.
+    // Both pages now render `CycleSectionNav` at their own top, so the three
+    // screens (the cycle list, what is due, the increment calendar) read as one
+    // section reachable from any of them, exactly the way the department
+    // mapping screen is reached from the Departments tab rather than listed
+    // beside it.
+    //
+    // The reasoning for pulling all three out: eight destinations under one
+    // heading asked HR to learn eight icons before finding anything, and three
+    // of the eight — Team review, Evaluation Due, Increments — are not jobs of
+    // their own so much as VIEWS onto people and cycles the other five already
+    // manage. Team review reads today's roster the same way Departments and
+    // Users already do, which is why it belongs beside them in Settings. Due and
+    // Increments are both about WHEN a cycle should happen, which is Evaluation
+    // Cycles' own question — so they are answered there, one click deeper.
     items: [
       { href: "/admin/form-builder", label: "Form Builder", icon: "questions", roles: ["HR_ADMIN", "MD"] },
       { href: ROUTES.adminCycles, label: "Evaluation Cycles", icon: "cycles", roles: ["HR_ADMIN", "MD"] },
       // §5's salary confinement: HR and the MD only. A HOD must not even see
       // that this screen exists, because its name says what it holds.
-      // P22: "This screen is how HR runs the year." First in Admin, and above
-      // Increments — an increment is one of the things it lists.
       /* -- Its own entry, directly under the staff one.
             §7 keeps the two modules apart, and the menu is where somebody first
             decides which they are in. Folding worker appraisals into "Evaluation
@@ -167,9 +183,6 @@ export const NAV: readonly NavGroup[] = [
         icon: "cycles",
         roles: ["HR_ADMIN", "MD"],
       },
-      { href: "/admin/due", label: "Evaluation Due", icon: "cycles", roles: ["HR_ADMIN", "MD"] },
-      { href: "/admin/increments", label: "Increments", icon: "increments", roles: ["HR_ADMIN", "MD"] },
-      { href: ROUTES.adminPeople, label: "Team review", icon: "people", roles: ["HR_ADMIN", "MD"] },
       { href: ROUTES.adminSettings, label: "Settings", icon: "settings", roles: ["HR_ADMIN", "MD"] },
     ],
   },
@@ -216,11 +229,26 @@ export function activeHref(
   return candidates[0]?.href ?? null;
 }
 
+/**
+ * Titles for pages that are reachable and real, but carry no sidebar entry of
+ * their own — Evaluation Due and Increments are sub-screens of Evaluation
+ * Cycles now (see the Admin group's own comment above), so `activeHref` finds
+ * nothing for them and the topbar would otherwise fall back to the generic
+ * "Appraisal" on two screens that plainly are not that.
+ */
+const EXTRA_TITLES: ReadonlyArray<{ prefix: string; label: string }> = [
+  { prefix: "/admin/due", label: "Evaluation Due" },
+  { prefix: "/admin/increments", label: "Increments" },
+];
+
 /** The page title for the topbar (§7), from the same config. */
 export function titleFor(pathname: string, roles: readonly AppRole[]): string {
   const href = activeHref(pathname, roles);
   const item = NAV.flatMap((g) => g.items).find((i) => i.href === href);
-  return item?.label ?? "Appraisal";
+  if (item) return item.label;
+
+  const extra = EXTRA_TITLES.find((e) => pathname === e.prefix || pathname.startsWith(`${e.prefix}/`));
+  return extra?.label ?? "Appraisal";
 }
 
 /**

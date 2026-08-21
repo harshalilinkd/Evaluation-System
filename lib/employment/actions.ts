@@ -113,6 +113,10 @@ export async function saveEmployment(
     } as Json,
   });
 
+  // /admin/people is a redirect now (Team review moved into Settings); the
+  // data it used to serve is read on /admin/settings, so that is what has to
+  // be revalidated for the tab to show the change without a manual refresh.
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/people");
   revalidatePath("/admin/increments");
   return { ok: true, data: { profileId: v.profileId } };
@@ -426,6 +430,10 @@ export async function addSalaryChange(
     } as Json,
   });
 
+  // /admin/people is a redirect now (Team review moved into Settings); the
+  // data it used to serve is read on /admin/settings, so that is what has to
+  // be revalidated for the tab to show the change without a manual refresh.
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/people");
   revalidatePath("/admin/increments");
   return { ok: true, data: { id: inserted.id } };
@@ -606,6 +614,7 @@ export async function commitEmploymentImport(
   const result = (data ?? {}) as { rows?: number; salary_rows?: number };
 
   revalidatePath("/admin/increments");
+  revalidatePath("/admin/settings");
   revalidatePath("/admin/people");
 
   return { ok: true, data: { rows: result.rows ?? 0, salaryRows: result.salary_rows ?? 0 } };

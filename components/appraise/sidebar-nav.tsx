@@ -13,8 +13,6 @@ import {
   ListChecks,
   Scale,
   Settings,
-  TrendingUp,
-  Users,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
@@ -37,8 +35,6 @@ export const ICONS: Record<NavIcon, LucideIcon> = {
   questions: ListChecks,
   departments: Building2,
   cycles: CalendarRange,
-  increments: TrendingUp,
-  people: Users,
   settings: Settings,
 };
 

@@ -8,6 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, HardHat, Rocket, Search, Upload } from "lucide-react";
 
 import { EmploymentImportDialog } from "@/app/(app)/admin/increments/import-panel";
+import { CycleSectionNav } from "@/components/appraise/cycle-section-nav";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
   KpiCard,
@@ -286,6 +287,8 @@ export function IncrementsClient({
     // The grid IS this screen, so it takes the viewport. `TableScreen` carries
     // the `data-full-bleed` that drops the shell's 1180px cap and its gutters.
     <TableScreen>
+      <CycleSectionNav />
+
       <ScreenHeader
         title="Increment calendar"
         subtitle={`${calendar.next90} ${calendar.next90 === 1 ? "increment is" : "increments are"} due in the next 90 days · overdue people first`}

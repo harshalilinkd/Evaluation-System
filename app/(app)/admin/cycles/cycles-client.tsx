@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 
+import { CycleSectionNav } from "@/components/appraise/cycle-section-nav";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { SegmentedProgress } from "@/components/appraise/segmented-bar";
 import { EmptyState } from "@/components/appraise/states";
@@ -328,6 +329,8 @@ export function CyclesClient({
       data-full-bleed
       className="flex h-[calc(100dvh-theme(spacing.topbar))] min-h-[26rem] flex-col overflow-hidden bg-surface"
     >
+      <CycleSectionNav />
+
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 border-b border-rule px-4 py-3 lg:px-6">
         <div className="min-w-0">
           <h1 className="text-display-sm font-semibold text-ink">
@@ -433,9 +436,13 @@ export function CyclesClient({
             <PeopleList
               title="Employees"
               empty="Nobody has been added yet."
-              rows={c.employees.map((e) => ({
-                key: e.name,
+              rows={c.employees.map((e, i) => ({
+                // Names are not unique (§0.2 forbids inventing an id here that
+                // does not exist on the row), so the index breaks a tie rather
+                // than two "Priya Sharma" rows colliding as one React key.
+                key: `${e.name}-${i}`,
                 name: e.name,
+                designation: e.designation,
                 done: e.submitted,
                 note: e.submitted ? "Submitted" : "Not yet",
               }))}
@@ -443,9 +450,10 @@ export function CyclesClient({
             <PeopleList
               title="Managers"
               empty="Nobody has a manager assigned."
-              rows={c.managerRows.map((m) => ({
-                key: m.name,
+              rows={c.managerRows.map((m, i) => ({
+                key: `${m.name}-${i}`,
                 name: m.name,
+                designation: m.designation,
                 done: m.done === m.total,
                 /* -- The FRACTION, not "pending". A HOD rating six people can
                       be finished for four, and one word would say the same
@@ -557,7 +565,7 @@ function PeopleList({
   empty,
 }: {
   title: string;
-  rows: Array<{ key: string; name: string; done: boolean; note: string }>;
+  rows: Array<{ key: string; name: string; designation: string | null; done: boolean; note: string }>;
   empty: string;
 }) {
   return (
@@ -569,18 +577,30 @@ function PeopleList({
       {rows.length === 0 ? (
         <p className="mt-2 font-sans text-body-sm text-ink-muted">{empty}</p>
       ) : (
-        <ul className="mt-2 space-y-1.5">
+        <ul className="mt-2 space-y-2">
           {rows.map((r) => (
-            <li key={r.key} className="flex items-baseline gap-2">
+            <li key={r.key} className="flex items-start gap-2">
               {r.done ? (
-                <Check aria-hidden className="size-3.5 shrink-0 translate-y-0.5 text-success" />
+                <Check aria-hidden className="mt-0.5 size-3.5 shrink-0 text-success" />
               ) : (
-                <span aria-hidden className="w-3.5 shrink-0 text-center text-ink-muted">
+                <span aria-hidden className="mt-0.5 w-3.5 shrink-0 text-center text-ink-muted">
                   –
                 </span>
               )}
-              <span className="min-w-0 flex-1 truncate font-sans text-body-sm text-ink">
-                {r.name}
+              {/* -- NAME AND DESIGNATION, stacked. A row used to be a name
+                    alone, and a cycle with two "Priya Sharma" or an unresolved
+                    second reviewer had nothing to tell them apart by. The
+                    designation is what a person actually goes by on a roster —
+                    absent for nobody who has one, and simply not shown for
+                    somebody whose record has none rather than printing an
+                    em dash into a crowded row. -- */}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-sans text-body-sm text-ink">{r.name}</span>
+                {r.designation ? (
+                  <span className="block truncate font-sans text-body-xs text-ink-muted">
+                    {r.designation}
+                  </span>
+                ) : null}
               </span>
               <span
                 className={cn(

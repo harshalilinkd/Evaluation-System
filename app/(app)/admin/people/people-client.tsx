@@ -345,12 +345,16 @@ export function PeopleClient({
   );
 
   return (
-    // The grid IS this screen, so it takes the viewport — the same shape as the
-    // question bank and the people list in Settings. `data-full-bleed` drops
-    // the shell's 1180px cap and its gutters (the :has() rule in globals.css).
+    // The grid IS this screen, so it takes the viewport — the same shape as
+    // the question bank and Settings › Users, which this now lives beside.
+    // `data-full-bleed` drops the shell's 1180px cap and its gutters (the
+    // :has() rule in globals.css). The `-5rem` matches Users' own calc: this
+    // renders under Settings' TabsList now, not straight below the topbar, so
+    // it has to give back the height that strip takes — Users' comment
+    // explains the same subtraction for the same reason.
     <div
       data-full-bleed
-      className="flex h-[calc(100dvh-theme(spacing.topbar))] min-h-[26rem] flex-col overflow-hidden bg-surface"
+      className="flex h-[calc(100dvh-theme(spacing.topbar)-5rem-var(--bottom-nav-h))] min-h-[26rem] flex-col overflow-hidden bg-surface"
     >
       {/* ---------- Header ---------- */}
       <div className="flex shrink-0 flex-wrap items-end justify-between gap-4 border-b border-rule px-4 py-3 lg:px-6">
@@ -395,7 +399,7 @@ export function PeopleClient({
                 return (
                   <Link
                     key={c.id}
-                    href={`/admin/people?cycle=${c.id}`}
+                    href={`/admin/settings?tab=team-review&cycle=${c.id}`}
                     aria-current={current ? "true" : undefined}
                     title={c.periodLabel}
                     className={cn(

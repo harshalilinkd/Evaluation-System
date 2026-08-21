@@ -1,4 +1,4 @@
-/** /admin/settings — General and Users. */
+/** /admin/settings — General, Users, evaluation periods, messages, departments, team review and the recycle bin. */
 
 import type { Metadata } from "next";
 
@@ -6,6 +6,7 @@ import {
   DepartmentsClient,
   type DepartmentRow,
 } from "@/app/(app)/admin/departments/departments-client";
+import { PeopleClient, type PersonRow as TeamReviewRow } from "@/app/(app)/admin/people/people-client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScheduleTab } from "@/app/(app)/admin/settings/schedule-tab";
 import { getEvaluationSchedule } from "@/lib/due/schedule";
@@ -19,6 +20,7 @@ import { NotificationsTab } from "@/app/(app)/admin/settings/notifications-tab";
 import { BinnedRounds } from "@/app/(app)/admin/settings/binned-rounds";
 import { RecycleBinTab } from "@/app/(app)/admin/settings/recycle-bin-tab";
 import { listBinnedCycles } from "@/lib/cycles/queries";
+import { managerFigure, managerOverallByEvaluation } from "@/lib/evaluations/manager-overall";
 import { getMessageLog, getOutboundState } from "@/lib/notify/settings";
 import { listTemplates } from "@/lib/notify/template-actions";
 import { requireRole } from "@/lib/auth/guards";
@@ -27,9 +29,25 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Settings" };
 
-const TABS = ["general", "users", "departments", "messages", "recycle-bin"] as const;
+// "periods" was missing here despite having its own trigger and panel below —
+// an unknown `?tab=periods` silently fell back to Users. "team-review" is new:
+// Team review moved in from the sidebar, beside Recycle bin (both are "look at
+// today's roster" screens).
+const TABS = [
+  "general",
+  "users",
+  "periods",
+  "team-review",
+  "messages",
+  "departments",
+  "recycle-bin",
+] as const;
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; find?: string }> }) {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; find?: string; cycle?: string }>;
+}) {
   // §9: the guard is the first statement. A non-HR user is redirected before
   // any markup is produced, never shown and then hidden.
   const { profile } = await requireRole(ADMIN_ROLES);
@@ -210,6 +228,79 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     questionCount: deptQuestionCount.get(d.id) ?? 0,
   }));
 
+  /* -- The Team review tab. Its own queries, kept apart from the ones above —
+        the same call Departments already makes (`allDepartments` does not
+        reuse the Users tab's `departments`): this list is read for a different
+        shape than the roster editor's, and the department name lookup here
+        deliberately carries every department, retired ones included, so
+        somebody assigned to one still shows a name instead of a blank. This
+        was ONE CYCLE FRAMING THE SCREEN in its own right (`/admin/people`'s own
+        history explains why: an Evaluation round and an Increment round are two
+        different exercises, and §11 keeps a score inside the cycle it was given
+        in, so this switches between them rather than averaging both). -- */
+  const { data: allTeamCycles } = await supabase
+    .from("evaluation_cycles")
+    .select("id, name, period_label, status")
+    .in("status", ["ACTIVE", "CLOSED"])
+    .is("deleted_at", null)
+    .order("starts_on", { ascending: false });
+
+  const teamCycles = allTeamCycles ?? [];
+  const teamCycle =
+    (params.cycle ? teamCycles.find((c) => c.id === params.cycle) : null) ?? teamCycles[0] ?? null;
+
+  const [{ data: teamPeople }, { data: teamDepartments }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, employee_code, designation, department_id, reports_to, is_active, track")
+      .order("full_name"),
+    supabase.from("departments").select("id, name").order("name"),
+  ]);
+
+  // Every read here goes through the AUTHENTICATED client, so RLS decides what
+  // this person may see (§9) — the role guard above is the clean exit, not the
+  // protection (P16-9).
+  const { data: teamEvaluations } = teamCycle
+    ? await supabase
+        .from("evaluations")
+        .select("id, evaluatee_id, status, self_overall, lead_overall, final_overall, excluded_at")
+        .eq("cycle_id", teamCycle.id)
+    : { data: [] };
+
+  const teamManagerOveralls = await managerOverallByEvaluation(
+    supabase,
+    (teamEvaluations ?? []).map((e) => e.id),
+  );
+
+  const teamDepartmentName = new Map((teamDepartments ?? []).map((d) => [d.id, d.name]));
+  const teamLeadName = new Map((teamPeople ?? []).map((p) => [p.id, p.full_name]));
+  const teamByPerson = new Map((teamEvaluations ?? []).map((e) => [e.evaluatee_id, e]));
+
+  const teamRows: TeamReviewRow[] = (teamPeople ?? []).map((p) => {
+    const evaluation = teamByPerson.get(p.id) ?? null;
+    return {
+      id: p.id,
+      fullName: p.full_name,
+      employeeCode: p.employee_code,
+      designation: p.designation,
+      departmentName: p.department_id ? (teamDepartmentName.get(p.department_id) ?? null) : null,
+      leadName: p.reports_to ? (teamLeadName.get(p.reports_to) ?? null) : null,
+      isActive: p.is_active,
+      track: p.track,
+      // A withdrawn participant (P10-6) is not "in progress" — the
+      // organisation stopped asking. Reporting it as a status would put them
+      // in the chase list for a form nobody is waiting on.
+      status: evaluation?.excluded_at ? null : (evaluation?.status ?? null),
+      excluded: Boolean(evaluation?.excluded_at),
+      self: evaluation?.self_overall ?? null,
+      // The MANAGER figure (0087), so a designer's column is both of theirs.
+      lead: evaluation
+        ? managerFigure(evaluation.id, evaluation.lead_overall, teamManagerOveralls)
+        : null,
+      final: evaluation?.final_overall ?? null,
+    };
+  });
+
   return (
     <Tabs defaultValue={activeTab} className="space-y-6">
       <TabsList className="bg-surface-mute">
@@ -227,6 +318,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </TabsTrigger>
         <TabsTrigger value="departments" className="font-sans text-body">
           Departments
+        </TabsTrigger>
+        {/* -- MOVED IN FROM THE SIDEBAR, at the owner's instruction, beside
+              Recycle bin: both are "look at what exists today" screens, the
+              same reasoning that put Departments beside Users. -- */}
+        <TabsTrigger value="team-review" className="font-sans text-body">
+          Team review
         </TabsTrigger>
         <TabsTrigger value="recycle-bin" className="font-sans text-body">
           Recycle bin
@@ -257,6 +354,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <TabsContent value="departments">
         <DepartmentsClient departments={departmentRows} />
+      </TabsContent>
+
+      {/* The staff roster, and the way into a scorecard. Its own tab rather
+          than folded into Users: Users edits who exists, this reads how they
+          are doing — two different jobs that happen to share a table. */}
+      <TabsContent value="team-review">
+        <PeopleClient
+          rows={teamRows}
+          departments={(teamDepartments ?? []).map((d) => d.name)}
+          cycleLabel={teamCycle ? `${teamCycle.name} · ${teamCycle.period_label}` : null}
+          cycles={teamCycles.map((c) => ({ id: c.id, name: c.name, periodLabel: c.period_label }))}
+          cycleId={teamCycle?.id ?? null}
+        />
       </TabsContent>
 
       {/* 0032: deleting a cycle marks the row rather than removing it, because

@@ -9,6 +9,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import Link from "next/link";
 import { AlertTriangle, ArrowUpRight, RotateCcw, Rocket, Search, Send } from "lucide-react";
 
+import { CycleSectionNav } from "@/components/appraise/cycle-section-nav";
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
   KpiCard,
@@ -354,6 +355,8 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
 
   return (
     <TableScreen>
+      <CycleSectionNav />
+
       <ScreenHeader
         title="Evaluation Due"
         subtitle={
@@ -635,7 +638,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                   one thing the screen is guaranteed never to show. It sat under
                   a heading reading "Nothing is due", which is where somebody
                   goes looking for why. -- */
-            body="A new joiner appears here a month after they start, and again at six months. After an increment, again at three and nine months. Office team only — the production team takes one increment a year and is appraised on its own rounds. Increments live under Increments."
+            body="A new joiner appears here a month after they start, and again at six months. After an increment, again at three and nine months. Office team only — the production team takes one increment a year and is appraised on its own rounds. Increments have their own screen, above this list."
           />
         }
         status={

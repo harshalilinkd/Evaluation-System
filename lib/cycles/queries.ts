@@ -36,11 +36,13 @@ export type CycleListRow = {
    * several. Somebody deciding whether to launch, or working out who to chase,
    * needs both numbers.
    *
-   * DISTINCT, and counted from `lead_id` on the evaluations themselves rather
-   * than from `profiles.reports_to`. The evaluation carries the manager it was
-   * launched with (P3-6) precisely so a reorganisation mid-cycle does not
-   * silently reassign an in-flight review — so this counts who is actually
-   * rating, not who would be if the cycle launched today.
+   * DISTINCT, and counted from `lead_id` AND `co_lead_id` on the evaluations
+   * themselves rather than from `profiles.reports_to`. The evaluation carries
+   * the manager it was launched with (P3-6) precisely so a reorganisation
+   * mid-cycle does not silently reassign an in-flight review — so this counts
+   * who is actually rating, not who would be if the cycle launched today. A
+   * second reviewer (0083) is exactly as much a manager rating in this cycle
+   * as the reporting one is, so they are counted here too.
    *
    * A participant with no manager contributes nothing to it. That is the state
    * a launch refuses, and counting a null as a manager would report a cycle as
@@ -63,7 +65,7 @@ export type CycleListRow = {
    * PENDING FIRST in both lists. They are read as a chase list, so they are
    * ordered the way somebody would work them (N1-7's reasoning).
    */
-  employees: Array<{ name: string; submitted: boolean }>;
+  employees: Array<{ name: string; designation: string | null; submitted: boolean }>;
   /**
    * Each manager once, with how far through their own reports they are.
    *
@@ -71,7 +73,7 @@ export type CycleListRow = {
    * and "pending" would be as true of somebody who has done five as of
    * somebody who has done none. The fraction is what says who to chase.
    */
-  managerRows: Array<{ name: string; done: number; total: number }>;
+  managerRows: Array<{ name: string; designation: string | null; done: number; total: number }>;
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
   /**
@@ -249,14 +251,27 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
       set.add(row.lead_id);
       managers.set(row.cycle_id, set);
     }
+    // The second reviewer (0083) is a manager too — SR-18 already fixed the
+    // per-person chase tally below to count both; this distinct-manager count
+    // had the same gap and was missed at the time.
+    if (row.co_lead_id) {
+      const set = managers.get(row.cycle_id) ?? new Set<string>();
+      set.add(row.co_lead_id);
+      managers.set(row.cycle_id, set);
+    }
   }
 
-  /* -- WHO, by name.
+  /* -- WHO, by name and designation.
         One round trip for every person named in any cycle — employees and
         managers together, since both are rows in `profiles` and asking twice
         would be two queries for one answer.
 
-        NOT an embedded join. `evaluations` has two foreign keys into
+        THREE ids per row now, not two. `co_lead_id` (0083's second reviewer)
+        was missing here, so every co-lead resolved to "Unknown" below — their
+        id was tallied into `managerTally` from `evaluations` directly, but
+        their profile was never among the ones fetched for a name.
+
+        NOT an embedded join. `evaluations` has three foreign keys into
         `profiles`, and a select string that has to disambiguate them is one
         typo away from silently resolving the wrong one — the same reason
         `listBinnedCycles` and `loadCycleParticipants` both read them
@@ -264,16 +279,20 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
   const namedIds = [
     ...new Set(
       (evaluations ?? [])
-        .flatMap((r) => [r.evaluatee_id, r.lead_id])
+        .flatMap((r) => [r.evaluatee_id, r.lead_id, r.co_lead_id])
         .filter((id): id is string => Boolean(id)),
     ),
   ];
   const { data: named } = namedIds.length
-    ? await supabase.from("profiles").select("id, full_name").in("id", namedIds)
+    ? await supabase.from("profiles").select("id, full_name, designation").in("id", namedIds)
     : { data: [] };
   const nameOf = new Map((named ?? []).map((p) => [p.id, p.full_name] as const));
+  const designationOf = new Map((named ?? []).map((p) => [p.id, p.designation] as const));
 
-  const employeesIn = new Map<string, Array<{ name: string; submitted: boolean }>>();
+  const employeesIn = new Map<
+    string,
+    Array<{ name: string; designation: string | null; submitted: boolean }>
+  >();
   /* Keyed by manager id so one HOD is one row however many people they rate. */
   const managerTally = new Map<string, Map<string, { done: number; total: number }>>();
 
@@ -281,6 +300,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     const list = employeesIn.get(row.cycle_id) ?? [];
     list.push({
       name: nameOf.get(row.evaluatee_id) ?? "Unknown",
+      designation: designationOf.get(row.evaluatee_id) ?? null,
       submitted: Boolean(row.self_submitted_at),
     });
     employeesIn.set(row.cycle_id, list);
@@ -362,7 +382,12 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         managers: managers.get(c.id)?.size ?? 0,
         employees: employeesIn.get(c.id) ?? [],
         managerRows: [...(managerTally.get(c.id)?.entries() ?? [])]
-          .map(([id, t]) => ({ name: nameOf.get(id) ?? "Unknown", done: t.done, total: t.total }))
+          .map(([id, t]) => ({
+            name: nameOf.get(id) ?? "Unknown",
+            designation: designationOf.get(id) ?? null,
+            done: t.done,
+            total: t.total,
+          }))
           // Furthest behind first, then alphabetical — the chase order.
           .sort(
             (a, b) => a.done / a.total - b.done / b.total || a.name.localeCompare(b.name),
