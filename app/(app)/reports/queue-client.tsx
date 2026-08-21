@@ -85,7 +85,17 @@ const TILE_STATUSES: Record<TileKey, string[]> = {
   closed: ["CLOSED"],
 };
 
-export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: boolean }) {
+export function ReportsQueueClient({
+  queue,
+  isHr,
+  extraChromeRem,
+}: {
+  queue: ReportQueue;
+  isHr: boolean;
+  /** Set once Reports gained its own Queue/Scorecard tab strip, so this
+   *  screen's own height calc gives that strip's height back. */
+  extraChromeRem?: number;
+}) {
   const [cycle, setCycle] = React.useState(ANY);
   /* -- TWO TABS, at the owner's instruction, and so no "both".
         One of the two is always active, which means the default HIDES the other
@@ -394,7 +404,7 @@ export function ReportsQueueClient({ queue, isHr }: { queue: ReportQueue; isHr: 
         figure moves into the subtitle where it belongs: it is a sentence about
         the queue, not a statistic of its own. -- */
   return (
-    <TableScreen>
+    <TableScreen extraChromeRem={extraChromeRem}>
       <ScreenHeader
         title="Reports"
         /* -- "Nothing is waiting for review" was true of HR's own inbox and

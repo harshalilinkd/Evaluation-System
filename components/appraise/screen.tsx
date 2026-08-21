@@ -35,9 +35,17 @@ import { cn } from "@/lib/utils";
 export function TableScreen({
   children,
   className,
+  extraChromeRem,
 }: {
   children: React.ReactNode;
   className?: string;
+  /**
+   * Rem height of anything rendered ABOVE this element that also has to come
+   * out of the viewport calc — Reports' own tab strip, for one. Omit it and
+   * nothing changes: the CSS variable this sets defaults to 0 in
+   * globals.css, so every existing caller is unaffected.
+   */
+  extraChromeRem?: number;
 }) {
   return (
     <div
@@ -54,6 +62,7 @@ export function TableScreen({
             its own. `--bottom-nav-h` is 0 above `lg`, so desktop is
             unchanged. -- */
       className={cn("table-screen flex min-h-[26rem] flex-col overflow-hidden bg-surface", className)}
+      style={extraChromeRem ? ({ "--extra-chrome-h": `${extraChromeRem}rem` } as React.CSSProperties) : undefined}
     >
       {children}
     </div>

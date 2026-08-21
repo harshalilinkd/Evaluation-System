@@ -575,7 +575,14 @@
      an arbitrary-value class because it subtracts a custom property, and
      `theme()` only resolves in CSS Tailwind processes. */
   .table-screen {
-    height: calc(100dvh - theme(spacing.topbar) - var(--bottom-nav-h));
+    /* --extra-chrome-h defaults to 0 and is otherwise unused — TableScreen
+       sets it inline when something else (Reports' own tab strip) sits above
+       this element and has to be given its height back, the same reasoning
+       Settings > Users already applies with a hardcoded 5rem (users-tab.tsx).
+       A CSS variable rather than a second Tailwind class: it overrides at the
+       element itself, with no cascade order to get wrong against a class the
+       compiled stylesheet may or may not place after this one. */
+    height: calc(100dvh - theme(spacing.topbar) - var(--bottom-nav-h) - var(--extra-chrome-h, 0px));
   }
 
   .app-main:has([data-full-bleed]) {

@@ -60,8 +60,28 @@ export const NAV: readonly NavGroup[] = [
     heading: null,
     items: [
       { href: ROUTES.dashboard, label: "Dashboard", icon: "dashboard", roles: [] },
-      // Second, at the owner's instruction: the dashboard says how the company
-      // is doing and this says how you are, so they read as a pair.
+      /* -- SECOND, at the owner's instruction — moved up from its old spot
+            after Production Team. §5's blindness invariant makes this the
+            ONLY screen where both sides of an evaluation appear together, and
+            §9 gives that to HR and the MD alone, so a HOD must not see the
+            entry, any more than they see Increments. `navFor` filters it on
+            that, same as always; only the POSITION changed.
+
+            Scorecard, below, now lives as a tab inside this screen for
+            whoever can see it — see the exclusion in `navFor` and its own
+            comment for why the standalone entry still shows for everyone
+            else. -- */
+      {
+        href: "/reports",
+        label: "Reports",
+        icon: "review",
+        roles: ["HR_ADMIN", "MD"],
+      },
+      // Was second, at the owner's instruction ("the dashboard says how the
+      // company is doing and this says how you are, so they read as a
+      // pair") — Reports took that spot for HR/MD, who reach this same
+      // screen through Reports' own tab now (see navFor's exclusion below).
+      // Unchanged for everyone else, including its position.
       { href: ROUTES.scorecard, label: "Scorecard", icon: "scorecard", roles: [] },
       { href: ROUTES.myEvaluation, label: "My Evaluation", icon: "myEvaluation", roles: [] },
       {
@@ -107,19 +127,6 @@ export const NAV: readonly NavGroup[] = [
         label: "Production Team",
         icon: "team",
         roles: ["SUPERVISOR"],
-      },
-      // AMEND-3 item 9 retired the collision view and left this slot empty,
-      // noting its replacement would be P20's. This is it.
-      //
-      // §5's blindness invariant makes /reports the ONLY screen in the product
-      // where both sides of an evaluation appear together, and §9 gives that to
-      // HR and the MD alone — so a HOD must not see the entry, any more than
-      // they see Increments.
-      {
-        href: "/reports",
-        label: "Reports",
-        icon: "review",
-        roles: ["HR_ADMIN", "MD"],
       },
     ],
   },
@@ -197,17 +204,36 @@ export const NAV: readonly NavGroup[] = [
  * caller behaves exactly as it did.
  */
 export function navFor(roles: readonly AppRole[], leadsTeam = false): NavGroup[] {
+  /* -- SCORECARD, HIDDEN FOR HR_ADMIN/MD, at the owner's explicit instruction.
+        It moved inside Reports as a tab for them, so the standalone sidebar
+        entry would be a second door to the same room. Everyone else keeps it
+        exactly as it was — §9 makes it every employee's own to see, not a
+        privilege, and NAV-2 already reversed pulling it from the sidebar once
+        before. The ROUTE itself is untouched and still open to everyone
+        (requireAuth, not requireRole) — an HR admin following a link into it
+        from elsewhere still lands there; only the always-visible shortcut is
+        gone for them.
+
+        Named explicitly rather than a general "hide for role" flag on the
+        item, same reasoning as `leadsTeam` below: this is the one route in
+        the product excluded by role instead of included by it, and a general
+        mechanism for one case invites the next person to reach for it for
+        something that should have been asked about first. -- */
+  const scorecardMovedIntoReports = roles.includes("HR_ADMIN") || roles.includes("MD");
+
   return NAV.map((group) => ({
     ...group,
     items: group.items.filter(
       (item) =>
-        item.roles.length === 0 ||
-        item.roles.some((role) => roles.includes(role)) ||
-        // The one item a relationship can unlock. Named explicitly rather than
-        // flagged on the item: it is the only route in the product whose access
-        // is decided by anything other than a role, and a general mechanism for
-        // one case invites the next person to use it for something else.
-        (leadsTeam && item.href === ROUTES.team),
+        (item.roles.length === 0 ||
+          item.roles.some((role) => roles.includes(role)) ||
+          // The one item a relationship can unlock. Named explicitly rather
+          // than flagged on the item: it is the only route in the product
+          // whose access is decided by anything other than a role, and a
+          // general mechanism for one case invites the next person to use it
+          // for something else.
+          (leadsTeam && item.href === ROUTES.team)) &&
+        !(scorecardMovedIntoReports && item.href === ROUTES.scorecard),
     ),
   })).filter((group) => group.items.length > 0);
 }
@@ -239,6 +265,10 @@ export function activeHref(
 const EXTRA_TITLES: ReadonlyArray<{ prefix: string; label: string }> = [
   { prefix: "/admin/due", label: "Evaluation Due" },
   { prefix: "/admin/increments", label: "Increments" },
+  // Only reached for HR_ADMIN/MD, who `navFor` excludes it for above — for
+  // anyone else the ordinary NAV lookup already finds it and this line is
+  // never consulted.
+  { prefix: "/scorecard", label: "Scorecard" },
 ];
 
 /** The page title for the topbar (§7), from the same config. */
