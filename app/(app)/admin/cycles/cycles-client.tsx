@@ -218,7 +218,22 @@ export function CyclesClient({
         header: "Manager in",
         size: 84,
         meta: { align: "right" },
-        cell: ({ row }) => <Count value={row.original.progress.lead} of={row.original.participants} />,
+        /* -- COUNTS A PERSON ONLY ONCE EVERY MANAGER ASKED HAS ANSWERED.
+              Reported as a contradiction: this cell read "0/1" while the
+              detail dialog's own manager list showed one of the two — a
+              second reviewer's cycle — sitting at "1 of 1". Both numbers were
+              right (`reachedLead` requires the REPORTING lead AND a second
+              reviewer, where one is assigned, before counting the person as
+              in), the confusion was that nothing said so. A tooltip here,
+              since a hover is what the grid gets; the dialog gets its own
+              sentence below, since nothing there can be hovered on a phone. -- */
+        cell: ({ row }) => (
+          <Count
+            value={row.original.progress.lead}
+            of={row.original.participants}
+            title="Counts a person once every manager asked has submitted — for somebody with a second reviewer, that is both, not just one."
+          />
+        ),
       },
       {
         id: "final",
@@ -432,35 +447,55 @@ export function CyclesClient({
               lead-facing screen the same list would be a leak, which is why the
               query's own comment says so. -- */
         rowDetail={(c) => (
-          <div className="grid gap-5 sm:grid-cols-2">
-            <PeopleList
-              title="Employees"
-              empty="Nobody has been added yet."
-              rows={c.employees.map((e, i) => ({
-                // Names are not unique (§0.2 forbids inventing an id here that
-                // does not exist on the row), so the index breaks a tie rather
-                // than two "Priya Sharma" rows colliding as one React key.
-                key: `${e.name}-${i}`,
-                name: e.name,
-                designation: e.designation,
-                done: e.submitted,
-                note: e.submitted ? "Submitted" : "Not yet",
-              }))}
-            />
-            <PeopleList
-              title="Managers"
-              empty="Nobody has a manager assigned."
-              rows={c.managerRows.map((m, i) => ({
-                key: `${m.name}-${i}`,
-                name: m.name,
-                designation: m.designation,
-                done: m.done === m.total,
-                /* -- The FRACTION, not "pending". A HOD rating six people can
-                      be finished for four, and one word would say the same
-                      thing about them as about somebody who has done none. -- */
-                note: `${m.done} of ${m.total}`,
-              }))}
-            />
+          <div className="space-y-3">
+            {/* -- WHY "MANAGER IN" ABOVE CAN READ LOWER THAN THE LIST BELOW.
+                  More manager rows than employees means at least one person
+                  here has a second reviewer (0083) — so "Manager in" up top
+                  counts them only once BOTH have submitted, and one manager
+                  being fully done, as below, is not the same as both. Shown
+                  only when it is actually true of this cycle, so a cycle with
+                  one manager per person — most of them — carries no extra
+                  line to read past. -- */}
+            {c.managerRows.length > c.employees.length ? (
+              <p className="rounded-control bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
+                At least one person here has a second reviewer. The Manager in
+                figure above counts them once{" "}
+                <span className="font-medium text-ink">both</span> of their
+                managers have submitted — not as soon as the first one has.
+              </p>
+            ) : null}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <PeopleList
+                title="Employees"
+                empty="Nobody has been added yet."
+                rows={c.employees.map((e, i) => ({
+                  // Names are not unique (§0.2 forbids inventing an id here
+                  // that does not exist on the row), so the index breaks a
+                  // tie rather than two "Priya Sharma" rows colliding as one
+                  // React key.
+                  key: `${e.name}-${i}`,
+                  name: e.name,
+                  designation: e.designation,
+                  done: e.submitted,
+                  note: e.submitted ? "Submitted" : "Not yet",
+                }))}
+              />
+              <PeopleList
+                title="Managers"
+                empty="Nobody has a manager assigned."
+                rows={c.managerRows.map((m, i) => ({
+                  key: `${m.name}-${i}`,
+                  name: m.name,
+                  designation: m.designation,
+                  done: m.done === m.total,
+                  /* -- The FRACTION, not "pending". A HOD rating six people
+                        can be finished for four, and one word would say the
+                        same thing about them as about somebody who has done
+                        none. -- */
+                  note: `${m.done} of ${m.total}`,
+                }))}
+              />
+            </div>
           </div>
         )}
         rowActions={(c) => (
@@ -530,9 +565,9 @@ export function CyclesClient({
 }
 
 /** A count against its total, so "0" is legible as "0 of 12" rather than bare. */
-function Count({ value, of }: { value: number; of: number }) {
+function Count({ value, of, title }: { value: number; of: number; title?: string }) {
   return (
-    <span className="tabular text-body-sm">
+    <span className="tabular text-body-sm" title={title}>
       <span className={value > 0 ? "text-ink" : "text-ink-muted"}>{value}</span>
       <span className="text-ink-muted">/{of}</span>
     </span>
