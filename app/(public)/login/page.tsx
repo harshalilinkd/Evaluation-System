@@ -20,11 +20,23 @@ const ERRORS: Record<string, string> = {
   // cause is the difference between a five-minute fix and an afternoon.
   /* -- Google returned somebody we do not know, or the exchange failed. The
         same sentence either way, on purpose: P6-7 forbids a login page that
-        tells you whether an address has an account. -- */
+        tells you whether an address has an account.
+
+        REWORDED to cover the dual-email case (P8, AMEND-4): an account is
+        registered under ONE email, and Google sign-in only recognises THAT
+        one automatically — a second address (most often the official one)
+        has to be linked once from /profile before Google works for it too.
+        Reported as "not able to login" for exactly this shape: a real
+        account, a real password, Google tried with the OTHER address.
+
+        Still says nothing about whether the SPECIFIC address tried has an
+        account — it states the general rule (§9's dual-email design), not a
+        fact about this one address, so it does not become the staff
+        directory P6-7 forbids. -- */
   google_unavailable:
     "Google sign-in is not switched on yet. Use your email and password, or ask HR.",
   no_account:
-    "That Google account is not set up here. Accounts are created by HR — ask them to add you, or sign in with your email and password.",
+    "That Google account is not recognised here. If you already have an account under a different email, sign in below with your password, then link this Google account from your profile — after that both will work. Otherwise, ask HR to add you.",
   no_profile:
     "Your sign-in worked, but this account has no profile record yet. Ask HR to add you, or — if you are setting the system up — apply the database migrations and create the account again.",
 };
