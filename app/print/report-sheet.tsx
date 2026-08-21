@@ -41,6 +41,23 @@ function average(self: number | null, lead: number | null): string {
 }
 
 /**
+ * "August 2026" reads as ONE month; an increment round actually looks back
+ * twelve, at the owner's instruction — the review covers the year since the
+ * last one, not the month it happens to land in. Reformats to
+ * "August 2025-2026" when the label parses as a month and a year, which is
+ * what the wizard always generates it as (thisMonthLabel(), wizard-client.tsx)
+ * — and leaves anything else exactly as typed rather than guess at a format
+ * HR may have overwritten it with.
+ */
+function incrementPeriod(period: string): string {
+  const match = /^([A-Za-z]+)\s+(\d{4})$/.exec(period.trim());
+  if (!match) return period;
+  const [, month, yearText] = match;
+  const year = Number(yearText);
+  return `${month} ${year - 1}-${year}`;
+}
+
+/**
  * What the managers TOGETHER say, where a person has two (0083).
  *
  * The Average column then averages this against Self, so AMEND-5's definition
@@ -100,17 +117,13 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
       </header>
 
       {/* ---------- Band 1 ---------- */}
-      {/* -- "EMPLOYEE & CYCLE", at the owner's instruction after asking whether
-            "Employee details" still fitted.
-
-            It did not, and the reason is worth keeping: FIX-37 moved the cycle,
-            period and type into this block, so a heading naming only the
-            employee would sit over three rows it does not describe. That is the
-            same class of small untruth as a column labelled with the wrong unit
-            — cheap to fix now, and the sort of thing nobody questions once it
-            has been printed a hundred times. -- */}
+      {/* -- "EMPLOYEE EVALUATION CYCLE", renamed again at the owner's
+            instruction from "Employee & cycle" — which itself replaced
+            "Employee details" once FIX-37 moved the cycle, period and type
+            into this same block, so a heading naming only the employee sat
+            over three rows it does not describe. -- */}
       <section className="print-block">
-        <h2>Employee &amp; cycle</h2>
+        <h2>Employee Evaluation Cycle</h2>
         <dl className="print-meta">
           <div><dt>Name</dt><dd>{header.employeeName}</dd></div>
           <div><dt>Employee code</dt><dd>{header.employeeCode ?? "—"}</dd></div>
@@ -153,7 +166,22 @@ export function ReportSheet({ report }: { report: EvaluationReport }) {
                 three separate facts that were being run together with a
                 middle dot. -- */}
           <div><dt>Cycle</dt><dd>{header.cycleName || "—"}</dd></div>
-          <div><dt>Period</dt><dd>{header.period || "—"}</dd></div>
+          {/* -- A ONE-MONTH LABEL ON A TWELVE-MONTH REVIEW, at the owner's
+                instruction: an increment round covers the year since the last
+                one, not the month it happens to land in, so "August 2026"
+                prints as "August 2025-2026" — the range this round actually
+                looks back over. Evaluation cycles are unchanged: they carry
+                no such year-long framing. -- */}
+          <div>
+            <dt>Period</dt>
+            <dd>
+              {header.period
+                ? header.cycleType === "Increment"
+                  ? incrementPeriod(header.period)
+                  : header.period
+                : "—"}
+            </dd>
+          </div>
           <div><dt>Cycle type</dt><dd>{header.cycleType ? `${header.cycleType}` : "—"}</dd></div>
         </dl>
 
