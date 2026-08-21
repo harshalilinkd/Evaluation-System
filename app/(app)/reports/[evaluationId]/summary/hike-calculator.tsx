@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { MoneyInput } from "@/components/appraise/money-input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   annualisedPct,
   hikeAmount,
@@ -68,9 +67,6 @@ export function HikeCalculator({
     const p = hikePct(current, existing === null ? null : Number(existing));
     return p === null ? "" : String(p);
   });
-  const [note, setNote] = useState<string>(
-    (isHr ? band.review?.hr_justification : band.review?.md_remarks) ?? "",
-  );
   const [saving, setSaving] = useState(false);
   /* -- The one thing a close needs that a save does not. First of next month,
         which is what payroll does unless somebody says otherwise, so the common
@@ -104,12 +100,12 @@ export function HikeCalculator({
      which also covers the reload case, because `existing` is read from the
      stored row.
 
-     `savedNote` compares against the stored note, so editing only the wording
-     re-arms the button too — the justification is part of the record. */
+     Removed at the owner's instruction: it recorded a justification/remarks
+     note (`hr_justification` / `md_remarks`), which stayed but is no longer
+     collected here. */
   const savedCtc = existing === null ? null : Number(existing);
-  const savedNote = ((isHr ? band.review?.hr_justification : band.review?.md_remarks) ?? "").trim();
 
-  const dirty = target !== savedCtc || note.trim() !== savedNote;
+  const dirty = target !== savedCtc;
   const canSave = live && dirty && !settled && !saving;
 
   function applyPct(next: string) {
@@ -145,8 +141,8 @@ export function HikeCalculator({
     }
     setSaving(true);
     const result = isHr
-      ? await saveProposal({ evaluationId, proposedCtc: target, justification: note.trim() })
-      : await saveApproval({ evaluationId, approvedCtc: target, remarks: note.trim() });
+      ? await saveProposal({ evaluationId, proposedCtc: target })
+      : await saveApproval({ evaluationId, approvedCtc: target });
     setSaving(false);
 
     if (!result.ok) {
@@ -181,7 +177,6 @@ export function HikeCalculator({
     const result = await approveAndClose({
       evaluationId,
       approvedCtc: target,
-      remarks: note.trim(),
       effectiveFrom,
     });
     setClosing(false);
@@ -335,35 +330,6 @@ export function HikeCalculator({
           live={live}
         />
       </dl>
-
-      {/* ---------- The note ---------- */}
-      <div>
-        <Label htmlFor="hike-note" className="flex items-baseline gap-1.5">
-          {isHr ? "Justification" : "Remarks"}
-          <span className="font-normal text-ink-muted">optional</span>
-        </Label>
-        <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
-          {isHr
-            ? "Travels with the figure to the MD. Saving without it is fine."
-            : "Kept with the record. Approving without it is fine — the approval is still dated and attributed to you."}
-        </p>
-        <Textarea
-          id="hike-note"
-          value={note}
-          onChange={(e) => {
-            setNote(e.target.value);
-            setSaved(false);
-          }}
-          disabled={settled}
-          rows={3}
-          className="mt-1.5"
-          placeholder={
-            isHr
-              ? "Why this figure — performance, market, retention, budget."
-              : "Anything the record should carry."
-          }
-        />
-      </div>
 
       {/* -- Only shown while the increment can still be closed. On a settled one
             it is a date nobody can change and the pay record already carries

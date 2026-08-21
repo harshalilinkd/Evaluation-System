@@ -483,7 +483,7 @@ export function ExecutiveSummary({
                      This card was "what was asked for" and a team median, which
                      is half a question. The MD is comparing three positions —
                      what the employee wants, what their managers recommend, and
-                     what HR has put up for approval — and was being asked to
+                     what management has approved — and was being asked to
                      hold two of them in their head while reading the third.
 
                      Every column is the SAME TWO FACTS in the same order: a
@@ -530,39 +530,31 @@ export function ExecutiveSummary({
                           }`
                     }
                   />
-                  {/* -- "HR PUT UP FOR APPROVAL" WAS THE ONE NAME FIX-28 MISSED,
-                        three lines above the comment that records the rename.
-                        The owner's instruction was explicit — only the HOD and
-                        the MD decide salary, so this figure is not HR's — and
-                        the card below was corrected while its sibling here was
-                        not. The fix-one-leave-the-sibling mistake, in the file
-                        that already carries a note about it.
+                  {/* -- "MANAGEMENT APPROVED", not "Proposed" — at the owner's
+                        instruction. This column used to show what HR had put
+                        up (`hr_proposed_ctc`), which is an intermediate,
+                        administrative figure that is very often still blank —
+                        "Nothing proposed yet" was most of what an MD saw here.
+                        The three positions that actually matter to a decision
+                        are what the employee asked for, what the managers
+                        recommended, and what was FINALLY approved — the
+                        before/during/after of the whole negotiation. HR's own
+                        proposal is still visible in full, further down, inside
+                        the "Manager recommended hike" card, where the workflow
+                        actually happens.
 
-                        The caption now says whether the figure IS the
-                        recommendation beside it. Two adjacent cards showing
-                        different percentages, with nothing saying why they
-                        differ, is the same confusion the detailed report was
-                        reported for — there it was one sentence contradicting
-                        its own heading; here it is two cards contradicting each
-                        other in silence. -- */}
+                        BLANK UNTIL TRUE, same rule as the card below (FIX-36):
+                        never defaulting to the proposal, which would show an
+                        approval nobody gave on the one figure a salary is paid
+                        from. -- */}
                   <Fact
                     tone="approved"
-                    label="Proposed"
-                    value={moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}
+                    label="Management approved"
+                    value={moneyMonthly(salary.review?.md_approved_ctc ?? null)}
                     caption={
-                      !salary.review?.hr_proposed_ctc
-                        ? "Nothing proposed yet."
-                        : salary.recommendedHikePct !== null &&
-                            salary.review?.hr_proposed_hike_pct !== null &&
-                            Math.abs(
-                              salary.review.hr_proposed_hike_pct - salary.recommendedHikePct,
-                            ) < 0.005
-                          ? `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary, as recommended.`
-                          : `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary${
-                              salary.recommendedHikePct === null
-                                ? "."
-                                : ` — not the ${salary.recommendedHikePct}% recommended.`
-                            }`
+                      !salary.review?.md_approved_ctc
+                        ? "Nothing approved yet."
+                        : `${pctText(salary.review?.md_approved_hike_pct ?? null)} on today's salary.`
                     }
                   />
                 </dl>
@@ -949,20 +941,32 @@ function Blocks({
         .map((g) => (
           <div key={g.label}>
             <p className="type-label text-ink-muted">{g.label}</p>
-            {/* -- THE ANSWER IS THE POINT, so it is the thing that reads as
-                   text: the question sits above it small and muted, the answer
-                   below it at body size against a rule. Both were `body-sm` in
-                   the same weight, which made a question and its answer one
-                   grey paragraph — and this is the section the MD said matters
-                   most, read minutes before an interview.
+            {/* -- THREE LEVELS, EACH LOOKING LIKE A DIFFERENT KIND OF THING.
+                   Reported as not readable at a glance, and it was not:
+                   `type-label` above is the GROUP ("Areas for improvement"),
+                   and the question ("Areas for improvement" — genuinely the
+                   same words, on this form) and its answer were both plain
+                   `body-sm` ink-muted-then-ink, one grey paragraph after
+                   another with only a hairline between them.
+
+                   Now the question reads as a PROMPT — italic, small, muted,
+                   never mistaken for the group label above it because it is
+                   sentence case where that one is uppercase — and the answer
+                   is the one thing on the card with any weight to it, inside
+                   its own tinted block so the eye lands there first. This is
+                   the section the MD said matters most, read minutes before
+                   an interview: the answer has to be the thing that is
+                   readable from across the desk.
 
                    `whitespace-pre-wrap` because these are free-text answers and
                    somebody who wrote three lines meant three lines. -- */}
-            <dl className="mt-1.5 space-y-3">
+            <dl className="mt-2 space-y-2.5">
               {g.items.map((b) => (
-                <div key={b.question} className="border-l-2 border-rule pl-3">
-                  <dt className="font-sans text-body-sm text-ink-muted">{b.question}</dt>
-                  <dd className="mt-0.5 whitespace-pre-wrap font-sans text-body leading-snug text-ink">
+                <div key={b.question} className="rounded-card bg-surface-mute/70 p-3">
+                  <dt className="font-sans text-body-sm italic leading-snug text-ink-muted">
+                    {b.question}
+                  </dt>
+                  <dd className="mt-1 whitespace-pre-wrap font-sans text-body font-medium leading-snug text-ink">
                     {b.answer}
                   </dd>
                 </div>
