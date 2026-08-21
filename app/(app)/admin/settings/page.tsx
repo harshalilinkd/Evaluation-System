@@ -252,7 +252,9 @@ export default async function SettingsPage({
   const [{ data: teamPeople }, { data: teamDepartments }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, designation, department_id, reports_to, is_active, track")
+      .select(
+        "id, full_name, employee_code, designation, department_id, reports_to, co_reviewer_id, is_active, track",
+      )
       .order("full_name"),
     supabase.from("departments").select("id, name").order("name"),
   ]);
@@ -285,6 +287,10 @@ export default async function SettingsPage({
       designation: p.designation,
       departmentName: p.department_id ? (teamDepartmentName.get(p.department_id) ?? null) : null,
       leadName: p.reports_to ? (teamLeadName.get(p.reports_to) ?? null) : null,
+      // Reuses teamLeadName (id -> full_name over every profile) rather than a
+      // second lookup — a second reviewer is a profile like any other, and the
+      // map already has everybody in it.
+      coReviewerName: p.co_reviewer_id ? (teamLeadName.get(p.co_reviewer_id) ?? null) : null,
       isActive: p.is_active,
       track: p.track,
       // A withdrawn participant (P10-6) is not "in progress" — the

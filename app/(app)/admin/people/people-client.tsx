@@ -33,6 +33,8 @@ export type PersonRow = {
   designation: string | null;
   departmentName: string | null;
   leadName: string | null;
+  /** The second reviewer (0083), if this person has one. Most people do not. */
+  coReviewerName: string | null;
   isActive: boolean;
   /* -- Which team they are on. Production workers are appraised in their own
         module (§7), so every staff-evaluation cell below reads "Production
@@ -202,6 +204,12 @@ export function PeopleClient({
         header: "Reports to",
         size: 170,
         cell: ({ row }) => <GridCell value={dash(row.original.leadName)} />,
+      },
+      {
+        accessorKey: "coReviewerName",
+        header: "Second reviewer",
+        size: 170,
+        cell: ({ row }) => <GridCell value={dash(row.original.coReviewerName)} />,
       },
       {
         id: "team",
