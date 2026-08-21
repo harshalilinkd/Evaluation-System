@@ -64,7 +64,20 @@ const WAITING: Record<string, { who: string; what: string }> = {
   CLOSED: { who: "Complete", what: "This cycle is closed." },
 };
 
-export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boolean }) {
+export function ScorecardClient({
+  card,
+  isSelf,
+  containerClassName = "mx-auto w-full max-w-content space-y-5",
+}: {
+  card: Scorecard;
+  isSelf: boolean;
+  /** Overrides the outer wrapper's width. Defaults to the single-subject
+   *  centred column every other caller (the standalone /scorecard route,
+   *  a person's own scorecard page) already uses — Reports' own tab passes a
+   *  wider one, since it sits beside a full-bleed queue and the centred
+   *  column there read as mostly empty canvas. */
+  containerClassName?: string;
+}) {
   // HR's own names, not the shipped defaults (P25).
   const sectionNames = useSectionLabels();
   /* -- Every chart carries a table fallback, and it is not a nicety.
@@ -370,7 +383,7 @@ export function ScorecardClient({ card, isSelf }: { card: Scorecard; isSelf: boo
     headline !== null && headlinePrev !== null ? headline - headlinePrev : null;
 
   return (
-    <div className="mx-auto w-full max-w-content space-y-5">
+    <div className={containerClassName}>
       {/* ---------- Identity, and the headline ----------
           ON THE CARD SURFACE IN BOTH THEMES, and that is a correctness call
           rather than a preference.

@@ -27,6 +27,7 @@ export async function ScorecardPanel({
   privileged,
   basePath,
   extraParams,
+  wide,
 }: {
   viewerId: string;
   subjectId: string;
@@ -35,6 +36,11 @@ export async function ScorecardPanel({
    *  rather than bouncing to the standalone route (person-picker.tsx). */
   basePath?: string;
   extraParams?: Record<string, string>;
+  /** Drops ScorecardClient's own single-subject 1180px cap. Reports passes
+   *  this — it sits beside a full-bleed queue, and the ordinary centred
+   *  column read as mostly empty canvas there. The standalone /scorecard
+   *  route and a person's own page leave it unset, unchanged. */
+  wide?: boolean;
 }) {
   const isSelf = subjectId === viewerId;
   const supabase = await createClient();
@@ -89,7 +95,11 @@ export async function ScorecardPanel({
         />
       ) : null}
 
-      <ScorecardClient card={card.data} isSelf={isSelf} />
+      <ScorecardClient
+        card={card.data}
+        isSelf={isSelf}
+        containerClassName={wide ? "w-full space-y-5" : undefined}
+      />
     </>
   );
 }

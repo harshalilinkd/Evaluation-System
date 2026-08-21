@@ -75,15 +75,21 @@ export default async function Page({
               `.app-main:has([data-full-bleed])` matches on DOM PRESENCE, not
               visibility — so it strips .app-main's padding globally on this
               page even while THIS tab, not that one, is what's showing.
-              Restated here at .app-main's own px-4 py-8 lg:px-8 (globals.css)
-              so this tab still looks like the ordinary centred page it is. -- */}
-        <div className="mx-auto w-full max-w-content space-y-4 px-4 py-8 lg:px-8">
+              Restated here at .app-main's own px-4 py-8 lg:px-8 (globals.css).
+
+              NO max-w-content, at the owner's instruction: the centred single-
+              subject column this shares with the standalone /scorecard route
+              read as mostly empty canvas beside the queue's full-bleed grid.
+              `wide` on ScorecardPanel drops ScorecardClient's own matching
+              cap, which is otherwise hardcoded for every OTHER caller. -- */}
+        <div className="w-full space-y-4 px-4 py-8 lg:px-8">
           <ScorecardPanel
             viewerId={session.profile.id}
             subjectId={params.person ?? session.profile.id}
             privileged
             basePath="/reports"
             extraParams={{ tab: "scorecard" }}
+            wide
           />
         </div>
       </TabsContent>
