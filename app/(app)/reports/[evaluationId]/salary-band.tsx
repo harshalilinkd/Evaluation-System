@@ -896,6 +896,27 @@ function MdApproval({
               <p className="font-sans text-body-sm text-ink-muted">
                 {money(review.employee_expectation_ctc)} a year
               </p>
+              {/* -- WHAT THEY ARE ACTUALLY ASKING FOR, as a rise.
+                    Two salaries side by side leave the MD to do the arithmetic,
+                    on the one screen where the whole decision is a comparison of
+                    percentages — every other card on this row states one. The
+                    figure goes through `hikePct`, which is the single
+                    implementation of it (P21-2): a percentage worked out in a
+                    component is one nobody can reproduce, and it would disagree
+                    with the summary report the first time either moved.
+
+                    Worded exactly as the summary words it, because FIX-42 had
+                    to close five separate drifts between these two files. -- */}
+              {hikePct(data.currentCtc, review.employee_expectation_ctc) === null ? (
+                <p className="mt-1 font-sans text-body-sm text-ink-muted">
+                  No current salary on record to compare against.
+                </p>
+              ) : (
+                <p className="mt-1 font-sans text-body-sm text-ink-muted">
+                  A rise of {pctText(hikePct(data.currentCtc, review.employee_expectation_ctc))} on{" "}
+                  {moneyMonthly(data.currentCtc)}.
+                </p>
+              )}
               {review.employee_expectation_note ? (
                 <p className="mt-1 whitespace-pre-wrap font-sans text-body-sm text-ink-muted">
                   {review.employee_expectation_note}
@@ -951,14 +972,28 @@ function MdApproval({
                     Worth a line, not a card. -- */}
               {data.recommendedHikePct === null ? null : (
                 <p className="mt-1 font-sans text-body-sm text-ink-muted">
-                  {data.recommendedIsAverage
-                    ? `Their two managers averaged ${data.recommendedHikePct}%`
-                    : `They recommended ${data.recommendedHikePct}%`}
-                  {review.hr_proposed_hike_pct === null
-                    ? "."
-                    : Math.abs(review.hr_proposed_hike_pct - data.recommendedHikePct) < 0.005
-                      ? ", and that is what was set."
-                      : `, and ${pctText(review.hr_proposed_hike_pct)} was set instead.`}
+                  {/* -- TWO FACTS, TWO SENTENCES, and neither of them passive.
+
+                        It read "Their two managers averaged 8%, and 10.00% was
+                        set instead." — reported as confusing, and it was, for a
+                        reason sharper than the wording: the card is HEADED
+                        "Manager recommended", and this line then said the
+                        managers had recommended something else. One sentence
+                        carrying a heading's contradiction.
+
+                        Split, so the MD reads what was recommended and what is
+                        being proposed as two separate figures. "was set
+                        instead" also named nobody — and naming HR is not
+                        available, because FIX-28 renamed this figure to the
+                        manager's at the owner's instruction (§0.2). "Proposed"
+                        is what the card is, and needs no actor. -- */}
+                  {review.hr_proposed_hike_pct !== null &&
+                  Math.abs(review.hr_proposed_hike_pct - data.recommendedHikePct) < 0.005
+                    ? `Proposed as the ${data.recommendedIsAverage ? "managers" : "manager"} recommended.`
+                    : `${data.recommendedIsAverage ? "Managers" : "Manager"} recommended ${data.recommendedHikePct}%.` +
+                      (review.hr_proposed_hike_pct === null
+                        ? ""
+                        : ` Proposed at ${pctText(review.hr_proposed_hike_pct)}.`)}
                 </p>
               )}
             </>

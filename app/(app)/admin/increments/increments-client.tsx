@@ -411,7 +411,14 @@ export function IncrementsClient({
               `min-w-0` on every child: a select's intrinsic minimum is its
               longest OPTION, so without it one department name blows the row
               out and the grid stops being four equal columns (F13-4). -- */}
-        <div className="grid w-full grid-cols-4 items-center gap-2 lg:contents">
+        {/* -- TWO ACROSS ON A PHONE, four from `sm`. Four across 375px is
+               about 80px a control, and the comment below says what that did to
+               the search box: the icon took 36 of them and left 44px to type
+               into, so the placeholder had to be emptied to stop it arriving as
+               "Search by ". Half a row each is ~170px, which is a field you can
+               read what you typed in — and it is why the placeholder comes
+               back. -- */}
+        <div className="grid w-full grid-cols-2 items-center gap-2 sm:grid-cols-4 lg:contents">
           <div className="relative min-w-0 lg:w-[300px]">
             <Search
               aria-hidden
@@ -420,11 +427,12 @@ export function IncrementsClient({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              /* At a quarter of 375px the field is ~80px and the icon takes 36
-                 of it, so a long placeholder arrives as "Search by " — which
-                 reads as a truncated label rather than a hint (F13-8). The
-                 full sentence is on the aria-label. */
-              placeholder=""
+              /* -- "Search", not the full sentence. At HALF of 375px there is
+                    room for a word but not for "Search by name or code", and a
+                    hint cut off mid-phrase reads as a broken label rather than
+                    a hint (F13-8). The whole sentence stays on the aria-label
+                    and the title, where it is not truncated by anything. -- */
+              placeholder="Search"
               aria-label="Search by name or code"
               title="Search by name or code"
               className="min-h-11 border-rule bg-surface pl-9 lg:placeholder-shown:pl-9"

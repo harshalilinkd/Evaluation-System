@@ -50,6 +50,36 @@
 
 begin;
 
+/* ****************************************************************************
+   THIS FILE DELETES THE PAY LEDGER. THE ONE BESIDE IT DOES NOT.
+
+   `RESET-CYCLE-DATA-ARMED.sql` clears the same cycles and KEEPS every salary
+   figure. The two names are one word apart, and pasting the wrong one has
+   already cost somebody every pay record they had — which the header above
+   warned about, in a header nobody reads before pasting.
+
+   So the warning is now a GATE. Uncomment the line below to confirm you mean
+   this file and not that one. Left as it ships, the run stops having changed
+   nothing.
+   **************************************************************************** */
+
+create temporary table _confirm (token text) on commit drop;
+
+insert into _confirm (token) values
+  -- ('DELETE THE PAY LEDGER');
+  ('__not_confirmed__');
+
+do $$
+declare v_ok boolean;
+begin
+  select exists (select 1 from _confirm where token = 'DELETE THE PAY LEDGER') into v_ok;
+  if not v_ok then
+    raise exception
+      'STOP — NOTHING WAS CHANGED. This file deletes every salary_history row and blanks the salary columns on every employment record. If you only want the CYCLES gone and the pay kept, run supabase/RESET-CYCLE-DATA-ARMED.sql instead. If you really do mean this one, uncomment the confirmation line at the top and run it again.';
+  end if;
+end;
+$$;
+
 /* -- What is about to go, printed before it goes.
       There is no blocker in this file — that is the point of it — so this
       notice is the only thing standing between a paste and a wiped pay ledger.

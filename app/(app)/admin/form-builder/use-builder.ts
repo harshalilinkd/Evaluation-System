@@ -44,7 +44,7 @@ export type SaveState =
  * a real sentence — and one that reads as obviously unfinished, so nobody ships
  * a cycle with it still in place.
  */
-const NEW_QUESTION_TEXT = "New question — write it here";
+export const NEW_QUESTION_TEXT = "New question — write it here";
 
 /** The autosave debounce. Long enough to coalesce a sentence being typed. */
 const SAVE_DEBOUNCE_MS = 900;

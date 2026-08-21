@@ -256,6 +256,20 @@ export const createUserSchema = z.object({
      sheet. Independent of department, because both modules have people in the
      same teams. */
   track: z.enum(["STAFF", "WORKER"]).default("STAFF"),
+  /* -- WHETHER THE MISSING-NUMBER RULE BELOW IS A REFUSAL OR A NOTE.
+
+        True on the form: HR is entering one person and has the number to
+        hand, so refusing costs nothing and closes the gap at the only moment
+        it is cheap.
+
+        False from the importer, deliberately. One bad row imports NOTHING
+        (P19C-8), so refusing here would fail a whole payroll file over a blank
+        cell — at the one moment HR most wants it to go in. The row lands and
+        carries a note naming the gap instead, which is the same call FIX-64
+        made for an unresolvable manager. Same idiom as `email_supplied`
+        above: a boolean the importer sets to relax a rule the form always
+        meets. -- */
+  phone_required: z.boolean().default(true),
   joining_ctc: money("Joining salary"),
   current_ctc: money("Current salary"),
   last_increment_amount: money("Last increment amount"),
@@ -279,7 +293,30 @@ export const createUserSchema = z.object({
       }),
     )
     .default([]),
-});
+  })
+  /* ---------- At least reachable, for anybody the system writes to ----------
+     §10 sends every invite over WhatsApp and/or email, and P11 makes the
+     mobile the channel that actually works — email needs SMTP configured
+     (AMEND-4) and WhatsApp does not. A Backend Team person with no number is
+     therefore somebody whose form link has one way to arrive instead of two,
+     and PR-9 already makes a HOD with no contact details a HARD BLOCK at
+     launch. Refusing it here is the same rule, moved to the moment somebody is
+     being entered — which is the moment the number is to hand.
+
+     PRODUCTION TEAM ARE EXEMPT, and that is not an oversight. Nothing in the
+     system ever writes to a worker: there is no worker template and no notify
+     path, because their supervisor fills the sheet (WORKER-1). Requiring a
+     number they will never be sent anything on would block a real import for
+     no benefit — F53 deliberately made even their EMAIL optional. */
+  .superRefine((value, ctx) => {
+    if (value.phone_required && value.track === "STAFF" && !value.phone?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["phone"],
+        message: "Enter a mobile number — this is where their form link is sent",
+      });
+    }
+  });
 
 /** An optional rupee figure. Empty means "not recorded", never zero. */
 function money(label: string) {

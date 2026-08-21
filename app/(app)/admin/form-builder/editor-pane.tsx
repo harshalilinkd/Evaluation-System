@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { GripVertical, PencilLine, Plus, Trash2 } from "lucide-react";
 
 import type { BuilderOption, BuilderQuestion } from "@/app/(app)/admin/form-builder/use-builder";
+import { NEW_QUESTION_TEXT } from "@/app/(app)/admin/form-builder/use-builder";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -259,8 +260,23 @@ export function EditorPane({
         ) : null}
 
         <Field label="Question">
+          {/* -- AN EMPTY BOX, not the placeholder sentence pre-filled.
+                A new question is WRITTEN to the database the moment it is added
+                rather than held in a modal until it is complete (PC-2), and
+                `questionFormSchema` demands five characters — so the stored
+                text has to be a real sentence from the start, and it still is
+                `NEW_QUESTION_TEXT`. That is what keeps the structure pane
+                reading "New question — write it here" until somebody writes
+                one, which is the safeguard against launching a cycle with an
+                unfinished question in it.
+
+                What was wrong is that the EDITOR showed that sentence as a
+                VALUE, so writing a question began with selecting and deleting
+                it. Blanking it here is display only: nothing about what is
+                stored, validated or rendered elsewhere changes, and leaving the
+                box untouched leaves the obviously-unfinished text in place. -- */}
           <Input
-            value={question.text}
+            value={question.text === NEW_QUESTION_TEXT ? "" : question.text}
             onChange={(e) => onPatch({ text: e.target.value })}
             placeholder="Write it the way a supervisor would say it on the floor"
           />

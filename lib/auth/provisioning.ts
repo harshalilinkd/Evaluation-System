@@ -988,10 +988,30 @@ export async function updatePerson(
     };
   }
 
+  /* -- THE SAME CONTACT RULE THE CREATE PATH HAS, restated because this
+        function validates by hand rather than through `createUserSchema`.
+
+        Without it the rule would be cosmetic: somebody could be created with a
+        number and then have it cleared on the very next screen. Two copies is
+        the cost of two validation styles, and they are asserted to carry the
+        same sentence so a change to one that misses the other is caught.
+
+        Production Team are exempt here for the reason the schema gives: no
+        template addresses a worker, so a number is something they would never
+        be written to on. -- */
+  const track: "STAFF" | "WORKER" =
+    String(formData.get("track") ?? "STAFF") === "WORKER" ? "WORKER" : "STAFF";
+
   // §10 wants E.164 with +91 as the default, and the normaliser says WHAT is
   // wrong rather than returning null (P11-12).
   let phoneE164: string | null = null;
   const phone = String(formData.get("phone") ?? "").trim();
+  if (!phone && track === "STAFF") {
+    return {
+      error: "Check the highlighted fields.",
+      fieldErrors: { phone: "Enter a mobile number — this is where their form link is sent" },
+    };
+  }
   if (phone) {
     const { normaliseToE164 } = await import("@/lib/notify/phone");
     const result = normaliseToE164(phone);
@@ -1049,9 +1069,8 @@ export async function updatePerson(
   const after = {
     full_name: fullName,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
-    track: (String(formData.get("track") ?? "STAFF") === "WORKER"
-      ? "WORKER"
-      : "STAFF") as "STAFF" | "WORKER",
+    // Derived once, above, because the contact rule reads it too.
+    track,
     designation: String(formData.get("designation") ?? "").trim() || null,
     department_id: departmentId || null,
     reports_to: reportsTo || null,
@@ -2287,6 +2306,8 @@ export async function importUsers(
             the profile says honestly that there is none rather than carrying a
             fabricated one that would look like a contact route. -- */
       email_supplied: emailText !== "",
+      // A blank number NOTES rather than refuses here — see the schema.
+      phone_required: false,
       password,
       track,
       department_id: departmentId ?? "",
@@ -2326,9 +2347,19 @@ export async function importUsers(
     // resolves it once that person exists.
     /* -- Both halves in one sentence, because a row missing both should not
           produce two lines HR has to read as one fact. -- */
+    /* -- A Backend Team person with no number is NOTED, never refused.
+          The form refuses it, because HR entering one person has the number to
+          hand. Refusing it here would fail a whole payroll file over a blank
+          cell, since one bad row imports nothing (P19C-8) — so the row lands
+          and says what is missing, which is FIX-64's call for an unresolvable
+          manager. Production Team are exempt: nothing is ever sent to them. -- */
+    const noMobile =
+      parsed.data.track === "STAFF" && !parsed.data.phone?.trim();
+
     const dropped = [
       leadMissing ? `no manager — nobody has ${record.reports_to}` : null,
       coMissing ? `no second reviewer — nobody has ${record.second_reviewer}` : null,
+      noMobile ? "no mobile number — their form link can only go by email" : null,
     ].filter(Boolean);
 
     prepared.push({

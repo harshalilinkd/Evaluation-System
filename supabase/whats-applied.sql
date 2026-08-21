@@ -141,6 +141,12 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0089_narrative_last', 'narrative_is_last',
      'Support & Expectations sits last on the employee''s form',
      'Without it the section renders wherever it currently sits — on this database, above Learning & Development. Nothing breaks; the form simply asks for what somebody expects before asking what they learned.'),
+  ('0090_md_only_approves_increment', 'md_only_approves', 'only the MD may approve and close an increment',
+     'Without it HR can approve and close an increment alone — the second pair of eyes AMEND-2 restored on a pay decision. TRUE is the intended state; it reverses 0056 and 0060 at the owner''s explicit instruction.'),
+  ('0091_supersede_earlier_milestone', 'supersedes_milestone', 'a later milestone withdraws an earlier open one',
+     'Without it an employee whose 1-month review was never finished holds TWO live evaluations and gets TWO form links when their 6-month review falls due. DO NOT re-run 0079 after this — see the 0079 row.'),
+  ('0092_second_reviewer_reads_their_people', 'co_reviewer_reads', 'a second reviewer may read the people they rate',
+     'Without it a Design Coordinator opens My Team and the person they are there to rate is called "Unknown" — no name, no employee code, no designation. The evaluation is readable and the PROFILE is not, so the row renders with the department and nothing else. 0083 added co_reviewer_id and never the read.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -502,6 +508,34 @@ select
           shape each time: a detector matching a SPELLING rather than the state.
           oidvectortypes(proargtypes) is the types alone, so renaming a
           parameter cannot move it. -- */
+    /* -- 0090 · The approval arm narrowed to the MD alone. Anchored to the ARM
+          — the from/to clause and its `then` adjacent — never to a set of
+          tokens the CASE happens to contain somewhere. That was 0056's failure:
+          a LIKE over three fragments matched three UNRELATED rows and reported
+          a success it had not achieved. -- */
+    when 'md_only_approves' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'apply_evaluation_transition'
+         and pg_get_functiondef(p.oid) ~
+             'HR_APPROVED[^;]{0,80}MD_REVIEWED[[:space:]]+then[[:space:]]+public\.is_md\(\)')
+
+    /* -- 0091 · The supersede block, detected by the comment 0091 SPLICES IN —
+          which is the same string 0091 itself checks to decide it has already
+          run, so the two cannot disagree. -- */
+    when 'supersedes_milestone' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'create_milestone_evaluation'
+         and pg_get_functiondef(p.oid) like '%Supersede any earlier%')
+
+    /* -- 0092 · The second reviewer's read of the people they rate. On the
+          POLICY's own expression, so it cannot be satisfied by the column
+          merely existing (0083 added that and the read was still missing —
+          which is the whole bug). -- */
+    when 'co_reviewer_reads' then exists (
+      select 1 from pg_policy pol join pg_class c on c.oid = pol.polrelid
+       where c.relname = 'profiles'
+         and pg_get_expr(pol.polqual, pol.polrelid) like '%co_reviewer_id%')
+
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'ensure_rolling_cycle'

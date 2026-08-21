@@ -698,6 +698,11 @@ function AddPersonDialog({
         one. Both are still submitted through FormData like everything else on
         this form — controlling them changes where the value comes from, not
         where it goes. -- */
+/* -- The Mobile No field has to say it is needed BEFORE the press, and whether
+      it is needed depends on which form they fill — so the selector's value is
+      held rather than left to the DOM. §13.4: a field that only reveals it was
+      required once you have failed to save is a dead end. -- */
+  const [track, setTrack] = useState<"STAFF" | "WORKER">("STAFF");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [passwordTouched, setPasswordTouched] = useState(false);
@@ -889,7 +894,8 @@ function AddPersonDialog({
                 <select
                   id="track"
                   name="track"
-                  defaultValue="STAFF"
+                  value={track}
+                  onChange={(e) => setTrack(e.target.value === "WORKER" ? "WORKER" : "STAFF")}
                   className={SELECT_CLASS}
                 >
                   {/* The VALUES are the enum and never move (§0.2) — they are
@@ -953,7 +959,12 @@ function AddPersonDialog({
               <Field
                 id="phone"
                 label="Mobile No"
-                hint="Where their form link is sent. Indian numbers may be typed without +91."
+                optional={track === "WORKER"}
+                hint={
+                  track === "WORKER"
+                    ? `Nothing is ever sent to ${TRACK_LABELS.WORKER} — their supervisor fills the sheet in for them.`
+                    : "Where their form link is sent. Indian numbers may be typed without +91."
+                }
                 error={createState.fieldErrors?.phone}
               >
                 <Input
@@ -1206,6 +1217,14 @@ function EditPersonDialog({
   onClose: () => void;
 }) {
   const [state, action] = useActionState<ProvisionState, FormData>(updatePerson, {});
+  /* -- Same reason as the add dialog: the rule depends on which form they fill.
+        `person` is null until one is opened and the guard below is after the
+        hooks, where it has to be — so this reads through it. The dialog is
+        keyed on the person's id at its call site, so it remounts per person
+        and this initial value is never the previous person's (P10-11). -- */
+  const [track, setTrack] = useState<"STAFF" | "WORKER">(
+    person?.track === "WORKER" ? "WORKER" : "STAFF",
+  );
 
   useEffect(() => {
     if (state.ok) onClose();
@@ -1361,7 +1380,8 @@ function EditPersonDialog({
                 <select
                   id="e_track"
                   name="track"
-                  defaultValue={person.track ?? "STAFF"}
+                  value={track}
+                  onChange={(e) => setTrack(e.target.value === "WORKER" ? "WORKER" : "STAFF")}
                   className={SELECT_CLASS}
                 >
                   {/* The VALUES are the enum and never move (§0.2) — they are
@@ -1455,9 +1475,13 @@ function EditPersonDialog({
               <Field
                 id="e_phone"
                 label="Mobile No"
-                optional
+                optional={track === "WORKER"}
                 error={state.fieldErrors?.phone}
-                hint="Where their form link is sent. Indian numbers may be typed without +91."
+                hint={
+                  track === "WORKER"
+                    ? `Nothing is ever sent to ${TRACK_LABELS.WORKER} — their supervisor fills the sheet in for them.`
+                    : "Where their form link is sent. Indian numbers may be typed without +91."
+                }
               >
                 <Input
                   id="e_phone"

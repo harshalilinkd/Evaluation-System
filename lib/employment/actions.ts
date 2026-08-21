@@ -218,7 +218,8 @@ export async function addJoiningSalary(input: {
   const v = parsed.data;
   const supabase = await createClient();
 
-  /* -- THROUGH `record_joining_salary` (0069), NOT A BARE UPDATE.
+  /* -- THROUGH A FUNCTION, NOT A BARE UPDATE. (0069 first, 0075 now — see the
+        note on the call itself for why it moved.)
 
         `employment: hr updates` (0023) is `using (public.is_hr())`, and the
         guard above admits the MD. So the MD passed the guard, the UPDATE matched
@@ -231,11 +232,25 @@ export async function addJoiningSalary(input: {
         RLS raises 42501 and the caller reports it. An UPDATE that matches
         nothing cannot fail. Only the second kind is silent.
 
-        The immutability check, the "does a revision exist" count and the
-        `current_ctc` decision all moved INTO the function — it is granted to
-        `authenticated`, so any of them left out here would be a rule the caller
-        could choose to skip (P9D-3). -- */
-  const { data: outcome, error } = await supabase.rpc("record_joining_salary", {
+        The "does a revision exist" count and the `current_ctc` decision both
+        live INSIDE the function — it is granted to `authenticated`, so either
+        left out here would be a rule the caller could choose to skip (P9D-3).
+        The immutability check was the third, and 0075 is what removed it. -- */
+  /* -- 0075's FUNCTION, NOT 0069's, AND THAT IS THE WHOLE FIX.
+
+        0069's `record_joining_salary` refuses a SECOND baseline in capitals —
+        "once recorded, joining_salary remains static". 0075 reversed that at
+        the owner's explicit instruction (F59-8) and shipped
+        `set_joining_salary`, which corrects one. The roster's inline editing
+        was moved onto it; THIS path was not, so the Employment tab went on
+        refusing what the table beside it allowed — two answers to one
+        question, and the one that refused is the screen built for the job.
+
+        Reported as "joining salary should be editable": a second attempt here
+        was refused, and the only control that then accepted a figure was Add a
+        salary change — which records a RISE. That is what "it's taking it as a
+        new salary" was. -- */
+  const { error } = await supabase.rpc("set_joining_salary", {
     p_profile_id: v.profileId,
     p_amount: v.amount,
   });
@@ -247,17 +262,12 @@ export async function addJoiningSalary(input: {
     return cycleError("SAVE_FAILED", error.message);
   }
 
-  const seeded = (outcome as { seeded_current?: boolean } | null)?.seeded_current === true;
-
-  // §12, and NO FIGURE in the diff (P19-10). A lead can read audit_log for
-  // their own reports (0013), so a salary there would walk past §5.
-  await supabase.rpc("log_admin_action", {
-    p_entity: "employment",
-    p_entity_id: v.profileId,
-    p_action: "salary.joining_recorded",
-    p_diff: { seeded_current: seeded } as Json,
-  });
-
+  /* -- NO AUDIT CALL HERE ANY MORE. 0075 writes its own row inside the same
+        statement, distinguishing `joining_salary.recorded` from
+        `joining_salary.corrected`, and carrying no amount (§5, P19-10) — a lead
+        can read `audit_log` for their own reports (0013), so a figure there
+        would walk straight past salary confinement. Logging again would put two
+        rows on the trail for one act, and the extra one would say less. -- */
   revalidatePath(`/admin/people/${v.profileId}/employment`);
   revalidatePath("/admin/increments");
   return { ok: true, data: { ok: true } };

@@ -8409,3 +8409,184 @@ genuine INCREMENT_ONLY content is reaching an evaluation form turns on
 whether `0072_promotion_is_increment_only.sql` has been applied — that fact
 could not be checked without database access, so it was asked rather than
 guessed.
+
+---
+
+### SALARY-1 — The MD reads the rise, not the arithmetic
+
+No migration. `app/(app)/reports/[evaluationId]/salary-band.tsx` and
+`.../summary/executive-client.tsx`.
+
+*(Named rather than numbered, for the reason DIAGNOSTIC-1 gives: a second
+session is appending to §18 in parallel and the FIX-nn sequence has duplicated
+four times.)*
+
+Two things, both reported from the MD's own screen: the expected salary showed
+no percentage, and the line under the recommendation was "too much confusing".
+
+#### The rise the employee is actually asking for
+
+Three cards sat in a row — joining, current, expected — and every other card on
+that panel states a percentage while this one stated two salaries and left the
+MD to subtract. On the one screen whose whole subject is a comparison of
+percentages.
+
+| # | Decision | Why |
+|---|---|---|
+| S1-1 | Through `hikePct`, never worked out in the component | P21-2: a percentage computed in an `onChange` is one nobody can reproduce, and it would disagree with the summary the first time either moved. The summary already derived it that way; the detailed report simply never showed it. |
+| S1-2 | Worded **exactly** as the summary words it | "A rise of 33.33% on ₹15,000 a month." FIX-42 had to close five separate drifts between these two files; adding a sixth in the same week would be careless. |
+| S1-3 | No current salary says so, rather than showing a dash | §13.4, and P21-3's rule that the percentage is null rather than infinite when there is nothing to divide by. |
+
+#### The sentence that contradicted its own heading
+
+It read **"Their two managers averaged 8%, and 10.00% was set instead."** The
+wording was the smaller half of the problem: the card is HEADED *Manager
+recommended*, and this line then said the managers had recommended something
+else. One sentence carrying a heading's contradiction, in the passive, naming
+nobody.
+
+| # | Decision | Why |
+|---|---|---|
+| S1-4 | **Two facts, two sentences** | "Managers recommended 8%. Proposed at 10.00%." The MD reads what was recommended and what is being proposed as two separate figures rather than untangling one clause. |
+| S1-5 | A matching figure says so and stops | "Proposed as the managers recommended." Restating the number a third time on the card that already shows it twice is what made the line feel like an argument. |
+| S1-6 | **"Proposed" names no actor, deliberately** | "Was set instead" named nobody, and the obvious repair — "HR set 10%" — is not available: FIX-28 renamed this figure to the manager's at the owner's explicit instruction, on the grounds that only the HOD and the MD decide salary (§0.2). "Proposed" is what the card is and needs no author. |
+| S1-7 | Singular and plural both handled | `recommendedIsAverage` already carried it; the plural is what tells the MD two people were asked, and the summary carries the breakdown. |
+
+#### And the name FIX-28 missed
+
+`label="HR put up for approval"` was still on the summary — **three lines above
+the comment recording that this figure was renamed away from HR**. One card was
+corrected and its sibling was not: the fix-one-leave-the-sibling mistake, in the
+file that already carries a note about it.
+
+| # | Decision | Why |
+|---|---|---|
+| S1-8 | Renamed to **Proposed**, matching the detailed report | One number with two authors depending on which report you opened is worse than either name alone — the summary's own comment says so. |
+| S1-9 | Its caption now says whether it IS the recommendation beside it | Two adjacent cards showing different percentages with nothing explaining why is the same confusion the detailed report was reported for, arrived at differently: there one sentence contradicted its heading, here two cards contradicted each other in silence. |
+
+**Verification — 14 checks, 0 failed.** Written as PARITY assertions where the
+two reports must agree: both derive the expected rise through the one
+implementation, both word it identically, neither does the arithmetic itself,
+and the retired phrases are proved gone over comment-stripped source. Typecheck
+0 errors, lint 0 errors, build clean.
+
+**Not changed.** The printed pack carries no salary panel, so nothing on paper
+moved. §5 is untouched — the panel is still HR and MD only, asserted.
+
+---
+
+### JOINING-1 — The joining salary was editable in the table and not on the screen built for it
+
+`lib/employment/actions.ts` and `supabase/DELETE-SALARY-HISTORY-ARMED.sql`.
+No migration — 0075 shipped the function this needed and one caller never moved
+onto it.
+
+*(Named rather than numbered, for the reason DIAGNOSTIC-1 gives.)*
+
+#### Two answers to one question
+
+0069 refused a second joining salary in capitals — *"once recorded,
+joining_salary remains static for audit purposes"*. 0075 reversed that at the
+owner's explicit instruction (F59-8) and shipped `set_joining_salary`, which
+corrects one. FIX-59 moved the ROSTER's inline editing onto it and left
+`addJoiningSalary` — the Employment tab, the screen built for this job — still
+calling `record_joining_salary`.
+
+So the tab refused what the table beside it allowed. Reported as "joining salary
+should be editable, currently when I'm adding the joining salary it's taking as
+new salary": the second attempt was refused, and the only control that then
+accepted a figure was **Add a salary change**, which records a RISE.
+
+| # | Decision | Why |
+|---|---|---|
+| J1-1 | The action moves to `set_joining_salary`; nothing else changes | P19E-1's protection is untouched — the baseline is still a COLUMN and still not a ledger row, so filling it in months later still cannot be read as a rise. Only whether it may be corrected moves, and 0075 already argued that: `previous_ctc`, `hike_amount` and `hike_pct` are STORED per row and never recomputed, so a correction cannot rewrite a stored percentage. |
+| J1-2 | **The action's own audit call is deleted** | 0075 writes its row inside the same statement, distinguishing `joining_salary.recorded` from `joining_salary.corrected`. Logging again would put two rows on the trail for one act, and the extra one would say less — it could not tell a correction from a first entry. |
+| J1-3 | Two stale comments corrected with it | One still opened "THROUGH `record_joining_salary` (0069)" and another listed the immutability check among rules that live inside the function. Both now describe what the code does; a comment that contradicts the line beneath it is worse than none. |
+
+#### And the delete script asked for the name four times
+
+`salary_history` is append-only by trigger for every caller including a
+superuser (P19-3), so removing a row is an operator action with no product path
+— `DELETE-SALARY-HISTORY-ARMED.sql` exists for it. Its own header read:
+*"CHANGE THE NAME IN ALL FOUR PLACES... They are separate statements and do not
+share a variable."*
+
+| # | Decision | Why |
+|---|---|---|
+| J1-4 | **The name is typed ONCE**, as a transaction-local setting | The whole file already runs inside one `begin`/`commit`, so the statements CAN share a value — `set_config(..., true)` and every statement reads it. Asking a person to keep four copies of a name in step, on the one operation that cannot be taken back, is not a safeguard: it is the hazard. |
+| J1-5 | It **refuses unless exactly one person matches** | Zero was previously a `raise notice` while the transaction carried on and committed — a run that deleted nothing, indistinguishable from a person who genuinely had no history. More than one is the dangerous case: `full_name` is not unique, so two people sharing a name would both lose their pay record from one paste. Raising aborts, so nothing is touched and the guard never comes off. |
+| J1-6 | An employee code is accepted too | The roster shows both and being strict about which costs safety nothing — the person is named back before anything is destroyed. |
+| J1-7 | The deletion is **audited** | §12. The rows are gone, so the audit row is the only remaining evidence they existed; `audit_log.entity_id` carries no foreign key (P3-2), so it outlives them. No amount in the diff (§5, P19-10). |
+| J1-8 | The confirm query still repeats the name, deliberately | The setting is transaction-local and gone by then — and a confirmation that reads its own input from the run it is confirming is not a confirmation. |
+
+**Verification — 17 checks, 0 failed, on real Postgres.** The append-only
+trigger is reproduced from 0023 rather than approximated — it is the object the
+script switches off — and proved to genuinely refuse a delete BEFORE the script
+runs, or the test would prove nothing. Then: the rows go, the other person's do
+not, the record's three salary columns clear while `next_increment_date` stays
+(it comes from the joining date, not pay), the guard is back ON and proved to
+refuse again, an employee code works, and both refusals abort having deleted
+nothing and left the guard on.
+
+Typecheck 0 errors, lint 0 errors (1 pre-existing warning).
+
+---
+
+### COREVIEWER-1 — The second reviewer could see the evaluation and not the person
+
+Migration `0092_second_reviewer_reads_their_people.sql`.
+
+*(Named rather than numbered, for the reason DIAGNOSTIC-1 gives.)*
+
+Reported with two screenshots of the same queue: the Design Coordinator sees
+**"Unknown · Design"**, and the reporting manager sees **"Manav Khandale ·
+MA-36 · Designer · Design"**.
+
+**The department rendering correctly for both is the tell.** `getTeamQueue`
+takes it from `evaluations.department_id`, a row the second reviewer may read;
+the name, the employee code and the designation come from `profiles`, and
+`team-queue.ts` falls back to the literal string `"Unknown"` when that row is
+absent. So the evaluation was visible and the person was not — which is what
+RLS looks like from the outside, because it hides a row rather than refusing it.
+
+The `profiles` read policy admits five things (0041, 0053): yourself, HR, the
+MD, the people who report to you, your own manager, and a worker assigned to you
+this round. **0083 added `co_reviewer_id` and the third rating layer and every
+screen that needed it, and nothing was ever added here.** A second reviewer is
+not the evaluatee's `reports_to`, so no clause matched them.
+
+| # | Decision | Why |
+|---|---|---|
+| CR1-1 | The clause is as narrow as the `reports_to` arm beside it | `co_reviewer_id = auth.uid()` matches the exact rows where this caller is the recorded second reviewer. Proved by asserting they still see only two profiles in the whole company — themselves and the person they rate. |
+| CR1-2 | **§5 is untouched, and it is the argument FIX-18 already made from the other side** | Blindness is about what each side ANSWERED — the SELF and LEAD layers. A name is not an answer. The second reviewer is rating this person on their own form and has to know who they are; withholding it discloses nothing and breaks the screen (F18-3). No layer, score or salary is reachable through this clause. |
+| CR1-3 | The whole policy is **restated, not amended**, and then counted | Postgres cannot add a clause to a policy, so every existing arm is reproduced from 0053. Dropping one would silently REMOVE access rather than fail — the class SR2-5 caught in a view — so the migration's own block asserts all five earlier arms survived, not just that the new one arrived. |
+| CR1-4 | The fix is a policy, not a fallback in the query | Making `getTeamQueue` fetch the name some other way would be routing around a permission the caller does not have, and would leave every other screen reading that profile still broken. |
+
+**Verification — 12 checks, 0 failed, on real Postgres under `set role
+authenticated` with a JWT subject.** PGlite connects as superuser and bypasses
+RLS, so without the role switch every assertion would pass while proving nothing
+(P16-3). The bug is reproduced BEFORE the fix — the manager reads the name, the
+second reviewer gets no row at all, which is the "Unknown" on screen — then the
+migration is applied and the name, code and designation all arrive, the manager
+is unaffected, an unrelated person still sees nothing, and re-running is not an
+error.
+
+#### And three migrations had no detector row
+
+`whats-applied.sql` could not answer for 0090, 0091 or 0092 — the FIX-15 lesson
+repeating: *a diagnostic with holes is worse than none, because it is trusted*,
+and this is the file the owner pastes to decide what to apply.
+
+| # | Decision | Why |
+|---|---|---|
+| CR1-5 | 0090 is anchored to the **ARM**, not to tokens the CASE contains | `HR_APPROVED … MD_REVIEWED … then public.is_md()` adjacent. 0056's failure was a `LIKE` over three fragments that matched three unrelated rows and reported a success it had not achieved. |
+| CR1-6 | 0091 is detected by the comment **0091 itself splices in** | It is the same string 0091 checks to decide it has already run, so the detector and the migration cannot disagree about what "applied" means. |
+| CR1-7 | 0092 is detected on the **policy expression**, never the column | 0083 added `co_reviewer_id` and the read was still missing — a column detector would have reported this fixed throughout the bug. |
+| CR1-8 | The 0091 row carries the do-not-re-run warning | Re-running 0079 after 0080 re-breaks Create and send (DIAGNOSTIC-1), and 0091 lives next to it in the list. |
+
+**The diagnostic is run, not just read: 16 checks, 75 rows, none NULL**, with the
+new row proved FALSE before its policy exists and TRUE after.
+
+**Action required.** `0092_second_reviewer_reads_their_people.sql` is **not
+applied**. Until it is, every second reviewer sees "Unknown" where the person
+they are rating should be.

@@ -530,14 +530,39 @@ export function ExecutiveSummary({
                           }`
                     }
                   />
+                  {/* -- "HR PUT UP FOR APPROVAL" WAS THE ONE NAME FIX-28 MISSED,
+                        three lines above the comment that records the rename.
+                        The owner's instruction was explicit — only the HOD and
+                        the MD decide salary, so this figure is not HR's — and
+                        the card below was corrected while its sibling here was
+                        not. The fix-one-leave-the-sibling mistake, in the file
+                        that already carries a note about it.
+
+                        The caption now says whether the figure IS the
+                        recommendation beside it. Two adjacent cards showing
+                        different percentages, with nothing saying why they
+                        differ, is the same confusion the detailed report was
+                        reported for — there it was one sentence contradicting
+                        its own heading; here it is two cards contradicting each
+                        other in silence. -- */}
                   <Fact
                     tone="approved"
-                    label="HR put up for approval"
+                    label="Proposed"
                     value={moneyMonthly(salary.review?.hr_proposed_ctc ?? null)}
                     caption={
-                      salary.review?.hr_proposed_ctc
-                        ? `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary.`
-                        : "Nothing proposed yet."
+                      !salary.review?.hr_proposed_ctc
+                        ? "Nothing proposed yet."
+                        : salary.recommendedHikePct !== null &&
+                            salary.review?.hr_proposed_hike_pct !== null &&
+                            Math.abs(
+                              salary.review.hr_proposed_hike_pct - salary.recommendedHikePct,
+                            ) < 0.005
+                          ? `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary, as recommended.`
+                          : `${pctText(salary.review?.hr_proposed_hike_pct ?? null)} on today's salary${
+                              salary.recommendedHikePct === null
+                                ? "."
+                                : ` — not the ${salary.recommendedHikePct}% recommended.`
+                            }`
                     }
                   />
                 </dl>
