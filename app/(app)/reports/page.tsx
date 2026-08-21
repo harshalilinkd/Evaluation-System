@@ -48,7 +48,21 @@ export default async function Page({
   }
 
   return (
-    <Tabs defaultValue={activeTab} className="flex h-full flex-col">
+    /* -- `data-full-bleed` HERE, not just on the queue tab's own TableScreen.
+          `.app-main:has([data-full-bleed]) .app-container { max-width: none }`
+          matches on DOM PRESENCE — which sounds like it should not care which
+          tab is showing, and does not: Radix's TabsContent uses `Presence`
+          with `present: forceMount || isSelected` (checked directly in
+          @radix-ui/react-tabs's source), so an INACTIVE tab's children are
+          not merely hidden, they are not in the DOM at all. So while looking
+          at Scorecard, the queue's own marker plain does not exist, and the
+          page-wide 1180px cap stayed on regardless of the `wide` prop below —
+          which was the actual bug, once tested rather than assumed correct
+          off the Settings precedent (there it happens to work, because the
+          full-bleed tab there is only ever relevant while IT is the active,
+          therefore mounted, one). Marking the whole page here is what makes
+          it independent of which tab is selected. -- */
+    <Tabs data-full-bleed defaultValue={activeTab} className="flex h-full flex-col">
       <TabsList className="mx-4 mt-3 w-fit bg-surface-mute lg:mx-6">
         <TabsTrigger value="queue" className="font-sans text-body">
           Queue
