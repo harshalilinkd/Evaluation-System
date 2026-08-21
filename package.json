@@ -12,7 +12,7 @@
     "db:reset": "supabase db reset",
     "db:push": "supabase db push",
     "db:diff": "supabase db diff",
-    "db:types": "supabase gen types typescript --linked > types/database.ts",
+    "db:types": "supabase gen types typescript --linked --schema evaluation > types/database.ts",
     "bootstrap:admin": "node --env-file=.env.local scripts/create-admin.mjs"
   },
   "dependencies": {

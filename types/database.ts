@@ -1,17 +1,22 @@
 /** Database types for the Supabase schema. Regenerate with `npm run db:types`. */
 
 // Hand-authored to match the output shape of
-//   supabase gen types typescript --linked
+//   supabase gen types typescript --linked --schema evaluation
 // exactly, so regenerating is a drop-in replacement rather than a refactor.
-// Kept in step with supabase/migrations/0001_core.sql by hand until the project
-// is linked and generation can run in CI.
+// Kept in step with supabase/migrations by hand until the project is linked
+// and generation can run in CI (Docker has never been available here).
+//
+// The schema key is "evaluation", not "public": this project moved into a
+// dedicated schema inside the shared team-apps Supabase project. Every
+// internal cross-reference (Database["evaluation"][...]) points at itself for
+// the same reason — there is exactly one schema described in this file.
 //
 // CLAUDE.md §14: no `any`. Everything the application touches is typed from here.
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export type Database = {
-  public: {
+  evaluation: {
     Tables: {
       /* -- 0023: employment and compensation. §5's salary confinement means
             these three are the most restricted tables in the system: HR and the
@@ -599,7 +604,7 @@ export type Database = {
           date_of_joining: string | null;
           /** 0065: a data URI, shown on sheets this person has signed. */
           signature_image: string | null;
-          track: Database["public"]["Enums"]["track_type"];
+          track: Database["evaluation"]["Enums"]["track_type"];
           reports_to: string | null;
           // 0083: a SECOND manager who rates this person independently of
           // reports_to. Null for almost everybody.
@@ -621,7 +626,7 @@ export type Database = {
           designation?: string | null;
           date_of_joining?: string | null;
           signature_image?: string | null;
-          track?: Database["public"]["Enums"]["track_type"];
+          track?: Database["evaluation"]["Enums"]["track_type"];
           reports_to?: string | null;
           co_reviewer_id?: string | null;
           is_active?: boolean;
@@ -641,7 +646,7 @@ export type Database = {
           designation?: string | null;
           date_of_joining?: string | null;
           signature_image?: string | null;
-          track?: Database["public"]["Enums"]["track_type"];
+          track?: Database["evaluation"]["Enums"]["track_type"];
           reports_to?: string | null;
           co_reviewer_id?: string | null;
           is_active?: boolean;
@@ -678,11 +683,11 @@ export type Database = {
           id: string;
           text: string;
           help_text: string | null;
-          section: Database["public"]["Enums"]["question_section"];
-          response_type: Database["public"]["Enums"]["response_type"];
-          category: Database["public"]["Enums"]["question_category"];
-          track: Database["public"]["Enums"]["track_type"];
-          answered_by: Database["public"]["Enums"]["answered_by"];
+          section: Database["evaluation"]["Enums"]["question_section"];
+          response_type: Database["evaluation"]["Enums"]["response_type"];
+          category: Database["evaluation"]["Enums"]["question_category"];
+          track: Database["evaluation"]["Enums"]["track_type"];
+          answered_by: Database["evaluation"]["Enums"]["answered_by"];
           is_required: boolean;
           min_value: number | null;
           max_value: number | null;
@@ -700,11 +705,11 @@ export type Database = {
           id?: string;
           text: string;
           help_text?: string | null;
-          section: Database["public"]["Enums"]["question_section"];
-          response_type: Database["public"]["Enums"]["response_type"];
-          category: Database["public"]["Enums"]["question_category"];
-          track?: Database["public"]["Enums"]["track_type"];
-          answered_by?: Database["public"]["Enums"]["answered_by"];
+          section: Database["evaluation"]["Enums"]["question_section"];
+          response_type: Database["evaluation"]["Enums"]["response_type"];
+          category: Database["evaluation"]["Enums"]["question_category"];
+          track?: Database["evaluation"]["Enums"]["track_type"];
+          answered_by?: Database["evaluation"]["Enums"]["answered_by"];
           is_required?: boolean;
           cycle_scope?: string;
           min_value?: number | null;
@@ -721,11 +726,11 @@ export type Database = {
           id?: string;
           text?: string;
           help_text?: string | null;
-          section?: Database["public"]["Enums"]["question_section"];
-          response_type?: Database["public"]["Enums"]["response_type"];
-          category?: Database["public"]["Enums"]["question_category"];
-          track?: Database["public"]["Enums"]["track_type"];
-          answered_by?: Database["public"]["Enums"]["answered_by"];
+          section?: Database["evaluation"]["Enums"]["question_section"];
+          response_type?: Database["evaluation"]["Enums"]["response_type"];
+          category?: Database["evaluation"]["Enums"]["question_category"];
+          track?: Database["evaluation"]["Enums"]["track_type"];
+          answered_by?: Database["evaluation"]["Enums"]["answered_by"];
           is_required?: boolean;
           cycle_scope?: string;
           min_value?: number | null;
@@ -839,7 +844,7 @@ export type Database = {
         };
         // No RLS policy admits either — set_outbound_paused is the write path.
         Insert: { id?: boolean; outbound_paused?: boolean };
-        Update: Partial<Database["public"]["Tables"]["notification_settings"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["notification_settings"]["Insert"]>;
         Relationships: [];
       };
 
@@ -861,7 +866,7 @@ export type Database = {
         };
         // No RLS policy admits a write — save_evaluation_schedule is the path.
         Insert: { id?: boolean };
-        Update: Partial<Database["public"]["Tables"]["evaluation_schedule"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluation_schedule"]["Insert"]>;
         Relationships: [];
       };
 
@@ -876,7 +881,7 @@ export type Database = {
         // No RLS policy admits a write — save_notification_template and
         // reset_notification_template are the whole write path.
         Insert: { key: string; subject: string; body: string };
-        Update: Partial<Database["public"]["Tables"]["notification_templates"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["notification_templates"]["Insert"]>;
         Relationships: [];
       };
 
@@ -946,7 +951,7 @@ export type Database = {
           created_at?: string;
           sent_at?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["notifications_log"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["notifications_log"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "notifications_log_evaluation_id_fkey";
@@ -990,7 +995,7 @@ export type Database = {
           reason?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["audit_log"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["audit_log"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "audit_log_actor_id_fkey";
@@ -1018,7 +1023,7 @@ export type Database = {
           created_by: string | null;
           created_at: string;
           // 0022: which layer this link opens. Neither opens the other.
-          layer: Database["public"]["Enums"]["rating_layer"];
+          layer: Database["evaluation"]["Enums"]["rating_layer"];
         };
         Insert: {
           id?: string;
@@ -1033,7 +1038,7 @@ export type Database = {
           created_by?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["invite_tokens"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["invite_tokens"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "invite_tokens_evaluation_id_fkey";
@@ -1057,13 +1062,13 @@ export type Database = {
           id: string;
           name: string;
           period_label: string;
-          track_scope: Database["public"]["Enums"]["track_type"];
+          track_scope: Database["evaluation"]["Enums"]["track_type"];
           starts_on: string | null;
           self_due_on: string | null;
           lead_due_on: string | null;
           md_due_on: string | null;
-          status: Database["public"]["Enums"]["cycle_status"];
-          disclosure: Database["public"]["Enums"]["disclosure_policy"];
+          status: Database["evaluation"]["Enums"]["cycle_status"];
+          disclosure: Database["evaluation"]["Enums"]["disclosure_policy"];
           variance_threshold: number;
           // 0022. Text with a CHECK, not enums — see the migration for why.
           cycle_type: string;
@@ -1083,13 +1088,13 @@ export type Database = {
           id?: string;
           name: string;
           period_label: string;
-          track_scope?: Database["public"]["Enums"]["track_type"];
+          track_scope?: Database["evaluation"]["Enums"]["track_type"];
           starts_on?: string | null;
           self_due_on?: string | null;
           lead_due_on?: string | null;
           md_due_on?: string | null;
-          status?: Database["public"]["Enums"]["cycle_status"];
-          disclosure?: Database["public"]["Enums"]["disclosure_policy"];
+          status?: Database["evaluation"]["Enums"]["cycle_status"];
+          disclosure?: Database["evaluation"]["Enums"]["disclosure_policy"];
           variance_threshold?: number;
           cycle_type?: string;
           cycle_kind?: string;
@@ -1103,7 +1108,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["evaluation_cycles"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluation_cycles"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "evaluation_cycles_created_by_fkey";
@@ -1122,8 +1127,8 @@ export type Database = {
           evaluatee_id: string;
           lead_id: string | null;
           department_id: string | null;
-          track: Database["public"]["Enums"]["track_type"];
-          status: Database["public"]["Enums"]["evaluation_status"];
+          track: Database["evaluation"]["Enums"]["track_type"];
+          status: Database["evaluation"]["Enums"]["evaluation_status"];
           self_submitted_at: string | null;
           lead_submitted_at: string | null;
           md_finalized_at: string | null;
@@ -1158,8 +1163,8 @@ export type Database = {
           evaluatee_id: string;
           lead_id?: string | null;
           department_id?: string | null;
-          track: Database["public"]["Enums"]["track_type"];
-          status?: Database["public"]["Enums"]["evaluation_status"];
+          track: Database["evaluation"]["Enums"]["track_type"];
+          status?: Database["evaluation"]["Enums"]["evaluation_status"];
           self_submitted_at?: string | null;
           lead_submitted_at?: string | null;
           md_finalized_at?: string | null;
@@ -1180,7 +1185,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["evaluations"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluations"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "evaluations_cycle_id_fkey";
@@ -1222,9 +1227,9 @@ export type Database = {
           question_id: string;
           text: string;
           help_text: string | null;
-          section: Database["public"]["Enums"]["question_section"];
-          response_type: Database["public"]["Enums"]["response_type"];
-          answered_by: Database["public"]["Enums"]["answered_by"];
+          section: Database["evaluation"]["Enums"]["question_section"];
+          response_type: Database["evaluation"]["Enums"]["response_type"];
+          answered_by: Database["evaluation"]["Enums"]["answered_by"];
           is_required: boolean;
           min_value: number | null;
           max_value: number | null;
@@ -1239,9 +1244,9 @@ export type Database = {
           question_id: string;
           text: string;
           help_text?: string | null;
-          section: Database["public"]["Enums"]["question_section"];
-          response_type: Database["public"]["Enums"]["response_type"];
-          answered_by: Database["public"]["Enums"]["answered_by"];
+          section: Database["evaluation"]["Enums"]["question_section"];
+          response_type: Database["evaluation"]["Enums"]["response_type"];
+          answered_by: Database["evaluation"]["Enums"]["answered_by"];
           is_required?: boolean;
           min_value?: number | null;
           max_value?: number | null;
@@ -1250,7 +1255,7 @@ export type Database = {
           options?: Json | null;
           sort_order?: number;
         };
-        Update: Partial<Database["public"]["Tables"]["evaluation_questions"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluation_questions"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "evaluation_questions_evaluation_id_fkey";
@@ -1266,7 +1271,7 @@ export type Database = {
         Row: {
           id: string;
           evaluation_id: string;
-          layer: Database["public"]["Enums"]["rating_layer"];
+          layer: Database["evaluation"]["Enums"]["rating_layer"];
           answers: Json;
           comments: Json;
           section_scores: Json | null;
@@ -1279,7 +1284,7 @@ export type Database = {
         Insert: {
           id?: string;
           evaluation_id: string;
-          layer: Database["public"]["Enums"]["rating_layer"];
+          layer: Database["evaluation"]["Enums"]["rating_layer"];
           answers?: Json;
           comments?: Json;
           section_scores?: Json | null;
@@ -1289,7 +1294,7 @@ export type Database = {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["evaluation_responses"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluation_responses"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "evaluation_responses_evaluation_id_fkey";
@@ -1330,7 +1335,7 @@ export type Database = {
           decided_by?: string | null;
           decided_at?: string | null;
         };
-        Update: Partial<Database["public"]["Tables"]["evaluation_decisions"]["Insert"]>;
+        Update: Partial<Database["evaluation"]["Tables"]["evaluation_decisions"]["Insert"]>;
         Relationships: [
           {
             foreignKeyName: "evaluation_decisions_evaluation_id_fkey";
@@ -1346,17 +1351,17 @@ export type Database = {
         Row: {
           id: string;
           profile_id: string;
-          role: Database["public"]["Enums"]["app_role"];
+          role: Database["evaluation"]["Enums"]["app_role"];
         };
         Insert: {
           id?: string;
           profile_id: string;
-          role: Database["public"]["Enums"]["app_role"];
+          role: Database["evaluation"]["Enums"]["app_role"];
         };
         Update: {
           id?: string;
           profile_id?: string;
-          role?: Database["public"]["Enums"]["app_role"];
+          role?: Database["evaluation"]["Enums"]["app_role"];
         };
         Relationships: [
           {
@@ -1427,12 +1432,12 @@ export type Database = {
           cycle_id: string;
           department_id: string | null;
           department_name: string | null;
-          section: Database["public"]["Enums"]["question_section"];
+          section: Database["evaluation"]["Enums"]["question_section"];
           /** False for Job Specific Skills — different questions per department. */
           is_comparable: boolean;
           answer_count: number;
           avg_score: number | null;
-          layer: Database["public"]["Enums"]["rating_layer"];
+          layer: Database["evaluation"]["Enums"]["rating_layer"];
         };
         Relationships: [];
       };
@@ -1459,7 +1464,7 @@ export type Database = {
           cycle_name: string;
           period_label: string;
           starts_on: string | null;
-          status: Database["public"]["Enums"]["evaluation_status"];
+          status: Database["evaluation"]["Enums"]["evaluation_status"];
           self_overall: number | null;
           lead_overall: number | null;
           final_overall: number | null;
@@ -1472,7 +1477,7 @@ export type Database = {
           promotion_recommendation: string | null;
           increment_type: string | null;
           increment_pct: number | null;
-          disclosure: Database["public"]["Enums"]["disclosure_policy"];
+          disclosure: Database["evaluation"]["Enums"]["disclosure_policy"];
         };
         Relationships: [];
       };
@@ -1482,15 +1487,15 @@ export type Database = {
       apply_evaluation_transition: {
         Args: {
           p_evaluation_id: string;
-          p_from_status: Database["public"]["Enums"]["evaluation_status"];
-          p_to_status: Database["public"]["Enums"]["evaluation_status"];
+          p_from_status: Database["evaluation"]["Enums"]["evaluation_status"];
+          p_to_status: Database["evaluation"]["Enums"]["evaluation_status"];
           p_actor_id: string;
           p_action: string;
           p_reason?: string | null;
           p_diff?: Json | null;
           p_evaluation_patch?: Json;
-          p_lock_layer?: Database["public"]["Enums"]["rating_layer"] | null;
-          p_unlock_layer?: Database["public"]["Enums"]["rating_layer"] | null;
+          p_lock_layer?: Database["evaluation"]["Enums"]["rating_layer"] | null;
+          p_unlock_layer?: Database["evaluation"]["Enums"]["rating_layer"] | null;
           p_answers?: Json | null;
           p_section_scores?: Json | null;
           p_overall_score?: number | null;
@@ -1545,7 +1550,7 @@ export type Database = {
       merge_evaluation_answers: {
         Args: {
           p_evaluation_id: string;
-          p_layer: Database["public"]["Enums"]["rating_layer"];
+          p_layer: Database["evaluation"]["Enums"]["rating_layer"];
           p_answers_patch: Json;
           p_comments_patch?: Json;
           p_remove_keys?: string[];
@@ -1703,11 +1708,11 @@ export type Database = {
       };
       evaluation_disclosure_of: {
         Args: { evaluation_id: string };
-        Returns: Database["public"]["Enums"]["disclosure_policy"];
+        Returns: Database["evaluation"]["Enums"]["disclosure_policy"];
       };
       evaluation_status_of: {
         Args: { evaluation_id: string };
-        Returns: Database["public"]["Enums"]["evaluation_status"];
+        Returns: Database["evaluation"]["Enums"]["evaluation_status"];
       };
       in_transition: { Args: { evaluation_id: string }; Returns: boolean };
       invite_pending_email: { Args: { p_invite_id: string }; Returns: string };
@@ -1767,7 +1772,7 @@ export type Database = {
         }[];
       };
       has_role: {
-        Args: { role: Database["public"]["Enums"]["app_role"] };
+        Args: { role: Database["evaluation"]["Enums"]["app_role"] };
         Returns: boolean;
       };
       is_hr: {
@@ -1837,7 +1842,7 @@ export type Database = {
 /* ---------- Convenience aliases ---------- */
 // So application code writes `Tables<"profiles">` rather than the full path.
 
-type PublicSchema = Database["public"];
+type PublicSchema = Database["evaluation"];
 
 export type Tables<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Row"];
 export type TablesInsert<T extends keyof PublicSchema["Tables"]> = PublicSchema["Tables"][T]["Insert"];

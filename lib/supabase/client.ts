@@ -2,6 +2,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 
+import { SUPABASE_SCHEMA } from "@/lib/supabase/config";
 import type { Database } from "@/types/database";
 
 export function createClient() {
@@ -19,5 +20,7 @@ export function createClient() {
 
   // createBrowserClient memoises internally, so calling this per render is cheap
   // and every component shares one auth state.
-  return createBrowserClient<Database>(url, anonKey);
+  return createBrowserClient<Database>(url, anonKey, {
+    db: { schema: SUPABASE_SCHEMA },
+  });
 }

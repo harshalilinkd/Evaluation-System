@@ -13,3 +13,13 @@ export function isSupabaseConfigured(): boolean {
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   );
 }
+
+/**
+ * The Postgres schema this app's tables live in, inside the shared team-apps
+ * Supabase project. A LITERAL, not read from an env var: supabase-js needs a
+ * compile-time string to pick which schema's Row/Insert/Update types apply to
+ * `.from(...)` calls (types/database.ts describes exactly one schema, keyed
+ * "evaluation") — a value computed at runtime can't narrow that, and every
+ * `.from()` call in the app degrades to untyped `any` the moment it can't.
+ */
+export const SUPABASE_SCHEMA = "evaluation" as const;

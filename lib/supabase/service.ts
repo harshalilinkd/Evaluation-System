@@ -6,6 +6,7 @@ import "server-only";
 
 import { createServerClient } from "@supabase/ssr";
 
+import { SUPABASE_SCHEMA } from "@/lib/supabase/config";
 import type { Database } from "@/types/database";
 
 /* ---------- Import-time guards ---------- */
@@ -44,6 +45,7 @@ export function createServiceClient() {
   // permissions in some paths and stay service-role in others, which is far
   // more dangerous than either behaviour on its own.
   return createServerClient<Database>(url, serviceRoleKey, {
+    db: { schema: SUPABASE_SCHEMA },
     cookies: {
       getAll: () => [],
       setAll: () => {},
