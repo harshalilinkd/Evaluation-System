@@ -274,15 +274,24 @@ export function ExecutiveSummary({
 
           {/* Section comparison — bars, not a list of numbers */}
           <Card title="Section by section">
-            {/* A key, once, rather than a legend repeated per row. */}
+            {/* A key, once, rather than a legend repeated per row.
+
+                NAMES, NOT ROLE WORDS, at the owner's instruction — "Self /
+                Manager / Coordinator" still left the reader mapping a colour
+                to a role to a person. The identity strip at the top of this
+                page already does the same thing ("KETAN BHOIR", "SUPRIYA
+                SONAWANE"), so this key now says the same words rather than a
+                second vocabulary for one fact. `type-label` uppercases
+                automatically, which is what keeps a full name from reading
+                as a sentence sitting where a short word used to. */}
             <div className="mb-2 flex flex-wrap items-center justify-end gap-3 border-b border-rule pb-1.5">
               <span className="flex items-center gap-1.5 type-label text-ink-muted">
                 <span aria-hidden className="size-2 rounded-pill bg-self" />
-                Self
+                {header.employeeName}
               </span>
               <span className="flex items-center gap-1.5 type-label text-ink-muted">
                 <span aria-hidden className="size-2 rounded-pill bg-lead" />
-                Manager
+                {header.leadName ?? "Manager"}
               </span>
               {/* -- THE THIRD TRACK, NAMED. Reported as "missing completely" —
                     it was not: `s.coLead` has drawn a third bar and a third
@@ -290,15 +299,19 @@ export function ExecutiveSummary({
                     null` a few lines down. What was missing was THIS line, so
                     an empty third bar (true right now — the coordinator has
                     not submitted) read as nothing being there at all rather
-                    than as a labelled column waiting on an answer. Same pink
-                    as Manager (§13.1 reserves the hue for "a manager said
-                    this", and a second reviewer is one) — told apart by the
-                    role, not a fourth colour, same as the two narrative cards
-                    above (SR-11). -- */}
+                    than as a labelled column waiting on an answer — Track
+                    itself was fixed separately to give an EMPTY bar a visible
+                    outline, since bg-surface-mute alone was barely there at
+                    6px against the card's own near-white surface.
+
+                    Same pink as Manager (§13.1 reserves the hue for "a
+                    manager said this", and a second reviewer is one) — told
+                    apart by the NAME, not a fourth colour, same as the two
+                    narrative cards above (SR-11). -- */}
               {secondManager ? (
                 <span className="flex items-center gap-1.5 type-label text-ink-muted">
                   <span aria-hidden className="size-2 rounded-pill bg-lead" />
-                  {coLeadRoleLabel}
+                  {secondManager}
                 </span>
               ) : null}
               {/* -- AMEND-5's Average, so this table says the same as the
@@ -875,9 +888,17 @@ function Headline({
 }
 
 /** A 0–5 score as a proportion of the scale. Fixed domain, never fitted. */
+/**
+ * `border` on the groove, not just `bg-surface-mute`, at the owner's
+ * instruction — reported as a genuinely missing third bar when it was an
+ * unfilled one: `bg-surface-mute` against the card's own near-white surface
+ * is barely there at 6px tall, so an EMPTY coordinator track read as no track
+ * at all rather than as "a real slot, waiting on an answer". A filled bar
+ * paints over the border; an empty one still shows its own outline.
+ */
 function Track({ value, className }: { value: number | null; className: string }) {
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-mute">
+    <div className="h-1.5 w-full overflow-hidden rounded-full border border-rule bg-surface-mute">
       {value === null ? null : (
         <div
           className={cn("h-full rounded-full", className)}
