@@ -439,6 +439,85 @@ export async function addSalaryChange(
   return { ok: true, data: { id: inserted.id } };
 }
 
+/* ---------- Correcting a ledger row in place (0093) ---------- */
+
+const correctionSchema = z.object({
+  id: z.string().uuid(),
+  // Not sent to the RPC — the function finds the row's own profile itself.
+  // Carried only so this action knows which employment page to revalidate,
+  // since `id` here is the salary_history row, not the person.
+  profileId: z.string().uuid(),
+  effectiveFrom: z.string().min(1, "An effective-from date is required"),
+  newCtc: z.coerce.number().positive("The salary must be greater than zero"),
+  reason: z.enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
+  note: z
+    .string()
+    .trim()
+    .max(500, "Keep the note under 500 characters")
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : null)),
+});
+
+/**
+ * Corrects an EXISTING `salary_history` row in place — the figure, the date,
+ * the reason and the note, on the same row. No row is appended.
+ *
+ * AT THE OWNER'S EXPLICIT INSTRUCTION (0093). §5's own comment on that
+ * migration is the thing to remember here: `salary_history` refuses a raw
+ * update or delete for EVERY other caller, including HR through the ordinary
+ * table policies. This function is the one door, and it exists because the
+ * owner was shown the alternative — append a CORRECTION row and leave the
+ * wrong one visible underneath — and asked for the row itself to change
+ * instead: "no new row will add, that same row will get corrected."
+ *
+ * `previous_ctc`/`hike_amount`/`hike_pct` are not fields here, same as every
+ * other write in this file (P19-7) — the function recomputes them for the
+ * whole chain, not just this row, because correcting one entry can change
+ * what every later one should have found as its own predecessor.
+ */
+export async function correctSalaryHistoryEntry(
+  input: Omit<z.input<typeof correctionSchema>, "newCtc"> & { newCtc: string | number },
+): Promise<CycleResult<{ figureMoved: boolean; clockMoved: boolean }>> {
+  const auth = await requireHrOrMd();
+  if (!auth.ok) return auth;
+
+  const parsed = correctionSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the highlighted fields.");
+  }
+  const v = parsed.data;
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("correct_salary_history_entry", {
+    p_id: v.id,
+    p_new_ctc: v.newCtc,
+    p_effective_from: v.effectiveFrom,
+    p_reason: v.reason,
+    p_note: v.note,
+  });
+
+  if (error) {
+    // The function raises a sentence somebody can act on for each refusal —
+    // not entitled, no such row, the joining row, a bad figure — so it is
+    // passed through rather than replaced with a generic failure (§0.7).
+    return cycleError("SAVE_FAILED", error.message);
+  }
+
+  const result = (data ?? {}) as { figure_moved?: boolean; clock_moved?: boolean };
+
+  // No audit call here — the function writes its own row inside the same
+  // statement (`salary.corrected`), carrying no figure (§5, P19-10), the same
+  // device 0075's `set_joining_salary` uses for the identical reason.
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+  revalidatePath("/admin/increments");
+  revalidatePath(`/admin/people/${v.profileId}/employment`);
+  return {
+    ok: true,
+    data: { figureMoved: Boolean(result.figure_moved), clockMoved: Boolean(result.clock_moved) },
+  };
+}
+
 /* ---------- Bulk import (P19) ---------- */
 
 /**

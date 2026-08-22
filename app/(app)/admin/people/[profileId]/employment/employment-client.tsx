@@ -26,7 +26,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { addJoiningSalary, addSalaryChange, saveEmployment } from "@/lib/employment/actions";
+import {
+  addJoiningSalary,
+  addSalaryChange,
+  correctSalaryHistoryEntry,
+  saveEmployment,
+} from "@/lib/employment/actions";
 import type { EmploymentDetail } from "@/lib/employment/queries";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -91,6 +96,17 @@ export function EmploymentClient({
   const [salaryMode, setSalaryMode] = React.useState<"change" | "correct" | null>(null);
   const openSalary = (mode: "change" | "correct") => setSalaryMode(mode);
   const [joiningOpen, setJoiningOpen] = React.useState(false);
+  /* -- Editing the ALREADY-SET baseline, not adding a first one. Same dialog,
+        pre-filled with the stored figure rather than blank — "Add joining
+        salary" only ever showed when there was none yet. -- */
+  const [joiningEditAmount, setJoiningEditAmount] = React.useState<string | null>(null);
+
+  /* -- THE ROW BEING CORRECTED, held as the row itself rather than an id, so
+        the dialog can pre-fill from it directly without a second lookup.
+        `null` is closed — same one-state-not-two shape as the dialogs above. -- */
+  const [correctingRow, setCorrectingRow] = React.useState<EmploymentDetail["history"][number] | null>(
+    null,
+  );
 
   /* -- REVISIONS ONLY.
         A legacy `reason = 'JOINING'` row is the baseline recorded the old way,
@@ -329,15 +345,15 @@ export function EmploymentClient({
       <DashboardCard title="Salary history">
         {revisions.length === 0 && r?.joining_ctc == null ? (
           <p className="text-body-sm text-ink-muted">
-            Nothing recorded yet. Every change is appended here and can never be edited or removed —
-            a mistake is fixed by adding a correction.
+            Nothing recorded yet. Every entry stays on record — a mistake is fixed on the row itself,
+            through Edit, rather than by adding a second one.
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border/60">
-                  {["Effective", "Previous", "New", "Hike", "%", "Reason", "Recorded by", "Note"].map(
+                  {["Effective", "Previous", "New", "Hike", "%", "Reason", "Recorded by", "Note", ""].map(
                     (h) => (
                       <th key={h} scope="col" className="type-label px-3 py-2 text-left font-bold text-ink">
                         {h}
@@ -355,7 +371,14 @@ export function EmploymentClient({
 
                         No previous, no hike, no percentage — it is what the
                         ledger starts from, and a baseline with a rise against
-                        it would be describing a raise that never happened. -- */}
+                        it would be describing a raise that never happened.
+
+                        EDITABLE IN PLACE, unlike every row beneath it — it is
+                        not a `salary_history` row at all, so 0023's append-only
+                        trigger has no say over it, and `set_joining_salary`
+                        (0075) already lets it be corrected. The "Edit" button
+                        here is the first time that path has a control on THIS
+                        table rather than only on the Current pay card above. -- */}
                 {r?.joining_ctc != null ? (
                   <tr className="border-b border-rule bg-surface-mute/60 last:border-b-0">
                     <td className="tabular px-3 py-2.5 text-body-sm text-ink">
@@ -386,6 +409,16 @@ export function EmploymentClient({
                       {detail.joiningRecordedByName ?? "—"}
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">Baseline</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <Button
+                        variant="ghost"
+                        className="h-auto min-h-11 px-2 py-1 text-body-sm text-primary sm:min-h-0"
+                        onClick={() => setJoiningEditAmount(String(r.joining_ctc))}
+                      >
+                        <Pencil aria-hidden className="size-3.5" />
+                        <span className="sr-only">Edit the joining salary</span>
+                      </Button>
+                    </td>
                   </tr>
                 ) : null}
 
@@ -408,11 +441,36 @@ export function EmploymentClient({
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">
                       {REASON_LABEL[row.reason] ?? row.reason}
+                      {/* -- A quiet marker, not a second Provenance column.
+                            `corrected_at` (0093) is null until the row has
+                            actually been edited, so a normal, never-touched
+                            entry looks exactly as it always has. -- */}
+                      {row.corrected_at ? (
+                        <span className="ml-1.5 text-body-xs text-ink-muted">
+                          (corrected {formatDate(row.corrected_at)})
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">
                       {row.recordedByName ?? "—"}
                     </td>
                     <td className="px-3 py-2.5 text-body-sm text-ink-muted">{row.note ?? "—"}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      {/* -- IN PLACE, AT THE OWNER'S EXPLICIT INSTRUCTION (0093).
+                            Every other write in this file appends; this one
+                            changes the row itself, and nothing else on this
+                            page does that — which is why it earns a comment
+                            here rather than only on the action and the
+                            migration. -- */}
+                      <Button
+                        variant="ghost"
+                        className="h-auto min-h-11 px-2 py-1 text-body-sm text-primary sm:min-h-0"
+                        onClick={() => setCorrectingRow(row)}
+                      >
+                        <Pencil aria-hidden className="size-3.5" />
+                        <span className="sr-only">Edit this entry</span>
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -449,12 +507,33 @@ export function EmploymentClient({
         }}
       />
 
+      {/* -- ONE DIALOG, TWO ENTRY POINTS, keyed on which is open so it never
+            shows the OTHER call's stale amount in its field. Add starts blank;
+            Edit (the row's own pencil button) starts on the stored figure. -- */}
       <JoiningSalaryDialog
-        open={joiningOpen}
-        onOpenChange={setJoiningOpen}
+        key={joiningEditAmount !== null ? "edit" : "add"}
+        open={joiningOpen || joiningEditAmount !== null}
+        onOpenChange={(v) => {
+          if (!v) {
+            setJoiningOpen(false);
+            setJoiningEditAmount(null);
+          }
+        }}
         profileId={person.id}
         dateOfJoining={detail.dateOfJoining ?? null}
         hasRecord={Boolean(r)}
+        initialAmount={joiningEditAmount ?? ""}
+        isEdit={joiningEditAmount !== null}
+      />
+
+      <CorrectRowDialog
+        row={correctingRow}
+        profileId={person.id}
+        onClose={() => setCorrectingRow(null)}
+        onDone={() => {
+          setCorrectingRow(null);
+          router.refresh();
+        }}
       />
     </div>
   );
@@ -686,15 +765,25 @@ function JoiningSalaryDialog({
   profileId,
   dateOfJoining,
   hasRecord,
+  initialAmount = "",
+  isEdit = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   profileId: string;
   dateOfJoining: string | null;
   hasRecord: boolean;
+  /** The stored figure, when this is opened from the row's own Edit button
+   *  rather than from "Add joining salary" — blank means there is nothing
+   *  to pre-fill yet. */
+  initialAmount?: string;
+  /** Changes only the wording; `set_joining_salary` (0075) behaves the same
+   *  either way — it has allowed a correction, not only a first entry,
+   *  since that migration. */
+  isEdit?: boolean;
 }) {
   const router = useRouter();
-  const [amount, setAmount] = React.useState("");
+  const [amount, setAmount] = React.useState(initialAmount);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -716,11 +805,11 @@ function JoiningSalaryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record the joining salary</DialogTitle>
+          <DialogTitle>{isEdit ? "Correct the joining salary" : "Record the joining salary"}</DialogTitle>
           <DialogDescription>
-            What they were paid when they joined. This is the baseline their first
-            rise is measured against — it is not a salary change and does not
-            count as one.
+            {isEdit
+              ? "This changes the figure on this same record — nothing new is added. If nobody has had a rise yet, today's salary moves with it, because they are still on what they joined on."
+              : "What they were paid when they joined. This is the baseline their first rise is measured against — it is not a salary change and does not count as one."}
           </DialogDescription>
         </DialogHeader>
 
@@ -750,9 +839,15 @@ function JoiningSalaryDialog({
                 value={amount === "" ? null : Number(amount)}
                 onValueChange={(annual) => setAmount(annual === null ? "" : String(annual))}
               />
+              {/* -- Where somebody already has a recorded rise, correcting this
+                    can leave that rise's own stored "previous" figure reading
+                    something else — a reading to interpret, not corrupted data
+                    (0075's own note on the trade). Said here rather than
+                    assumed, since this is the one moment it is decided. -- */}
               <p className="text-body-sm text-ink-muted">
-                Recorded once and left alone afterwards, because
-                every later percentage is worked out from it.
+                {isEdit
+                  ? "Every percentage already recorded on a later rise is stored on that row and stays exactly as it was — only this figure changes."
+                  : "Can be corrected later if it is typed wrong."}
               </p>
             </div>
 
@@ -770,7 +865,122 @@ function JoiningSalaryDialog({
           </Button>
           <Button onClick={() => void submit()} disabled={busy || !hasRecord} className="min-h-11">
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            Record it
+            {isEdit ? "Save the correction" : "Record it"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ---------- Correcting a history row in place (0093) ---------- */
+
+/**
+ * Edits an EXISTING `salary_history` row's own figures. AT THE OWNER'S
+ * EXPLICIT INSTRUCTION — the ordinary way to fix a wrong entry in this system
+ * is to append a new row with reason CORRECTION and leave the wrong one
+ * visible underneath (still true, still available from the "Correct" button
+ * on the Current pay card above). This dialog does the other thing: the row
+ * itself changes, and nothing new is added.
+ *
+ * `previous_ctc`, `hike_amount` and `hike_pct` are not fields here, same as
+ * `SalaryDialog` above and for the same reason (P19-7) — the server
+ * recomputes them for the whole chain, because correcting this row's figure
+ * or date can change what a LATER row should have found as its own
+ * predecessor.
+ */
+function CorrectRowDialog({
+  row,
+  profileId,
+  onClose,
+  onDone,
+}: {
+  row: EmploymentDetail["history"][number] | null;
+  profileId: string;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [effectiveFrom, setEffectiveFrom] = React.useState(row?.effective_from ?? "");
+  const [newCtc, setNewCtc] = React.useState(row?.new_ctc != null ? String(row.new_ctc) : "");
+  const [reason, setReason] = React.useState(row?.reason ?? "ANNUAL_INCREMENT");
+  const [note, setNote] = React.useState(row?.note ?? "");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function submit() {
+    if (!row) return;
+    setBusy(true);
+    setError(null);
+    const result = await correctSalaryHistoryEntry({
+      id: row.id,
+      profileId,
+      effectiveFrom,
+      newCtc,
+      reason: reason as (typeof REASONS)[number]["value"],
+      note,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    // Keyed on the row's own id, so opening a second row's Edit while this
+    // one is still mid-edit — or reopening after Cancel — always starts from
+    // THAT row's own stored values rather than whatever was last typed
+    // (P10-11's device: a reset effect would render once with the stale
+    // fields first, visible as them changing under the pointer).
+    <Dialog key={row?.id ?? "closed"} open={row !== null} onOpenChange={(v) => (v ? null : onClose())}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit this entry</DialogTitle>
+          <DialogDescription>
+            Changes the figure on this same row — nothing new is added, and it is not counted as a
+            fresh rise. Every later entry&rsquo;s own previous-figure and hike are updated to match, so
+            the ledger stays consistent with itself.
+          </DialogDescription>
+        </DialogHeader>
+
+        {row ? (
+          <div className="space-y-4">
+            <Field label="Effective from" required>
+              <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+            </Field>
+            <Field label="Salary (monthly)" required>
+              <MoneyInput
+                value={newCtc === "" ? null : Number(newCtc)}
+                onValueChange={(annual) => setNewCtc(annual === null ? "" : String(annual))}
+              />
+            </Field>
+            <Field label="Reason" required>
+              <select
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                className="h-10 w-full rounded-control border border-border bg-surface px-3 text-body-sm text-ink"
+              >
+                {REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Note" hint="Optional. Why this changed — somebody will read it in two years.">
+              <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+            </Field>
+          </div>
+        ) : null}
+
+        {error ? <p role="alert" className="text-body-sm font-medium text-critical">{error}</p> : null}
+
+        <DialogFooter>
+          <Button variant="outline" className="min-h-11" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button className="min-h-11" onClick={() => void submit()} disabled={busy || !row}>
+            {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+            Save the correction
           </Button>
         </DialogFooter>
       </DialogContent>

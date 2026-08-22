@@ -80,6 +80,11 @@ export type Database = {
           recorded_by: string | null;
           recorded_at: string;
           note: string | null;
+          // 0093. Who/when a row was CORRECTED — separate from recorded_by/
+          // recorded_at, which the append-only trigger pins to the original
+          // entry even through the one correction path.
+          corrected_by: string | null;
+          corrected_at: string | null;
         };
         Insert: {
           profile_id: string;
@@ -93,8 +98,10 @@ export type Database = {
           recorded_by?: string | null;
           note?: string | null;
         };
-        // No Update type. The table refuses one, and a type that suggested
-        // otherwise would be an invitation to write code that cannot run.
+        // No Update type. The table refuses a raw update from every ordinary
+        // caller (0023) — 0093's one exception is `correct_salary_history_entry`,
+        // an RPC rather than a table write, so nothing here should suggest a
+        // client can `.update()` this table directly.
         Update: never;
         Relationships: [];
       };
@@ -1572,6 +1579,24 @@ export type Database = {
       // 0074. The corrective path: same rules, minus the once-only refusal.
       set_joining_salary: {
         Args: { p_profile_id: string; p_amount: number };
+        Returns: Json;
+      };
+      /**
+       * The one door into an append-only table (0093). Corrects a REAL
+       * salary_history row in place — id/profile_id/evaluation_id/recorded_by/
+       * recorded_at cannot move even through this path, and the whole chain's
+       * previous_ctc/hike_amount/hike_pct is recomputed afterwards so nothing
+       * downstream is left disagreeing with the corrected figure.
+       */
+      correct_salary_history_entry: {
+        Args: {
+          p_id: string;
+          p_new_ctc: number;
+          p_effective_from: string;
+          p_reason: string;
+          p_note: string | null;
+        };
+        /** { figure_moved, clock_moved } — same shape as apply_salary_to_record. */
         Returns: Json;
       };
       record_joining_salary: {
