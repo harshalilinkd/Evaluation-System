@@ -448,21 +448,35 @@ export function CyclesClient({
               query's own comment says so. -- */
         rowDetail={(c) => (
           <div className="space-y-3">
-            {/* -- WHY "MANAGER IN" ABOVE CAN READ LOWER THAN THE LIST BELOW.
-                  More manager rows than employees means at least one person
-                  here has a second reviewer (0083) — so "Manager in" up top
-                  counts them only once BOTH have submitted, and one manager
-                  being fully done, as below, is not the same as both. Shown
-                  only when it is actually true of this cycle, so a cycle with
-                  one manager per person — most of them — carries no extra
-                  line to read past. -- */}
-            {c.managerRows.length > c.employees.length ? (
-              <p className="rounded-control bg-surface-mute px-3 py-2 text-body-sm text-ink-muted">
-                At least one person here has a second reviewer. The Manager in
-                figure above counts them once{" "}
-                <span className="font-medium text-ink">both</span> of their
-                managers have submitted — not as soon as the first one has.
-              </p>
+            {/* -- THE TWO MANAGERS, SEPARATELY — reported as unclear: "Manager
+                  in 0/1" up top read lower than the breakdown below, which
+                  already showed one of the two managers fully done, and a
+                  tooltip explaining the blended figure was not enough to
+                  resolve the confusion. Two plain rows instead, styled like
+                  "Self in"/"Manager in" above — the same shape everywhere a
+                  count appears on this dialog — so each number needs no
+                  explanation of its own. Shown only when this cycle actually
+                  has a second reviewer; the ordinary two-form cycle carries
+                  no extra rows to read past. -- */}
+            {c.coReviewerIn ? (
+              <dl className="rounded-control border border-rule">
+                <div className="grid grid-cols-[9rem_1fr] items-baseline gap-3 border-b border-rule px-3 py-2.5">
+                  <dt className="type-label font-bold text-ink">Manager in</dt>
+                  <dd className="font-sans text-body text-ink">
+                    {c.reportingLeadIn.done}/{c.reportingLeadIn.total}
+                  </dd>
+                </div>
+                <div className="grid grid-cols-[9rem_1fr] items-baseline gap-3 px-3 py-2.5">
+                  {/* Not the designation of any one person — a cycle can mix
+                      second reviewers with different titles, and this is
+                      the same word the roster elsewhere already uses for
+                      the role (Team review's "2nd rating"). */}
+                  <dt className="type-label font-bold text-ink">2nd reviewer in</dt>
+                  <dd className="font-sans text-body text-ink">
+                    {c.coReviewerIn.done}/{c.coReviewerIn.total}
+                  </dd>
+                </div>
+              </dl>
             ) : null}
             <div className="grid gap-5 sm:grid-cols-2">
               <PeopleList

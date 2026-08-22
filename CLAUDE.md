@@ -8587,6 +8587,40 @@ and this is the file the owner pastes to decide what to apply.
 **The diagnostic is run, not just read: 16 checks, 75 rows, none NULL**, with the
 new row proved FALSE before its policy exists and TRUE after.
 
-**Action required.** `0092_second_reviewer_reads_their_people.sql` is **not
-applied**. Until it is, every second reviewer sees "Unknown" where the person
-they are rating should be.
+**COREVIEWER-1 addendum — I deleted this migration and was wrong to. It is
+restored.**
+
+Run against the live database rather than reasoned about, and two things came
+back that change this entry:
+
+1. **The arm is already on the live database.** `evaluation.profiles`' read
+   policy reads `… OR (co_reviewer_id = (SELECT auth.uid()))`. The diagnosis
+   was right and the fix had already reached the deployment by other means.
+2. **The app's tables live in an `evaluation` SCHEMA**, not `public` —
+   `lib/supabase/config.ts` pins `SUPABASE_SCHEMA = "evaluation"` and every
+   client passes it. The Supabase project is shared by eight or nine apps, each
+   in its own schema; `public` belongs to the enquiry/CRM system.
+
+**I concluded from those two that the file was redundant and deleted it. That
+was wrong, and the owner said so.** Both points argue about the DEPLOYMENT and
+neither says anything about the CHAIN:
+
+- Without this file, anybody rebuilding from migrations gets 0053's policy,
+  which has no second-reviewer clause — so the fix silently disappears on the
+  next rebuild and the "Unknown" bug returns. **A repair that exists only in a
+  running database and not in the migration that creates the object is a repair
+  with a half-life.**
+- `public.` is not a fault of this file. **All 91 migrations before it say
+  `public.`**, so 0092 is consistent with every sibling, and whatever process
+  applies those applies this one identically. Singling this one out for a
+  property the whole chain shares was the error.
+
+Restored, with the live state recorded in its own header so nobody re-derives
+this. The `public.` versus `evaluation.` discrepancy across the whole chain is a
+real and separate question — recorded here, needing an explicit decision, and
+NOT something to resolve by editing 91 files inside a bug fix.
+
+**The reported symptom had a different cause entirely.** The second reviewer had
+entered nothing: her `LEAD_2` response row exists and is empty (0 answers, never
+submitted), while SELF and LEAD both carry 15 answers and a stored score. The
+form was open and waiting, so nothing about storage was broken.

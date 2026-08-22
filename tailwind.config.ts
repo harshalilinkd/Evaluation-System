@@ -98,6 +98,13 @@ const config: Config = {
           tint: color("final-tint"),
         },
 
+        /* -- NOT a fourth tier. A second reviewer shares the Lead hue by
+              definition (§13.1 — both are "an HOD said this"), but a chart
+              plotting both managers together needs to tell their two series
+              apart. Chosen by the owner, at their explicit instruction, for
+              that one narrow use — see globals.css. -- */
+        "second-reviewer": color("second-reviewer"),
+
         /* -- Two record tints, chosen by the owner for the salary panel's
               joining and last-increment cards. TINT ONLY, no DEFAULT: there is
               no "joining" foreground and never should be. Kept beside the tiers

@@ -211,12 +211,15 @@ export function ExecutiveSummary({
             {/* -- Their own panel, not folded into the one beside it: the two
                    managers rated independently and blind to each other, so one
                    figure would hide exactly the disagreement both were asked
-                   for. Named, because the manager hue is shared (§13.1). -- */}
+                   for. accent="second-reviewer" — reported as still reading
+                   pink here even after the chart below took the distinct
+                   colour: this card is a different render path (Headline, not
+                   Track) and needed the same colour applied to it directly. -- */}
             {secondManager ? (
               <Headline
                 label={secondManager}
                 value={score(summary.coLeadOverall)}
-                accent="lead"
+                accent="second-reviewer"
               />
             ) : null}
             <Headline
@@ -310,13 +313,13 @@ export function ExecutiveSummary({
                     with the name in place: two identically solid pink bars
                     sitting one above the other, five rows down, meant
                     constantly tracing back up to this legend to remember
-                    which position was which. A lighter TINT of the same
-                    hue (bg-lead/55, matched on the Track below) is not a
-                    fourth colour — the family and its meaning are unchanged
-                    — it is what lets every row read on its own. -- */}
+                    which position was which. bg-second-reviewer — a distinct
+                    literal colour (#767F9E), CHOSEN BY THE OWNER at their
+                    explicit instruction, not a lighter tint of Lead — is what
+                    lets every row read on its own without a fourth TIER. -- */}
               {secondManager ? (
                 <span className="flex items-center gap-1.5 type-label text-ink-muted">
-                  <span aria-hidden className="size-2 rounded-pill bg-lead/55" />
+                  <span aria-hidden className="size-2 rounded-pill bg-second-reviewer" />
                   {secondManager}
                 </span>
               ) : null}
@@ -371,14 +374,16 @@ export function ExecutiveSummary({
                       <span className="mt-1.5 block space-y-1">
                         <Track value={s.self} className="bg-self" />
                         <Track value={s.lead} className="bg-lead" />
-                        {/* -- Lighter tint of the same manager hue, matching the
-                              legend swatch above — not a fourth colour, a
-                              distinguishable SHADE of the one §13.1 reserves for
-                              "a manager said this". Reported as unreadable even
-                              once both managers were named: two solid pink bars
-                              stacked in every one of five rows still needed
-                              tracing back to the legend each time. -- */}
-                        {secondManager ? <Track value={s.coLead} className="bg-lead/55" /> : null}
+                        {/* -- bg-second-reviewer, matching the legend swatch
+                              above — a distinct literal colour (#767F9E),
+                              CHOSEN BY THE OWNER at their explicit instruction.
+                              Reported as unreadable even once both managers
+                              were named: two solid pink bars stacked in every
+                              one of five rows still needed tracing back to the
+                              legend each time. -- */}
+                        {secondManager ? (
+                          <Track value={s.coLead} className="bg-second-reviewer" />
+                        ) : null}
                       </span>
                     </span>
                     <span className="flex shrink-0 items-baseline gap-3">
@@ -878,7 +883,7 @@ function Headline({
   label: string;
   value: string;
   caption?: string;
-  accent: "self" | "lead" | "none";
+  accent: "self" | "lead" | "second-reviewer" | "none";
 }) {
   return (
     <div className="px-4 py-3">
@@ -888,7 +893,11 @@ function Headline({
             aria-hidden
             className={cn(
               "size-2 shrink-0 rounded-pill",
-              accent === "self" ? "bg-self" : "bg-lead",
+              accent === "self"
+                ? "bg-self"
+                : accent === "second-reviewer"
+                  ? "bg-second-reviewer"
+                  : "bg-lead",
             )}
           />
         )}

@@ -242,7 +242,9 @@ export async function getSalaryBand(
      with NO recorded rise keeps whatever was typed". Somebody imported with
      their joining date in that column therefore keeps it for ever.
 
-     So the ledger decides, on exactly 0068's three reasons:
+     So the ledger decides, on exactly 0068's reasons (0094 added a fourth —
+     THREE_MONTH_INCREMENT is money genuinely paid as a rise, same as an
+     annual one, so it moves the clock the same way):
 
        · a recorded rise      → its date, which also self-heals a stale column
        · no rise, and the stored date IS their joining date
@@ -254,7 +256,7 @@ export async function getSalaryBand(
 
      CORRECTION is not a rise and is excluded, as 0068 excludes it: fixing a
      figure that was typed wrong does not restart anybody's increment clock. */
-  const RISE_REASONS = ["ANNUAL_INCREMENT", "PROMOTION", "MARKET_ADJUSTMENT"];
+  const RISE_REASONS = ["ANNUAL_INCREMENT", "PROMOTION", "MARKET_ADJUSTMENT", "THREE_MONTH_INCREMENT"];
   const risesOnRecord = (past ?? []).filter((row) => RISE_REASONS.includes(row.reason));
   const storedLastIncrement = employment?.last_increment_date ?? null;
 

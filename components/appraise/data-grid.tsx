@@ -45,6 +45,13 @@ declare module "@tanstack/react-table" {
      * one from the column id without it.
      */
     label?: string;
+    /**
+     * A stronger divider on this column's TRAILING edge — the last leaf of a
+     * grouped block ("Increment 2"'s Amount column, say), so the boundary
+     * between one group and the next reads as a partition rather than the
+     * same hairline every ordinary column pair shares.
+     */
+    partition?: boolean;
   }
 }
 
@@ -393,9 +400,39 @@ export function DataGrid<TData>({
       ) : null,
   };
 
+  /* -- NORMALISED TO A UNIFORM DEPTH, and ONLY when a caller's OWN columns mix
+        grouped and plain ones — the shape a spanning pair (an "Increment 2"
+        heading over its own Date/Amount columns) needs.
+
+        TanStack's automatic placeholder/depth handling for a MIXED top-level
+        array — some entries carrying their own nested `columns`, some not —
+        did not put every column's real content on the row this code expected:
+        tried directly, group headers slid left into the slots plain columns
+        should have occupied, verified against a real render rather than
+        assumed. Rather than getting that depth math right by more careful
+        reading of undocumented behaviour, every PLAIN column is wrapped in
+        its own single-child, blank-headed group instead — so every top-level
+        entry is structurally identical (a group), and there is no depth
+        ambiguity left to get wrong: row 0 is always every top-level header
+        (blank for a wrapped single, a real name for a real group), row 1 is
+        always every leaf.
+
+        Flat-only callers — the overwhelming majority of this component's
+        callers — take none of this: `hasGrouping` is false for them and the
+        column array passes through completely unchanged. -- */
+  const hasGrouping = columns.some(
+    (c) => "columns" in c && Array.isArray((c as { columns?: unknown }).columns),
+  );
+  const normalise = (col: ColumnDef<TData>): ColumnDef<TData> => {
+    if (!hasGrouping) return col;
+    if ("columns" in col && Array.isArray((col as { columns?: unknown }).columns)) return col;
+    const childId = col.id ?? (col as { accessorKey?: string }).accessorKey ?? "";
+    return { id: `${childId}__wrap`, header: "", columns: [col] };
+  };
+
   const table = useReactTable({
     data,
-    columns: selection ? [selectColumn, gutter, ...columns] : [gutter, ...columns],
+    columns: (selection ? [selectColumn, gutter, ...columns] : [gutter, ...columns]).map(normalise),
     state: { columnSizing },
     onColumnSizingChange: setColumnSizing,
     // `onChange` tracks the pointer live, which is what makes a drag feel like a
@@ -451,7 +488,16 @@ export function DataGrid<TData>({
 
   const headingFor = (columnId: string) => {
     const header = table.getFlatHeaders().find((h) => h.column.id === columnId);
-    return header ? flexRender(header.column.columnDef.header, header.getContext()) : columnId;
+    if (!header) return columnId;
+    /* -- `meta.label` FIRST, same precedence `columnLabel()` uses (line 68).
+          A leaf under a GROUP column renders its own short header on the
+          desktop table — "Date", "Amount" — because the group name above it
+          already says which one. A phone card has no group row to borrow
+          that context from, so a leaf that needs disambiguating supplies its
+          full name through `meta.label` instead; every column that does not
+          set one falls through to its plain header exactly as before. -- */
+    const label = header.column.columnDef.meta?.label;
+    return label ?? flexRender(header.column.columnDef.header, header.getContext());
   };
 
   return (
@@ -652,22 +698,68 @@ export function DataGrid<TData>({
             </colgroup>
 
             <thead>
-              {table.getHeaderGroups().map((headerGroup) => (
+              {/* -- HEADER ROW HEIGHT is fixed at `h-9` (36px) below, so a
+                    second row's sticky offset is `groupIndex * 36`. Every
+                    caller until now has had exactly one header row — a flat
+                    ColumnDef list — so `groupIndex` was always 0 and this was
+                    a no-op; grouped columns (a ColumnDef with its own nested
+                    `columns`) are what makes a second row exist at all. -- */}
+              {table.getHeaderGroups().map((headerGroup, groupIndex) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => {
+                    /* -- TanStack fills the rows BELOW a leaf column that
+                          starts at a shallow depth with placeholder header
+                          objects, so every row has an entry for every leaf.
+                          Rendering those as empty `<th>`s would draw a second,
+                          blank cell under a leaf that has no group above it —
+                          the correct HTML shape is for the leaf's OWN cell to
+                          rowSpan down through them instead, so the placeholder
+                          is skipped entirely rather than drawn. -- */
+                    if (header.isPlaceholder) return null;
+
                     // No `meta` here on purpose: alignment is a property of the
                     // VALUES, and the heading no longer follows it.
                     const left = frozenLeft.get(header.column.id);
+                    const isLeaf = header.subHeaders.length === 0;
+                    // A leaf sitting above sibling GROUP columns has to span
+                    // down through every row below it — for a flat grid every
+                    // leaf is already on the LAST row, so this is always 1.
+                    const rowSpan = isLeaf ? table.getHeaderGroups().length - header.depth : 1;
+                    /* -- A GENUINE GROUP, spanning more than one leaf — never
+                          just "not a leaf". `normalise` above wraps every
+                          PLAIN column (Name, Joined, the gutter…) in its own
+                          one-child synthetic group so depth stays uniform
+                          (see the long comment there); `isLeaf` alone cannot
+                          tell that wrapper apart from a real "Increment 2"
+                          spanning two columns, and treating them the same
+                          darkened the WHOLE header row instead of the three
+                          cells this was actually asked for. colSpan is what
+                          the wrapper and a real group do NOT share. -- */
+                    const isRealGroup = header.colSpan > 1;
+                    /* -- THE PARTITION, checked on THIS header's own trailing
+                          leaf — a leaf checks its own meta; a group looks at
+                          the LAST of its children, since a group's right edge
+                          sits at exactly the same x-coordinate as that leaf's
+                          and the two rows have to agree or the line breaks in
+                          the middle of the header. -- */
+                    const partitionRight = isLeaf
+                      ? Boolean(header.column.columnDef.meta?.partition)
+                      : Boolean(header.subHeaders.at(-1)?.column.columnDef.meta?.partition);
                     return (
                       <th
                         key={header.id}
                         scope="col"
+                        colSpan={header.colSpan}
+                        rowSpan={rowSpan}
                         // border-separate, not border-collapse: a collapsed
                         // border belongs to the table rather than the cell, so
                         // it does not travel with a sticky header or a frozen
                         // column — the grid loses its lines exactly when it is
                         // scrolled, which is when they matter most.
-                        style={left === undefined ? undefined : { "--frozen-left": `${left}px` } as React.CSSProperties}
+                        style={{
+                          top: groupIndex * 36,
+                          ...(left === undefined ? {} : { "--frozen-left": `${left}px` }),
+                        } as React.CSSProperties}
                         className={cn(
                           // EVERY HEADING IS LEFT-ALIGNED, whatever its column
                           // holds.
@@ -679,7 +771,29 @@ export function DataGrid<TData>({
                           // rather than as meaning. A single left edge lets the
                           // eye run along the row and find a column by its
                           // name; the values still align by type underneath.
-                          "sticky top-0 z-20 h-9 border-b border-r border-rule bg-surface-mute px-3 text-left align-middle",
+                          "sticky z-20 h-9 border-b border-r border-rule px-3 text-left align-middle",
+                          // `twMerge` (inside `cn`) lets this WIN over the
+                          // plain `border-r` above — a real divider between
+                          // one "Increment" block and the next, not the same
+                          // hairline an ordinary column pair shares.
+                          partitionRight && "border-r-2 border-r-ink/25",
+                          // A GROUP heading ("Increment 2") gets its OWN
+                          // slightly darker ground than an ordinary leaf
+                          // heading, and centres over the pair it spans — a
+                          // group name read against a single left edge shared
+                          // with an unrelated leaf column beside it does not
+                          // read as belonging to anything.
+                          //
+                          // `color-mix` rather than a second named token: the
+                          // header background is already the darker of two
+                          // surface tokens in light mode and the LIGHTER of
+                          // the two in dark mode (the whole ramp inverts), so
+                          // no single hex reads as "a bit darker" in both —
+                          // mixing a little black in always does, whatever
+                          // the base colour's own lightness is.
+                          isRealGroup
+                            ? "bg-[color-mix(in_srgb,rgb(var(--surface-mute)),black_8%)] text-center"
+                            : "bg-surface-mute",
                           left !== undefined && "grid-frozen z-30",
                         )}
                       >
@@ -688,12 +802,14 @@ export function DataGrid<TData>({
                             its columns are. `text-ink` is #111827 — the
                             darkest text token there is. */}
                         <span className="type-label block truncate font-bold text-ink">
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(header.column.columnDef.header, header.getContext())}
+                          {flexRender(header.column.columnDef.header, header.getContext())}
                         </span>
 
-                        {header.column.getCanResize() ? (
+                        {/* Resizing a GROUP would resize a column that has no
+                            width of its own — TanStack sizes leaves, and a
+                            group's width is only ever the sum of its
+                            children's. */}
+                        {isLeaf && header.column.getCanResize() ? (
                           <button
                             type="button"
                             aria-label={`Resize the ${columnLabel(header.column)} column`}
@@ -729,8 +845,14 @@ export function DataGrid<TData>({
                     );
                   })}
                   {/* The filler takes every spare pixel so the sized columns
-                      never have to, and carries the header ground to the edge. */}
-                  <th aria-hidden className="sticky top-0 z-20 border-b border-rule bg-surface-mute" />
+                      never have to, and carries the header ground to the
+                      edge — one per row, since the trailing slack column runs
+                      the table's full height, not just its last row. */}
+                  <th
+                    aria-hidden
+                    style={{ top: groupIndex * 36 }}
+                    className="sticky z-20 border-b border-rule bg-surface-mute"
+                  />
                 </tr>
               ))}
             </thead>
@@ -780,6 +902,11 @@ export function DataGrid<TData>({
                           // heading are aligned by one rule, so they cannot end
                           // up disagreeing about which edge they sit against.
                           meta?.align ? ALIGN_CLASS[meta.align] : "text-left",
+                          // The SAME partition as the header above, so the
+                          // divider between one "Increment" block and the
+                          // next runs the full height of the table rather
+                          // than stopping at the header row.
+                          meta?.partition && "border-r-2 border-r-ink/25",
                           left !== undefined && "grid-frozen z-10",
                         )}
                       >
@@ -825,41 +952,83 @@ export function DataGrid<TData>({
 
           {openRow ? (
             <dl className="divide-y divide-rule">
-              {openRow
-                .getVisibleCells()
-                /* The gutter is the row number, and a column with no heading is
-                   an actions column — neither is a FIELD, and listing them
-                   would put a ⋯ menu in a list of values under a blank label. */
+              {/* -- WALKING THE TOP-LEVEL HEADER ROW, not the flat cell list
+                    the field-by-field version used. A GROUP's children — an
+                    "Increment 2" heading's own Date and Amount — now render
+                    as ONE row instead of two separate ones the eye has to
+                    re-pair by hand, matching what was asked for directly.
+
+                    For a screen with no grouping at all (Team review, Users,
+                    every OTHER caller) `getHeaderGroups()[0]` already holds
+                    exactly the leaf columns in order, `colSpan` is 1 for
+                    every one of them, and this is a complete no-op — the
+                    single-field branch below is byte-for-byte what the old
+                    code did. -- */}
+              {(table.getHeaderGroups()[0]?.headers ?? [])
                 .filter(
-                  (cell) =>
-                    cell.column.id !== GUTTER_ID &&
-                    cell.column.id !== SELECT_ID &&
-                    hasHeading(cell.column.columnDef),
+                  (h) => !h.isPlaceholder && h.column.id !== GUTTER_ID && h.column.id !== SELECT_ID,
                 )
-                .map((cell) => (
-                  <div
-                    key={cell.id}
-                    className="grid grid-cols-[9rem_1fr] items-baseline gap-3 py-2.5"
-                  >
-                    <dt className="type-label font-bold text-ink">
-                      {/* Rendered from the real HEADER, not a synthesised
-                          context: a function header (the tier-dot ones) needs
-                          the header object `flexRender` expects, and the table
-                          already has it. Matched by column id. */}
-                      {(() => {
-                        const header = table
-                          .getFlatHeaders()
-                          .find((h) => h.column.id === cell.column.id);
-                        return header
-                          ? flexRender(header.column.columnDef.header, header.getContext())
-                          : cell.column.id;
-                      })()}
-                    </dt>
-                    <dd className="min-w-0 font-sans text-body text-ink">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </dd>
-                  </div>
-                ))}
+                .map((header) => {
+                  if (header.colSpan > 1) {
+                    // A REAL GROUP — its children, side by side in one row,
+                    // each still carrying its own short label ("Date" /
+                    // "Amount") so the pair is not ambiguous on its own.
+                    const values = header.subHeaders
+                      .map((sub) => ({
+                        sub,
+                        cell: openRow.getVisibleCells().find((c) => c.column.id === sub.column.id),
+                      }))
+                      .filter((v) => v.cell);
+                    return (
+                      <div key={header.id} className="grid grid-cols-[9rem_1fr] items-baseline gap-3 py-2.5">
+                        <dt className="type-label font-bold text-ink">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </dt>
+                        <dd className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-1 font-sans text-body text-ink">
+                          {values.map(({ sub, cell }) => (
+                            <span key={sub.id} className="inline-flex items-baseline gap-1.5">
+                              <span className="type-label text-ink-muted">
+                                {flexRender(sub.column.columnDef.header, sub.getContext())}
+                              </span>
+                              {flexRender(cell!.column.columnDef.cell, cell!.getContext())}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    );
+                  }
+
+                  /* -- THE SINGLE-FIELD CASE — but `header` here might be
+                        `normalise`'s SYNTHETIC one-child wrapper (Name,
+                        Joined, Joining salary…), not the real field: its OWN
+                        columnDef carries a BLANK header ("") so the group row
+                        above has nothing to show for it, and its id is
+                        `${childId}__wrap`, which matches no cell at all —
+                        `openRow.getVisibleCells()` only ever has entries for
+                        real LEAF columns. Checking `hasHeading`/looking up a
+                        cell against the WRAPPER rather than the leaf it hides
+                        is what made every wrapped field disappear from this
+                        dialog outright. Unwrapped here: a header with exactly
+                        one child drills into that child; a genuine flat leaf
+                        (`subHeaders.length === 0`, every OTHER screen using
+                        this dialog) is unchanged, since `leafHeader` is then
+                        just `header` itself. -- */
+                  const leafHeader = header.subHeaders.length === 1 ? header.subHeaders[0]! : header;
+                  // A column with no heading is an actions column, not a
+                  // FIELD, and listing it would put a ⋯ menu in a list of
+                  // values under a blank label.
+                  if (!hasHeading(leafHeader.column.columnDef)) return null;
+                  const cell = openRow.getVisibleCells().find((c) => c.column.id === leafHeader.column.id);
+                  if (!cell) return null;
+                  return (
+                    <div key={header.id} className="grid grid-cols-[9rem_1fr] items-baseline gap-3 py-2.5">
+                      <dt className="type-label font-bold text-ink">{headingFor(leafHeader.column.id)}</dt>
+                      <dd className="min-w-0 font-sans text-body text-ink">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </dd>
+                    </div>
+                  );
+                })}
             </dl>
           ) : null}
 

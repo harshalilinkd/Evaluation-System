@@ -48,19 +48,27 @@ async function guard() {
  * still knew about one person. So the only time a HOD ever received their link
  * was the launch dispatch — and if that failed, as it did here on a localhost
  * app URL, there was no way to send it at all.
+ *
+ * LEAD_2 (0083) is the same story a second time: the second reviewer's tokens
+ * are minted correctly at launch, but this screen had no way to resend or copy
+ * one — a second reviewer whose original link failed to arrive had no route
+ * back onto the roster except the launch dispatch itself.
  */
-async function loadTarget(evaluationId: string, layer: "SELF" | "LEAD" = "SELF") {
+async function loadTarget(evaluationId: string, layer: "SELF" | "LEAD" | "LEAD_2" = "SELF") {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("evaluations")
-    .select("id, status, evaluatee_id, lead_id, cycle_id, excluded_at, due_self_on, due_lead_on")
+    .select(
+      "id, status, evaluatee_id, lead_id, co_lead_id, cycle_id, excluded_at, due_self_on, due_lead_on",
+    )
     .eq("id", evaluationId)
     .maybeSingle();
 
   if (error || !data) return null;
 
-  const recipientId = layer === "LEAD" ? data.lead_id : data.evaluatee_id;
+  const recipientId =
+    layer === "LEAD" ? data.lead_id : layer === "LEAD_2" ? data.co_lead_id : data.evaluatee_id;
   if (!recipientId) return null;
 
   /* The evaluatee is loaded whichever layer this is: the HOD's message names
@@ -121,10 +129,12 @@ export async function sendEvaluationLink(
   evaluationId: string,
   channel: Channel,
   /** Whose link. Defaults to the employee, which is every existing caller. */
-  layer: "SELF" | "LEAD" = "SELF",
+  layer: "SELF" | "LEAD" | "LEAD_2" = "SELF",
 ): Promise<CycleResult<SendOutcome>> {
   const auth = await guard();
   if (!auth.ok) return auth;
+
+  const isManager = layer !== "SELF";
 
   /* -- Before anything else: will the link work at all?
         A localhost APP_URL produces a message that sends cleanly, logs as Sent,
@@ -141,7 +151,9 @@ export async function sendEvaluationLink(
       "NOT_FOUND",
       layer === "LEAD"
         ? "That evaluation has no Manager assigned, so there is nobody to send a rating link to."
-        : "That evaluation no longer exists.",
+        : layer === "LEAD_2"
+          ? "That evaluation has no second reviewer assigned, so there is nobody to send a rating link to."
+          : "That evaluation no longer exists.",
     );
   }
 
@@ -171,7 +183,7 @@ export async function sendEvaluationLink(
         template is chosen from the layer a few lines below; the constant is
         repeated because the resolution has to happen before the guard, and a
         test pins the two to agree. -- */
-  const to = contactFor(person, layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite");
+  const to = contactFor(person, isManager ? "leadReviewInvite" : "selfEvaluationInvite");
   const recipient = channel === "WHATSAPP" ? to.phone : to.email;
   if (!recipient) {
     return cycleError(
@@ -184,8 +196,8 @@ export async function sendEvaluationLink(
 
   /* -- Mint the link, for THIS layer.
         0022 keys a token on (evaluation, layer, channel), so minting the HOD's
-        does not revoke the employee's and resending either leaves the other
-        alone (PR-5). -- */
+        or the second reviewer's does not revoke the employee's, and resending
+        any one of the three leaves the other two alone (PR-5). -- */
   const issued = await issueInviteToken(
     evaluationId,
     channel === "WHATSAPP" ? "whatsapp" : "email",
@@ -200,48 +212,36 @@ export async function sendEvaluationLink(
   /* -- Two different messages, and that is not cosmetic.
         `leadReviewInvite` states only that the form is open and when it is due.
         The employee's template names their own deadline. Sending the employee's
-        wording to a HOD would tell them about somebody else's form — and PR-10
-        replaced the older lead template precisely because it leaked the
+        wording to a manager would tell them about somebody else's form — and
+        PR-10 replaced the older lead template precisely because it leaked the
         employee's progress ("{employee} has submitted"), which blind rating
-        withholds (§5). -- */
-  const message =
-    layer === "LEAD"
-      ? leadReviewInvite({
-          leadName: person.full_name,
-          employeeName: evaluatee.full_name,
-          department: departmentName,
-          period: cycle.period_label,
-          dueDate: formatDate(evaluation.due_lead_on ?? cycle.lead_due_on),
-          link,
-        })
-      : selfEvaluationInvite({
-          name: person.full_name,
-          period: cycle.period_label,
-          dueDate: formatDate(evaluation.due_self_on ?? cycle.self_due_on),
-          link,
-        });
+        withholds (§5). LEAD_2 (0083) shares this SAME template rather than a
+        third wording of its own — the two managers are asked for the same
+        thing on the same form, which dispatch-launch.ts's own launch-time send
+        already treats as one message with two recipients. -- */
+  const dueLead = formatDate(evaluation.due_lead_on ?? cycle.lead_due_on);
+  const leadVars = {
+    leadName: person.full_name,
+    employeeName: evaluatee.full_name,
+    department: departmentName,
+    period: cycle.period_label,
+    dueDate: dueLead,
+    link,
+  };
+  const selfVars = {
+    name: person.full_name,
+    period: cycle.period_label,
+    dueDate: formatDate(evaluation.due_self_on ?? cycle.self_due_on),
+    link,
+  };
+  const message = isManager ? leadReviewInvite(leadVars) : selfEvaluationInvite(selfVars);
 
   const result = await sendNotification({
     channel,
     recipient,
-    template: layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite",
+    template: isManager ? "leadReviewInvite" : "selfEvaluationInvite",
     message,
-    vars:
-      layer === "LEAD"
-        ? {
-            leadName: person.full_name,
-            employeeName: evaluatee.full_name,
-            department: departmentName,
-            period: cycle.period_label,
-            dueDate: formatDate(evaluation.due_lead_on ?? cycle.lead_due_on),
-            link,
-          }
-        : {
-            name: person.full_name,
-            period: cycle.period_label,
-            dueDate: formatDate(evaluation.due_self_on ?? cycle.self_due_on),
-            link,
-          },
+    vars: isManager ? leadVars : selfVars,
     evaluationId,
     profileId: person.id,
     // Display context only. No link, no token — the CHECK on notifications_log
@@ -288,8 +288,14 @@ export async function sendBulk(
    * choice about who is being messaged, because the two audiences are told
    * different things and a HOD receiving forty employee invites would be a
    * mess nobody could undo. The screen asks.
+   *
+   * LEAD_2 is a valid value here too (per-row sends already use it), but the
+   * bulk toolbar does not currently offer it — most evaluations have no second
+   * reviewer, and a bulk run over a mixed roster would report "no second
+   * reviewer assigned" for every row without one. Left for the per-row action,
+   * where it is the exception rather than the rule.
    */
-  layers: ReadonlyArray<"SELF" | "LEAD"> = ["SELF"],
+  layers: ReadonlyArray<"SELF" | "LEAD" | "LEAD_2"> = ["SELF"],
 ): Promise<CycleResult<{ outcomes: SendOutcome[]; sent: number; failed: number }>> {
   const auth = await guard();
   if (!auth.ok) return auth;
@@ -360,14 +366,33 @@ export async function issueCopyableLink(
 
         The default stays SELF so no existing caller changes behaviour — but the
         distribution screen now always says which, because "copy a link" on a
-        row that has two people on it is ambiguous either way. -- */
-  layer: "SELF" | "LEAD" = "SELF",
-): Promise<CycleResult<{ link: string; name: string; layer: "SELF" | "LEAD" }>> {
+        row that has two people on it (or three, with a second reviewer) is
+        ambiguous either way. -- */
+  layer: "SELF" | "LEAD" | "LEAD_2" = "SELF",
+): Promise<CycleResult<{ link: string; name: string; layer: "SELF" | "LEAD" | "LEAD_2" }>> {
   const auth = await guard();
   if (!auth.ok) return auth;
 
-  const target = await loadTarget(evaluationId);
-  if (!target) return cycleError("NOT_FOUND", "That evaluation no longer exists.");
+  /* -- THE BUG: this called `loadTarget(evaluationId)` with no layer, which
+        defaults to SELF — so `target.person` was ALWAYS the employee, whatever
+        layer was actually requested. The token minted a few lines below was
+        correctly scoped to `layer` (it was passed there all along), so the
+        LINK itself opened the right form — but the name on the confirmation
+        dialog, and the address `queue_notification` recorded the copy
+        against, were the employee's even when HR asked for the manager's or
+        the second reviewer's link. A dialog naming the wrong person is
+        believed, which is worse than naming nobody. -- */
+  const target = await loadTarget(evaluationId, layer);
+  if (!target) {
+    return cycleError(
+      "NOT_FOUND",
+      layer === "LEAD"
+        ? "That evaluation has no Manager assigned, so there is no link to create."
+        : layer === "LEAD_2"
+          ? "That evaluation has no second reviewer assigned, so there is no link to create."
+          : "That evaluation no longer exists.",
+    );
+  }
 
   // Same rename, same consequence — see above.
   if (target.evaluation.status !== "OPEN") {
@@ -388,8 +413,9 @@ export async function issueCopyableLink(
         manager's link was recorded as an employee's — FIX-26 gave the dialog a
         choice of layer and this row never learned about it. Small, and it is
         the audit trail: a row that names the wrong link is worse than no row,
-        because it is believed. -- */
-  const copiedTemplate = layer === "LEAD" ? "leadReviewInvite" : "selfEvaluationInvite";
+        because it is believed. LEAD_2 shares the manager's template — see the
+        note above `leadVars` in `sendEvaluationLink`. -- */
+  const copiedTemplate = layer === "SELF" ? "selfEvaluationInvite" : "leadReviewInvite";
 
   // Recorded as an attempt with no provider behind it: HR is the delivery
   // channel here, and a link that leaves the building unrecorded is exactly what

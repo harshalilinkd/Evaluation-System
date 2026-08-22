@@ -49,6 +49,10 @@ const REASONS = [
   { value: "ANNUAL_INCREMENT", label: "Annual increment" },
   { value: "PROMOTION", label: "Promotion" },
   { value: "MARKET_ADJUSTMENT", label: "Market adjustment" },
+  // 0094, at the owner's explicit instruction — not every employee, only
+  // where management promised a performance-based raise 3 months after
+  // joining.
+  { value: "THREE_MONTH_INCREMENT", label: "3-month increment" },
   { value: "CORRECTION", label: "Correction of an earlier entry" },
 ] as const;
 

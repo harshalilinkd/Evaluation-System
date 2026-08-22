@@ -24,10 +24,17 @@ import { SignatureCard } from "@/components/appraise/signature-card";
 export function GeneralTab({
   hikeBands,
   signature,
+  canSign,
 }: {
   hikeBands: number[];
   /** The SIGNED-IN person's own, never anybody else's. */
   signature: string | null;
+  /** MD only, at the owner's explicit instruction — a wet-signature image
+   *  stands in for the MD's approval specifically, and HR's own review is
+   *  still recorded and printed by name whether or not this card exists for
+   *  them. `saveMySignature` re-checks this itself (§9); hiding the card is
+   *  the clean exit, not the guard. */
+  canSign: boolean;
 }) {
   const router = useRouter();
   const [bands, setBands] = React.useState<string[]>(
@@ -54,8 +61,11 @@ export function GeneralTab({
   return (
     <div className="space-y-8">
       {/* First, because it is the one thing on this tab that belongs to the
-          person reading it rather than to the company. */}
-      <SignatureCard initial={signature} />
+          person reading it rather than to the company. HR reaches this tab
+          too (Settings is guarded to HR_ADMIN or MD), and this card is not
+          for them — a signature image stands in for the MD's own approval,
+          never HR's review, which prints by name regardless. */}
+      {canSign ? <SignatureCard initial={signature} /> : null}
 
       <SectionCard
         title="Increment quick-set bands"

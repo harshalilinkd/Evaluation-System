@@ -155,12 +155,21 @@ export type PersonPatch = {
   joining_ctc?: number;
 };
 
-type SalaryReason = "ANNUAL_INCREMENT" | "PROMOTION" | "CORRECTION" | "MARKET_ADJUSTMENT";
+type SalaryReason =
+  | "ANNUAL_INCREMENT"
+  | "PROMOTION"
+  | "CORRECTION"
+  | "MARKET_ADJUSTMENT"
+  // 0094, at the owner's explicit instruction — not scheduled like the
+  // others: some employees are promised a performance-based raise 3 months
+  // after joining, and this is that reason, not a company-wide interval.
+  | "THREE_MONTH_INCREMENT";
 
 const SALARY_REASONS: Array<{ value: SalaryReason; label: string }> = [
   { value: "ANNUAL_INCREMENT", label: "Annual increment" },
   { value: "PROMOTION", label: "Promotion" },
   { value: "MARKET_ADJUSTMENT", label: "Market adjustment" },
+  { value: "THREE_MONTH_INCREMENT", label: "3-month increment" },
   { value: "CORRECTION", label: "Correction to an earlier entry" },
 ];
 
@@ -1917,6 +1926,13 @@ export function UsersTab({
   const [payReason, setPayReason] = useState<SalaryReason>("ANNUAL_INCREMENT");
   const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [payNote, setPayNote] = useState("");
+  /* -- WHICH KIND OF EVENT a changed salary cell is, for the whole batch —
+        mirrors `lib/employment/bulk.ts`'s `salaryMode`. "change" is the
+        original behaviour: every edited cell appends a new ledger row.
+        "correct" is AT THE OWNER'S EXPLICIT INSTRUCTION (0093): the row that
+        already IS each person's current figure is edited in place instead —
+        no new entry, and it is not counted as a rise. -- */
+  const [payMode, setPayMode] = useState<"change" | "correct">("change");
 
   const setCell = useCallback(<K extends keyof PersonPatch>(id: string, key: K, value: PersonPatch[K]) => {
     setDrafts((prev) => {
@@ -1955,6 +1971,7 @@ export function UsersTab({
     setTableEdit(false);
     setDrafts(new Map());
     setPayOpen(false);
+    setPayMode("change");
   }
 
   async function saveTable() {
@@ -1970,8 +1987,11 @@ export function UsersTab({
     setSaveResult(null);
     const result = await bulkUpdatePeople({
       patches: [...drafts.entries()].map(([profileId, patch]) => ({ profileId, ...patch })),
-      salaryReason: salaryChanged ? payReason : undefined,
-      salaryEffectiveFrom: salaryChanged ? payDate : undefined,
+      salaryMode: payMode,
+      // "correct" needs neither — the row being fixed keeps its own reason
+      // and date, and only the figure changes.
+      salaryReason: salaryChanged && payMode === "change" ? payReason : undefined,
+      salaryEffectiveFrom: salaryChanged && payMode === "change" ? payDate : undefined,
       salaryNote: salaryChanged ? payNote : undefined,
     });
     setSaving(false);
@@ -1990,7 +2010,7 @@ export function UsersTab({
           ? `${result.data.updated} saved, ${failed.length} could not be: ${failed[0]?.error ?? ""}`
           : `${result.data.updated} ${result.data.updated === 1 ? "person" : "people"} updated${
               result.data.salaryChanges > 0
-                ? `, ${result.data.salaryChanges} pay ${result.data.salaryChanges === 1 ? "change" : "changes"} recorded`
+                ? `, ${result.data.salaryChanges} pay ${payMode === "correct" ? (result.data.salaryChanges === 1 ? "figure" : "figures") : result.data.salaryChanges === 1 ? "change" : "changes"} ${payMode === "correct" ? "corrected" : "recorded"}`
                 : ""
             }.`,
     });
@@ -2869,49 +2889,108 @@ export function UsersTab({
         <DialogContent className="w-[min(96vw,520px)] border-rule">
           <DialogHeader>
             <DialogTitle className="text-display-sm text-ink">
-              Why are these salaries changing?
+              {payMode === "correct" ? "Correcting, not a new change" : "Why are these salaries changing?"}
             </DialogTitle>
             <DialogDescription className="font-sans text-body-sm text-ink-muted">
-              {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} pay{" "}
-              {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1
-                ? "change goes"
-                : "changes go"}{" "}
-              into the salary history with this reason and date. The history cannot be edited
-              afterwards — a mistake is fixed by adding a correction.
+              {payMode === "correct" ? (
+                <>
+                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} figure
+                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1 ? "" : "s"}{" "}
+                  will be corrected on the row that already represents each person&rsquo;s current
+                  salary — nothing new is added, and it does not count as a rise or move their
+                  increment date.
+                </>
+              ) : (
+                <>
+                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} pay{" "}
+                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1
+                    ? "change goes"
+                    : "changes go"}{" "}
+                  into the salary history with this reason and date.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="pay_reason">Reason</Label>
-              <select
-                id="pay_reason"
-                value={payReason}
-                onChange={(e) => setPayReason(e.target.value as SalaryReason)}
-                className="min-h-11 w-full min-w-0 rounded-input border border-rule bg-surface px-3 font-sans text-body-sm text-ink"
-              >
-                {SALARY_REASONS.map((r) => (
-                  <option key={r.value} value={r.value}>
-                    {r.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* -- THE CHOICE ITSELF, at the owner's explicit instruction (0093).
+                  A radio pair rather than a checkbox: the two are mutually
+                  exclusive readings of the same edited cells, never both at
+                  once, and a radio says that at a glance where a checkbox
+                  would not. -- */}
+            <fieldset className="space-y-2 rounded-card border border-rule p-3">
+              <legend className="px-1 font-sans text-body-sm font-medium text-ink">
+                What does typing a new number mean?
+              </legend>
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="pay_mode"
+                  checked={payMode === "change"}
+                  onChange={() => setPayMode("change")}
+                  className="mt-1 size-4"
+                />
+                <span className="text-body-sm text-ink">
+                  <span className="font-medium">A new salary change</span>
+                  <span className="block text-ink-muted">
+                    Added to the history as a fresh entry — a rise, a promotion, a market
+                    adjustment. This is what &ldquo;Add salary change&rdquo; on a person&rsquo;s
+                    own page does too.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="radio"
+                  name="pay_mode"
+                  checked={payMode === "correct"}
+                  onChange={() => setPayMode("correct")}
+                  className="mt-1 size-4"
+                />
+                <span className="text-body-sm text-ink">
+                  <span className="font-medium">A correction — the same entry, fixed</span>
+                  <span className="block text-ink-muted">
+                    The figure was typed wrong. This edits the existing row instead of adding one —
+                    its date and reason stay exactly as they were.
+                  </span>
+                </span>
+              </label>
+            </fieldset>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="pay_date">Effective from</Label>
-              <Input
-                id="pay_date"
-                type="date"
-                value={payDate}
-                onChange={(e) => setPayDate(e.target.value)}
-                className="min-h-11 tabular"
-              />
-              <p className="font-sans text-body-sm text-ink-muted">
-                When the new salary starts being paid. An annual increment dated here also moves
-                their next increment date.
-              </p>
-            </div>
+            {payMode === "change" ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pay_reason">Reason</Label>
+                  <select
+                    id="pay_reason"
+                    value={payReason}
+                    onChange={(e) => setPayReason(e.target.value as SalaryReason)}
+                    className="min-h-11 w-full min-w-0 rounded-input border border-rule bg-surface px-3 font-sans text-body-sm text-ink"
+                  >
+                    {SALARY_REASONS.map((r) => (
+                      <option key={r.value} value={r.value}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="pay_date">Effective from</Label>
+                  <Input
+                    id="pay_date"
+                    type="date"
+                    value={payDate}
+                    onChange={(e) => setPayDate(e.target.value)}
+                    className="min-h-11 tabular"
+                  />
+                  <p className="font-sans text-body-sm text-ink-muted">
+                    When the new salary starts being paid. An annual increment dated here also moves
+                    their next increment date.
+                  </p>
+                </div>
+              </>
+            ) : null}
 
             <div className="space-y-1.5">
               <Label htmlFor="pay_note">Note</Label>
@@ -2919,7 +2998,11 @@ export function UsersTab({
                 id="pay_note"
                 value={payNote}
                 onChange={(e) => setPayNote(e.target.value)}
-                placeholder="Optional. Anything the record should carry."
+                placeholder={
+                  payMode === "correct"
+                    ? "Optional. Left blank, each row keeps whatever note it already had."
+                    : "Optional. Anything the record should carry."
+                }
                 className="min-h-20"
               />
             </div>
@@ -2930,7 +3013,7 @@ export function UsersTab({
               Back to the table
             </Button>
             <Button className="min-h-11" onClick={() => void saveTable()} disabled={saving}>
-              {saving ? "Saving…" : "Record and save"}
+              {saving ? "Saving…" : payMode === "correct" ? "Correct and save" : "Record and save"}
             </Button>
           </DialogFooter>
         </DialogContent>

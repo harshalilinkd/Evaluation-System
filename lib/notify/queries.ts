@@ -44,6 +44,16 @@ export type DistributionRow = {
   /** False when the evaluation is not CYCLE_ACTIVE, or there is no contact at all. */
   sendable: boolean;
   blockedReason: string | null;
+
+  /**
+   * Whether this evaluation has a SECOND reviewer (0083).
+   *
+   * The board carries no name or contact detail for them — fetching one per row
+   * would be a query this screen does not otherwise need — only whether the
+   * per-row menu should offer their link at all. Most evaluations have none, so
+   * the action is hidden rather than shown-and-refused.
+   */
+  hasCoLead: boolean;
 };
 
 export type DistributionBoard = {
@@ -73,7 +83,7 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
 
   const { data: evaluations, error: evaluationError } = await supabase
     .from("evaluations")
-    .select("id, evaluatee_id, department_id, status, excluded_at, self_submitted_at")
+    .select("id, evaluatee_id, department_id, status, excluded_at, self_submitted_at, co_lead_id")
     .eq("cycle_id", cycleId)
     .is("excluded_at", null);
 
@@ -222,6 +232,7 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
         : wrongStatus
           ? blockedMessage(evaluation.status)
           : null,
+      hasCoLead: Boolean(evaluation.co_lead_id),
     });
   }
 

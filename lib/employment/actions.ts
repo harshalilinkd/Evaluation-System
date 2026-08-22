@@ -135,7 +135,16 @@ const salarySchema = z.object({
         somebody file "the first salary this person was ever paid" as a rise
         over the salary they are on today — which is how a 620% hike got
         written. `setJoiningSalary` below is its own path. -- */
-  reason: z.enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
+  reason: z.enum([
+    "ANNUAL_INCREMENT",
+    "PROMOTION",
+    "CORRECTION",
+    "MARKET_ADJUSTMENT",
+    // 0094. Not scheduled like the others — applies only where management
+    // has promised a performance-based raise 3 months after joining, which
+    // is not every employee.
+    "THREE_MONTH_INCREMENT",
+  ]),
   /* -- OPTIONAL, at the owner's explicit instruction. This reverses P19-8,
         which made it required on the reasoning that "optional would mean
         usually blank, and a pay change with no explanation is the thing
@@ -449,7 +458,13 @@ const correctionSchema = z.object({
   profileId: z.string().uuid(),
   effectiveFrom: z.string().min(1, "An effective-from date is required"),
   newCtc: z.coerce.number().positive("The salary must be greater than zero"),
-  reason: z.enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"]),
+  reason: z.enum([
+    "ANNUAL_INCREMENT",
+    "PROMOTION",
+    "CORRECTION",
+    "MARKET_ADJUSTMENT",
+    "THREE_MONTH_INCREMENT",
+  ]),
   note: z
     .string()
     .trim()

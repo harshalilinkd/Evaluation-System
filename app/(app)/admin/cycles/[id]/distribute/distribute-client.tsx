@@ -105,7 +105,11 @@ export function DistributeClient({
         mis-aimed bulk send cannot be recalled. -- */
   const [recipients, setRecipients] = React.useState<Array<"SELF" | "LEAD">>(["SELF"]);
   const [copyWarning, setCopyWarning] = React.useState<DistributionRow | null>(null);
-  const [copied, setCopied] = React.useState<{ link: string; name: string; layer: "SELF" | "LEAD" } | null>(null);
+  const [copied, setCopied] = React.useState<{
+    link: string;
+    name: string;
+    layer: "SELF" | "LEAD" | "LEAD_2";
+  } | null>(null);
   const [fixing, setFixing] = React.useState<DistributionRow | null>(null);
   const [history, setHistory] = React.useState<DistributionRow | null>(null);
 
@@ -181,7 +185,7 @@ export function DistributeClient({
   const sendOne = async (
     row: DistributionRow,
     channel: Channel,
-    layer: "SELF" | "LEAD" = "SELF",
+    layer: "SELF" | "LEAD" | "LEAD_2" = "SELF",
   ) => {
     setRunning(true);
     const result = await sendEvaluationLink(row.evaluationId, channel, layer);
@@ -619,6 +623,7 @@ export function DistributeClient({
                            and making it depend on a toggle elsewhere on the
                            screen is how the wrong person gets messaged. */
                         onSendLead={() => void sendOne(row, "WHATSAPP", "LEAD")}
+                        onSendCoLead={() => void sendOne(row, "WHATSAPP", "LEAD_2")}
                         onCopy={() => setCopyWarning(row)}
                         onHistory={() => setHistory(row)}
                       />
@@ -671,6 +676,7 @@ export function DistributeClient({
                     onSend={(channel) => void sendOne(row, channel)}
                     onSendBoth={() => void run([row.evaluationId], ["WHATSAPP", "EMAIL"], ["SELF"])}
                     onSendLead={() => void sendOne(row, "WHATSAPP", "LEAD")}
+                    onSendCoLead={() => void sendOne(row, "WHATSAPP", "LEAD_2")}
                     onCopy={() => setCopyWarning(row)}
                     onHistory={() => setHistory(row)}
                   />
@@ -843,6 +849,7 @@ export function DistributeClient({
             if (!copyWarning) return;
             const result = await issueCopyableLink(copyWarning.evaluationId, layer);
             if (result.ok) setCopied(result.data);
+            else setOutcomes([{ evaluationId: copyWarning.evaluationId, name: copyWarning.name, channel: "EMAIL", ok: false, message: result.error.message }]);
             router.refresh();
           }}
         />
@@ -919,6 +926,7 @@ function RowMenu({
   onSend,
   onSendBoth,
   onSendLead,
+  onSendCoLead,
   onCopy,
   onHistory,
 }: {
@@ -929,6 +937,8 @@ function RowMenu({
   onSendBoth: () => void;
   /** The HOD's rating link — a different person and a different message. */
   onSendLead: () => void;
+  /** The second reviewer's rating link (0083) — only offered when one exists. */
+  onSendCoLead: () => void;
   onCopy: () => void;
   onHistory: () => void;
 }) {
@@ -966,6 +976,20 @@ function RowMenu({
         >
           Send the Manager&rsquo;s rating link
         </DropdownMenuItem>
+
+        {/* The second reviewer (0083) — a third person, on the same form, only
+            when this evaluation actually has one. Not shown-and-disabled for
+            everybody else: most evaluations have no second reviewer, and a
+            menu item that is always there and almost always refused teaches
+            people to stop reading menu items. */}
+        {row.hasCoLead ? (
+          <DropdownMenuItem
+            disabled={disabled || !row.sendable || !configured.whatsapp}
+            onSelect={() => onSendCoLead()}
+          >
+            Send the 2nd reviewer&rsquo;s rating link
+          </DropdownMenuItem>
+        ) : null}
 
         <DropdownMenuSeparator />
 
@@ -1127,16 +1151,22 @@ function CopyLinkDialog({
   onConfirm,
 }: {
   row: DistributionRow | null;
-  copied: { link: string; name: string; layer: "SELF" | "LEAD" } | null;
+  copied: { link: string; name: string; layer: "SELF" | "LEAD" | "LEAD_2" } | null;
   onCancel: () => void;
-  onConfirm: (layer: "SELF" | "LEAD") => Promise<void>;
+  onConfirm: (layer: "SELF" | "LEAD" | "LEAD_2") => Promise<void>;
 }) {
   const [pending, setPending] = React.useState(false);
   /* -- WHOSE LINK. A row has two people on it — the employee and their
         manager — and each has their own form. A single "copy the link" button
         was minting the employee's every time, so a link handed to a manager
-        opened a form about themselves and the guard bounced them. -- */
-  const [layer, setLayer] = React.useState<"SELF" | "LEAD">("SELF");
+        opened a form about themselves and the guard bounced them.
+
+        A THIRD, when the evaluation has a second reviewer (0083): a row can
+        have three people on it, and the same ambiguity applies a second time —
+        "copy the link" for a designer's evaluation, handed to the wrong one of
+        two managers, is the exact class of mix-up this dialog exists to
+        prevent. -- */
+  const [layer, setLayer] = React.useState<"SELF" | "LEAD" | "LEAD_2">("SELF");
 
   return (
     <Dialog open={row !== null} onOpenChange={(next) => !next && onCancel()}>
@@ -1146,14 +1176,18 @@ function CopyLinkDialog({
             {copied
               ? copied.layer === "LEAD"
                 ? `Manager’s link for ${copied.name}`
-                : `${copied.name}’s own link`
+                : copied.layer === "LEAD_2"
+                  ? `2nd reviewer’s link for ${copied.name}`
+                  : `${copied.name}’s own link`
               : "Which link do you need?"}
           </DialogTitle>
           <DialogDescription>
             {copied
               ? copied.layer === "LEAD"
                 ? "Send this to their manager. It opens the form for rating this person."
-                : "Send this to them. It opens their own self-evaluation."
+                : copied.layer === "LEAD_2"
+                  ? "Send this to their second reviewer. It opens the same rating form, for that reviewer."
+                  : "Send this to them. It opens their own self-evaluation."
               : "Each link opens a different form, and creating one stops the previous link of that kind working."}
           </DialogDescription>
         </DialogHeader>
@@ -1161,13 +1195,18 @@ function CopyLinkDialog({
         {!copied && row ? (
           <fieldset className="space-y-2">
             <legend className="type-label mb-1 text-ink-muted">Who is this link for?</legend>
-            {([
-              { value: "SELF", label: `${row.name} — their own self-evaluation` },
-              // Not named: this board's rows are about the EMPLOYEE and carry no
-              // lead. Fetching one for a label would be a query per row for a
-              // dialog most people never open.
-              { value: "LEAD", label: `Their manager — to rate ${row.name}` },
-            ] as const).map((option) => (
+            {(
+              [
+                { value: "SELF", label: `${row.name} — their own self-evaluation` },
+                // Not named: this board's rows are about the EMPLOYEE and carry
+                // no lead. Fetching one for a label would be a query per row
+                // for a dialog most people never open.
+                { value: "LEAD", label: `Their manager — to rate ${row.name}` },
+                ...(row.hasCoLead
+                  ? [{ value: "LEAD_2" as const, label: `Their second reviewer — to rate ${row.name}` }]
+                  : []),
+              ] as const
+            ).map((option) => (
               <label
                 key={option.value}
                 className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control border border-rule px-3"

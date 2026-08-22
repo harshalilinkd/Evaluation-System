@@ -112,6 +112,13 @@
     --final: 79 70 229; /* #4F46E5  indigo · the MD, the authoritative answer */
     --final-tint: 224 231 255; /* #E0E7FF */
 
+    /* -- A second reviewer shares the Lead tier (§13.1 — both managers mean
+          "an HOD said this"), but on a chart plotting BOTH of them beside each
+          other they need to read apart. CHOSEN BY THE OWNER, at their explicit
+          instruction — not a fourth tier, only a way to tell two Lead-tier
+          series apart on the one chart that plots both together. -- */
+    --second-reviewer: 118 127 158; /* #767F9E */
+
     /* -- Two record tints, CHOSEN BY THE OWNER, for the two employment facts
           on the salary panel: what they joined on, and when they last moved.
 
@@ -304,6 +311,11 @@
     --final: 129 140 248;
     --final-tint: 49 46 129; /* #312E81 */
 
+    /* Second reviewer: same literal value in both themes — the owner gave one
+       hex with no dark-mode variant, and #767F9E reads clearly against both
+       surfaces. */
+    --second-reviewer: 118 127 158; /* #767F9E */
+
     /* The two record tints, re-stepped for the dark surface. #FFD6BB and
        #BFECFF are ~L 0.90: on the dark canvas they would be near-white slabs
        carrying LIGHT text, because --ink is the light colour here (UI2-3). Same
@@ -430,6 +442,11 @@
     --lead-tint: 131 24 67; /* #831843 */
     --final: 129 140 248;
     --final-tint: 49 46 129; /* #312E81 */
+
+    /* Second reviewer: same literal value in both themes — the owner gave one
+       hex with no dark-mode variant, and #767F9E reads clearly against both
+       surfaces. */
+    --second-reviewer: 118 127 158; /* #767F9E */
 
     /* The two record tints, re-stepped for the dark surface. #FFD6BB and
        #BFECFF are ~L 0.90: on the dark canvas they would be near-white slabs

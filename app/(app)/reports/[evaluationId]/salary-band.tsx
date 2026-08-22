@@ -450,6 +450,17 @@ function HrProposal({
   const amount = hikeAmount(currentCtc, proposed);
   const annualised = annualisedPct(pct, data.monthsSinceLastIncrement);
   const gap = expectationGap(review?.employee_expectation_ctc ?? null, proposed);
+  /* -- What the ASK itself represents, as a rise over today's salary.
+        Reported as confusing: the card led with a bare difference before the
+        reader had even seen the figure it was a difference FROM, and never
+        said what the ask meant relative to what the person earns now — the
+        one thing that tells HR whether ₹35,000 is a stretch or a formality. -- */
+  const expectedPct = hikePct(currentCtc, review?.employee_expectation_ctc ?? null);
+  const coLabel = data.coManagerName !== null ? coLeadRole(data.coManagerDesignation, data.coManagerName) : null;
+  /* Whether the figure on screen right now IS the recommendation, or HR/the MD
+     has since typed something else — the same test Row 3 already makes, reused
+     so this card cannot claim an average that is no longer what is proposed. */
+  const isRecommended = managerPct !== null && (pctInput.trim() === "" || Number(pctInput) === managerPct);
 
   async function onSave() {
     if (proposed === null) return;
@@ -486,51 +497,75 @@ function HrProposal({
           proposal is still on screen. */}
       <div className="grid gap-4">
         <article className="card-surface p-4">
-          {/* -- ATTRIBUTED TO THE MANAGER, at the owner's instruction: the
-                manager recommends the figure and the MD decides it, so nothing
-                on this screen should read as HR's own proposal. "against their
-                ask" is kept because the number below is a DIFFERENCE, and a
-                heading of "Manager proposal" over a gap would name the wrong
-                thing. -- */}
-          {/* Renamed at the owner's instruction, to match the question the
-              employee answered ("What is your monthly Expected Salary?"). */}
+          {/* -- REWRITTEN AT THE OWNER'S INSTRUCTION as a straight, ordered
+                story rather than a difference shown before its own operands:
+                what they asked for, what each manager recommended, what that
+                comes to, and how it compares — one line each, in that order.
+                Reported as "too much wording" and confusing to read; nothing
+                below is a new figure, every one was already computed on this
+                screen (or, for `expectedPct`, one line up), just never told in
+                a sequence a reader could follow without piecing two cards
+                together. -- */}
           <h3 className="type-label text-ink-muted">Compared with their expected salary</h3>
-          {gap.amount === null ? (
+
+          {!review?.employee_expectation_ctc ? (
             <p className="mt-1 font-sans text-body text-ink-muted">
-              {review?.employee_expectation_ctc
-                ? `They asked for ${moneyMonthly(review.employee_expectation_ctc)}. Enter a proposal to compare.`
-                : `${firstName} did not state a figure, so there is nothing to compare.`}
+              {firstName} did not state a figure, so there is nothing to compare.
             </p>
           ) : (
-            <>
-              {/* -- A SIGNED FIGURE WITH NO VERB IS A PUZZLE.
-                    It read "+₹1,85,000.00" under the heading "Against your
-                    proposal", then "740.00% against what they asked for" — three
-                    ambiguities at once: which way the sign points, whether the
-                    percent describes the proposal or the difference, and paise
-                    on a rounded difference nobody quotes to the paisa.
+            <div className="mt-1.5 space-y-1 font-sans text-body-sm text-ink">
+              {/* Line 1 — the ask, and what it represents. */}
+              <p>
+                {firstName} asked for{" "}
+                <span className="font-medium">{moneyMonthly(review.employee_expectation_ctc)}</span>
+                {expectedPct !== null ? ` — ${pctText(expectedPct)} more than they earn now` : ""}.
+              </p>
 
-                    Now the number is the size of the gap and the words carry the
-                    direction. -- */}
-              <p
-                className={cn(
-                  "mt-1 tabular text-display-md",
-                  gap.amount < 0 ? "text-critical" : "text-ink",
-                )}
-              >
-                {/* Monthly, so the difference is in the same unit as the two
-                    figures it sits between. An annual gap under two monthly
-                    salaries is the arithmetic the reader cannot do in their
-                    head. */}
-                {gap.amount === 0 ? moneyMonthly(0) : moneyMonthly(Math.abs(gap.amount))}
-              </p>
-              <p className="font-sans text-body-sm text-ink-muted">
-                {gap.amount === 0
-                  ? "Exactly what they asked for."
-                  : gap.amount > 0
-                    ? `more than they asked for${gap.pct === null ? "" : ` — ${pctText(gap.pct)} above their figure`}.`
-                    : `less than they asked for${gap.pct === null ? "" : ` — ${pctText(Math.abs(gap.pct))} below their figure`}.`}
-              </p>
+              {/* Line 2 — each manager's own recommendation, named apart so
+                  neither figure is buried inside the other's sentence. */}
+              {managerPct !== null ? (
+                <p>
+                  {data.managerHikePct !== null
+                    ? `Manager recommended ${pctText(data.managerHikePct)}.`
+                    : "Manager has not answered yet."}
+                  {coLabel
+                    ? ` ${
+                        data.coManagerHikePct !== null
+                          ? `${coLabel} recommended ${pctText(data.coManagerHikePct)}.`
+                          : `${coLabel} has not answered yet.`
+                      }`
+                    : ""}
+                </p>
+              ) : null}
+
+              {/* Line 3 — what that comes to, right now. Says "averages" only
+                  while the figure on screen still IS the average — the moment
+                  HR or the MD types something else, this says so instead of
+                  quietly repeating a number that no longer applies. */}
+              {gap.amount !== null ? (
+                <p>
+                  {data.recommendedIsAverage && isRecommended
+                    ? `Together that averages ${pctText(managerPct)}, taking their pay to `
+                    : isRecommended
+                      ? `That takes their pay to `
+                      : `The figure entered now is ${pctText(pct)}, taking their pay to `}
+                  <span className="font-medium">{moneyMonthly(proposed)}</span>.
+                </p>
+              ) : null}
+
+              {/* Line 4 — the comparison this whole card exists to answer. */}
+              {gap.amount !== null ? (
+                <p className={cn("font-medium", gap.amount < 0 ? "text-critical" : "text-ink")}>
+                  That is{" "}
+                  {gap.amount === 0
+                    ? "exactly what they asked for."
+                    : `${moneyMonthly(Math.abs(gap.amount))}${
+                        gap.pct === null ? "" : ` (${pctText(Math.abs(gap.pct))})`
+                      } ${gap.amount > 0 ? "more than" : "short of"} what they asked for.`}
+                </p>
+              ) : (
+                <p className="text-ink-muted">Enter a proposal below to compare.</p>
+              )}
 
               {/* -- A UNITS CHECK, phrased as a question rather than a verdict.
                     An employee who types a MONTHLY figure into an annual field
@@ -540,23 +575,13 @@ function HrProposal({
                     for an annual figure in as many words, but answers already
                     given cannot be re-asked, and a pay decision should not rest
                     on a number whose units are in doubt. -- */}
-              {/* -- NAMES THE ASK, which used to be the card beside this one.
-                    A difference with only one of its two operands on screen is
-                    a number the reader has to go and look something up for. -- */}
-              {review?.employee_expectation_ctc ? (
-                <p className="mt-1 font-sans text-body-sm text-ink-muted">
-                  Expected salary {moneyMonthly(review.employee_expectation_ctc)}
-                  {review.employee_expectation_note ? ` — ${review.employee_expectation_note}` : "."}
-                </p>
-              ) : null}
-
               {gap.pct !== null && gap.pct >= 200 ? (
-                <p className="mt-2 rounded-control bg-warning-tint px-2.5 py-1.5 font-sans text-body-sm text-ink">
+                <p className="mt-2 rounded-control bg-warning-tint px-2.5 py-1.5 text-ink">
                   That is a long way apart. Worth checking they gave an annual figure rather than a
                   monthly one before this anchors anything.
                 </p>
               ) : null}
-            </>
+            </div>
           )}
         </article>
       </div>

@@ -1,4 +1,4 @@
-/** /admin/settings — General, Users, evaluation periods, messages, departments, team review and the recycle bin. */
+/** /admin/settings — General, Users, salary history, evaluation periods, messages, departments, team review and the recycle bin. */
 
 import type { Metadata } from "next";
 
@@ -15,6 +15,8 @@ import {
   type DepartmentOption,
   type PersonRow,
 } from "@/app/(app)/admin/settings/users-tab";
+import { SalaryHistoryTab } from "@/app/(app)/admin/settings/salary-history-tab";
+import { getEmploymentHistoryGrid } from "@/lib/employment/history-grid";
 import { GeneralTab } from "@/app/(app)/admin/settings/general-tab";
 import { NotificationsTab } from "@/app/(app)/admin/settings/notifications-tab";
 import { BinnedRounds } from "@/app/(app)/admin/settings/binned-rounds";
@@ -40,6 +42,7 @@ export const metadata: Metadata = { title: "Settings" };
 const TABS = [
   "general",
   "users",
+  "salary-history",
   "periods",
   "team-review",
   "messages",
@@ -54,7 +57,7 @@ export default async function SettingsPage({
 }) {
   // §9: the guard is the first statement. A non-HR user is redirected before
   // any markup is produced, never shown and then hidden.
-  const { profile } = await requireRole(ADMIN_ROLES);
+  const { profile, roles } = await requireRole(ADMIN_ROLES);
 
   // `searchParams` is a promise in Next 16. Unknown values fall back rather
   // than rendering a Tabs with no panel showing.
@@ -91,6 +94,10 @@ export default async function SettingsPage({
   // where they have not. `listTemplates` reads both.
   const templatePreviews = await listTemplates();
   const schedule = await getEvaluationSchedule();
+  // The whole-company salary sheet (asked for directly, alongside the roster
+  // above) — its own query, since it needs every real salary_history row per
+  // person rather than the roster's single "current figure".
+  const historyGrid = await getEmploymentHistoryGrid();
 
   // P21 stored these and P23 finally renders the editor.
   const { data: incrementSettings } = await supabase
@@ -327,6 +334,9 @@ export default async function SettingsPage({
         <TabsTrigger value="users" className="font-sans text-body">
           Users
         </TabsTrigger>
+        <TabsTrigger value="salary-history" className="font-sans text-body">
+          Salary history
+        </TabsTrigger>
         <TabsTrigger value="periods" className="font-sans text-body">
           Evaluation periods
         </TabsTrigger>
@@ -355,7 +365,11 @@ export default async function SettingsPage({
       </TabsContent>
 
       <TabsContent value="general">
-        <GeneralTab hikeBands={hikeBands} signature={me?.signature_image ?? null} />
+        <GeneralTab
+          hikeBands={hikeBands}
+          signature={me?.signature_image ?? null}
+          canSign={roles.includes("MD")}
+        />
       </TabsContent>
 
       <TabsContent value="users">
@@ -371,6 +385,19 @@ export default async function SettingsPage({
 
       <TabsContent value="departments">
         <DepartmentsClient departments={departmentRows} />
+      </TabsContent>
+
+      {/* -- ASKED FOR DIRECTLY: the roster shows one "Current salary" per
+            person because it is a roster, not a ledger, and a fixed set of
+            columns cannot hold history that keeps growing. This is the whole
+            company's salary_history, one sheet, columns growing sideways as
+            increments happen. -- */}
+      <TabsContent value="salary-history">
+        {historyGrid.ok ? (
+          <SalaryHistoryTab rows={historyGrid.data.rows} />
+        ) : (
+          <p className="text-body-sm text-critical">{historyGrid.error.message}</p>
+        )}
       </TabsContent>
 
       {/* The staff roster, and the way into a scorecard. Its own tab rather

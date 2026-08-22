@@ -7,9 +7,19 @@ import { z } from "zod";
 
 import { checkRole } from "@/lib/auth/guards";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
-import { addSalaryChange } from "@/lib/employment/actions";
+import { addSalaryChange, correctSalaryHistoryEntry } from "@/lib/employment/actions";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
+
+// One alias, used everywhere a reason is cast below — the schema's own enum
+// and this type must list the same five values, and a third repetition is
+// the one that drifts.
+type SalaryReason =
+  | "ANNUAL_INCREMENT"
+  | "PROMOTION"
+  | "CORRECTION"
+  | "MARKET_ADJUSTMENT"
+  | "THREE_MONTH_INCREMENT";
 
 /**
  * WHY A SALARY CELL IS NOT JUST ANOTHER CELL
@@ -80,13 +90,34 @@ const cellPatchSchema = z.object({
 
 const bulkSchema = z.object({
   patches: z.array(cellPatchSchema).min(1, "Nothing was changed.").max(200),
-  /* -- Required ONLY when a salary actually moved. Validated below rather than
-        in the schema, so a batch of designation fixes is never asked for a pay
-        reason it does not need. -- */
+  /* -- WHICH KIND OF EVENT A CHANGED SALARY CELL IS, asked once for the whole
+        batch — same reasoning as the reason/date below, applied to the choice
+        itself (P19-8: twelve identical decisions is the case this screen
+        exists to save).
+
+        "change" is the ORIGINAL, unchanged behaviour: `addSalaryChange`
+        appends a new ledger row per person.
+
+        "correct" is AT THE OWNER'S EXPLICIT INSTRUCTION (0093) — the row that
+        already represents each person's current figure is edited in place
+        instead. It is resolved PER PERSON below rather than asked for as a
+        row id, because a grid cell is "what are they on now", not "which
+        historical row" — the loop finds the right row itself, the same way
+        the Employment page's own "Correct" affordances do. -- */
+  salaryMode: z.enum(["change", "correct"]).default("change"),
+  /* -- Required ONLY when a salary actually moved AND the mode is "change".
+        Validated below rather than in the schema, so a batch of designation
+        fixes is never asked for a pay reason it does not need, and a
+        correction batch is never asked for one either — the row being
+        corrected keeps its own reason and date. -- */
   salaryReason: z
-    .enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT"])
+    .enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT", "THREE_MONTH_INCREMENT"])
     .optional(),
   salaryEffectiveFrom: z.string().optional(),
+  /* -- In "correct" mode this REPLACES the row's own note only when typed —
+        left blank, the row's existing note is preserved (checked per row
+        below), because a bulk correction of forty figures must not wipe forty
+        unrelated notes just because none of them was retyped here. -- */
   salaryNote: z.string().trim().max(500).optional(),
 });
 
@@ -110,10 +141,13 @@ export async function bulkUpdatePeople(
   if (!parsed.success) {
     return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the changes.");
   }
-  const { patches, salaryReason, salaryEffectiveFrom, salaryNote } = parsed.data;
+  const { patches, salaryMode, salaryReason, salaryEffectiveFrom, salaryNote } = parsed.data;
 
   const withSalary = patches.filter((p) => p.current_ctc !== undefined);
-  if (withSalary.length > 0 && (!salaryReason || !salaryEffectiveFrom)) {
+  // Only "change" needs a reason and a date — "correct" reuses whatever the
+  // row being fixed already carries (P19-8's requirement is already met by
+  // the entry that exists; asking again would be asking why a typo happened).
+  if (salaryMode === "change" && withSalary.length > 0 && (!salaryReason || !salaryEffectiveFrom)) {
     return cycleError(
       "SALARY_NEEDS_REASON",
       "A pay change has to say why and from when. Choose a reason and an effective date, then save again.",
@@ -232,20 +266,70 @@ export async function bulkUpdatePeople(
       }
     }
 
-    /* ---------- The pay change, through the one path that may make one ---------- */
+    /* ---------- The pay change ---------- */
     if (current_ctc !== undefined) {
-      const result = await addSalaryChange({
-        profileId,
-        newCtc: current_ctc,
-        effectiveFrom: salaryEffectiveFrom as string,
-        reason: salaryReason as "ANNUAL_INCREMENT" | "PROMOTION" | "CORRECTION" | "MARKET_ADJUSTMENT",
-        note: salaryNote,
-      });
-      if (!result.ok) {
-        rows.push({ profileId, ok: false, error: result.error.message });
-        continue;
+      if (salaryMode === "change") {
+        // Unchanged: the one path that APPENDS a rise.
+        const result = await addSalaryChange({
+          profileId,
+          newCtc: current_ctc,
+          effectiveFrom: salaryEffectiveFrom as string,
+          reason: salaryReason as SalaryReason,
+          note: salaryNote,
+        });
+        if (!result.ok) {
+          rows.push({ profileId, ok: false, error: result.error.message });
+          continue;
+        }
+        salaryChanges += 1;
+      } else {
+        /* -- "correct": THE ROW ALREADY REPRESENTING TODAY'S FIGURE, edited in
+              place (0093), same as the Employment page's own per-row Edit. A
+              grid cell only ever says "what are they on now" — it carries no
+              row id — so the row is found here: the LATEST salary_history
+              entry excluding JOINING, or, where nobody has ever had a rise,
+              the joining baseline column itself. -- */
+        const { data: latest } = await supabase
+          .from("salary_history")
+          .select("id, effective_from, reason, note")
+          .eq("profile_id", profileId)
+          .neq("reason", "JOINING")
+          .order("effective_from", { ascending: false })
+          .order("recorded_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (latest) {
+          const result = await correctSalaryHistoryEntry({
+            id: latest.id,
+            profileId,
+            effectiveFrom: latest.effective_from,
+            newCtc: current_ctc,
+            reason: latest.reason as SalaryReason,
+            // A typed batch note REPLACES this row's note; left blank, the
+            // row's own note survives — a correction of forty figures must
+            // not wipe forty unrelated notes just because none was retyped.
+            note: salaryNote && salaryNote.length > 0 ? salaryNote : (latest.note ?? undefined),
+          });
+          if (!result.ok) {
+            rows.push({ profileId, ok: false, error: result.error.message });
+            continue;
+          }
+        } else {
+          // Nobody has ever had a rise — the figure on record IS the joining
+          // salary, so that is what "correct today's figure" has to mean.
+          // Same function the Employment page's baseline Edit button calls.
+          const { error } = await supabase.rpc("set_joining_salary", {
+            p_profile_id: profileId,
+            p_amount: current_ctc,
+          });
+          if (error) {
+            rows.push({ profileId, ok: false, error: error.message });
+            continue;
+          }
+        }
+        salaryChanges += 1;
       }
-      salaryChanges += 1;
     }
 
     updated += 1;

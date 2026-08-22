@@ -77,6 +77,15 @@ export type CycleListRow = {
   /** Counts for the segmented progress bar, in tier order. */
   progress: { self: number; lead: number; final: number };
   /**
+   * The two managers' OWN counts, disaggregated — asked for directly, after
+   * "Manager in 0/1" (the blended figure above, unchanged) read confusingly
+   * low beside a per-person breakdown already showing one manager fully
+   * done. `coReviewerIn` is `null` on the ordinary two-form cycle — nobody
+   * here has a second reviewer, so there is nothing for the row to say.
+   */
+  reportingLeadIn: { done: number; total: number };
+  coReviewerIn: { done: number; total: number } | null;
+  /**
    * How many participants have had an invite link sent to them.
    *
    * The row menu offered "Send links" with nothing beside it to say whether
@@ -231,16 +240,51 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     return cycleError("QUERY_FAILED", `Could not read evaluations: ${evaluationError.message}`);
   }
 
-  const tally = new Map<string, { participants: number; self: number; lead: number; final: number }>();
+  const tally = new Map<
+    string,
+    {
+      participants: number;
+      self: number;
+      lead: number;
+      final: number;
+      /* -- THE TWO MANAGERS, COUNTED SEPARATELY — asked for directly, having
+            reported "Manager in 0/1" as unclear beside a breakdown showing one
+            of the two managers already at "1 of 1". `lead` above is the
+            BLENDED figure (both required) and stays exactly as it was —
+            SegmentedProgress and anything reading cycle readiness still uses
+            it. These are the two halves that make it up, shown separately
+            instead of behind a tooltip explaining why the single number
+            reads lower than expected. -- */
+      reportingLeadDone: number;
+      coLeadDone: number;
+      /** How many participants HAVE a second reviewer at all — the second
+       *  row's own denominator, and zero (so the row is hidden entirely) on
+       *  the ordinary two-form cycle. */
+      coLeadTotal: number;
+    }
+  >();
   const cycleOfEvaluation = new Map<string, string>();
   /* A Set per cycle, so one HOD rating six people is counted once. */
   const managers = new Map<string, Set<string>>();
   for (const row of evaluations ?? []) {
-    const entry = tally.get(row.cycle_id) ?? { participants: 0, self: 0, lead: 0, final: 0 };
+    const entry = tally.get(row.cycle_id) ?? {
+      participants: 0,
+      self: 0,
+      lead: 0,
+      final: 0,
+      reportingLeadDone: 0,
+      coLeadDone: 0,
+      coLeadTotal: 0,
+    };
     entry.participants += 1;
     if (reachedSelf(row)) entry.self += 1;
     if (reachedLead(row)) entry.lead += 1;
     if (reachedFinal(row)) entry.final += 1;
+    if (reachedReportingLead(row)) entry.reportingLeadDone += 1;
+    if (row.co_lead_id) {
+      entry.coLeadTotal += 1;
+      if (reachedCoLead(row)) entry.coLeadDone += 1;
+    }
     tally.set(row.cycle_id, entry);
     cycleOfEvaluation.set(row.id, row.cycle_id);
 
@@ -363,7 +407,15 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
   return {
     ok: true,
     data: cycles.map((c) => {
-      const counts = tally.get(c.id) ?? { participants: 0, self: 0, lead: 0, final: 0 };
+      const counts = tally.get(c.id) ?? {
+        participants: 0,
+        self: 0,
+        lead: 0,
+        final: 0,
+        reportingLeadDone: 0,
+        coLeadDone: 0,
+        coLeadTotal: 0,
+      };
       return {
         id: c.id,
         name: c.name,
@@ -393,6 +445,9 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
             (a, b) => a.done / a.total - b.done / b.total || a.name.localeCompare(b.name),
           ),
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
+        reportingLeadIn: { done: counts.reportingLeadDone, total: counts.participants },
+        coReviewerIn:
+          counts.coLeadTotal > 0 ? { done: counts.coLeadDone, total: counts.coLeadTotal } : null,
         linksSent: sentPerCycle.get(c.id)?.size ?? 0,
       };
     }),
@@ -449,6 +504,17 @@ function reachedLead(row: ProgressRow) {
   if (row.lead_submitted_at === null) return false;
   if (!row.co_lead_id) return true;
   return row.co_lead_submitted_at !== null || Boolean(row.co_lead_skipped);
+}
+/** The REPORTING lead's own layer alone — never mind whether a second
+ *  reviewer exists or has answered. The first of the two disaggregated
+ *  figures `reachedLead` above blends together. */
+function reachedReportingLead(row: ProgressRow) {
+  return row.lead_submitted_at !== null || PAST_OPEN.includes(row.status);
+}
+/** The SECOND reviewer's own layer alone. Only meaningful where `co_lead_id`
+ *  is set — the caller checks that before counting a row into the total. */
+function reachedCoLead(row: ProgressRow) {
+  return row.co_lead_submitted_at !== null || Boolean(row.co_lead_skipped) || PAST_OPEN.includes(row.status);
 }
 function reachedFinal(row: ProgressRow) {
   return ["MD_REVIEWED", "INTERVIEW_DONE", "CLOSED"].includes(row.status);

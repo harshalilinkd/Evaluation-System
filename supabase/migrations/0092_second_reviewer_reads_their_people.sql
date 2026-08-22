@@ -35,6 +35,28 @@
 -- THE CLAUSE IS AS NARROW AS `reports_to`, deliberately: it matches the exact
 -- rows where this caller is the recorded second reviewer, and nothing else. A
 -- second reviewer still sees no other profile in the company.
+--
+-- ============================================================================
+-- THE LIVE DATABASE ALREADY HAS THIS ARM. THIS FILE IS STILL REQUIRED.
+--
+-- Checked directly: the deployed policy on `profiles` already reads
+-- `… OR (co_reviewer_id = (SELECT auth.uid()))`, so applying this changes
+-- nothing there — it is idempotent and safe to run either way.
+--
+-- It belongs in the chain regardless. Without it, anybody rebuilding from
+-- migrations gets 0053's version of the policy, which has no second-reviewer
+-- clause — so the fix would silently disappear on the next rebuild and the
+-- "Unknown" bug would come back. A repair that exists only in a running
+-- database and not in the migration that creates the object is a repair with a
+-- half-life.
+--
+-- ON THE SCHEMA. This says `public.`, as all 91 migrations before it do. The
+-- deployment puts these tables in an `evaluation` schema (see
+-- `lib/supabase/config.ts`), so the chain and the deployment differ — that is a
+-- standing discrepancy across the whole set, not something this file
+-- introduces, and it is recorded in §18 rather than being papered over here.
+-- Whatever process applies the other 91 applies this one the same way.
+-- ============================================================================
 
 begin;
 

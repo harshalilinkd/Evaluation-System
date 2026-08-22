@@ -4,6 +4,7 @@
 
 import * as React from "react";
 
+import { DatePopoverInput } from "@/components/appraise/date-popover";
 import { cn } from "@/lib/utils";
 
 /**
@@ -130,14 +131,17 @@ export function MoneyCell({
 }
 
 /**
- * A date, in the browser's own picker.
+ * A date. ISO IN AND OUT, because that is what the column stores.
  *
- * ISO IN AND OUT, because that is what the column stores and what a
- * `type="date"` input speaks. §0.10 fixes DD-MM-YYYY as what a PERSON reads,
- * and the native control already renders in the reader's locale — so the
- * convention is honoured by the browser rather than by a parser here, and the
- * value never round-trips through a format that could be read as the wrong
- * month (P19C-12's concern, avoided rather than handled).
+ * NOT the browser's own picker any more (0093's follow-up). Reported from a
+ * grid that scrolls with a sticky header and re-renders on every keystroke: a
+ * native `<input type="date">` popup can dismiss itself on a page reflow that
+ * has nothing to do with it, which is a real, well-known Chromium quirk and
+ * exactly the conditions a data grid produces constantly. `DatePopoverInput`
+ * (components/appraise/date-popover.tsx) owns its own calendar instead, so
+ * there is nothing native left for an unrelated repaint to close by accident.
+ * §0.10's DD-MM-YYYY is what it shows; ISO is still what it reads and writes,
+ * so no caller here changed.
  */
 export function DateCell({
   value,
@@ -151,15 +155,7 @@ export function DateCell({
   label: string;
   dirty: boolean;
 }) {
-  return (
-    <input
-      type="date"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={label}
-      className={cn(base, "tabular", dirty && "border-primary bg-primary/10")}
-    />
-  );
+  return <DatePopoverInput value={value} onChange={onChange} label={label} dirty={dirty} />;
 }
 
 /**
