@@ -516,9 +516,9 @@ function HrProposal({
             <div className="mt-1.5 space-y-1 font-sans text-body-sm text-ink">
               {/* Line 1 — the ask, and what it represents. */}
               <p>
-                {firstName} asked for{" "}
+                {firstName} expected salary{" "}
                 <span className="font-medium">{moneyMonthly(review.employee_expectation_ctc)}</span>
-                {expectedPct !== null ? ` — ${pctText(expectedPct)} more than they earn now` : ""}.
+                {expectedPct !== null ? ` — ${pctText(expectedPct)} more than their current salary` : ""}.
               </p>
 
               {/* Line 2 — each manager's own recommendation, named apart so
@@ -545,7 +545,7 @@ function HrProposal({
               {gap.amount !== null ? (
                 <p>
                   {data.recommendedIsAverage && isRecommended
-                    ? `Together that averages ${pctText(managerPct)}, taking their pay to `
+                    ? `Their averages ${pctText(managerPct)}, taking their pay to `
                     : isRecommended
                       ? `That takes their pay to `
                       : `The figure entered now is ${pctText(pct)}, taking their pay to `}

@@ -15,21 +15,14 @@ import {
   ArrowRight,
   CircleAlert,
   CircleCheck,
-  ClipboardCheck,
-  Star,
   TrendingDown,
   TrendingUp,
-  UserCheck,
   Users,
 } from "lucide-react";
 
 import {
-  BucketBarChart,
   CHART_COLORS,
   ChartLegend,
-  GroupedBarChart,
-  RATING_BANDS,
-  RadialGauge,
   StackedBarChart,
   TIER_CHART_COLORS,
   TrendAreaChart,
@@ -38,7 +31,6 @@ import { MetricStrip, type Metric } from "@/components/appraise/metric-strip";
 import { CycleShapeChart } from "@/components/appraise/cycle-shape-chart";
 import { HistoryTrendChart } from "@/components/appraise/history-trend-chart";
 import { ChartFigure } from "@/components/appraise/chart-figure";
-import { useSectionLabels } from "@/components/appraise/section-labels";
 import { HeroCard } from "@/components/appraise/stat-tile";
 import { Button } from "@/components/ui/button";
 import type { Analytics } from "@/lib/analytics/queries";
@@ -185,15 +177,6 @@ const TREND_POINTS = 8;
 
 const score = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(2);
-
-/* -- A difference always carries its sign. "0.40" and "−0.40" are opposite
-      findings about a team and must never read alike (P29-7). -- */
-const signedScore = (v: number | null | undefined) => {
-  if (v === null || v === undefined) return "—";
-  const n = Number(v);
-  if (n === 0) return "0.00";
-  return `${n > 0 ? "+" : "−"}${Math.abs(n).toFixed(2)}`;
-};
 
 export function DashboardClient({
   analytics,
@@ -438,21 +421,31 @@ export function DashboardClient({
               </Button>
             }
           >
+            {/* -- THE HEADLINE IS NOW THE SUM OF WHAT IS LISTED BELOW IT.
+                  It used to be `due.thisMonth` — "falls due within the current
+                  calendar month" — sitting directly above "due in the next 30
+                  days" and "overdue", two numbers it does not equal and is not
+                  built from (a rolling 30-day window and an all-time overdue
+                  count, against a fixed calendar boundary). Reported as
+                  confusing, and it is: three numbers with no stated
+                  relationship read as one that failed to add up. Computed here
+                  explicitly, so the big figure and its breakdown can never
+                  disagree. -- */}
             <div className="space-y-3">
-              <p className="tabular text-display-lg text-ink">{due.thisMonth}</p>
+              <p className="tabular text-display-lg text-ink">{due.overdue + due.dueSoon}</p>
               <p className="font-sans text-body-sm text-ink-muted">
-                {due.thisMonth === 1 ? "thing needs" : "things need"} your attention this month
+                {due.overdue + due.dueSoon === 1 ? "thing needs" : "things need"} your attention
               </p>
               <dl className="space-y-1 font-sans text-body-sm">
-                <div className="flex justify-between">
-                  <dt className="text-ink-muted">Due in the next 30 days</dt>
-                  <dd className="tabular text-ink">{due.dueSoon}</dd>
-                </div>
                 <div className="flex justify-between">
                   <dt className="text-ink-muted">Overdue</dt>
                   <dd className={due.overdue > 0 ? "tabular text-critical" : "tabular text-ink"}>
                     {due.overdue}
                   </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-ink-muted">Due in the next 30 days</dt>
+                  <dd className="tabular text-ink">{due.dueSoon}</dd>
                 </div>
               </dl>
             </div>
@@ -712,7 +705,7 @@ function MonthDelta({ current, previous }: { current: number; previous: number }
  * section, and it keeps one definition of what each figure means.
  */
 function adminMetrics(analytics: Analytics): Metric[] {
-  const { departments, progress } = analytics;
+  const { progress } = analytics;
   /* ---------- The headline figures ----------
 
      WHAT EACH COLUMN COUNTS IS NOT GUESSED — 0027 rewrote this view for blind
@@ -727,23 +720,18 @@ function adminMetrics(analytics: Analytics): Metric[] {
      The two share bars are therefore honest: they are counting people, not
      inferring from a status. */
   const total = Number(progress?.total ?? 0);
-  const selfIn = Number(progress?.self_submitted ?? 0);
-  const leadIn = Number(progress?.lead_reviewed ?? 0);
   const notStarted = Number(progress?.not_started ?? 0);
   const closed = Number(progress?.closed ?? 0);
 
-  /* -- Weighted by headcount, not a mean of means. A five-person team and a
-        fifty-person team do not carry equal weight in a company average, and
-        averaging the department averages would give them exactly that. -- */
-  const rated = departments.filter((d) => d.avg_lead !== null);
-  const ratedPeople = rated.reduce((n, d) => n + Number(d.people ?? 0), 0);
-  const companyLead =
-    ratedPeople > 0
-      ? rated.reduce((n, d) => n + Number(d.avg_lead ?? 0) * Number(d.people ?? 0), 0) / ratedPeople
-      : null;
-
   const share = (n: number) => (total > 0 ? n / total : 0);
 
+  /* -- "Self-evaluations in" and "Manager ratings in" USED TO BE TWO MORE TILES
+        HERE. Both counts reappear a few inches below as the two bars in
+        "Where this cycle stands" — same numbers, same words ("of {total}"),
+        drawn twice within one screenful. The bars carry MORE (a visible share,
+        not just a fraction) than a tile can, so the tile was the one adding
+        nothing. This strip keeps only what nothing else on the page already
+        says. -- */
   return [
     {
       label: "In this cycle",
@@ -751,22 +739,6 @@ function adminMetrics(analytics: Analytics): Metric[] {
       caption: total === 1 ? "person being appraised" : "people being appraised",
       tone: "primary",
       icon: <Users className="size-4" />,
-    },
-    {
-      label: "Self-evaluations in",
-      value: selfIn,
-      caption: `of ${total}`,
-      share: share(selfIn),
-      tone: "cyan",
-      icon: <UserCheck className="size-4" />,
-    },
-    {
-      label: "Manager ratings in",
-      value: leadIn,
-      caption: `of ${total}`,
-      share: share(leadIn),
-      tone: "pink",
-      icon: <ClipboardCheck className="size-4" />,
     },
     {
       label: "Not started",
@@ -784,83 +756,25 @@ function adminMetrics(analytics: Analytics): Metric[] {
       tone: "green",
       icon: <CircleCheck className="size-4" />,
     },
-    {
-      label: "Average rating",
-      value: companyLead === null ? "—" : companyLead.toFixed(2),
-      // §11 is explicit that there is no final score and no single headline
-      // figure, so this says WHICH average it is rather than presenting itself
-      // as "the score".
-      caption: companyLead === null ? "no ratings yet" : "lead average, out of 5",
-      tone: "primary",
-      icon: <Star className="size-4" />,
-    },
   ];
+  /* -- "Average rating" WAS HERE, and it is gone AT THE OWNER'S INSTRUCTION:
+        "we didn't need to show ratings data on dashboard ... make it
+        operational and informative". This strip, and everything below it,
+        answers what is done and what is pending — a score is neither. It
+        belongs to `/reports`, where a figure is read against the answers it
+        came from rather than as a headline nobody asked for. -- */
 }
 
 function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPulse | null }) {
-  const { departments, needsAttention, timeline, progress, distribution, sections } = analytics;
-  const sectionLabels = useSectionLabels();
+  const { departments, needsAttention, timeline } = analytics;
 
-  /* -- THE SPREAD OF SCORES.
-        `v_rating_distribution` has been queried on every dashboard load since
-        P16 and rendered nowhere — so the cycle's actual OUTPUT, the one thing
-        an appraisal exercise produces, was invisible. It answers the question
-        nobody asks until the review meeting: is this a real distribution, or
-        is everybody a 4?
-
-        Built from `RATING_BANDS` rather than from the query result, so a band
-        with nobody in it renders as a gap on the axis instead of vanishing and
-        silently shifting every other band along — which would also break
-        `BucketBarChart`'s ordinal ramp, since it takes its step from the bar's
-        POSITION. Padding is what keeps position and band the same fact. -- */
-  const bands = RATING_BANDS.map((bucket) => ({
-    bucket,
-    people: Number(distribution.find((d) => d.bucket === bucket)?.people ?? 0),
-  }));
-  const ratedPeople = bands.reduce((sum, b) => sum + b.people, 0);
-
-  /* -- WHERE THE COMPANY IS STRONG, AND WHERE IT IS NOT.
-        `v_section_scores` was the second slice fetched and discarded. It is
-        per (cycle, department, section, layer) and already filtered to the
-        comparable sections — Job Specific Skills is a different set of
-        questions per department, so it never shares an axis with another's
-        (P16-4).
-
-        WEIGHTED BY `answer_count`, never a mean of the department means: a
-        team of two and a team of thirty do not carry the same weight in a
-        company figure, and averaging averages quietly says they do.
-
-        Both layers, side by side, because that is the one comparison this
-        product exists to draw (§1) — a section where the two sides agree and
-        one where they are a point apart are different findings, and a single
-        company average hides exactly that. -- */
-  const sectionRows = (() => {
-    const acc = new Map<string, { self: number; selfN: number; lead: number; leadN: number }>();
-    for (const row of sections) {
-      if (row.avg_score === null) continue;
-      const n = Number(row.answer_count ?? 0);
-      if (n <= 0) continue;
-      const at = acc.get(row.section) ?? { self: 0, selfN: 0, lead: 0, leadN: 0 };
-      if (row.layer === "SELF") {
-        at.self += Number(row.avg_score) * n;
-        at.selfN += n;
-      } else if (row.layer === "LEAD") {
-        at.lead += Number(row.avg_score) * n;
-        at.leadN += n;
-      }
-      acc.set(row.section, at);
-    }
-    return [...acc.entries()]
-      .map(([section, a]) => ({
-        section,
-        label: sectionLabels[section as keyof typeof sectionLabels] ?? section,
-        self: a.selfN > 0 ? Number((a.self / a.selfN).toFixed(2)) : null,
-        lead: a.leadN > 0 ? Number((a.lead / a.leadN).toFixed(2)) : null,
-      }))
-      /* -- WEAKEST FIRST, on the manager's figure. The panel is read to decide
-            what to do next, and what to do next starts at the bottom. -- */
-      .sort((a, b) => (a.lead ?? a.self ?? 9) - (b.lead ?? b.self ?? 9));
-  })();
+  /* -- "THE SPREAD OF SCORES" (a rating-band chart) AND "STRONGEST AND
+        WEAKEST, COMPANY-WIDE" (section score averages) WERE HERE, and both
+        are gone AT THE OWNER'S INSTRUCTION: "we didn't need to show ratings
+        data on dashboard ... make it operational and informative." Everything
+        left in this view answers what is done and what is pending; a score
+        is neither. Both figures are still on `/reports`, read against the
+        answers that produced them rather than as a dashboard headline. -- */
 
   /* -- IS THERE A CURVE TO DRAW, or just a rule?
         `timeline.length < 2` was the wrong test. A cycle with one participant
@@ -906,44 +820,25 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           "what is happening, and what needs me" — a state of the system, not a
           distribution of its output.
 
-          These three counts are the whole pipeline in one row: filling in,
-          waiting for HR, waiting for the MD. Each is a link, because a count
-          somebody cannot act on is a fact rather than a dashboard. */}
+          These four counts are the whole pipeline in one row: filling in,
+          waiting for HR, waiting for the MD, ready to close. Each is a link,
+          because a count somebody cannot act on is a fact rather than a
+          dashboard.
+
+          NAMED "Across every cycle" — it was headed "Cycle progress", the exact
+          words the panel above it uses for a DIFFERENT scope: `getSystemPulse`
+          takes no cycle id, so these four counts span every cycle the company
+          has ever run, while everything above this section is the ONE selected
+          cycle. Reported as confusing, and rightly — a heading that matches its
+          neighbour's implies it restates the same number, when it is answering
+          a different question. The arc that used to sit here was the third
+          rendering of one cycle's percentage (already in the hero and in the
+          panel above); removed rather than reworded, since nothing here needs
+          it repeated a third time. -- */}
       {pulse ? (
-        <section className="grid gap-4 lg:grid-cols-4">
-          {/* -- An ARC, beside three numbers.
-                `RadialGauge` has existed since UI-2 and nothing had ever used
-                it. It earns its place here rather than being variety for its
-                own sake: this is a single proportion, which is the one thing a
-                dial does better than a number — it reads from across a room,
-                and unlike a donut it does not imply the remainder is a second
-                category.
-
-                `percent_complete` is the view's own figure, not one recomputed
-                here: 0027 defines it as three steps per evaluation so the arc
-                moves as work happens rather than only when somebody finishes
-                entirely, and a second definition on this screen would disagree
-                with the segmented bar under the cycle header. -- */}
-          <div className="card-surface flex flex-col justify-center p-6">
-            <p className="font-sans text-body-sm text-ink-muted">Cycle progress</p>
-            <RadialGauge
-              value={Number(progress?.percent_complete ?? 0)}
-              max={100}
-              height={148}
-              color="primary"
-            />
-            <p className="text-center font-sans text-body-sm text-ink-muted">
-              {Number(progress?.total ?? 0)} in this cycle · every appraisal is three
-              steps
-            </p>
-          </div>
-
-          {/* -- FOUR STAGES, NOT THREE. The pipeline ended at "With the MD",
-                so a record the MD had reviewed was counted nowhere and the row
-                read as though nothing were outstanding — the same hole the
-                reports queue had until today, and the one place work stalls
-                silently because each side assumes the other has it. -- */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:col-span-3 xl:grid-cols-4">
+        <section className="space-y-3">
+          <p className="type-label text-ink-muted">Across every cycle</p>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <PipelineTile
               label="Being filled in"
               value={pulse.inProgress}
@@ -1300,97 +1195,18 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
           team to ring. `v_department_scores` has carried `people` and
           `self_count` since P16 and nothing had ever read them.
 
-          Completion and divergence on one row deliberately: a team that is
-          behind AND disagreeing with itself is a different problem from one
-          that is merely late, and reading the two facts off separate panels is
-          how the combination gets missed. */}
-      {/* ---------- What the cycle is actually producing ----------
-            Two panels, side by side, on data this screen has been fetching and
-            discarding since P16. Everything above is a count of PROGRESS — how
-            many forms are in, who is late. Neither says anything about the
-            answers, which is what the exercise is for. */}
-      {ratedPeople > 0 || sectionRows.length > 0 ? (
-        <section className="grid gap-4 xl:grid-cols-2">
-          {ratedPeople > 0 ? (
-            <Panel
-              title="The spread of scores"
-              subtitle="Every rated person, by their manager's overall. A healthy cycle has a shape; a cycle where everybody is a 4 has not been rated."
-            >
-              <ChartFigure
-                caption="How many people fall in each rating band"
-                rows={bands}
-                columns={[
-                  { header: "Band", cell: (b) => b.bucket },
-                  { header: "People", cell: (b) => String(b.people), align: "right" },
-                  {
-                    header: "Share",
-                    cell: (b) => `${Math.round((b.people / ratedPeople) * 100)}%`,
-                    align: "right",
-                  },
-                ]}
-              >
-                {/* One hue in five steps, light to dark — 0-1 through 4-5 is a
-                    single scale, not five kinds of thing. The step comes from
-                    the band's position, which `bands` guarantees is the band
-                    (P29-3). No tier hue: a rating band says nothing about who
-                    gave it (§13.1). */}
-                <BucketBarChart data={bands} labelKey="bucket" valueKey="people" height={200} />
-              </ChartFigure>
-            </Panel>
-          ) : null}
-
-          {sectionRows.length > 0 ? (
-            <Panel
-              title="Strongest and weakest, company-wide"
-              subtitle="Weighted by how many answers each team gave, so a large department is not outvoted by a small one. Weakest first."
-            >
-              <ChartFigure
-                caption="Average score by section, employee against manager"
-                rows={sectionRows}
-                columns={[
-                  { header: "Section", cell: (s) => s.label },
-                  { header: "Employee", cell: (s) => score(s.self), align: "right" },
-                  { header: "Manager", cell: (s) => score(s.lead), align: "right" },
-                  {
-                    header: "Difference",
-                    cell: (s) =>
-                      s.self === null || s.lead === null ? "—" : signedScore(s.lead - s.self),
-                    align: "right",
-                  },
-                ]}
-              >
-                {/* The documented exception to keeping tiers out of a chart
-                    (UI2-12): these two series ARE the layers, so they take the
-                    reserved hues and the legend beside them cannot disagree
-                    with the marks (P33-3). */}
-                <GroupedBarChart
-                  data={sectionRows}
-                  labelKey="label"
-                  series={[
-                    { key: "self", label: "Employee", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead },
-                  ]}
-                />
-              </ChartFigure>
-              <ChartLegend
-                items={[
-                  { label: "Employee", fill: TIER_CHART_COLORS.self },
-                  { label: "Manager", fill: TIER_CHART_COLORS.lead },
-                ]}
-              />
-            </Panel>
-          ) : null}
-        </section>
-      ) : null}
-
+          COMPLETION ONLY, at the owner's instruction — the self-versus-lead
+          score difference that used to sit beside it here, and the two panels
+          above it ("The spread of scores", "Strongest and weakest,
+          company-wide"), are gone: "we didn't need to show ratings data on
+          dashboard ... make it operational and informative". This panel now
+          answers one question only — who is behind — which is what is done
+          and what is pending, not what anybody scored. */}
       {departments.length > 0 ? (
         <section>
-          <Panel
-            title="Where each team stands"
-            subtitle="How far the self-evaluations have come, and how far apart the two sides are. A team can be finished and still disagree."
-          >
+          <Panel title="Where each team stands" subtitle="How far the self-evaluations have come.">
             <ChartFigure
-              caption="Self-evaluation completion and self-versus-lead difference, by department"
+              caption="Self-evaluation completion by department"
               rows={departments}
               columns={[
                 { header: "Department", cell: (d) => String(d.department_name ?? "—") },
@@ -1399,14 +1215,12 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                   cell: (d) => `${Number(d.self_count ?? 0)} of ${Number(d.people ?? 0)}`,
                   align: "right",
                 },
-                { header: "Difference", cell: (d) => signedScore(d.gap), align: "right" },
               ]}
             >
               <ul className="space-y-3">
                 {[...departments]
                   /* -- Least complete first. The list is a work queue, so its
-                        order has to be the order somebody would work it — not
-                        alphabetical, and not by score. -- */
+                        order has to be the order somebody would work it. -- */
                   .sort(
                     (a, b) =>
                       Number(a.self_count ?? 0) / Math.max(1, Number(a.people ?? 0)) -
@@ -1416,8 +1230,6 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                     const people = Number(d.people ?? 0);
                     const inCount = Number(d.self_count ?? 0);
                     const pct = people > 0 ? (inCount / people) * 100 : 0;
-                    const gap = d.gap === null || d.gap === undefined ? null : Number(d.gap);
-                    const wide = gap !== null && Math.abs(gap) >= 1;
                     return (
                       <li key={String(d.department_id ?? d.department_name)}>
                         <div className="mb-1.5 flex items-baseline justify-between gap-3">
@@ -1426,17 +1238,6 @@ function AdminView({ analytics, pulse }: { analytics: Analytics; pulse: SystemPu
                           </span>
                           <span className="tabular shrink-0 text-body-sm text-ink-muted">
                             {inCount} of {people}
-                            {gap === null ? null : (
-                              <>
-                                {" · "}
-                                {/* Never colour alone (§13.8): the number carries
-                                    its own sign and the word says what it means. */}
-                                <span className={wide ? "text-warning" : undefined}>
-                                  {signedScore(gap)}
-                                  {wide ? " apart" : ""}
-                                </span>
-                              </>
-                            )}
                           </span>
                         </div>
                         <div className="h-2 overflow-hidden rounded-pill bg-rule/70">

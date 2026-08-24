@@ -120,7 +120,14 @@ export function MoneyInput({
           inputMode="numeric"
           disabled={disabled}
           required={required}
-          placeholder={placeholder ?? "50,000"}
+          /* -- NO SPECIMEN FIGURE BY DEFAULT.
+                This used to fall back to "50,000" — a plausible, real-looking
+                salary sitting inside an empty box reads as a stored value to
+                most people, not as an example. Every caller that used to pass
+                `placeholder=""` to fight that default now gets the same result
+                for free; the ₹ prefix, the label above and `emptyHint` below
+                already say what the field is and how to read it empty. -- */
+          placeholder={placeholder ?? ""}
           aria-describedby={describedBy}
           value={text}
           onChange={(e) => {

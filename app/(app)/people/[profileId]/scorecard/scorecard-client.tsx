@@ -23,7 +23,6 @@ import {
   GroupedBarChart,
   RATING_BANDS,
   ScoreComboChart,
-  SectionRadarChart,
   StatusDonutChart,
   TIER_CHART_COLORS,
   ratingBandColor,
@@ -36,8 +35,13 @@ import { useSectionLabels } from "@/components/appraise/section-labels";
 import { sectionRank } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { Scorecard, ScorecardQuestion } from "@/lib/analytics/queries";
+import { coLeadRole } from "@/lib/reports/reviewer";
 import { formatDate, formatScore } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+
+/** Reused from the tier chart palette, so a second reviewer takes the same
+ *  distinct colour everywhere it appears — the executive summary included. */
+const SECOND_REVIEWER_COLOR = TIER_CHART_COLORS.secondReviewer;
 
 /** §11's flag threshold. A gap this wide is worth a conversation. */
 const NOTABLE_GAP = 2;
@@ -101,6 +105,29 @@ export function ScorecardClient({
   const visibleHistory = cycleFilter
     ? card.history.filter((h) => String(h.evaluation_id) === cycleFilter)
     : card.history;
+  /** Whether any cycle CURRENTLY SHOWN has a second reviewer's figure — the
+   *  column and its header appear and disappear with the "Show" filter, which
+   *  is honest: a cycle with no second reviewer should not carry an empty one. */
+  const visibleHistoryHaveCoLead = visibleHistory.some((h) => h.co_lead_overall !== null);
+
+  /* -- WHAT THE MANAGERS SAID. `manager_overall` (0087) is the mean of both
+        where this person has two managers, and equal to `lead_overall` where
+        they have one. Falling back the other way would show a designer half
+        their review.
+
+        NOT a fallback across the §5 strip: `withoutLeadLayer` nulls both
+        columns for an employee reading their own card, so both being null means
+        withheld rather than missing — and reaching past one to the other would
+        undo the strip on the very screen it was written for.
+
+        DECLARED HERE, before its first use: it was defined further down the
+        component and referenced above that point (in `ratedHistory` below, and
+        in the headline figures), which is a `const` read in its own temporal
+        dead zone — a crash on every render, not just some. -- */
+  const managerOf = (
+    h: { manager_overall: number | null; lead_overall: number | null } | null | undefined,
+  ) =>
+    h?.manager_overall ?? h?.lead_overall ?? null;
 
   /* -- The headline numbers describe the last appraisal that PRODUCED one.
         Reading the last row outright meant a draft cycle sitting above a rated
@@ -124,12 +151,13 @@ export function ScorecardClient({
   const sections = React.useMemo(() => {
     const bySection = new Map<
       QuestionSection,
-      { self: number[]; lead: number[]; final: number[] }
+      { self: number[]; lead: number[]; coLead: number[]; final: number[] }
     >();
     for (const q of card.questions) {
-      const entry = bySection.get(q.section) ?? { self: [], lead: [], final: [] };
+      const entry = bySection.get(q.section) ?? { self: [], lead: [], coLead: [], final: [] };
       if (q.self !== null) entry.self.push(q.self);
       if (q.lead !== null) entry.lead.push(q.lead);
+      if (q.coLead !== null) entry.coLead.push(q.coLead);
       if (q.final !== null) entry.final.push(q.final);
       bySection.set(q.section, entry);
     }
@@ -140,52 +168,16 @@ export function ScorecardClient({
       .map(([section, v]) => ({
         section,
         label: sectionNames[section],
-        count: Math.max(v.self.length, v.lead.length, v.final.length),
+        count: Math.max(v.self.length, v.lead.length, v.coLead.length, v.final.length),
         self: mean(v.self),
         lead: mean(v.lead),
+        coLead: mean(v.coLead),
         final: mean(v.final),
       }))
       .sort((a, b) => sectionRank(a.section) - sectionRank(b.section));
     // `sectionNames` is HR's live naming: a rename has to re-label these rows,
     // not wait for the answers to change.
   }, [card.questions, sectionNames]);
-
-  /* -- The gap per section. Only sections BOTH sides rated: a difference
-        against a blank is not a difference, and drawing one would invent a
-        disagreement out of a layer that never submitted. -- */
-  const sectionGaps = React.useMemo(
-    () =>
-      sections
-        .filter((s) => s.self !== null && s.lead !== null)
-        .map((s) => ({
-          section: s.section,
-          label: s.label,
-          self: s.self,
-          lead: s.lead,
-          delta: Math.round(((s.lead ?? 0) - (s.self ?? 0)) * 100) / 100,
-        })),
-    [sections],
-  );
-
-  /* -- The radar's rows. Only sections at least one layer rated: an axis with
-        nothing on it draws a zero-length spoke, which reads as "scored nothing
-        here" rather than "not asked here" (P14-10 made the same call about
-        KPI). Final is offered only where it DIFFERS from the lead — otherwise
-        it lies exactly on the lead polygon and just thickens the line. -- */
-  const radar = React.useMemo(
-    () =>
-      sections
-        .filter((s) => s.self !== null || s.lead !== null || s.final !== null)
-        .map((s) => ({
-          section: s.label,
-          self: s.self,
-          lead: s.lead,
-          final: s.final,
-        })),
-    [sections],
-  );
-
-  const radarHasFinal = radar.some((r) => r.final !== null && r.final !== r.lead);
 
   /* -- What the scores actually say.
         The settled value per question is the final where one exists, else the
@@ -238,74 +230,53 @@ export function ScorecardClient({
         period: h.period_label,
         self: h.self_overall,
         lead: managerOf(h),
+        // 0095. The second reviewer's OWN figure per cycle — added at the
+        // owner's instruction ("coordinator ratings still not added in all
+        // charts"). `managerOf` above stays the BLEND (0087) — this is the
+        // other of the two numbers a blend is made from, not a duplicate.
+        coLead: h.co_lead_overall,
         final: h.final_overall,
       })),
     [ratedHistory],
   );
+  const comboRowsHaveCoLead = comboRows.some((r) => r.coLead !== null);
 
-  /* -- HOW THE TWO SIDES SPENT THEIR SCORES.
-        The donut above shows the SETTLED answer as one series, because a ring
-        can only carry one honestly. The question it cannot answer is the one
-        somebody actually asks in a review: not "what did we land on" but "how
-        differently did we mark". Nine 5s against two 5s is a sentence a person
-        understands immediately, and no average on this page states it — a self
-        of 4.20 against a lead of 3.90 could be a small difference everywhere
-        or a large one in three places, and those are opposite findings.
-
-        Every band is kept, including the empty ones, so the axis is the SCALE
-        rather than the bands that happen to be occupied. A missing 0-1 is a
-        fact about this review, and dropping it would shift every bar left and
-        quietly redraw the axis between two people's cards. -- */
-  const bandComparison = React.useMemo(() => {
-    const rows = RATING_BANDS.map((band) => ({ band, you: 0, lead: 0 }));
-    const at = (v: number) => rows[Math.min(Math.floor(v), RATING_BANDS.length - 1)]!;
-    for (const q of card.questions) {
-      if (q.self !== null) at(q.self).you += 1;
-      if (q.lead !== null) at(q.lead).lead += 1;
-    }
-    return rows;
-  }, [card.questions]);
-
-  const bandComparisonRated = bandComparison.some((r) => r.you > 0 && r.lead > 0);
-
-  /* -- WHETHER THE TWO SIDES ARE CONVERGING.
-        `sectionGaps` answers "where do we differ THIS time". Across cycles the
-        more useful question is whether the difference is closing — somebody
-        whose gap has run +1.2, +0.7, +0.2 is learning to read their own work,
-        and that is a better thing to say in a review than any single average.
-
-        CHRONOLOGICAL, never sorted by size: this is a time series and ranking
-        it would destroy the only axis that carries the finding.
-
-        Both overalls or nothing. A cycle where one side never submitted has no
-        difference to draw, and drawing one against a blank would invent a
-        disagreement out of a layer that does not exist (§11: missing is not
-        zero). -- */
-  const gapTrend = React.useMemo(
-    () =>
-      ratedHistory
-        .filter((h) => h.self_overall !== null && managerOf(h) !== null)
-        .map((h) => ({
-          section: String(h.evaluation_id),
-          label: h.period_label,
-          self: h.self_overall,
-          lead: managerOf(h),
-          delta: Math.round((Number(managerOf(h)) - Number(h.self_overall)) * 100) / 100,
-        })),
-    [ratedHistory],
-  );
-
-  /* -- Sections as grouped bars, self against lead.
-        Grouped and not stacked: self 4 and lead 3 is not a section worth 7. -- */
+  /* -- Sections as grouped bars: self, manager, second reviewer, final.
+        Grouped and not stacked: self 4 and lead 3 is not a section worth 7.
+        AT THE OWNER'S INSTRUCTION, this is now the ONLY chart carrying section
+        shape — the radar that used to sit beside it drew the identical numbers
+        as a polygon, and a diverging "where you disagreed" chart and a
+        by-band comparison chart each restated the self/lead pair a third and
+        fourth time in different shapes lower down the page. One chart, every
+        series it needs, including the one that was missing entirely: a
+        second reviewer's own answers (0083) were never shown anywhere on
+        this card. -- */
   const sectionBars = React.useMemo(
     () =>
       sections
-        .filter((s) => s.self !== null || s.lead !== null || s.final !== null)
-        .map((s) => ({ label: s.label, self: s.self, lead: s.lead, final: s.final })),
+        .filter((s) => s.self !== null || s.lead !== null || s.coLead !== null || s.final !== null)
+        .map((s) => ({
+          label: s.label,
+          self: s.self,
+          lead: s.lead,
+          coLead: s.coLead,
+          final: s.final,
+        })),
     [sections],
   );
 
   const sectionBarsHaveFinal = sectionBars.some((s) => s.final !== null && s.final !== s.lead);
+  const sectionBarsHaveCoLead = sectionBars.some((s) => s.coLead !== null);
+  /* -- Their designation, never an invented role like "2nd reviewer" — the
+        same rule the executive summary and the printed sheet already follow
+        (lib/reports/reviewer.ts). Only computed for display where a co-lead
+        actually exists; `card.coLeadName` is null otherwise, and every render
+        site below guards on that before reading this. -- */
+  const coLeadHeader = coLeadRole(card.coLeadDesignation, card.coLeadName);
+  /** Whether ANY question actually carries a second-reviewer answer — a
+   *  co-lead can be assigned and not yet have rated anything, and a column
+   *  of nothing but em dashes is not a reason to draw a fourth column. */
+  const questionsHaveCoLead = card.questions.some((q) => q.coLead !== null);
 
   /* -- The four numbers worth reading before any chart.
         "Agreed" is where both sides landed on the same score — the single
@@ -352,21 +323,8 @@ export function ScorecardClient({
         again, and §11's own instruction that where a single headline figure is
         needed it is the lead average, LABELLED as such. The caption under it
         says which layer it came from, so the hero never implies an authority
-        the number does not have. -- */
-  /* -- WHAT THE MANAGERS SAID. `manager_overall` (0087) is the mean of both
-        where this person has two managers, and equal to `lead_overall` where
-        they have one. Falling back the other way would show a designer half
-        their review.
-
-        NOT a fallback across the §5 strip: `withoutLeadLayer` nulls both
-        columns for an employee reading their own card, so both being null means
-        withheld rather than missing — and reaching past one to the other would
-        undo the strip on the very screen it was written for. -- */
-  const managerOf = (
-    h: { manager_overall: number | null; lead_overall: number | null } | null | undefined,
-  ) =>
-    h?.manager_overall ?? h?.lead_overall ?? null;
-
+        the number does not have. `managerOf` is declared near the top of the
+        component, before `ratedHistory` — see the comment there. -- */
   const headline = latest?.final_overall ?? managerOf(latest) ?? latest?.self_overall ?? null;
   const headlineLayer: "final" | "lead" | "self" | null =
     latest?.final_overall != null
@@ -443,9 +401,19 @@ export function ScorecardClient({
                 {/* §11: where a single headline figure is needed, it is the
                     lead average and it is LABELLED as such. The caption names
                     the layer, so the number never claims an authority it does
-                    not have. */}
+                    not have.
+
+                    "Managers' average", not "Manager score", when a second
+                    reviewer exists and this figure IS the blend (0087) — it
+                    was reported as reading like a mistake: this line said
+                    3.75 while the tile beside it said 3.83, because the tile
+                    is the reporting lead's OWN figure and this is both
+                    managers together. Different numbers, correctly, and now
+                    said differently too. */}
                 <p className="text-body-sm text-ink-muted">
-                  {TIER_LABELS[headlineLayer ?? "final"]} score
+                  {headlineLayer === "lead" && card.coLeadName
+                    ? "Managers' average score"
+                    : `${TIER_LABELS[headlineLayer ?? "final"]} score`}
                   {latest ? ` · ${latest.period_label}` : ""}
                 </p>
                 <p className="flex items-baseline gap-1.5">
@@ -465,16 +433,26 @@ export function ScorecardClient({
                 </p>
               </div>
 
-              {/* The three layers, small, beside the headline rather than
+              {/* Up to four layers, small, beside the headline rather than
                   instead of it. Which side said what is the second question on
                   this page; what the score IS, is the first. */}
-              <div className="flex gap-2.5">
+              <div className="flex flex-wrap gap-2.5">
                 <HeroTier tier="self" value={latest?.self_overall ?? null} />
                 {/* §5: not shown on your own card, at any status. The server
                     has already nulled it — this stops an em dash standing in,
                     which would read as "your manager did not rate you". */}
                 {card.showLead ? (
                   <HeroTier tier="lead" value={latest?.lead_overall ?? null} />
+                ) : null}
+                {/* -- THE SECOND REVIEWER (0083), missing entirely before this.
+                      Gated on the reporting lead's OWN tile having a real
+                      number rather than on `card.coLeadOverall` alone: that
+                      figure is scoped to the last RATED cycle, which can be an
+                      older one than `latest` when the newest cycle is still a
+                      draft — and showing a real figure beside three em dashes
+                      would be a different appraisal wearing this one's hero. -- */}
+                {card.showLead && card.coLeadName && latest?.lead_overall != null ? (
+                  <HeroTierCoLead label={coLeadHeader} value={card.coLeadOverall} />
                 ) : null}
                 <HeroTier tier="final" value={latest?.final_overall ?? null} />
               </div>
@@ -601,9 +579,17 @@ export function ScorecardClient({
               is a real reading of one appraisal — and hiding the panel until
               somebody's second year is how a new joiner's scorecard ends up
               looking half-built. */}
+          {/* -- SIDE BY SIDE, AT THE OWNER'S INSTRUCTION. Both are read
+                together — one is "what happened over time", the other "where
+                it happened" — and stacked full-width each took a whole
+                screenful before the other came into view. Either card spans
+                the full row alone if the other has nothing to show, rather
+                than leaving an empty cell beside it. -- */}
+          <div className="grid items-start gap-5 lg:grid-cols-2">
           {comboRows.length >= 1 ? (
             <DashboardCard
               title={comboRows.length > 1 ? "Appraisals over time" : "This appraisal, by layer"}
+              className={sectionBars.length === 0 ? "lg:col-span-2" : undefined}
             >
               <p className="-mt-2 mb-1 max-w-prose text-body-sm text-ink-muted">
                 {comboRows.length > 1
@@ -625,6 +611,15 @@ export function ScorecardClient({
                         },
                       ]
                     : []),
+                  ...(card.showLead && comboRowsHaveCoLead
+                    ? [
+                        {
+                          header: coLeadHeader,
+                          cell: (r: (typeof comboRows)[number]) => formatScore(r.coLead),
+                          align: "right" as const,
+                        },
+                      ]
+                    : []),
                   { header: "Final", cell: (r) => formatScore(r.final), align: "right" },
                 ]}
               >
@@ -636,109 +631,37 @@ export function ScorecardClient({
                     ...(card.showLead
                       ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
                       : []),
+                    ...(card.showLead && comboRowsHaveCoLead
+                      ? [{ key: "coLead", label: coLeadHeader, color: SECOND_REVIEWER_COLOR }]
+                      : []),
                   ]}
                   line={{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }}
                 />
-                <TierLegend showFinal lineFinal showLead={card.showLead} />
+                <TierLegend
+                  showFinal
+                  lineFinal
+                  showLead={card.showLead}
+                  coLeadLabel={card.showLead && comboRowsHaveCoLead ? coLeadHeader : null}
+                />
               </ChartFigure>
             </DashboardCard>
           ) : null}
 
-          {/* ---------- Shape, and spread ----------
-              The radar answers "where is this person strong" in one glance;
-              the distribution answers "what kind of rating is this" — a steady
-              3.5 everywhere and a mix of 5s and 2s share a mean and are
-              completely different reviews. Neither question was on the page. */}
-          {radar.length >= 3 || showRatingMix ? (
-            <div className="grid gap-5 lg:grid-cols-5">
-              {radar.length >= 3 ? (
-                <DashboardCard
-                  title="Section profile"
-                  className={showRatingMix ? "lg:col-span-3" : "lg:col-span-5"}
-                >
-                  <p className="-mt-2 mb-1 max-w-prose text-body-sm text-ink-muted">
-                    Two polygons sitting on top of each other mean the review is settled. One
-                    pulled in on a spoke is where the conversation is.
-                  </p>
-                  <ChartFigure
-                    caption="Average score per section, by layer"
-                    rows={sections}
-                    columns={[
-                      { header: "Section", cell: (s) => s.label },
-                      { header: "Self", cell: (s) => formatScore(s.self), align: "right" },
-                      ...(card.showLead
-                        ? [
-                            {
-                              header: "Manager",
-                              cell: (s: (typeof sections)[number]) => formatScore(s.lead),
-                              align: "right" as const,
-                            },
-                          ]
-                        : []),
-                      { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
-                    ]}
-                  >
-                    <SectionRadarChart
-                      data={radar}
-                      height={320}
-                      series={[
-                        { key: "self", label: "Self", color: TIER_CHART_COLORS.self },
-                        ...(card.showLead
-                          ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
-                          : []),
-                        ...(radarHasFinal
-                          ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
-                          : []),
-                      ]}
-                    />
-                    <TierLegend showFinal={radarHasFinal} showLead={card.showLead} />
-                  </ChartFigure>
-                </DashboardCard>
-              ) : null}
-
-              {/* Not a second view of the radar: the radar says WHERE the
-                  scores are, this says what KIND of review it is. A steady 3.5
-                  everywhere and a mix of 5s and 2s share a mean and are
-                  completely different appraisals — the ring is the only thing
-                  on the page that tells them apart. */}
-              {showRatingMix ? (
-                /* Takes the whole row when there is no radar beside it. A
-                   two-fifths card floating against an empty three-fifths reads
-                   as something that failed to load. */
-                <DashboardCard
-                  title="Rating mix"
-                  className={radar.length >= 3 ? "lg:col-span-2" : "lg:col-span-5"}
-                >
-                  <p className="-mt-2 mb-1 text-body-sm text-ink-muted">
-                    Every rated answer, by the score it settled at.
-                  </p>
-                  {/* Capped so the ring and its key stay a readable block when
-                      this card takes the full row on its own. */}
-                  <div className="mx-auto w-full max-w-[340px]">
-                    <StatusDonutChart
-                      data={settledBands}
-                      height={200}
-                      centerValue={String(settledTotal)}
-                      centerLabel={settledTotal === 1 ? "answer" : "answers"}
-                    />
-                  </div>
-                  <p className="mt-3 text-body-sm text-ink-muted">
-                    A band counts questions, not people. Darker is a higher score.
-                  </p>
-                </DashboardCard>
-              ) : null}
-            </div>
-          ) : null}
-
           {/* ---------- Section scores, as bars ----------
-              The radar carries shape; this carries VALUE. A polygon is read by
-              area and area is the one thing people misjudge, so the same
-              numbers appear a second time on a common baseline where two
-              near-equal sections can actually be told apart — and every bar is
-              directly labelled, which is what discharges the validator's
-              contrast warning on cyan. */}
+              AT THE OWNER'S INSTRUCTION, this is now the ONLY chart carrying
+              section shape. A radar used to sit beside it drawing the exact
+              same numbers as a polygon — the same information told twice, and
+              the harder of the two to read once a second reviewer added a
+              third overlapping outline to a four-axis diamond. Bars scale to
+              however many layers rated a section; a radar does not.
+
+              Every bar is directly labelled, which is what discharges the
+              validator's contrast warning on cyan. -- */}
           {sectionBars.length > 0 ? (
-            <DashboardCard title="Score by section">
+            <DashboardCard
+              title="Score by section"
+              className={comboRows.length === 0 ? "lg:col-span-2" : undefined}
+            >
               <ChartFigure
                 caption="Average score per section, by layer"
                 rows={sectionBars}
@@ -754,6 +677,15 @@ export function ScorecardClient({
                         },
                       ]
                     : []),
+                  ...(card.showLead && sectionBarsHaveCoLead
+                    ? [
+                        {
+                          header: coLeadHeader,
+                          cell: (s: (typeof sectionBars)[number]) => formatScore(s.coLead),
+                          align: "right" as const,
+                        },
+                      ]
+                    : []),
                   { header: "Final", cell: (s) => formatScore(s.final), align: "right" },
                 ]}
               >
@@ -765,13 +697,46 @@ export function ScorecardClient({
                     ...(card.showLead
                       ? [{ key: "lead", label: "Manager", color: TIER_CHART_COLORS.lead }]
                       : []),
+                    ...(card.showLead && sectionBarsHaveCoLead
+                      ? [{ key: "coLead", label: coLeadHeader, color: SECOND_REVIEWER_COLOR }]
+                      : []),
                     ...(sectionBarsHaveFinal
                       ? [{ key: "final", label: "Final", color: TIER_CHART_COLORS.final }]
                       : []),
                   ]}
                 />
-                <TierLegend showFinal={sectionBarsHaveFinal} showLead={card.showLead} />
+                <TierLegend
+                  showFinal={sectionBarsHaveFinal}
+                  showLead={card.showLead}
+                  coLeadLabel={card.showLead && sectionBarsHaveCoLead ? coLeadHeader : null}
+                />
               </ChartFigure>
+            </DashboardCard>
+          ) : null}
+          </div>
+
+          {/* ---------- Rating mix ----------
+              What KIND of review this is — a steady 3.5 everywhere and a mix
+              of 5s and 2s share a mean and are completely different reviews.
+              A ring can only carry one series honestly, so this is the
+              SETTLED answer per question, not a per-layer breakdown; the bars
+              above are where each layer is told apart. -- */}
+          {showRatingMix ? (
+            <DashboardCard title="Rating mix">
+              <p className="-mt-2 mb-1 text-body-sm text-ink-muted">
+                Every rated answer, by the score it settled at.
+              </p>
+              <div className="mx-auto w-full max-w-[340px]">
+                <StatusDonutChart
+                  data={settledBands}
+                  height={200}
+                  centerValue={String(settledTotal)}
+                  centerLabel={settledTotal === 1 ? "answer" : "answers"}
+                />
+              </div>
+              <p className="mt-3 text-body-sm text-ink-muted">
+                A band counts questions, not people. Darker is a higher score.
+              </p>
             </DashboardCard>
           ) : null}
 
@@ -790,121 +755,19 @@ export function ScorecardClient({
             </div>
           ) : null}
 
-          {/* ---------- Where the two sides disagreed, by section ----------
-              The one figure on this page that answers "did my lead and I see
-              this the same way", which is the conversation the appraisal
-              exists to have. §11 defines the gap as Lead − Self, so pink to
-              the right means the lead rated higher and cyan to the left means
-              the employee did — the reserved tier hues carrying exactly the
-              meaning §13.1 gives them (UI-1's collision-chart exception).
-
-              Diverging, so it needs a NEUTRAL midpoint and two hues, never a
-              ramp: zero is agreement, and agreement is not a small amount of
-              disagreement. Every bar is directly labelled, which is also what
-              discharges the validator's contrast warning on cyan. */}
-          {/* §5: guarded on showLead as well as on emptiness. `sectionGaps` is
-              derived from `q.lead`, which the server nulls on your own card, so
-              this is already empty there — but that is an indirect guard, and a
-              refactor that changed how the gaps are derived would silently
-              restore the card. The rule is stated where it applies. */}
-          {card.showLead && sectionGaps.length > 0 ? (
-            <DashboardCard title="Where you and your lead agreed — and did not">
-              {/* One toggle component for every chart on the page. This card
-                  carried its own `useState` and its own hand-built table, which
-                  is how two switches that do the same thing end up looking and
-                  behaving differently. */}
-              <ChartFigure
-                caption="Difference between the lead's section average and your own"
-                rows={sectionGaps}
-                columns={[
-                  { header: "Section", cell: (g) => g.label },
-                  { header: "Self", cell: (g) => formatScore(g.self), align: "right" },
-                  { header: "Manager", cell: (g) => formatScore(g.lead), align: "right" },
-                  { header: "Difference", cell: (g) => signed(g.delta), align: "right" },
-                ]}
-              >
-                <DivergingGapChart rows={sectionGaps} />
-                <p className="mt-4 text-body-sm text-ink-muted">
-                  A difference is not a mistake — it is the part of the review worth talking
-                  about.
-                </p>
-              </ChartFigure>
-            </DashboardCard>
-          ) : null}
-
-          {/* ---------- How each side spent its scores ----------
-              The distribution behind the averages. Two series, so grouped and
-              never stacked: seven questions you marked 4 and three your lead
-              marked 4 is not ten of anything.
-
-              The tier hues, because the two series ARE the layers — the one
-              documented exception to keeping them out of a chart (UI2-12), and
-              the reason the legend beside it cannot disagree with the marks.
-
-              §5 twice over: guarded on `showLead`, and the lead counts come
-              from `q.lead`, which the server nulls on your own card. */}
-          {card.showLead && bandComparisonRated ? (
-            <DashboardCard title="How each of you marked">
-              <ChartFigure
-                caption="How many questions each side placed in each band"
-                rows={bandComparison}
-                columns={[
-                  { header: "Band", cell: (b) => b.band },
-                  { header: "You", cell: (b) => String(b.you), align: "right" },
-                  { header: "Manager", cell: (b) => String(b.lead), align: "right" },
-                  {
-                    header: "Difference",
-                    cell: (b) => (b.you === b.lead ? "—" : signed(b.you - b.lead)),
-                    align: "right",
-                  },
-                ]}
-              >
-                <GroupedBarChart
-                  data={bandComparison}
-                  labelKey="band"
-                  counts
-                  series={[
-                    { key: "you", label: "You", color: TIER_CHART_COLORS.self },
-                    { key: "lead", label: "Your lead", color: TIER_CHART_COLORS.lead },
-                  ]}
-                />
-                <p className="mt-4 text-body-sm text-ink-muted">
-                  Two averages a fifth of a point apart can come from very different
-                  reviews. This is the shape behind them.
-                </p>
-              </ChartFigure>
-            </DashboardCard>
-          ) : null}
-
-          {/* ---------- Whether the difference is closing ----------
-              The only panel on this page that is about more than one appraisal
-              and more than one number. It needs two cycles both sides rated —
-              a single point is not a direction, and calling one a trend is the
-              thing P33-8 removed from the chart above. */}
-          {card.showLead && gapTrend.length >= 2 ? (
-            <DashboardCard title="Are you and your lead converging?">
-              <ChartFigure
-                caption="The difference between your lead's overall and your own, cycle by cycle"
-                rows={gapTrend}
-                columns={[
-                  { header: "Cycle", cell: (g) => g.label },
-                  { header: "You", cell: (g) => formatScore(g.self), align: "right" },
-                  { header: "Manager", cell: (g) => formatScore(g.lead), align: "right" },
-                  { header: "Difference", cell: (g) => signed(g.delta), align: "right" },
-                ]}
-              >
-                {/* The SAME diverging component the section gaps use. One
-                    implementation, so a reader who has learnt "pink right, cyan
-                    left" upstairs does not have to learn it twice — and the two
-                    cannot drift into disagreeing about which side is which. */}
-                <DivergingGapChart rows={gapTrend} />
-                <p className="mt-4 text-body-sm text-ink-muted">
-                  Oldest first. A difference that is shrinking usually means the two of you
-                  are reading the same work the same way.
-                </p>
-              </ChartFigure>
-            </DashboardCard>
-          ) : null}
+          {/* ---------- Three panels were here ----------
+              "Where you and your lead agreed — and did not" (a diverging
+              section-gap chart), "How each of you marked" (a by-band
+              comparison) and "Are you and your lead converging?" (the same
+              gap over past cycles) are REMOVED, AT THE OWNER'S INSTRUCTION —
+              "keep only informative and analytical information, not all...
+              don't show the same repetitive information". All three drew the
+              identical self-vs-lead comparison "Score by section" already
+              shows, in three further shapes lower down a page that was
+              already long. §11's gap is still the finding "Where you and your
+              lead saw it differently" exists to surface below, per question —
+              nothing about that reasoning is lost, only its restatement four
+              more times. -- */}
 
           {/* ---------- The verdict, beside where the two sides differed ----------
               Deliberately adjacent: the recorded outcome and the questions it
@@ -1022,10 +885,16 @@ export function ScorecardClient({
 
           {/* ---------- Every answer ----------
               The one exhaustive list on the page, and the only place a specific
-              question can be looked up. The three-track sparkbar beside each
-              row is what makes it scannable: a reader picking out the rows
-              where the tracks are ragged has found every disagreement without
-              reading a single number. */}
+              question can be looked up. The sparkbar beside each row is what
+              makes it scannable: a reader picking out the rows where the
+              tracks are ragged has found every disagreement without reading a
+              single number.
+
+              THE SECOND REVIEWER'S TRACK AND COLUMN, added at the owner's
+              instruction — reported as still missing after every OTHER chart
+              on this page had it. `q.coLead` has carried this since the
+              server was extended for it; this was the one table that never
+              read the field. -- */}
           {card.questions.length > 0 ? (
             <DashboardCard title="Every rated answer">
               <div className="overflow-x-auto">
@@ -1045,7 +914,12 @@ export function ScorecardClient({
                           together. The lead track was drawn even here: a bar
                           whose LENGTH is the manager's score is the same
                           disclosure as the number. */}
-                      {["Self", ...(card.showLead ? ["Manager"] : []), "Final"].map((h) => (
+                      {[
+                        "Self",
+                        ...(card.showLead ? ["Manager"] : []),
+                        ...(card.showLead && questionsHaveCoLead ? [coLeadHeader] : []),
+                        "Final",
+                      ].map((h) => (
                         <th
                           key={h}
                           scope="col"
@@ -1069,13 +943,21 @@ export function ScorecardClient({
                           </span>
                         </td>
                         <td className="py-2.5 pr-4">
-                          {/* Decorative: the three figures are in the same row,
-                              so labelling each track makes a reader hear the
-                              row twice. */}
+                          {/* Decorative: the figures are in the same row, so
+                              labelling each track makes a reader hear the row
+                              twice. */}
                           <div className="space-y-1">
                             <SectionBar decorative tier="self" value={q.self} />
                             {card.showLead ? (
                               <SectionBar decorative tier="lead" value={q.lead} />
+                            ) : null}
+                            {card.showLead && questionsHaveCoLead ? (
+                              <SectionBar
+                                decorative
+                                tier="coLead"
+                                label={coLeadHeader}
+                                value={q.coLead}
+                              />
                             ) : null}
                             <SectionBar decorative tier="final" value={q.final} />
                           </div>
@@ -1088,6 +970,11 @@ export function ScorecardClient({
                             {formatScore(q.lead)}
                           </td>
                         ) : null}
+                        {card.showLead && questionsHaveCoLead ? (
+                          <td className="tabular py-2.5 text-right text-body text-ink">
+                            {formatScore(q.coLead)}
+                          </td>
+                        ) : null}
                         <td className="tabular py-2.5 text-right text-body font-medium text-ink">
                           {formatScore(q.final)}
                         </td>
@@ -1096,7 +983,12 @@ export function ScorecardClient({
                   </tbody>
                 </table>
               </div>
-              <TierLegend showFinal showLead={card.showLead} className="mt-4" />
+              <TierLegend
+                showFinal
+                showLead={card.showLead}
+                coLeadLabel={card.showLead && questionsHaveCoLead ? coLeadHeader : null}
+                className="mt-4"
+              />
             </DashboardCard>
           ) : null}
 
@@ -1143,6 +1035,7 @@ export function ScorecardClient({
                       "Period",
                       "Self",
                       ...(card.showLead ? ["Manager"] : []),
+                      ...(card.showLead && visibleHistoryHaveCoLead ? [coLeadHeader] : []),
                       "Final",
                       "Promotion",
                       "Increment %",
@@ -1161,6 +1054,15 @@ export function ScorecardClient({
                       {card.showLead ? (
                         <td className="tabular py-2 text-body text-ink">
                           {formatScore(h.lead_overall)}
+                        </td>
+                      ) : null}
+                      {/* 0095. The second reviewer's own figure per cycle —
+                          absent below in exactly the case the header above
+                          it is: no second reviewer on THAT cycle, or (§5)
+                          this is somebody's own card. */}
+                      {card.showLead && visibleHistoryHaveCoLead ? (
+                        <td className="tabular py-2 text-body text-ink">
+                          {formatScore(h.co_lead_overall)}
                         </td>
                       ) : null}
                       <td className="tabular py-2 text-body font-medium text-ink">
@@ -1280,6 +1182,28 @@ function HeroTier({ tier, value }: { tier: "self" | "lead" | "final"; value: num
 }
 
 /**
+ * The second reviewer's own tile (0083) — the SAME shape as `HeroTier`, but
+ * not built from `TIER_CLASSES`: a second reviewer shares the Lead HUE by
+ * definition (§13.1 — both are "an HOD said this") and is NOT a fourth tier,
+ * so it takes the dedicated second-reviewer token rather than a tier class,
+ * and its own name rather than a generic "2nd reviewer" (the owner's
+ * objection to that exact phrase — see lib/reports/reviewer.ts).
+ */
+function HeroTierCoLead({ label, value }: { label: string; value: number | null }) {
+  return (
+    <div className="rounded-card border border-second-reviewer/40 bg-second-reviewer/10 px-3.5 py-2.5">
+      <span className="flex items-center gap-1.5 text-body-sm text-ink-muted">
+        <span aria-hidden className="size-2 rounded-pill bg-second-reviewer" />
+        {label}
+      </span>
+      <span className="tabular mt-0.5 block text-display-sm text-ink">
+        {value === null ? "—" : value.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+/**
  * The key every tier chart on this page shares.
  *
  * Present whenever two or more layers are drawn — identity is never colour
@@ -1294,6 +1218,11 @@ function TierLegend({
   showFinal = false,
   showLead = true,
   lineFinal = false,
+  /** The second reviewer's role/name, or null with none on this evaluation
+   *  (0083). Not a boolean: the entry needs a real label, not a generic one —
+   *  the owner's objection to "2nd reviewer" as an invented role name applies
+   *  here exactly as it does everywhere else this pairing is shown. */
+  coLeadLabel = null,
   className,
 }: {
   showFinal?: boolean;
@@ -1302,6 +1231,7 @@ function TierLegend({
    *  tells the reader to look for something the page will never show them. */
   showLead?: boolean;
   lineFinal?: boolean;
+  coLeadLabel?: string | null;
   className?: string;
 }) {
   return (
@@ -1317,6 +1247,12 @@ function TierLegend({
           {TIER_LABELS[tier]}
         </li>
       ))}
+      {coLeadLabel ? (
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden className="size-2.5 rounded-mark bg-second-reviewer" />
+          {coLeadLabel}
+        </li>
+      ) : null}
       {showFinal ? (
         <li className="flex items-center gap-1.5">
           <span
@@ -1471,105 +1407,6 @@ function signed(n: number): string {
 }
 
 /**
- * Diverging bars: how far the lead's section average sits from the employee's.
- *
- * Hand-built rather than charted. A diverging bar is a centre line and two
- * rectangles, and Recharts spends more effort being talked out of its axis
- * defaults than the geometry costs to state directly — which also keeps the
- * 2px surface gap and the rounded data-end under our control rather than the
- * library's.
- *
- * The domain is symmetric and taken from the largest gap present, so the two
- * sides are always comparable in length. Floored at 1 point: without it, a
- * person whose worst disagreement is 0.2 gets a full-width bar that reads as a
- * chasm.
- */
-function DivergingGapChart({
-  rows,
-}: {
-  rows: { section: string; label: string; self: number | null; lead: number | null; delta: number }[];
-}) {
-  const bound = Math.max(1, ...rows.map((r) => Math.abs(r.delta)));
-
-  return (
-    <div className="space-y-3">
-      {rows.map((r) => {
-        const pct = (Math.abs(r.delta) / bound) * 50;
-        const higher = r.delta > 0;
-        return (
-          <div key={r.section}>
-            <div className="mb-1 flex items-baseline justify-between gap-3">
-              <span className="truncate text-body-sm text-ink">{r.label}</span>
-              <span className="tabular shrink-0 text-body-sm text-ink">
-                {formatScore(r.self)} → {formatScore(r.lead)}
-              </span>
-            </div>
-
-            <div className="relative h-6">
-              {/* The centre line IS the neutral midpoint. A diverging scale
-                  needs one, and it must not be a third hue. */}
-              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-rule" />
-
-              {r.delta === 0 ? (
-                <div className="absolute inset-y-0 left-1/2 flex -translate-x-1/2 items-center">
-                  <span className="tabular rounded-pill bg-surface-mute px-2 py-0.5 text-body-xs text-ink-muted">
-                    agreed
-                  </span>
-                </div>
-              ) : (
-                <div
-                  className={cn(
-                    "absolute inset-y-1 flex items-center",
-                    higher ? "left-1/2 justify-start" : "right-1/2 justify-end",
-                  )}
-                  style={{ width: `${pct}%` }}
-                >
-                  <div
-                    className={cn(
-                      "h-full w-full",
-                      // 4px rounded data-end, square against the baseline.
-                      higher ? "rounded-r-[4px] bg-lead" : "rounded-l-[4px] bg-self",
-                    )}
-                  />
-                </div>
-              )}
-
-              {/* Direct label, outside the bar so it is legible whatever the
-                  fill does — and the relief the palette validator requires. */}
-              {r.delta === 0 ? null : (
-                <div
-                  className={cn(
-                    "absolute inset-y-0 flex items-center px-2",
-                    higher ? "left-1/2" : "right-1/2",
-                  )}
-                  style={higher ? { marginLeft: `${pct}%` } : { marginRight: `${pct}%` }}
-                >
-                  <span className="tabular text-body-xs font-medium text-ink">
-                    {signed(r.delta)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Legend — identity is never colour alone (§13.8). */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-rule pt-3 text-body-xs text-ink-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-mark bg-self" />
-          You rated higher
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-mark bg-lead" />
-          Your lead rated higher
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/**
  * One layer's score as a track, 0–5.
  *
  * A null draws NOTHING rather than an empty track at zero width. Both look
@@ -1585,12 +1422,20 @@ function SectionBar({
   tier,
   value,
   decorative = false,
+  /** Only read for "coLead" — there is no TIER_LABELS entry for a role that
+   *  is not a tier (§13.1), so the caller passes the second reviewer's own
+   *  designation or name instead. */
+  label,
 }: {
-  tier: "self" | "lead" | "final";
+  tier: "self" | "lead" | "final" | "coLead";
   value: number | null;
   decorative?: boolean;
+  label?: string;
 }) {
-  const classes = TIER_CLASSES[tier];
+  // A second reviewer is not a tier (§13.1) — same token everywhere else
+  // this pairing is drawn, not one of TIER_CLASSES' three fills.
+  const fillClass = tier === "coLead" ? "bg-second-reviewer" : TIER_CLASSES[tier].fill;
+  const spokenLabel = tier === "coLead" ? (label ?? "Second reviewer") : TIER_LABELS[tier];
   return (
     <div
       className="h-1.5 w-full overflow-hidden rounded-pill bg-surface-mute"
@@ -1598,14 +1443,14 @@ function SectionBar({
         ? { "aria-hidden": true }
         : {
             role: "img",
-            "aria-label": `${TIER_LABELS[tier]} ${
+            "aria-label": `${spokenLabel} ${
               value === null ? "not rated" : value.toFixed(2)
             } out of 5`,
           })}
     >
       {value === null ? null : (
         <div
-          className={cn("h-full rounded-pill transition-[width] duration-500", classes.fill)}
+          className={cn("h-full rounded-pill transition-[width] duration-500", fillClass)}
           style={{ width: `${(value / 5) * 100}%` }}
         />
       )}

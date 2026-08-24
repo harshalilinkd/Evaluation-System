@@ -52,11 +52,17 @@ export type HistoryRow = Views<"v_employee_history">;
       dash and an em dash means "not rated" — which would be a lie, and a more
       confusing one than the leak. -- */
 function withoutLeadLayer(rows: HistoryRow[]): HistoryRow[] {
-  /* -- BOTH manager figures. 0087 added `manager_overall`, and it is the same
-        thing summarised one step further — the mean of what one or two managers
-        said. Stripping only the older column would have reintroduced this exact
-        leak through the new one, on the same screen, a fortnight later. -- */
-  return rows.map((row) => ({ ...row, lead_overall: null, manager_overall: null }));
+  /* -- ALL THREE manager figures. 0087 added `manager_overall` — the mean of
+        what one or two managers said — and 0095 added `co_lead_overall`, the
+        second reviewer's OWN figure per cycle. Both are the lead layer
+        summarised a different way; stripping only the original column would
+        have reintroduced this exact leak through either of the newer ones. -- */
+  return rows.map((row) => ({
+    ...row,
+    lead_overall: null,
+    manager_overall: null,
+    co_lead_overall: null,
+  }));
 }
 
 export type DashboardAudience = "hr" | "md" | "lead" | "employee";
@@ -366,7 +372,7 @@ export async function getAnalytics(
 
 /* ---------- The scorecard ---------- */
 
-/** One rated question, as all three layers answered it. */
+/** One rated question, as every layer answered it — up to four, with a second reviewer (0083). */
 export type ScorecardQuestion = {
   questionId: string;
   text: string;
@@ -374,6 +380,8 @@ export type ScorecardQuestion = {
   sortOrder: number;
   self: number | null;
   lead: number | null;
+  /** The second reviewer's own answer, where this evaluation has one (0083). */
+  coLead: number | null;
   final: number | null;
 };
 
@@ -411,6 +419,15 @@ export type Scorecard = {
   questions: ScorecardQuestion[];
   /** The newest evaluation, so an in-flight one has something to say. */
   current: ScorecardCurrent | null;
+  /**
+   * The second reviewer's OWN overall for the rated cycle (0083) — never
+   * averaged with the reporting lead's, which is what `manager_overall` on
+   * `history` already is. Null with no second reviewer, and null on your own
+   * card regardless (§5 — a second reviewer is a manager).
+   */
+  coLeadOverall: number | null;
+  coLeadName: string | null;
+  coLeadDesignation: string | null;
   /** True when the viewer is the employee and the policy withholds detail. */
   redacted: boolean;
   /** False when somebody is looking at their own card: §5 keeps the LEAD layer
@@ -519,9 +536,19 @@ export async function getScorecard(
         LEAD column, rather than the page reimplementing §9's disclosure rules a
         second time and eventually disagreeing with the policy. -- */
   const questions: ScorecardQuestion[] = [];
+  /* -- THE SECOND REVIEWER (0083). `v_employee_history` was built for two
+        layers and carries no `co_lead_id` — a designer's Design Coordinator
+        was invisible here from the day the role existed, on the one screen
+        that is supposed to be the record of who said what. Read from
+        `evaluations` for the SAME rated evaluation everything else on this
+        page comes from, so a page that shows one evaluation's questions never
+        names a different one's reviewer. -- */
+  let coLeadOverall: number | null = null;
+  let coLeadName: string | null = null;
+  let coLeadDesignation: string | null = null;
 
   if (rated) {
-    const [{ data: snapshot }, { data: responses }] = await Promise.all([
+    const [{ data: snapshot }, { data: responses }, { data: evalRow }] = await Promise.all([
       supabase
         .from("evaluation_questions")
         .select("question_id, text, section, response_type, sort_order")
@@ -529,15 +556,32 @@ export async function getScorecard(
         .order("sort_order"),
       supabase
         .from("evaluation_responses")
-        .select("layer, answers")
+        .select("layer, answers, overall_score")
         .eq("evaluation_id", rated.evaluation_id),
+      supabase.from("evaluations").select("co_lead_id").eq("id", rated.evaluation_id).maybeSingle(),
     ]);
 
     const answersFor = (layer: string) =>
       ((responses ?? []).find((r) => r.layer === layer)?.answers ?? {}) as Record<string, unknown>;
     const selfAnswers = answersFor("SELF");
     const leadAnswers = answersFor("LEAD");
+    const coLeadAnswers = answersFor("LEAD_2");
     const mdAnswers = answersFor("MD");
+
+    // The second reviewer's OWN overall — never averaged with the reporting
+    // lead's here, which is what `manager_overall` already is (0087). Two
+    // opinions collapsed to one figure is the mean; this is one of the two.
+    coLeadOverall = (responses ?? []).find((r) => r.layer === "LEAD_2")?.overall_score ?? null;
+
+    if (evalRow?.co_lead_id) {
+      const { data: coLeadProfile } = await supabase
+        .from("profiles")
+        .select("full_name, designation")
+        .eq("id", evalRow.co_lead_id)
+        .maybeSingle();
+      coLeadName = coLeadProfile?.full_name ?? null;
+      coLeadDesignation = coLeadProfile?.designation ?? null;
+    }
 
     for (const row of snapshot ?? []) {
       // scoreValue is §11's ONE implementation — only SCALE_0_5 counts, and
@@ -551,10 +595,11 @@ export async function getScorecard(
 
       const self = scoreValue(asQuestion, selfAnswers[row.question_id]);
       const lead = scoreValue(asQuestion, leadAnswers[row.question_id]);
+      const coLead = scoreValue(asQuestion, coLeadAnswers[row.question_id]);
       const final = scoreValue(asQuestion, mdAnswers[row.question_id]);
 
       // A question nobody scored carries no information on this screen.
-      if (self === null && lead === null && final === null) continue;
+      if (self === null && lead === null && coLead === null && final === null) continue;
 
       questions.push({
         questionId: row.question_id,
@@ -563,6 +608,7 @@ export async function getScorecard(
         sortOrder: row.sort_order,
         self,
         lead,
+        coLead,
         final,
       });
     }
@@ -599,8 +645,16 @@ export async function getScorecard(
       },
       history: ownCard ? withoutLeadLayer(rows) : rows,
       latestSections: sections ?? [],
-      questions: ownCard ? questions.map((q) => ({ ...q, lead: null })) : questions,
+      questions: ownCard
+        ? questions.map((q) => ({ ...q, lead: null, coLead: null }))
+        : questions,
       current,
+      // §5 again: a second reviewer is a manager, and the evaluatee never sees
+      // any manager's rating. Nulled here rather than left to the screen to
+      // remember, the same reasoning `showLead` was built on.
+      coLeadOverall: ownCard ? null : coLeadOverall,
+      coLeadName: ownCard ? null : coLeadName,
+      coLeadDesignation: ownCard ? null : coLeadDesignation,
       redacted,
       // The screens read this to REMOVE the column rather than blank it (P20-3).
       showLead: !ownCard,

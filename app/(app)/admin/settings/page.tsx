@@ -32,8 +32,25 @@ import { listTemplates } from "@/lib/notify/template-actions";
 import { requireRole } from "@/lib/auth/guards";
 import { ADMIN_ROLES } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Settings" };
+
+/**
+ * The gutters the five non-grid tabs used to get from the shell.
+ *
+ * With `data-full-bleed` now on the page rather than on three of its tabs,
+ * `.app-main` drops its padding for ALL of them — which is right for the tabs
+ * that hold a grid and wrong for the ones that hold a form, whose content would
+ * otherwise start at the very edge of the screen. Given back here, at the same
+ * `px-4 lg:px-8` the shell was applying, so nothing about those five moves
+ * horizontally; only the tabs that were already flush stay flush.
+ *
+ * The bottom padding comes back too: the full-bleed rule replaces the shell's
+ * `pb-8 + nav` with the nav reservation alone, so without this the last control
+ * on a long settings form would sit against the bottom of the page.
+ */
+const PANEL = "px-4 pb-8 lg:px-8";
 
 // "periods" was missing here despite having its own trigger and panel below —
 // an unknown `?tab=periods` silently fell back to Users. "team-review" is new:
@@ -326,33 +343,75 @@ export default async function SettingsPage({
   });
 
   return (
-    <Tabs defaultValue={activeTab} className="space-y-6">
-      <TabsList className="bg-surface-mute">
-        <TabsTrigger value="general" className="font-sans text-body">
+    /* -- FULL BLEED ON THE PAGE, not on three of its eight tabs.
+          `data-full-bleed` drops the shell's 1180px cap and its gutters, and it
+          was carried by Users, Salary history and Team review — the three that
+          hold a grid — while General, Evaluation periods, Messages, Departments
+          and Recycle bin sat in the centred column. Since `TabsContent` unmounts
+          the inactive panel, the attribute appeared and disappeared as somebody
+          switched tabs: the page changed width under them and the TAB STRIP
+          ITSELF jumped from flush-left to a 240px indent, which is what was
+          reported as "some sub screens are utilising full screen and some are
+          centred". The chrome is the one part of a tabbed screen that must not
+          move when the tab does.
+
+          Held here so it is true of every tab, at the owner's instruction to
+          make them all match Users. The three grid tabs keep their own
+          `data-full-bleed` — nested, redundant and harmless — because each is
+          also reachable in its own right, and a panel that only lays out
+          correctly inside this page would be a trap for the next caller.
+          The five that had been relying on the shell's gutters get that padding
+          back explicitly below (`PANEL`), so dropping it here cannot leave their
+          content against the edge of the screen. -- */
+    <Tabs defaultValue={activeTab} data-full-bleed className="space-y-6">
+      {/* -- THE STRIP SCROLLS; THE PAGE DOES NOT.
+            Eight tabs in an `inline-flex` that neither wraps nor scrolls is
+            about 900px of tab — so on a phone it was the widest thing on the
+            page and the DOCUMENT scrolled sideways to fit it. That is what was
+            reported as "grids moving and data not visible": nothing was wrong
+            with the grid. The page itself was scrolled right, so the topbar
+            shifted, the tab strip started mid-way through, and every row label
+            in the list sat off the left edge with only its value showing.
+
+            `overflow-x-auto` moves that scroll inside the strip, where it
+            belongs and where it is the normal way to reach a ninth tab.
+            `justify-start` because the primitive centres its children, which
+            with a scroller would park the strip mid-list rather than at the
+            first tab. Each trigger gets `shrink-0` so they scroll at full size
+            instead of being crushed into unreadable slivers. -- */}
+      <TabsList
+        className={cn(
+          "flex max-w-full justify-start overflow-x-auto bg-surface-mute",
+          /* The strip sits where the Users tab's toolbar sits, so the left edge
+             of the chrome is one line down the whole screen. */
+          "mx-3 lg:mx-6",
+        )}
+      >
+        <TabsTrigger value="general" className="shrink-0 font-sans text-body">
           General
         </TabsTrigger>
-        <TabsTrigger value="users" className="font-sans text-body">
+        <TabsTrigger value="users" className="shrink-0 font-sans text-body">
           Users
         </TabsTrigger>
-        <TabsTrigger value="salary-history" className="font-sans text-body">
+        <TabsTrigger value="salary-history" className="shrink-0 font-sans text-body">
           Salary history
         </TabsTrigger>
-        <TabsTrigger value="periods" className="font-sans text-body">
+        <TabsTrigger value="periods" className="shrink-0 font-sans text-body">
           Evaluation periods
         </TabsTrigger>
-        <TabsTrigger value="messages" className="font-sans text-body">
+        <TabsTrigger value="messages" className="shrink-0 font-sans text-body">
           Messages
         </TabsTrigger>
-        <TabsTrigger value="departments" className="font-sans text-body">
+        <TabsTrigger value="departments" className="shrink-0 font-sans text-body">
           Departments
         </TabsTrigger>
         {/* -- MOVED IN FROM THE SIDEBAR, at the owner's instruction, beside
               Recycle bin: both are "look at what exists today" screens, the
               same reasoning that put Departments beside Users. -- */}
-        <TabsTrigger value="team-review" className="font-sans text-body">
+        <TabsTrigger value="team-review" className="shrink-0 font-sans text-body">
           Team review
         </TabsTrigger>
-        <TabsTrigger value="recycle-bin" className="font-sans text-body">
+        <TabsTrigger value="recycle-bin" className="shrink-0 font-sans text-body">
           Recycle bin
         </TabsTrigger>
       </TabsList>
@@ -360,11 +419,11 @@ export default async function SettingsPage({
       {/* 0076: how everybody's review dates are worked out. HR writes it, the
           MD reads it — the tab renders for both and `save_evaluation_schedule`
           re-checks `is_hr()` in SQL, because a rendered form is not a permission. */}
-      <TabsContent value="periods">
+      <TabsContent value="periods" className={PANEL}>
         <ScheduleTab schedule={schedule} />
       </TabsContent>
 
-      <TabsContent value="general">
+      <TabsContent value="general" className={PANEL}>
         <GeneralTab
           hikeBands={hikeBands}
           signature={me?.signature_image ?? null}
@@ -383,7 +442,7 @@ export default async function SettingsPage({
         />
       </TabsContent>
 
-      <TabsContent value="departments">
+      <TabsContent value="departments" className={PANEL}>
         <DepartmentsClient departments={departmentRows} />
       </TabsContent>
 
@@ -415,7 +474,7 @@ export default async function SettingsPage({
 
       {/* 0032: deleting a cycle marks the row rather than removing it, because
           §5 does not permit destroying the frozen question sets it contains. */}
-      <TabsContent value="recycle-bin">
+      <TabsContent value="recycle-bin" className={PANEL}>
         <RecycleBinTab cycles={binnedCycles} />
         {/* Their own section, not merged into the table above: §7 keeps the two
             modules from sharing a function, and a merged list would need one
@@ -426,7 +485,7 @@ export default async function SettingsPage({
       {/* P23: the pause switch, the message log and the wording preview. The
           engine has existed since P17; until now nothing rendered it, so
           silencing every outbound message meant a SQL console. */}
-      <TabsContent value="messages">
+      <TabsContent value="messages" className={PANEL}>
         <NotificationsTab state={outbound} log={messageLog} templates={templatePreviews} />
       </TabsContent>
     </Tabs>

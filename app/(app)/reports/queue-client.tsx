@@ -487,7 +487,7 @@ export function ReportsQueueClient({
           above 1024px so the seven controls rejoin the flex line exactly as
           before. Nothing about the desktop strip changes. */}
       <ScreenToolbar>
-        <div className="grid w-full grid-cols-3 gap-2 lg:contents">
+        <div className="grid w-full grid-cols-2 gap-2 lg:contents">
           <div className="relative min-w-0 lg:w-[260px]">
             <Search
               aria-hidden
@@ -514,17 +514,24 @@ export function ReportsQueueClient({
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
-          {/* -- A SEGMENTED PAIR, not a select. Two options is the case a
-                select is worst at — it hides half the choice behind a click and
-                gives no hint that the other half exists. Side by side, with
-                their counts, the whole choice is one glance.
-
-                Real buttons with `aria-pressed`, so the state is announced and
-                not only drawn (§13.8), inside a `tablist`-shaped group. -- */}
+        </div>
+        {/* -- THE SEGMENTED PAIR GETS ITS OWN ROW ON A PHONE.
+              Two options is the case a select is worst at — it hides half the
+              choice behind a click and gives no hint the other half exists —
+              so this stays real buttons with both words and both counts
+              legible, never collapsed to icons. `shrink-0` said so, and put
+              itself in direct conflict with being the third item of a
+              `grid-cols-3` row: at 375px that left it needing more width than
+              its own cell had, so "Evaluation 0 / Increment 1" ran past the
+              edge of the screen instead of shrinking into something
+              unreadable. Full width here, with `lg:contents` unwrapping it
+              back into the exact same flex line as everything else the moment
+              there is room — the desktop strip is unchanged. -- */}
+        <div className="w-full lg:contents">
           <div
             role="group"
             aria-label="Cycle type"
-            className="flex shrink-0 rounded-control border border-rule bg-surface-mute p-0.5"
+            className="flex w-full rounded-control border border-rule bg-surface-mute p-0.5 lg:w-auto lg:shrink-0"
           >
             {(["Evaluation", "Increment"] as const).map((t) => (
               <button
@@ -533,7 +540,7 @@ export function ReportsQueueClient({
                 onClick={() => setType(t)}
                 aria-pressed={type === t}
                 className={cn(
-                  "min-h-9 rounded-sm px-3 font-sans text-body-sm transition-colors",
+                  "min-h-9 flex-1 rounded-sm px-3 font-sans text-body-sm transition-colors lg:flex-none",
                   type === t
                     ? "bg-surface font-medium text-ink shadow-sm"
                     : "text-ink-muted hover:text-ink",

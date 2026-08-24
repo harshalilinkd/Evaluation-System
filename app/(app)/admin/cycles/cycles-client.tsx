@@ -51,6 +51,30 @@ function dash(value: string | null): string {
   return value ? formatDate(value) : "—";
 }
 
+/**
+ * OVERDUE was designed into `StatusChip` from the start (DESIGN.md §6.5,
+ * "computed from the audit trail and the cycle deadlines") and never actually
+ * computed anywhere — the styleguide is the only place the word appeared in
+ * the whole app. So a cycle sitting past its own due date with people still
+ * unsubmitted read as plain "Cycle active", identical to one that had just
+ * launched an hour ago, with nothing on this grid to tell HR the two apart.
+ *
+ * A cycle counts as overdue when EITHER date it set for itself has passed
+ * with that side still short of everybody — never on a DRAFT (nothing was
+ * due yet) or a CLOSED one (it is a record, not a wait).
+ */
+function isPast(iso: string | null): boolean {
+  if (!iso) return false;
+  return new Date(`${iso}T00:00:00`).getTime() < Date.now();
+}
+
+function cycleIsOverdue(row: CycleListRow): boolean {
+  if (row.status !== "ACTIVE") return false;
+  const selfShort = isPast(row.selfDueOn) && row.progress.self < row.participants;
+  const leadShort = isPast(row.leadDueOn) && row.progress.lead < row.participants;
+  return selfShort || leadShort;
+}
+
 export function CyclesClient({
   cycles,
   greetingName,
@@ -117,7 +141,13 @@ export function CyclesClient({
         size: 130,
         cell: ({ row }) => (
           <StatusChip
-            status={row.original.status === "ACTIVE" ? "CYCLE_ACTIVE" : row.original.status}
+            status={
+              cycleIsOverdue(row.original)
+                ? "OVERDUE"
+                : row.original.status === "ACTIVE"
+                  ? "CYCLE_ACTIVE"
+                  : row.original.status
+            }
           />
         ),
       },
@@ -234,6 +264,30 @@ export function CyclesClient({
             title="Counts a person once every manager asked has submitted — for somebody with a second reviewer, that is both, not just one."
           />
         ),
+      },
+      {
+        id: "coLead",
+        header: "2nd reviewer in",
+        size: 110,
+        meta: { align: "right" },
+        /* -- ITS OWN COLUMN, so it can be tracked separately from "Manager
+              in" rather than only inside that column's blended count (which
+              needs BOTH managers before it counts anyone, per the comment
+              above) or the row-detail dialog, which nothing on a phone or a
+              quick scan down the table can reach. `total` here is NOT
+              `participants` — it is only the people who actually carry a
+              second reviewer, so a cycle with none shows an em dash rather
+              than a false "0 of 12". -- */
+        cell: ({ row }) =>
+          row.original.coReviewerIn ? (
+            <Count
+              value={row.original.coReviewerIn.done}
+              of={row.original.coReviewerIn.total}
+              title="Second reviewers only — people with no second reviewer on this cycle are not counted."
+            />
+          ) : (
+            <span className="text-body-sm text-ink-muted">—</span>
+          ),
       },
       {
         id: "final",
@@ -525,7 +579,7 @@ export function CyclesClient({
             </Button>
           </>
         )}
-        minWidth={1636}
+        minWidth={1746}
         empty={
           // The empty state speaks for the TAB, not the whole list. "Nothing
           // matches that" on an untouched Increment tab reads as a broken

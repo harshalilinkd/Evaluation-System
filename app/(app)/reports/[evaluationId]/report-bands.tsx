@@ -1125,7 +1125,14 @@ export function NarrativeBand({
         >
           {blocks.map((block) => (
             <div key={block.question} className="space-y-1.5 px-6 py-4">
-              <p className="type-label text-ink-muted">{block.question}</p>
+              {/* -- BOLD, matching every other `type-label` in this file that
+                    sits directly beside the value it names (TierTag, a table
+                    header, the score dt/dd pairs). Without it this was the one
+                    label in the report at plain weight — the same small caps
+                    and muted colour as everywhere else, but nothing to make it
+                    read as a HEADING rather than a second line of the answer,
+                    which is what made the two hard to tell apart at a glance. -- */}
+              <p className="type-label font-bold text-ink-muted">{block.question}</p>
               {/* Never truncated. The brief is explicit, and a difficulty
                   somebody wrote three sentences about is not served by two. */}
               <p className="whitespace-pre-wrap font-sans text-body text-ink">

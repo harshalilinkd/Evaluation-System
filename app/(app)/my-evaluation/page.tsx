@@ -10,8 +10,46 @@ import { EmptyState } from "@/components/appraise/states";
 import { StatusChip } from "@/components/appraise/status-chip";
 import { Button } from "@/components/ui/button";
 import { requireAuth } from "@/lib/auth/guards";
+import { milestoneLabel } from "@/lib/due/queries";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatScore } from "@/lib/utils/date";
+
+/**
+ * WHAT THIS EVALUATION IS FOR, in words — never a bare cycle name.
+ *
+ * Reported directly: with two cycles open at once, both cards said "Open for
+ * you" over a name HR typed freely, and an employee could not tell which one
+ * was the six-month review HR had actually asked them to fill. `milestone_type`
+ * already carries that answer for anything the nightly sweep opened — it is
+ * the same lookup `/admin/due` already shows HR, reused rather than
+ * reinvented so the two screens never describe one evaluation two ways. A
+ * cycle HR launched by hand carries no milestone, so it falls back to what
+ * the cycle itself is: an increment round is a different exercise from a
+ * plain evaluation (§1), and that distinction is worth keeping even with one
+ * card on screen.
+ */
+function purpose(milestoneType: string | null, cycleType: string | null | undefined): string {
+  if (milestoneType) return milestoneLabel(milestoneType);
+  return cycleType === "INCREMENT" ? "Increment review" : "Evaluation";
+}
+
+/**
+ * OVERDUE, on THEIR side only.
+ *
+ * `StatusChip` has carried an OVERDUE state since it was designed — "computed
+ * from the audit trail and the cycle deadlines" — and nothing on this page
+ * ever computed it, so a form sitting three weeks past its due date read
+ * exactly like one opened an hour ago: both just said "In progress".
+ *
+ * Scoped to the employee's OWN due date and OWN submission. It cannot look at
+ * whether their manager is late — that is precisely what blind rating
+ * withholds from them (§5), on the one screen most likely to be read as "am I
+ * the one holding this up".
+ */
+function selfIsOverdue(status: string, selfSubmittedAt: string | null, selfDueOn: string | null): boolean {
+  if (status !== "OPEN" || selfSubmittedAt || !selfDueOn) return false;
+  return new Date(`${selfDueOn}T00:00:00`).getTime() < Date.now();
+}
 
 export const metadata: Metadata = { title: "My Evaluation" };
 
@@ -87,7 +125,7 @@ export default async function Page({
     supabase
       .from("evaluations")
       .select(
-        "id, status, cycle_id, final_overall, self_submitted_at, excluded_at, evaluation_cycles!inner(deleted_at)",
+        "id, status, cycle_id, milestone_type, final_overall, self_submitted_at, excluded_at, evaluation_cycles!inner(deleted_at)",
       )
       .eq("evaluatee_id", session.profile.id)
       .is("excluded_at", null)
@@ -95,7 +133,7 @@ export default async function Page({
       .order("created_at", { ascending: false }),
     supabase
       .from("evaluation_cycles")
-      .select("id, name, period_label, self_due_on, disclosure")
+      .select("id, name, period_label, self_due_on, disclosure, cycle_type")
       .is("deleted_at", null),
   ]);
 
@@ -184,13 +222,18 @@ export default async function Page({
       <h1 className="text-display-md text-ink">Your evaluations</h1>
 
       {/* One card per open evaluation. With a single one this is exactly what
-          the page rendered before; with two it is the fix. The label stops
-          claiming there is one "current" cycle when there are two — a heading
-          that says Current cycle above two cards is worse than no heading. */}
+          the page rendered before; with two it is the fix.
+
+          THE LABEL NAMES WHAT THIS IS, not that it is open. "Open for you"
+          repeated over two cards told an employee nothing that distinguished
+          one from the other — they could not tell their six-month review from
+          their increment round without opening both. `purpose()` reads the
+          same milestone the nightly sweep already assigned, so the words here
+          match what HR sees on their own screen for the same evaluation. */}
       {openCards.map(({ row, cycle }, index) => (
         <HeroCard
           key={row.id}
-          label={openCards.length > 1 ? "Open for you" : "Current cycle"}
+          label={purpose(row.milestone_type, cycle.cycle_type)}
           value={cycle.name}
           caption={`${cycle.period_label} · due ${formatDate(cycle.self_due_on)}`}
           action={
@@ -208,8 +251,16 @@ export default async function Page({
           {/* §8 / §13: an employee never sees a raw status enum. StatusChip's
               employee vocabulary collapses the middle of the pipeline into
               "Under review" — whether the MD has finalised is not their
-              business until the result is disclosed. */}
-          <StatusChip status={row.status} audience="employee" />
+              business until the result is disclosed. Overdue is checked
+              first and only ever against THEIR OWN due date. */}
+          <StatusChip
+            status={
+              selfIsOverdue(row.status, row.self_submitted_at, cycle.self_due_on)
+                ? "OVERDUE"
+                : row.status
+            }
+            audience="employee"
+          />
         </HeroCard>
       ))}
 
@@ -227,6 +278,9 @@ export default async function Page({
               return (
                 <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
+                    <p className="type-label font-bold text-ink-muted">
+                      {purpose(row.milestone_type, cycle?.cycle_type)}
+                    </p>
                     <p className="truncate text-body text-ink">{cycle?.name ?? "Cycle"}</p>
                     <p className="text-body-sm text-ink-muted">{cycle?.period_label ?? ""}</p>
                   </div>

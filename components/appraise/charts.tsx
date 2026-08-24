@@ -72,6 +72,12 @@ export const TIER_CHART_COLORS = {
   self: "rgb(var(--self))",
   lead: "rgb(var(--lead))",
   final: "rgb(var(--final))",
+  /* -- NOT a fourth tier. A second reviewer shares the Lead hue by definition
+        (§13.1 — both are "an HOD said this"), but a chart plotting both
+        managers together needs to tell their two series apart. Same token the
+        executive summary uses, chosen by the owner at their explicit
+        instruction for that one narrow purpose. -- */
+  secondReviewer: "rgb(var(--second-reviewer))",
 } as const;
 
 export type TierChartColor = keyof typeof TIER_CHART_COLORS;
@@ -121,7 +127,16 @@ export function ordinalStep(index: number): string {
 }
 
 const AXIS = {
-  stroke: "rgb(var(--ink-faint))",
+  /* -- ink-MUTED, not ink-faint. This is the default fill Recharts gives
+        every tick label on every plain XAxis/YAxis in the app (the axis LINE
+        itself is hidden everywhere with `axisLine={false}`, but the tick TEXT
+        still inherits `stroke` as its colour unless a chart overrides it with
+        its own `tick` prop). ink-faint is the lightest of the three darkened
+        ink steps — reported as still hard to read, AT THE OWNER'S EXPLICIT
+        INSTRUCTION, and it is: every OTHER explicit label fill in this file
+        already uses ink-muted, so this was the one inconsistency making axis
+        numbers and category names read lighter than everything around them. -- */
+  stroke: "rgb(var(--ink-muted))",
   // §3: chart labels are body-sm, and every number is tabular.
   style: { fontSize: 12, fontVariantNumeric: "tabular-nums" as const },
 };

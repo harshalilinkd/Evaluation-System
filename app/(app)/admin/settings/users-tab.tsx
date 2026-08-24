@@ -60,6 +60,7 @@ import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { EmptyState } from "@/components/appraise/states";
 import { ROLE_LABELS } from "@/components/appraise/nav-config";
 import { cn } from "@/lib/utils";
+import { DIALOG_PAD, SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 // formatInr is gone from this file and that ABSENCE IS THE GUARANTEE: every
 // salary here now goes through moneyMonthly, so no cell can render an annual
 // figure without the compiler noticing. Same device F20-2 used.
@@ -306,12 +307,21 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="grid gap-x-10 gap-y-4 border-t border-rule pt-6 md:grid-cols-[13rem_1fr] md:pt-7">
-      <div className="space-y-1">
+    /* -- `min-w-0` ON EVERY LEVEL, and it is load-bearing rather than tidy.
+          A grid item's default `min-width: auto` refuses to shrink below its
+          own min-content, and an `<input>` carries an intrinsic width of about
+          twenty characters. So on a 375px screen the column sized itself to the
+          fields rather than to the phone, the section grew wider than the
+          dialog, and every hint beside it laid out on one long line instead of
+          wrapping — which is why the text was being cut mid-word at the right
+          edge rather than running onto a second line. `min-w-0` lets the track
+          shrink to the screen, and the prose wraps again. -- */
+    <section className="grid min-w-0 gap-x-10 gap-y-4 border-t border-rule pt-6 md:grid-cols-[13rem_1fr] md:pt-7">
+      <div className="min-w-0 space-y-1">
         <h3 className="font-sans text-body font-medium text-ink">{title}</h3>
         <p className="font-sans text-body-sm text-ink-muted">{hint}</p>
       </div>
-      <div className="space-y-5">{children}</div>
+      <div className="min-w-0 space-y-5">{children}</div>
     </section>
   );
 }
@@ -333,7 +343,9 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-2">
+    /* `min-w-0` for the reason FormSection carries: this is the grid item that
+       holds the input, so it is the one that would otherwise refuse to shrink. */
+    <div className="min-w-0 space-y-2">
       <Label htmlFor={id} className="type-label flex items-baseline gap-2 text-ink-muted">
         {label}
         {optional ? (
@@ -352,6 +364,17 @@ function Field({
 /** The native select, styled to match the shadcn Input it sits beside. */
 const SELECT_CLASS =
   "min-h-11 w-full rounded-input border border-rule bg-surface px-3 font-sans text-body text-ink";
+
+/**
+ * The three big forms here — import, add, edit — all take the shared sheet.
+ * Reported as "edit option in setting is worst"; `SHEET_ON_MOBILE` carries the
+ * reasoning. These three are flex columns, so the display mode is added here
+ * rather than in the shared constant, which deliberately holds neither.
+ */
+const FORM_DIALOG = cn(
+  "flex flex-col gap-0 overflow-hidden border-rule bg-background p-0",
+  SHEET_ON_MOBILE,
+);
 
 /**
  * Bulk import.
@@ -414,9 +437,14 @@ function ImportDialog({
         // the action returns — closing on a stray backdrop click would throw
         // away the only record of which rows landed.
         onInteractOutside={(event) => event.preventDefault()}
-        className="flex max-h-[92dvh] w-[min(96vw,760px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className={cn(FORM_DIALOG, "sm:w-[min(96vw,760px)]")}
       >
-        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+        <DialogHeader
+          className={cn(
+            "shrink-0 space-y-1 border-b border-rule bg-surface py-4 pr-14 text-left",
+            DIALOG_PAD,
+          )}
+        >
           <DialogTitle className="text-display-sm text-ink">Import from a spreadsheet</DialogTitle>
           <DialogDescription className="text-body-sm text-ink-muted">
             Add everybody in one go. Start from the template — its header row is what the importer
@@ -424,7 +452,7 @@ function ImportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <form action={action} className={cn("min-h-0 flex-1 space-y-5 overflow-y-auto py-5", DIALOG_PAD)}>
         {state.error ? (
           <p
             role="alert"
@@ -748,9 +776,14 @@ function AddPersonDialog({
         // unsaved fields and a stray backdrop click throwing them away is the
         // kind of loss people do not report, they just stop trusting the screen.
         onInteractOutside={(event) => event.preventDefault()}
-        className="flex max-h-[92dvh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className={cn(FORM_DIALOG, "sm:w-[min(96vw,900px)]")}
       >
-        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+        <DialogHeader
+          className={cn(
+            "shrink-0 space-y-1 border-b border-rule bg-surface py-4 pr-14 text-left",
+            DIALOG_PAD,
+          )}
+        >
           <DialogTitle className="text-display-sm text-ink">Add someone</DialogTitle>
           <DialogDescription className="text-body-sm text-ink-muted">
             They can sign in as soon as you save. Tell them their password yourself — it is not
@@ -788,14 +821,14 @@ function AddPersonDialog({
             action={createAction}
             className="flex min-h-0 flex-1 flex-col"
           >
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
+          <div className={cn("min-h-0 flex-1 space-y-2 overflow-y-auto py-5", DIALOG_PAD)}>
 
           {/* ---------- Identity ---------- */}
           <FormSection
             title="Identity"
             hint="Who they are and how they sign in. The password is not emailed — read it out to them."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field id="full_name" label="Full name" error={createState.fieldErrors?.full_name}>
                 <Input
                   id="full_name"
@@ -875,7 +908,7 @@ function AddPersonDialog({
             title="Where they sit"
             hint="Their team, their title, and who rates them."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field
                 id="department_id"
                 label="Department"
@@ -1049,7 +1082,7 @@ function AddPersonDialog({
             title="Employment"
             hint="The dates the increment reminder is worked out from."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field
                 id="date_of_joining"
                 label="Date of joining"
@@ -1179,9 +1212,16 @@ function AddPersonDialog({
 
           </div>
 
-          {/* §13.3: one primary action, in its own panel below the scroll area. */}
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface px-6 py-4">
-            <p className="mr-auto font-sans text-body-sm text-ink-muted">
+          {/* §13.3: one primary action, in its own panel below the scroll area.
+              The sentence is desktop-only — at 375px it would push the button
+              onto a second line or squeeze it below a comfortable target. */}
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface py-4",
+              DIALOG_PAD,
+            )}
+          >
+            <p className="mr-auto hidden font-sans text-body-sm text-ink-muted sm:block">
               They can sign in as soon as you save.
             </p>
             <Submit pendingLabel="Creating…">Create account</Submit>
@@ -1248,9 +1288,14 @@ function EditPersonDialog({
         // 900px, the add form's width. The bands need the label column, and two
         // dialogs about the same person at two different widths read as two
         // different screens.
-        className="flex max-h-[92dvh] w-[min(96vw,900px)] max-w-none flex-col gap-0 overflow-hidden rounded-card-lg border-rule bg-background p-0"
+        className={cn(FORM_DIALOG, "sm:w-[min(96vw,900px)]")}
       >
-        <DialogHeader className="shrink-0 space-y-1 border-b border-rule bg-surface px-6 py-4 pr-14 text-left">
+        <DialogHeader
+          className={cn(
+            "shrink-0 space-y-1 border-b border-rule bg-surface py-4 pr-14 text-left",
+            DIALOG_PAD,
+          )}
+        >
           <DialogTitle className="text-display-sm text-ink">Edit {person.full_name}</DialogTitle>
           <DialogDescription className="text-body-sm text-ink-muted">
             {/* -- This said pay was NOT in this form. It is — the Compensation
@@ -1266,7 +1311,7 @@ function EditPersonDialog({
         {/* Same structure as the add dialog: the fields scroll, the action bar
             does not, and neither can cover the other. */}
         <form action={action} className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 py-5">
+          <div className={cn("min-h-0 flex-1 space-y-2 overflow-y-auto py-5", DIALOG_PAD)}>
           <input type="hidden" name="profile_id" value={person.id} />
           <Notice state={state} />
 
@@ -1275,7 +1320,7 @@ function EditPersonDialog({
             title="Identity"
             hint="Who they are and how they sign in. Changing the email or the password changes the account itself."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field id="e_full_name" label="Full name" error={state.fieldErrors?.full_name}>
                 <Input
                   id="e_full_name"
@@ -1359,7 +1404,7 @@ function EditPersonDialog({
 
           {/* ---------- Where they sit ---------- */}
           <FormSection title="Where they sit" hint="Their team, their title, and who rates them.">
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field
                 id="e_department"
                 label="Department"
@@ -1558,7 +1603,7 @@ function EditPersonDialog({
             title="Employment"
             hint="The dates the increment reminder is worked out from."
           >
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               <Field
                 id="e_doj"
                 label="Date of joining"
@@ -1661,7 +1706,7 @@ function EditPersonDialog({
               </Link>
             </div>
 
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid min-w-0 gap-5 sm:grid-cols-2">
               {/* Blank means "not changing it", never "set it to nothing" —
                   the rule the bulk import follows (P19D-4). Nothing below is
                   read unless this carries a figure. */}
@@ -1738,7 +1783,12 @@ function EditPersonDialog({
 
           </div>
 
-          <div className="flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface px-6 py-4">
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-end gap-3 border-t border-rule bg-surface py-4",
+              DIALOG_PAD,
+            )}
+          >
             <Button type="button" variant="ghost" className="min-h-11" onClick={onClose}>
               Cancel
             </Button>

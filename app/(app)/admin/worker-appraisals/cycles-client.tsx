@@ -26,6 +26,7 @@ import {
   moveWorkerRoundToBin,
 } from "@/lib/worker/cycle-actions";
 import { cn } from "@/lib/utils";
+import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
 export type WorkerRow = {
   id: string;
@@ -303,7 +304,11 @@ export function StartRoundDialog({
           event.preventDefault();
           (event.currentTarget as HTMLElement | null)?.focus();
         }}
-        className="flex max-h-[92dvh] w-[min(96vw,720px)] max-w-none flex-col gap-0 overflow-hidden p-0"
+        className={cn(
+          "flex flex-col gap-0 overflow-hidden p-0",
+          SHEET_ON_MOBILE,
+          "sm:w-[min(96vw,720px)]",
+        )}
       >
         <DialogHeader className="shrink-0 border-b border-rule px-6 py-4">
           <DialogTitle className="flex items-center gap-2">
@@ -392,19 +397,13 @@ export function StartRoundDialog({
               </p>
             ) : null}
 
-            {raters.length === 0 ? (
-              /* -- A dropdown reading "Nobody chosen" and nothing else states a
-                    problem in the one place that cannot explain it (§13.4). The
-                    fix is named, and it is a role grant rather than a
-                    designation — "Supervisor" typed into a job title looks
-                    identical on the users list and does nothing here. -- */
-              <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
-                <span className="font-medium">Nobody holds the Supervisor access level yet.</span>{" "}
-                A worker is rated by their supervisor, so somebody has to hold it before a round can
-                start. Set it in Settings, Users — tick <span className="font-medium">Supervisor</span>{" "}
-                under Access. A job title reading &ldquo;Supervisor&rdquo; is not the same thing.
-              </p>
-            ) : eligible.length === 0 ? (
+            {/* -- The "nobody holds Supervisor" block that used to sit here is
+                  gone: a worker's Reports-to is now offered as their rater
+                  regardless of access level, so an empty Supervisor pool no
+                  longer means an empty round — it only matters, per worker,
+                  when that worker has no Reports-to set either, which the row
+                  itself already explains. -- */}
+            {eligible.length === 0 ? (
               <p className="rounded-control bg-warning-tint px-4 py-3 text-body-sm text-ink">
                 Nobody is on the Production Team yet. Set somebody&rsquo;s form to{" "}
                 <span className="font-medium">Production Team</span> in Settings, Users.
@@ -482,11 +481,26 @@ export function StartRoundDialog({
                     </li>
                   ) : null}
                   {shown.map((w) => {
-                    /* A default seeded from Reports-to only counts if that
-                       person is actually on the supervisor list — otherwise the
-                       select would show a blank with a value behind it. */
+                    /* -- REPORTS-TO IS TRUSTED ON ITS OWN, at the owner's
+                          instruction: whoever a worker's profile names as their
+                          Reports-to IS their team leader, and that is true
+                          whether or not anybody has separately ticked the
+                          Supervisor access level for them. It used to be
+                          dropped here unless it also appeared on the
+                          Supervisor-role list, which meant HR had to go and
+                          grant a permission before the correct, already-known
+                          person could even be offered.
+
+                          `rowRaters` is the general Supervisor pool PLUS this
+                          one worker's own Reports-to, so every other row is
+                          unaffected and HR can still pick somebody else from
+                          the pool if this one is wrong. -- */
                     const seeded = raterFor(w);
-                    const raterId = raters.some((r) => r.id === seeded) ? seeded : "";
+                    const raterId = seeded;
+                    const rowRaters =
+                      w.supervisorId && !raters.some((r) => r.id === w.supervisorId)
+                        ? [{ id: w.supervisorId, name: w.supervisorName ?? "Their manager", designation: null }, ...raters]
+                        : raters;
                     const included = chosen.has(w.id);
 
                     return (
@@ -527,7 +541,7 @@ export function StartRoundDialog({
                             className="min-h-11 min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
                           >
                             <option value="">Nobody chosen</option>
-                            {raters.map((r) => (
+                            {rowRaters.map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.designation ? `${r.name} · ${r.designation}` : r.name}
                               </option>
@@ -535,22 +549,11 @@ export function StartRoundDialog({
                           </select>
                         </label>
 
-                        {/* -- WHY there is no default, per row.
-                              The global case — nobody holds Supervisor at all —
-                              is explained above. This is the other one: the
-                              worker's Reports-to is set to somebody who does not
-                              hold the access level, so the seeded value was
-                              dropped and the select fell back to blank. Without
-                              this the row says "Nobody chosen" and nothing else,
-                              which is the dead end §13.4 forbids — and the fix
-                              is a role grant, not a different pick here. -- */}
-                        {!raterId && w.supervisorId && !raters.some((r) => r.id === w.supervisorId) ? (
-                          <span className="w-full font-sans text-body-sm text-ink-muted">
-                            {w.supervisorName ?? "Their manager"} is their Reports-to but does not hold
-                            the Supervisor access level, so they are not offered here. Grant it in
-                            Settings, Users — or pick somebody else.
-                          </span>
-                        ) : !raterId && !w.supervisorId ? (
+                        {/* -- The only case left unresolved: nobody to default
+                              to at all. Their Reports-to is now offered
+                              regardless of access level, so this fires only
+                              when the profile has no Reports-to set. -- */}
+                        {!raterId && !w.supervisorId ? (
                           <span className="w-full font-sans text-body-sm text-ink-muted">
                             No Reports-to is set for {w.name}, so there is nobody to default to.
                           </span>

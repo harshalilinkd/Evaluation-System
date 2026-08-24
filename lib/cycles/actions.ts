@@ -95,6 +95,33 @@ export async function createCycle(input: CycleDraftInput): Promise<CycleResult<{
 
   const supabase = await createClient();
 
+  /* -- NO TWO LIVE CYCLES SHARE A NAME.
+        Reported directly: two cycles both plainly called "Evaluation" left an
+        employee unable to tell which one HR meant, and they filled the wrong
+        one while the one HR actually wanted stayed open. `name` had no
+        uniqueness of any kind — two people could type the exact same eight
+        letters and both would go through.
+
+        Scoped to cycles that are still LIVE (not CLOSED, not binned): a
+        finished cycle from last year sharing a name with a new one is not the
+        reported confusion, since the employee's own list already keeps past
+        evaluations in their own section, well apart from anything open. -- */
+  const { data: clash } = await supabase
+    .from("evaluation_cycles")
+    .select("id")
+    .ilike("name", basics.data.name.trim())
+    .is("deleted_at", null)
+    .neq("status", "CLOSED")
+    .limit(1)
+    .maybeSingle();
+
+  if (clash) {
+    return cycleError(
+      "DUPLICATE_NAME",
+      `A cycle called "${basics.data.name.trim()}" is already open. Give this one a name that says what it is for — e.g. its period or which review it covers — so employees can tell the two apart.`,
+    );
+  }
+
   const { data, error } = await supabase
     .from("evaluation_cycles")
     .insert({

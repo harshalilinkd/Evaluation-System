@@ -25,6 +25,7 @@ import {
 } from "@/lib/forms/section-actions";
 import type { QuestionSection } from "@/lib/forms/labels";
 import { cn } from "@/lib/utils";
+import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
 export type SectionRow = {
   section: QuestionSection;
@@ -82,7 +83,16 @@ export function SectionsDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[88dvh] w-[min(96vw,640px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
+        /* -- `flex flex-col`, because the list below already says
+              `min-h-0 flex-1 overflow-y-auto` and a grid child cannot honour
+              `flex-1` — so the scroller it was asking for never existed, and a
+              long section list overflowed a container set to `overflow-hidden`
+              instead of scrolling inside it. -- */
+        className={cn(
+          "flex flex-col gap-4 overflow-hidden border-rule bg-surface",
+          SHEET_ON_MOBILE,
+          "sm:w-[min(96vw,640px)]",
+        )}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>

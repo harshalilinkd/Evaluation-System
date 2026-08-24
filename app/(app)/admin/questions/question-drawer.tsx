@@ -39,6 +39,7 @@ import {
   type ResponseType,
 } from "@/lib/questions/labels";
 import { cn } from "@/lib/utils";
+import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
 export type DepartmentOption = { id: string; name: string };
 
@@ -167,8 +168,9 @@ export function QuestionDrawer({
         // all three are deliberate acts.
         onInteractOutside={(event) => event.preventDefault()}
         className={cn(
-          "flex max-h-[92dvh] w-[min(96vw,1040px)] max-w-none flex-col gap-0 overflow-hidden",
-          "rounded-card-lg border-rule bg-background p-0",
+          "flex flex-col gap-0 overflow-hidden border-rule bg-background p-0",
+          SHEET_ON_MOBILE,
+          "sm:w-[min(96vw,1040px)]",
         )}
       >
         {/* pr-14 leaves the built-in close X its corner. */}

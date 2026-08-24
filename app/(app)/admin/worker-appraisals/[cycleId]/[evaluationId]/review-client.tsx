@@ -505,12 +505,7 @@ export function WorkerReviewClient({
           {isMd && withMd ? (
             <div className="space-y-1.5">
               <Label htmlFor="md_new_ctc">Salary you are approving</Label>
-              <MoneyInput
-                id="md_new_ctc"
-                value={newCtc}
-                onValueChange={setNewCtc}
-                placeholder=""
-              />
+              <MoneyInput id="md_new_ctc" value={newCtc} onValueChange={setNewCtc} />
               <p className="font-sans text-body-sm text-ink-muted">
                 {salaryDirty
                   ? "Changed from what HR set. Approving saves this figure and closes the appraisal."
@@ -1199,21 +1194,7 @@ function WorkerSalaryPanel({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="w_old_hr">Current salary</Label>
-              {/* -- NO PLACEHOLDER. `MoneyInput` defaults to "50,000", and a
-                    grey figure sitting in a money box reads as a stored value
-                    to most people — which is the exact ambiguity F22-2 was
-                    reported for, arriving by a different route. The ₹ prefix
-                    and the label already say what the field is; a specimen
-                    number adds nothing and can be misread as data.
-
-                    Left alone on the increment screens, which nobody has
-                    raised and which are a separate surface. -- */}
-              <MoneyInput
-                id="w_old_hr"
-                value={oldCtc}
-                onValueChange={setOldCtc}
-                placeholder=""
-              />
+              <MoneyInput id="w_old_hr" value={oldCtc} onValueChange={setOldCtc} />
               {/* -- The record's figure is OFFERED, never assumed.
                     It used to be pre-filled, which made an unsaved screen look
                     exactly like a saved one. As a button it does the same work
@@ -1251,7 +1232,6 @@ function WorkerSalaryPanel({
                 value={newCtc}
                 onValueChange={setNewCtc}
                 emptyHint={null}
-                placeholder=""
               />
               {suggested !== null && newCtc !== suggested ? (
                 <button

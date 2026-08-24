@@ -1143,6 +1143,10 @@ export type Database = {
           self_overall: number | null;
           lead_overall: number | null;
           final_overall: number | null;
+          // 0031: set only when create_milestone_evaluation opened this one —
+          // 'MONTH_3', 'MONTH_6', 'INCREMENT', etc. Null for anything HR
+          // launched by hand through the ordinary cycle wizard.
+          milestone_type: string | null;
           // 0021: HR advanced past a layer that never came in.
           self_skipped: boolean;
           lead_skipped: boolean;
@@ -1179,6 +1183,7 @@ export type Database = {
           self_overall?: number | null;
           lead_overall?: number | null;
           final_overall?: number | null;
+          milestone_type?: string | null;
           self_skipped?: boolean;
           lead_skipped?: boolean;
           co_lead_id?: string | null;
@@ -1485,6 +1490,13 @@ export type Database = {
           increment_type: string | null;
           increment_pct: number | null;
           disclosure: Database["evaluation"]["Enums"]["disclosure_policy"];
+          /**
+           * 0095. The second reviewer's OWN overall for this cycle — never
+           * averaged with the reporting lead's, which is what `manager_overall`
+           * already is. Null with no second reviewer, or one who has not
+           * submitted.
+           */
+          co_lead_overall: number | null;
         };
         Relationships: [];
       };

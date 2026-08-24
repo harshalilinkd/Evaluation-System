@@ -553,13 +553,25 @@ export function DataGrid<TData>({
                         navigate keep their route in the expanded actions below,
                         because a tap that sometimes expands and sometimes leaves
                         the page is a tap nobody trusts. -- */}
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    aria-controls={bodyId}
-                    className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left"
-                    onClick={() => toggleRow(row.id)}
-                  >
+                  {/* -- THE SUMMARY IS NOT INSIDE THE TOGGLE, and it cannot be.
+                        The two summary cells render whatever the column
+                        renders, and on an editable grid that is a control — the
+                        salary history's first column is a date picker, which is
+                        itself a `<button>`. Nesting one button in another is
+                        invalid HTML and React refuses to hydrate it, so the
+                        whole tab died with a hydration error rather than
+                        misbehaving quietly.
+
+                        It was wrong on its own terms too, before the markup:
+                        with the summary inside the toggle, tapping the date
+                        field to change it would ALSO collapse the card.
+
+                        So the toggle is now a SIBLING — the row's code and the
+                        chevron, which is where the eye already goes and where
+                        the affordance was drawn anyway. The summary beside it
+                        is plain markup, so an editable cell in it is reachable.
+                        `min-h-11` keeps it a full-size target (§13.8). -- */}
+                  <div className="flex min-w-0 flex-1 items-start gap-3 py-3 pl-4 text-left">
                     <span className="min-w-0 flex-1">
                       <span className="block font-sans text-body font-medium text-ink">
                         {lead ? flexRender(lead.column.columnDef.cell, lead.getContext()) : null}
@@ -578,26 +590,36 @@ export function DataGrid<TData>({
                         </span>
                       ) : null}
                     </span>
+                  </div>
 
-                    <span className="flex shrink-0 items-center gap-2">
-                      {/* The row's own identifier — an employee code where the
-                          screen supplies one. A row NUMBER is not worth a line
-                          on a card, so the plain gutter is dropped. */}
-                      {rowLabel ? (
-                        <span className="tabular font-sans text-body-sm text-ink-muted">
-                          {rowLabel.value(row.original)}
-                        </span>
-                      ) : null}
-                      {/* §13.8: the state is a shape, not only a position. The
-                          `aria-expanded` above carries it to assistive tech. */}
-                      <ChevronDown
-                        aria-hidden
-                        className={cn(
-                          "size-4 text-ink-muted transition-transform duration-hover",
-                          open && "rotate-180",
-                        )}
-                      />
-                    </span>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    aria-controls={bodyId}
+                    onClick={() => toggleRow(row.id)}
+                    className="flex min-h-11 shrink-0 items-center gap-2 py-3 pl-1 pr-4"
+                  >
+                    {/* The chevron is `aria-hidden`, and the row code is not a
+                        name for an action — without this the button announces
+                        as "NA-01" or as nothing at all. */}
+                    <span className="sr-only">{open ? "Hide details" : "Show details"}</span>
+                    {/* The row's own identifier — an employee code where the
+                        screen supplies one. A row NUMBER is not worth a line
+                        on a card, so the plain gutter is dropped. */}
+                    {rowLabel ? (
+                      <span className="tabular font-sans text-body-sm text-ink-muted">
+                        {rowLabel.value(row.original)}
+                      </span>
+                    ) : null}
+                    {/* §13.8: the state is a shape, not only a position. The
+                        `aria-expanded` above carries it to assistive tech. */}
+                    <ChevronDown
+                      aria-hidden
+                      className={cn(
+                        "size-4 text-ink-muted transition-transform duration-hover",
+                        open && "rotate-180",
+                      )}
+                    />
                   </button>
                   </div>
 

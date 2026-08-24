@@ -24,6 +24,7 @@ import {
 } from "@/lib/questions/import-actions";
 import { responseTypeLabel } from "@/lib/questions/labels";
 import { cn } from "@/lib/utils";
+import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
 /** Downloading is a browser job, not a route: the file is already in memory. */
 function download(filename: string, contents: string) {
@@ -124,7 +125,15 @@ export function QuestionImportDialog({
       }}
     >
       <DialogContent
-        className="max-h-[88dvh] w-[min(96vw,900px)] max-w-[96vw] overflow-hidden border-rule bg-surface"
+        /* -- `flex flex-col`, for the reason the sections dialog carries: the
+              body says `min-h-0 flex-1 overflow-y-auto` and a grid child cannot
+              honour `flex-1`, so the preview table it was meant to scroll had
+              no scroller and was clipped by `overflow-hidden` instead. -- */
+        className={cn(
+          "flex flex-col gap-4 overflow-hidden border-rule bg-surface",
+          SHEET_ON_MOBILE,
+          "sm:w-[min(96vw,900px)]",
+        )}
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>

@@ -17,6 +17,7 @@ import { commitEmploymentImport, previewEmploymentImport } from "@/lib/employmen
 import { EMPLOYMENT_COLUMNS, employmentTemplate, type EmploymentPreviewRow } from "@/lib/employment/import";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
+import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
 type Stage =
   | { kind: "idle" }
@@ -45,7 +46,15 @@ export function EmploymentImportDialog({
       {/* Capped so a long preview can never outgrow the viewport. The BODY
           scrolls, not the dialog: the header and its close button are the way
           out, and a way out that scrolls off the top is not one. */}
-      <DialogContent className="max-h-[86dvh] max-w-3xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-rule bg-surface">
+      {/* The explicit grid rows stay — they are what makes the body the only
+          thing that scrolls, and they work unchanged at full height. */}
+      <DialogContent
+        className={cn(
+          "grid-rows-[auto_minmax(0,1fr)] overflow-hidden border-rule bg-surface",
+          SHEET_ON_MOBILE,
+          "sm:max-w-3xl",
+        )}
+      >
         <DialogHeader>
           <DialogTitle className="font-sans text-display-md">Import employment data</DialogTitle>
           <DialogDescription className="font-sans text-body text-ink-muted">
