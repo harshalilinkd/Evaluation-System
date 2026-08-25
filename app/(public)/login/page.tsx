@@ -66,7 +66,7 @@ export default async function LoginPage({
   const current = await getCurrentProfile();
 
   return (
-    <AuthShell title="Sign in">
+    <AuthShell title="Sign in" backdrop>
       {current ? (
         <p className="mb-4 rounded-card bg-surface-mute px-4 py-3 text-body-sm text-ink-muted">
           You are signed in as{" "}

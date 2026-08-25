@@ -788,3 +788,304 @@
     break-inside: avoid;
   }
 }
+
+/* ============================================================================
+   The sign-in backdrop (components/appraise/auth-backdrop.tsx).
+
+   OUTSIDE @layer ON PURPOSE, and this is the third time that call has had to be
+   made in this file: a media query nested inside a layer gets reordered by the
+   layer cascade and the override silently vanishes from the compiled output
+   (UI-5, and again for `.card-enter`). The reduced-motion block at the bottom
+   of this section is exactly that shape, so the whole section stays out.
+
+   Decoration only. Nothing here carries meaning, and every colour is the brand
+   accent or an ink token — no tier hue is used to decorate (§13.1).
+
+   THE OPACITIES ARE THE DESIGN. The first version of this file used values
+   three to five times higher and the result was reported as gaudy: at 0.28 a
+   blurred radial is a colour cast over the whole viewport, and a 0.5-alpha
+   panel is an object rather than a suggestion of one. Everything here is
+   deliberately at the edge of visible. If a layer announces itself in a
+   screenshot it is too strong.
+   ========================================================================== */
+
+/* ---------- The canvas ---------- */
+
+/*
+  A FIXED DEEP SCENE, not the app's theme.
+
+  Deliberately literal rgb values rather than tokens, and that needs saying
+  because §2 forbids a raw colour in a component: this is the same exception
+  `print.css` holds (P15-2). A token exists so a colour can move with the theme,
+  and this scene must NOT move with it — it is one composed image, lit from one
+  direction, and half of it inverting on a theme switch would leave the rings
+  and motes lit for a ground that is no longer there. The white card in front is
+  the app's, and stays the app's.
+
+  Deep navy through indigo, with the horizon lifted slightly left of centre.
+*/
+.auth-canvas {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 90% at 50% 108%, rgb(99 91 255 / 0.35) 0%, transparent 62%),
+    radial-gradient(90% 70% at 12% 8%, rgb(56 47 138 / 0.55) 0%, transparent 60%),
+    linear-gradient(168deg, rgb(11 14 32) 0%, rgb(17 20 46) 46%, rgb(9 11 26) 100%);
+}
+
+/*
+  SWEEPING LIGHT. One very wide conic turning once every two minutes. The beam is
+  never legible as a shape — what reads is the field slowly brightening on one
+  side and dimming on the other, which is the cheapest honest way to make a
+  static gradient feel alive.
+*/
+.auth-beams {
+  position: absolute;
+  /* Oversized and centred so the cone's apex is off-screen; a visible apex
+     turns the whole effect into a pie chart. */
+  left: 50%;
+  top: 50%;
+  width: 200vmax;
+  height: 200vmax;
+  transform: translate(-50%, -50%);
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    transparent 0deg,
+    rgb(129 140 248 / 0.1) 22deg,
+    transparent 60deg,
+    transparent 170deg,
+    rgb(99 91 255 / 0.08) 200deg,
+    transparent 250deg,
+    transparent 360deg
+  );
+  filter: blur(40px);
+  animation: auth-sweep 120s linear infinite;
+  will-change: transform;
+}
+
+@keyframes auth-sweep {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+.auth-aurora {
+  position: absolute;
+  inset: -30%;
+  /* Blur is what turns a hard radial into light, and it is a composited
+     property so it costs nothing per frame. */
+  filter: blur(90px);
+  will-change: transform;
+}
+
+/* Three fronts, three hues, three cycle lengths with no common multiple — so the
+   colour is always moving and never returns to the same arrangement while
+   somebody is looking at it. */
+.auth-aurora-a {
+  background: radial-gradient(30% 34% at 20% 26%, rgb(109 92 255 / 0.55) 0%, transparent 68%);
+  animation: auth-drift-a 37s ease-in-out infinite alternate;
+}
+
+.auth-aurora-b {
+  background: radial-gradient(28% 32% at 82% 72%, rgb(56 189 248 / 0.28) 0%, transparent 70%);
+  animation: auth-drift-b 53s ease-in-out infinite alternate;
+}
+
+.auth-aurora-c {
+  background: radial-gradient(26% 30% at 68% 14%, rgb(167 139 250 / 0.34) 0%, transparent 70%);
+  animation: auth-drift-c 71s ease-in-out infinite alternate;
+}
+
+@keyframes auth-drift-a {
+  from {
+    transform: translate3d(-6%, -4%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(8%, 6%, 0) scale(1.3);
+  }
+}
+
+@keyframes auth-drift-b {
+  from {
+    transform: translate3d(5%, 4%, 0) scale(1.16);
+  }
+  to {
+    transform: translate3d(-7%, -5%, 0) scale(1);
+  }
+}
+
+@keyframes auth-drift-c {
+  from {
+    transform: translate3d(2%, 6%, 0) scale(1.05);
+  }
+  to {
+    transform: translate3d(-5%, -6%, 0) scale(1.28);
+  }
+}
+
+/*
+  ONE POOL OF LIGHT, behind the card. A lit scene has a source, and the card has
+  to sit at the brightest point or nothing on screen directs the eye.
+*/
+.auth-spot {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(42% 38% at 50% 46%, rgb(148 163 255 / 0.16) 0%, transparent 72%);
+}
+
+/* ---------- The orbital rings ---------- */
+
+/*
+  Hairline ellipses lying in 3D space, turning slowly on their own axis. Rings
+  rather than the rectangles this replaced, because a ring is structure: the eye
+  reads a family of concentric orbits as one system, where six loose rectangles
+  read as six loose rectangles.
+
+  The conic border is what keeps them from looking like a wireframe diagram —
+  each ring is bright along one arc and fades to nothing on the opposite side,
+  so it catches the light rather than being drawn. The mask is the standard
+  gradient-border trick: paint the gradient on the border box, then punch the
+  padding box out of it, leaving only the 1px edge.
+*/
+.auth-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  transform: translate3d(-50%, -50%, 0) rotateX(var(--ring-tilt)) rotateZ(var(--ring-yaw));
+  border: 1px solid transparent;
+  background: conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgb(199 210 254 / 0.95) 54deg,
+      rgb(129 140 248 / 0.7) 120deg,
+      rgb(99 91 255 / 0.2) 190deg,
+      transparent 260deg,
+      transparent 360deg
+    )
+    border-box;
+  /* A ring on a dark ground needs its own glow or the 1px edge reads as an
+     aliasing artefact rather than as a lit filament. */
+  box-shadow: 0 0 30px -6px rgb(129 140 248 / 0.4);
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box exclude,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box exclude,
+    linear-gradient(#000 0 0);
+  animation-name: auth-orbit;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+}
+
+.auth-ring-reverse {
+  animation-direction: reverse;
+}
+
+/* The tilt and yaw are held constant through the turn — only the spin moves, so
+   the ring reads as an orbit rather than as a tumbling object. */
+@keyframes auth-orbit {
+  from {
+    transform: translate3d(-50%, -50%, 0) rotateX(var(--ring-tilt)) rotateZ(var(--ring-yaw));
+  }
+  to {
+    transform: translate3d(-50%, -50%, 0) rotateX(var(--ring-tilt))
+      rotateZ(calc(var(--ring-yaw) + 360deg));
+  }
+}
+
+/* ---------- Motes ---------- */
+
+.auth-mote {
+  position: absolute;
+  border-radius: 50%;
+  background: rgb(224 231 255 / 0.95);
+  box-shadow: 0 0 12px 2px rgb(165 180 252 / 0.55);
+  animation-name: auth-mote-float;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  will-change: transform, opacity;
+}
+
+/* Fading as it rises is what makes a mote read as drifting through light rather
+   than as a dot sliding up the screen. */
+@keyframes auth-mote-float {
+  from {
+    transform: translate3d(0, 10px, 0);
+    opacity: 0.25;
+  }
+  to {
+    transform: translate3d(0, -10px, 0);
+    opacity: 0.9;
+  }
+}
+
+/* ---------- Structure ---------- */
+
+.auth-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgb(165 180 252 / 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(165 180 252 / 0.09) 1px, transparent 1px);
+  background-size: 72px 72px;
+  /* Masked to an ellipse so the grid fades out before it can reach an edge and
+     become a visible rectangle of lines. */
+  -webkit-mask-image: radial-gradient(56% 52% at 50% 46%, #000 0%, transparent 100%);
+  mask-image: radial-gradient(56% 52% at 50% 46%, #000 0%, transparent 100%);
+}
+
+/* Deep corners, so the lit middle reads as a pool rather than as an even tint —
+   this is what actually holds the eye on the card. */
+.auth-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(78% 68% at 50% 44%, transparent 38%, rgb(5 7 18 / 0.72) 100%);
+}
+
+/* ---------- The card's arrival ---------- */
+
+.auth-rise {
+  animation: auth-rise 720ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  /* `backwards` for UI-6's reason: without it a delayed element paints at full
+     opacity for the length of its delay and then snaps back to the start of the
+     animation, which reads as a flicker rather than as a stagger. */
+  animation-delay: var(--rise-delay, 0ms);
+}
+
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+/*
+  The global rule near the top of this file already collapses every animation to
+  0.01ms, so the field goes still on its own. This adds what that rule cannot:
+  a frozen mote sits at whatever opacity its keyframe happened to stop at. Both
+  are settled to a deliberate resting state instead. DESIGN.md §5 — motion
+  confirms, it never performs.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .auth-mote {
+    opacity: 0.5 !important;
+  }
+
+  .auth-rise {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+}
