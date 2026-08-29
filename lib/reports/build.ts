@@ -173,20 +173,40 @@ export async function buildEvaluationReport(
   /* The gap needs BOTH sides in. Measured against a draft it is not a
      disagreement, it is a reading of how far somebody has got — and §11 makes
      the gap the figure the whole product exists to surface. */
-  const variance = computeVariance(scoredSelfAnswers, scoredLeadAnswers, leadForm.data, threshold);
+  const variance = computeVariance(
+    scoredSelfAnswers,
+    scoredLeadAnswers,
+    leadForm.data,
+    threshold,
+    // Undefined where there is no second reviewer, which leaves the gap exactly
+    // as it was for everybody on the ordinary two-form flow.
+    coLeadData ? scoredCoLeadAnswers : undefined,
+  );
   const varianceByQuestion = new Map(variance.map((v) => [v.questionId, v]));
   const flaggedCount = variance.filter((v) => v.flag !== "none").length;
 
   const sectionAverages: SectionAverages[] = SECTION_ORDER.map((section) => {
     const self = selfScores.sectionScores[section] ?? null;
     const leadValue = leadScores.sectionScores[section] ?? null;
+    const coLeadValue = coLeadScores?.sectionScores[section] ?? null;
+
+    /* -- The same rule as the per-question gap above: measured against what
+          the MANAGERS said, which with one manager is that manager and is
+          unchanged. Written here rather than imported so the section row and
+          the question row cannot drift into two definitions of one column. -- */
+    const managerValues = [leadValue, coLeadValue].filter((v): v is number => v !== null);
+    const managers =
+      managerValues.length === 0
+        ? null
+        : round2(managerValues.reduce((a, b) => a + b, 0) / managerValues.length);
+
     return {
       section,
       label: SECTION_LABELS[section],
       self,
       lead: leadValue,
-      coLead: coLeadScores?.sectionScores[section] ?? null,
-      gap: self === null || leadValue === null ? null : round2(leadValue - self),
+      coLead: coLeadValue,
+      gap: self === null || managers === null ? null : round2(managers - self),
     };
   }).filter((s) => s.self !== null || s.lead !== null || s.coLead !== null);
 

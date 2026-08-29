@@ -258,7 +258,32 @@ export function KpiRow({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={cn(
-        "grid shrink-0 gap-1.5 border-b border-rule px-3 py-2.5 sm:gap-3 sm:px-4 sm:py-3 lg:px-6",
+        /* -- ON A PHONE THIS IS ONE SWIPEABLE STRIP, not a grid.
+              Reported against /reports: "table data starting from almost 3/4 of
+              screen". Five tiles two-up is THREE stacked rows — about 170px of
+              counts above a list somebody opened the screen to read, and the
+              counts are context where the list is the job.
+
+              Wrapping is what costs the height, so the fix is to stop wrapping:
+              one row that scrolls sideways inside itself. The tiles keep their
+              size and their labels stay readable, which is what the two-up
+              compromise was protecting, and the row costs one row's height
+              whether it holds three tiles or six.
+
+              Sideways INSIDE ITSELF — `overflow-x-auto` on this element, so the
+              page itself never widens. That is the fault the Settings tab strip
+              had, where an unscrollable row made the whole document wider than
+              the phone and shifted every screen sideways.
+
+              The scrollbar is hidden because a permanent one under a 56px strip
+              is most of a tile's worth of chrome; the partially-visible tile at
+              the right edge is what says it scrolls. -- */
+        "flex shrink-0 snap-x snap-mandatory gap-1.5 overflow-x-auto border-b border-rule px-3 py-2.5",
+        "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "[&>*]:min-w-[8.75rem] [&>*]:shrink-0 [&>*]:snap-start",
+        /* From `sm` there is room to lay them out properly, so the grid comes
+           back and the per-child minimum is released. */
+        "sm:grid sm:gap-3 sm:overflow-x-visible sm:px-4 sm:py-3 sm:[&>*]:min-w-0 lg:px-6",
         columns,
       )}
     >

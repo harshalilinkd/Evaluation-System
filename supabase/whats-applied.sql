@@ -246,13 +246,19 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0059_app_notifications',    'table',        'app_notifications',
      'The notification bell. Without it the bell is empty for everybody, and every authenticated page load asks for a table that is not there.'),
   ('0060_hr_close_increment_really','hr_close_inc','HR may approve and close an INCREMENT — FOR REAL',
-     'Applies what 0056 reported it had applied. 0056''s guard matched the UNPATCHED function, so it skipped its own work and said "already widened". Same row as 0056 above: if that says false, 0056 never took effect and this is the migration that fixes it.')
+     'Applies what 0056 reported it had applied. 0056''s guard matched the UNPATCHED function, so it skipped its own work and said "already widened". Same row as 0056 above: if that says false, 0056 never took effect and this is the migration that fixes it.'),
+  ('0097_no_duplicate_core_questions','index','questions_no_duplicate_core',
+     'Stops the same CORE question being added twice. A CORE question goes to everybody, so two copies means every employee and every manager rates it twice — which is what happened to "Quality of work" and reached a live increment form. FALSE means the guard is off and a double-submit in the Form Builder can do it again.')
 )
 select
   e.migration,
   case e.kind
     when 'table'  then to_regclass('public.' || e.object_name) is not null
     when 'view'   then to_regclass('public.' || e.object_name) is not null
+    /* Anchored on the index NAME, which is what 0097 wrote. A detector that
+       merely counted duplicate rows would read TRUE on a bank that happens to
+       have none today, which is not the same as the guard being on. */
+    when 'index'  then to_regclass('public.' || e.object_name) is not null
     when 'function' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = e.object_name)

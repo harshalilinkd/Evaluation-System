@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Flag, Search } from "lucide-react";
+import { AlertTriangle, Flag, Search, SlidersHorizontal } from "lucide-react";
 
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import {
@@ -108,6 +108,24 @@ export function ReportsQueueClient({
   const [status, setStatus] = React.useState(ANY);
   const [flaggedOnly, setFlaggedOnly] = React.useState(false);
   const [minGap, setMinGap] = React.useState("");
+  /* -- Phone only: the secondary filters fold away so the list is not pushed
+        three-quarters of the way down the screen. `lg:contents` in the markup
+        means this flag has no effect at all on a laptop. -- */
+  const [showFilters, setShowFilters] = React.useState(false);
+
+  /* -- HOW MANY ARE ON, on the button that hides them.
+        A folded filter that is still applied would make a narrowed list look
+        like a short one, with the reason out of sight — §13.4's dead end, and
+        the one real risk in collapsing a filter bar. The count is what keeps
+        the state visible while the controls are not.
+        `type` is excluded deliberately: it stays on screen beside the button,
+        so counting it would report a filter the reader can already see. -- */
+  const activeFilters =
+    (cycle === ANY ? 0 : 1) +
+    (department === ANY ? 0 : 1) +
+    (status === ANY ? 0 : 1) +
+    (flaggedOnly ? 1 : 0) +
+    (minGap.trim() === "" ? 0 : 1);
   const [search, setSearch] = React.useState("");
   /* -- THE TILES ARE A FILTER, and until now they were four numbers that did
         nothing when pressed. A count sitting above the list it describes invites
@@ -508,12 +526,34 @@ export function ReportsQueueClient({
               className="min-h-11 w-full min-w-0 border-rule bg-surface pl-8 lg:pl-9"
             />
           </div>
-          <select value={cycle} onChange={(e) => setCycle(e.target.value)} aria-label="Filter by cycle" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
-            <option value={ANY}>Every cycle</option>
-            {queue.cycles.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          {/* -- THE SECONDARY FILTERS FOLD AWAY ON A PHONE.
+                Four rows of controls above the list is ~190px, and with the
+                counts above them the list itself began about three-quarters of
+                the way down the screen — which is what was reported.
+
+                What stays out is what somebody uses every time: the search, and
+                the Evaluation/Increment choice below. What folds is the
+                narrowing — cycle, department, status, gap, flagged — which is
+                occasional and, crucially, SAYS HOW MANY ARE ON, so a list
+                narrowed by a filter can never look like a list that is simply
+                short (§13.4). Nothing is removed; at `lg` the whole thing
+                dissolves back into the one flex line it has always been. -- */}
+          <Button
+            type="button"
+            variant={activeFilters > 0 ? "default" : "secondary"}
+            className="min-h-11 lg:hidden"
+            aria-expanded={showFilters}
+            aria-controls="report-filters"
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            <SlidersHorizontal className="mr-2 size-4" aria-hidden />
+            Filters
+            {activeFilters > 0 ? (
+              <span className="tabular ml-1.5 rounded-pill bg-surface/25 px-1.5 text-body-sm">
+                {activeFilters}
+              </span>
+            ) : null}
+          </Button>
         </div>
         {/* -- THE SEGMENTED PAIR GETS ITS OWN ROW ON A PHONE.
               Two options is the case a select is worst at — it hides half the
@@ -552,6 +592,25 @@ export function ReportsQueueClient({
             ))}
           </div>
         </div>
+
+        {/* Everything from here down is the collapsible group on a phone, and
+            is untouched from `lg` up — `lg:contents` removes both wrappers so
+            the controls rejoin the one flex line they have always been on. */}
+        <div
+          id="report-filters"
+          className={cn("w-full lg:contents", !showFilters && "hidden lg:contents")}
+        >
+          <select
+            value={cycle}
+            onChange={(e) => setCycle(e.target.value)}
+            aria-label="Filter by cycle"
+            className={cn(SELECT_CLASS, SELECT_TIGHT, "mb-2 w-full lg:mb-0 lg:w-[190px]")}
+          >
+            <option value={ANY}>Every cycle</option>
+            {queue.cycles.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
 
         <div className="grid w-full grid-cols-3 gap-2 lg:contents">
           <select value={department} onChange={(e) => setDepartment(e.target.value)} aria-label="Filter by department" className={cn(SELECT_CLASS, SELECT_TIGHT)}>
@@ -611,6 +670,7 @@ export function ReportsQueueClient({
           <p className="tabular shrink-0 text-body-sm text-ink-muted lg:ml-auto">
             {rows.length} of {queue.rows.length} {queue.rows.length === 1 ? "report" : "reports"}
           </p>
+        </div>
         </div>
       </ScreenToolbar>
 

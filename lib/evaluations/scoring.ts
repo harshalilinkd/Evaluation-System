@@ -168,6 +168,27 @@ export function computeVariance(
   leadAnswers: Readonly<Record<string, unknown>>,
   formDefinition: Pick<FormDefinition, "questions">,
   threshold: number = DEFAULT_VARIANCE_THRESHOLD,
+  /**
+   * The SECOND reviewer's answers, where the evaluatee has one.
+   *
+   * THE GAP IS AGAINST WHAT THE MANAGERS SAID, NOT WHAT ONE OF THEM SAID.
+   * Reported as the gap "not getting calculated correctly", and it was: on a
+   * row reading Self 4 · Manager 4 · Coordinator 3 the gap showed 0.00, which
+   * states the two sides agreed while a manager's disagreement sat in the
+   * column beside it. The Average column had already been defined as Self
+   * against BOTH managers (AMEND-5, SR-14), so one row was blending them and
+   * the next was not.
+   *
+   * SR-15 deliberately left this alone — "quietly redefining it would move
+   * every flag in the system for one team with nobody having asked". Somebody
+   * has now asked, and this is that change.
+   *
+   * OPTIONAL, AND THAT IS THE SAFETY PROPERTY. Absent — which is every
+   * evaluation without a second reviewer, i.e. almost all of them — the
+   * arithmetic below is byte-for-byte what it always was, so no existing flag
+   * moves for anybody who does not have two managers.
+   */
+  coLeadAnswers?: Readonly<Record<string, unknown>>,
 ): QuestionVariance[] {
   const warningAt = Math.max(0, threshold);
   const criticalAt = warningAt + 1;
@@ -180,7 +201,21 @@ export function computeVariance(
 
     const self = scoreValue(question, selfAnswers[question.questionId]);
     const lead = scoreValue(question, leadAnswers[question.questionId]);
-    const delta = self === null || lead === null ? null : round2(lead - self);
+
+    /* -- What the managers said, together.
+          A silence is left out rather than counted as zero (§11's
+          missing-is-not-zero): with only one of the two in, the gap is against
+          that one, exactly as it was before a second reviewer existed. -- */
+    const coLead = coLeadAnswers
+      ? scoreValue(question, coLeadAnswers[question.questionId])
+      : null;
+    const managerValues = [lead, coLead].filter((v): v is number => v !== null);
+    const managers =
+      managerValues.length === 0
+        ? null
+        : round2(managerValues.reduce((a, b) => a + b, 0) / managerValues.length);
+
+    const delta = self === null || managers === null ? null : round2(managers - self);
 
     let flag: FlagLevel = "none";
     if (delta !== null) {
