@@ -278,7 +278,7 @@ export function activeHref(
  */
 const EXTRA_TITLES: ReadonlyArray<{ prefix: string; label: string }> = [
   { prefix: "/admin/due", label: "Evaluation Due" },
-  { prefix: "/admin/increments", label: "Increments" },
+  { prefix: "/admin/increments", label: "Increments Due" },
   // Only reached for HR_ADMIN/MD, who `navFor` excludes it for above — for
   // anyone else the ordinary NAV lookup already finds it and this line is
   // never consulted.

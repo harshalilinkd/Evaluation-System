@@ -7,7 +7,9 @@ import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { getIncrementCalendar } from "@/lib/employment/queries";
 
-export const metadata: Metadata = { title: "Increments" };
+// The browser tab is a surface too — a rename that stops at the visible
+// label leaves the two disagreeing (P9-9 caught exactly this).
+export const metadata: Metadata = { title: "Increments Due" };
 
 export default async function Page() {
   /* -- §5's salary confinement. HR and the MD only, and the guard is the first

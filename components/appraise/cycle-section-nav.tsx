@@ -25,7 +25,10 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { href: "/admin/cycles", label: "Cycles" },
   { href: "/admin/due", label: "Evaluation Due" },
-  { href: "/admin/increments", label: "Increments" },
+  // Renamed at the owner's explicit instruction (§0.2). It sits beside
+       // "Evaluation Due" and answers the same question about a different
+       // thing, so the two now read as a pair rather than a list and a noun.
+       { href: "/admin/increments", label: "Increments Due" },
 ] as const;
 
 export function CycleSectionNav() {
