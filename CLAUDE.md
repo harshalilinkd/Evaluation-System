@@ -8765,3 +8765,37 @@ both is a fact about how small the team is, not a mistake to prevent.
 the previous commit's wording and not the commit after it. Checked in the source
 before answering rather than replying "reload" — the assertion that matters is
 what the file says, not what the tab shows.
+
+**WORKER-2 addendum 3 — one form where the rater is the supervisor. W2-23 is
+reversed, and its objection is answered rather than accepted.**
+
+Migration `0101_worker_rate_and_decide_together.sql`.
+
+W2-23 kept the two steps for this case and defended it on a concrete defect:
+the three fields filled on the RATING sheet are stored where 0064 lets a
+supervisor write and not read, so the percentage would vanish from the box on
+reopening. The owner instructed one form, twice. §0.9 — the concern was raised
+and reaffirmed, so it is their call — and the defect is fixed rather than
+tolerated.
+
+| # | Decision | Why |
+|---|---|---|
+| W2-27 | **The combined path stores the three fields in `worker_evaluation_decisions`**, not in the legacy columns | Which is the same place a separate supervisor stores them, and the reason the read-back objection disappears rather than being lived with: `worker_review_decision` is a definer function that names four columns and carries no amount, so they can read what they wrote. One storage location whoever filled it — HR's screen, the print sheet and the board all read one place. |
+| W2-28 | `save_worker_review`'s status gate admits **OPEN, and only when the caller is also the rater** | Without a hand-over there is no PENDING_SUPERVISOR to wait for: the record is OPEN for the whole time they are filling it in. Narrow on purpose — a SEPARATE supervisor still cannot touch the row until it reaches them, which is what keeps that flow a genuine hand-over rather than a shared drawer. |
+| W2-29 | **One PL/pgSQL function, not two RPCs behind one button** | It moves a status, locks a layer, stamps two timestamps, files a pay recommendation and writes two audit rows. Two calls would leave the ticks locked at PENDING_SUPERVISOR if the second failed — recoverable, but only by somebody who knew to look. P14-1 and P10-2's rule: TypeScript decides, SQL commits. |
+| W2-30 | The completeness rules are **restated word for word**, not referenced | This is a second route to HR, and a second route that is laxer than the first is a hole rather than a convenience. Training answered; a recommended rise carries a percentage; the percentage is between 0 and 100. |
+| W2-31 | **Two audit rows, not one** | Rating and deciding are two acts and stay two in the record even when one press performed both — a single row would make the trail say less than what happened. Both carry `combined: true`, and neither carries an amount (§5, P19-10). |
+| W2-32 | `reviewer_submitted_at` is stamped too | So the record does not later read as a review that never happened, and so the two-step path's own guard (`reviewer_submitted_at is null`) can never reopen it. |
+| W2-33 | **`submit_worker_layer` is NOT touched** | A different supervisor still gets the hand-over. If the combined case ever reaches the plain path it degrades to two steps rather than to HR with three empty fields — the safe direction. |
+| W2-34 | The form says what is missing before the press, and `FormActionBar` gains no prop | The same two sentences the function raises. The bar is shared with the staff forms, and one caller's rule does not belong in it (§13.4 is satisfied by saying it, not by disabling it). |
+
+#### Verification — 5 checks on the LIVE database, rolled back
+
+```
+1 · saves the three fields while OPEN, and reads them back              OK
+2 · one press refuses an unpriced rise and a missing training tick      OK
+3 · ONE PRESS: ticks locked, decision filed, straight to HR,
+    overall tick stored, both timestamps, 2 audit rows, no amount       OK
+4 · one press refuses where a DIFFERENT supervisor reviews              OK
+5 · that appraisal still hands over to them, unchanged                  OK
+```

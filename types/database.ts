@@ -1816,6 +1816,18 @@ export type Database = {
         Args: { p_evaluation_id: string };
         Returns: undefined;
       };
+      /* 0101 · one press, where the rater is also the supervisor: locks the
+         ticks, files the decision and sends it to HR in one transaction. */
+      submit_worker_combined: {
+        Args: {
+          p_evaluation_id: string;
+          p_salary_changed: boolean;
+          p_increment_pct: number | null;
+          p_comment: string | null;
+          p_training: boolean | null;
+        };
+        Returns: undefined;
+      };
       submit_worker_layer: {
         Args: {
           p_evaluation_id: string;

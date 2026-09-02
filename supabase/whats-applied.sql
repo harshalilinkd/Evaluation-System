@@ -153,6 +153,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0100_worker_supervisor_review', 'worker_review_step',
      'the team leader rates and their supervisor reviews',
      'Without it a production round has no review step: whoever ticks the sheet also records the comment, the training tick and the recommended percentage, and it goes straight to HR. Detected on the SUBMIT function, which is what actually moves an appraisal on — the reviewer columns alone would read TRUE while nothing routed to them.'),
+  ('0101_worker_rate_and_decide_together', 'worker_rate_and_decide',
+     'a team leader who is also the supervisor fills ONE form',
+     'Without it they do two steps: rate, submit, then reopen the same appraisal under "Waiting on your review". Nothing breaks — it is the 0100 flow — but on a floor where the team leader IS the only supervisor it is two screens for one person.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -565,6 +568,14 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'submit_worker_layer'
          and pg_get_functiondef(p.oid) like '%PENDING_SUPERVISOR%')
+
+    /* -- 0101 · the one-press function. Named, because it is what the
+          migration WROTE — the relaxed `save_worker_review` gate is the other
+          half and would be far harder to detect without matching a fragment
+          the old body also contains (0056's failure). -- */
+    when 'worker_rate_and_decide' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'submit_worker_combined')
 
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace

@@ -18,10 +18,12 @@ import { cn } from "@/lib/utils";
 import {
   saveWorkerSalary,
   saveWorkerSheet,
+  submitWorkerCombined,
   submitWorkerSheet,
   type WorkerSheet,
   type WorkerTick,
 } from "@/lib/worker/form";
+import { saveWorkerReview } from "@/lib/worker/review-sheet";
 import { formatDate } from "@/lib/utils/date";
 
 /*
@@ -138,10 +140,13 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           landing out of order would let a stale snapshot overwrite a newer. -- */
     const run = (async (): Promise<boolean> => {
     try {
-      const result = await saveWorkerSheet(sheet.evaluationId, answers, {
-        overallComment: comment,
-        trainingRequired: training,
-      });
+      const result = await saveWorkerSheet(
+        sheet.evaluationId,
+        answers,
+        // Dropped on the combined path — they are written above instead, and
+        // sending them twice would put one answer in two places.
+        sheet.alsoDecides ? undefined : { overallComment: comment, trainingRequired: training },
+      );
       if (!result.ok) {
         setSaveState("error");
         setError(result.error.message);
@@ -178,7 +183,22 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       setSaved(new Date(result.data.savedAt));
       setError(null);
 
-      if (sheet.salary) {
+      /* -- WHERE THE THREE FIELDS GO (0101).
+            The rater who is also the supervisor writes them to
+            `worker_evaluation_decisions`, exactly as a separate supervisor
+            does — one storage location whoever filled them, and the only one
+            they can read back. 0064 lets a supervisor WRITE the legacy salary
+            block and not READ it, so the older path below can store a
+            percentage it cannot show again; that is why this branch exists. -- */
+      if (sheet.alsoDecides) {
+        const reviewResult = await saveWorkerReview(sheet.evaluationId, {
+          salaryChanged: salary.salaryChanged,
+          incrementPct: salary.incrementPct,
+          comment,
+          trainingRequired: training,
+        });
+        setSalaryError(reviewResult.ok ? null : reviewResult.error.message);
+      } else if (sheet.salary) {
         const salaryResult = await saveWorkerSalary(sheet.evaluationId, salary);
         setSalaryError(salaryResult.ok ? null : salaryResult.error.message);
       }
@@ -200,7 +220,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       // Only if it is still ours: a later persist may already own the slot.
       if (inFlight.current === run) inFlight.current = null;
     }
-  }, [readOnly, sheet.evaluationId, sheet.salary, answers, comment, training, salary]);
+  }, [readOnly, sheet.evaluationId, sheet.salary, sheet.alsoDecides, answers, comment, training, salary]);
 
   // Save once the person stops for a moment.
   React.useEffect(() => {
@@ -229,6 +249,20 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
     setBusy(false);
   }
 
+  /* -- 0101: what is still missing on a form that both rates AND decides.
+        The same two rules `submit_worker_combined` enforces, in the same words,
+        so the form cannot accept what the server then rejects (P13-6). Said
+        before the press rather than only after it (§13.4); the button stays
+        live because `FormActionBar` is shared with the staff forms and one
+        caller's rule does not belong in it. -- */
+  const decisionBlocker = !sheet.alsoDecides
+    ? null
+    : training === null
+      ? "Say whether training is required before sending this to HR."
+      : salary.salaryChanged && !(salary.incrementPct && salary.incrementPct > 0)
+        ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
+        : null;
+
   async function submit() {
     setBusy(true);
     /* -- If the draft never reached the server, say so rather than submitting
@@ -238,10 +272,21 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       setBusy(false);
       return;
     }
-    const result = await submitWorkerSheet(sheet.evaluationId, answers, {
-      overallComment: comment,
-      trainingRequired: training,
-    });
+    /* -- ONE PRESS, at the owner's instruction, where the same person rates
+          and decides: the ticks, the comment, the training tick and the
+          percentage all commit together and it goes straight to HR. There is
+          no second screen for them, because there is no hand-over. -- */
+    const result = sheet.alsoDecides
+      ? await submitWorkerCombined(sheet.evaluationId, answers, {
+          salaryChanged: salary.salaryChanged,
+          incrementPct: salary.incrementPct,
+          comment,
+          trainingRequired: training,
+        })
+      : await submitWorkerSheet(sheet.evaluationId, answers, {
+          overallComment: comment,
+          trainingRequired: training,
+        });
     setBusy(false);
     if (!result.ok) {
       setError(result.error.message);
@@ -574,6 +619,12 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                 hand-over path (WORKER-1) and still reads correctly — the
                 progress is theirs either way, and the alternative would be a
                 third tier this module does not have. -- */}
+          {decisionBlocker ? (
+            <p className="mb-3 rounded-card bg-surface-mute px-4 py-3 font-sans text-body-sm text-ink-muted">
+              {decisionBlocker}
+            </p>
+          ) : null}
+
           <FormActionBar
             answered={answered}
             total={sheet.questions.length}
@@ -621,7 +672,9 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                      they would hear otherwise is somebody asking them about a
                      training tick they were never shown. -- */
                 `Your ratings for ${sheet.workerName} are recorded. Their supervisor reviews them next and decides on training and any increment.`
-              : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`
+              : sheet.alsoDecides
+                ? `Your ratings and your decision for ${sheet.workerName} are recorded and are with HR. Nothing more is needed from you.`
+                : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`
         }
         actionLabel="Done"
         onAction={() => setThanked(false)}

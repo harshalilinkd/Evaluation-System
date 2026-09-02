@@ -42,13 +42,16 @@ export type WorkerSheet = {
   dueOn: string | null;
   questions: WorkerSheetQuestion[];
   answers: Record<string, WorkerTick>;
-  /* -- 0100: TRUE when a supervisor is assigned to review these ticks.
-        When it is, the three fields below belong to THEM and are not on this
-        sheet at all — the team leader rates and nothing else. When it is not,
-        this is a round launched before the review step existed, and the rater
-        still fills them exactly as they always did. That second case is what
-        keeps every live round working rather than stranding it. -- */
+  /* -- 0100: a DIFFERENT person reviews these ticks. The three fields below
+        belong to them and are not on this sheet at all — the team leader rates
+        and nothing else. -- */
   hasReviewer: boolean;
+  /* -- 0101: the rater IS the supervisor, at the owner's instruction. They
+        rate AND decide, on this one form, in one press. The three fields are
+        here, and they are stored in `worker_evaluation_decisions` — the same
+        place a separate supervisor stores them — rather than in the legacy
+        columns, so the percentage can be read back. -- */
+  alsoDecides: boolean;
   /** Paper form: "Supervisor Comment". Only when there is no reviewer. */
   overallComment: string;
   /** Paper form: "Training Required Yes/No". Supervisor layer only. */
@@ -150,13 +153,32 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   /* -- Read through the AUTHENTICATED client, so RLS decides. A worker gets
         nothing back here and the field is null for them — the screen is not
         making that decision, the policy is. -- */
-  const hasReviewer = evaluation.reviewer_id !== null;
+  const separate =
+    evaluation.reviewer_id !== null && evaluation.reviewer_id !== evaluation.supervisor_id;
+  const alsoDecides =
+    evaluation.reviewer_id !== null && evaluation.reviewer_id === evaluation.supervisor_id;
+  /* -- The three fields are on this sheet unless somebody ELSE is going to
+        fill them: a round with no reviewer at all (pre-0100, unchanged) and a
+        rater who is also the supervisor (0101) both fill them here. -- */
+  const hasReviewer = separate;
 
   /* -- Not queried at all once a supervisor owns the decision. Fetching it and
         choosing not to render it leaves the leak one careless line away; not
         fetching it keeps the figure out of the process (A3-8's reasoning). -- */
+  /* -- 0101: through the FUNCTION for the combined case, never the table.
+        `worker_evaluation_decisions` holds `old_ctc` and `new_ctc` and RLS is
+        row-level, so a policy admitting them to their own recommendation would
+        hand over the amounts with it. `worker_review_decision` names four
+        columns and cannot return a fifth — which is also why the percentage
+        can be read back here at all, and 0064's write-only path could not. -- */
+  const { data: combinedRows } =
+    layer === "SUPERVISOR" && alsoDecides
+      ? await supabase.rpc("worker_review_decision", { p_evaluation_id: evaluationId })
+      : { data: null };
+  const combined = combinedRows?.[0] ?? null;
+
   const [{ data: decisions }, { data: employment }] =
-    layer === "SUPERVISOR" && !hasReviewer
+    layer === "SUPERVISOR" && !hasReviewer && !alsoDecides
       ? await Promise.all([
           supabase
             .from("worker_evaluation_decisions")
@@ -205,18 +227,37 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
       })),
       answers: (response?.answers ?? {}) as Record<string, WorkerTick>,
       hasReviewer,
-      overallComment: hasReviewer ? "" : (response?.overall_comment ?? ""),
-      trainingRequired: hasReviewer ? null : (response?.training_required ?? null),
+      alsoDecides,
+      overallComment: hasReviewer
+        ? ""
+        : alsoDecides
+          ? (combined?.supervisor_comment ?? "")
+          : (response?.overall_comment ?? ""),
+      trainingRequired: hasReviewer
+        ? null
+        : alsoDecides
+          ? (combined?.training_required ?? null)
+          : (response?.training_required ?? null),
       salary:
-        layer === "SUPERVISOR" && !hasReviewer
-          ? {
-              salaryChanged: decisions?.salary_changed ?? false,
-              // What was recorded on this appraisal, else what they are on now.
-              oldCtc: decisions?.old_ctc ?? employment?.current_ctc ?? null,
-              incrementPct: decisions?.increment_pct ?? null,
-              newCtc: decisions?.new_ctc ?? null,
-            }
-          : null,
+        layer !== "SUPERVISOR" || hasReviewer
+          ? null
+          : alsoDecides
+            ? {
+                salaryChanged: combined?.salary_changed ?? false,
+                /* -- No amount, ever. 0064 took the figures from supervisors
+                      and 0100 kept it that way; the combined path recommends a
+                      percentage exactly as the separate one does. -- */
+                oldCtc: null,
+                incrementPct: combined?.increment_pct ?? null,
+                newCtc: null,
+              }
+            : {
+                salaryChanged: decisions?.salary_changed ?? false,
+                // What was recorded on this appraisal, else what they are on now.
+                oldCtc: decisions?.old_ctc ?? employment?.current_ctc ?? null,
+                incrementPct: decisions?.increment_pct ?? null,
+                newCtc: decisions?.new_ctc ?? null,
+              },
       isSubmitted: submittedAt !== null,
       isOpen: evaluation.status === "OPEN" && submittedAt === null && !skipped,
     },
@@ -273,7 +314,9 @@ export async function saveWorkerSheet(
             these two belong to them, on their own screen, and a browser still
             sending them is out of date rather than malicious — so they are
             dropped rather than refused. -- */
-      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.hasReviewer
+      ...(sheet.data.layer === "SUPERVISOR" &&
+      !sheet.data.hasReviewer &&
+      !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
             training_required: extras?.trainingRequired ?? null,
@@ -339,7 +382,9 @@ export async function submitWorkerSheet(
             these two belong to them, on their own screen, and a browser still
             sending them is out of date rather than malicious — so they are
             dropped rather than refused. -- */
-      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.hasReviewer
+      ...(sheet.data.layer === "SUPERVISOR" &&
+      !sheet.data.hasReviewer &&
+      !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
             training_required: extras?.trainingRequired ?? null,
@@ -438,5 +483,83 @@ export async function saveWorkerSalary(
     );
   }
 
+  return { ok: true, data: { ok: true } };
+}
+
+/* ---------- One form, where the rater is also the supervisor (0101) ---------- */
+
+export type WorkerCombinedInput = {
+  salaryChanged: boolean;
+  incrementPct: number | null;
+  comment: string;
+  trainingRequired: boolean | null;
+};
+
+/**
+ * Rate and decide in one press.
+ *
+ * At the owner's instruction: where the team leader IS the supervisor there is
+ * no hand-over, so there is no second screen either. Everything commits in one
+ * transaction inside `submit_worker_combined` — the decision, the layer lock,
+ * §11's overall tick, both timestamps and two audit rows — because a
+ * half-applied version of that is a record nobody can explain (P14-1).
+ *
+ * The required-tick check is the same one `submitWorkerSheet` runs, against the
+ * FROZEN sheet rather than what the browser sent (P12-7). The other two rules
+ * live in the function, in 0100's words, so this second route to HR cannot be
+ * a laxer one than the first.
+ */
+export async function submitWorkerCombined(
+  evaluationId: string,
+  answers: Record<string, WorkerTick>,
+  decision: WorkerCombinedInput,
+): Promise<Result<{ ok: true }>> {
+  const profile = await getCurrentProfile();
+  if (!profile) return fail("NOT_AUTHENTICATED", "Please sign in again.");
+
+  const sheet = await getWorkerSheet(evaluationId);
+  if (!sheet.ok) return sheet;
+  if (!sheet.data.isOpen) return fail("LOCKED", "This sheet has already been submitted.");
+  if (!sheet.data.alsoDecides) {
+    return fail("NOT_COMBINED", "This appraisal goes to a supervisor for review.");
+  }
+
+  const missing = sheet.data.questions.filter((q) => q.isRequired && !answers[q.questionId]);
+  if (missing.length > 0) {
+    return fail(
+      "INCOMPLETE",
+      `${missing.length} ${missing.length === 1 ? "quality still needs" : "qualities still need"} a tick.`,
+    );
+  }
+
+  const supabase = await createClient();
+
+  /* -- The ticks first, through RLS, by the person who gave them. The function
+        below locks the layer but does not write the answers — same split as
+        `submitWorkerSheet`, and for the same reason: the answers are written by
+        the caller's own session so the policy decides. -- */
+  const { error: answersError } = await supabase
+    .from("worker_evaluation_responses")
+    .update({ answers: answers as Json })
+    .eq("evaluation_id", evaluationId)
+    .eq("layer", "SUPERVISOR");
+
+  if (answersError) return fail("SAVE_FAILED", answersError.message);
+
+  const { error } = await supabase.rpc("submit_worker_combined", {
+    p_evaluation_id: evaluationId,
+    p_salary_changed: decision.salaryChanged,
+    p_increment_pct: decision.salaryChanged ? decision.incrementPct : null,
+    p_comment: decision.comment,
+    p_training: decision.trainingRequired,
+  });
+
+  if (error) {
+    return fail("SUBMIT_FAILED", error.message.replace(/^.*?:\s*/, "").trim() || error.message);
+  }
+
+  revalidatePath("/worker-appraisal");
+  revalidatePath(`/worker-appraisal/${evaluationId}`);
+  revalidatePath("/worker-team");
   return { ok: true, data: { ok: true } };
 }

@@ -684,7 +684,8 @@ export function StartRoundDialog({
                         {included && raterId && reviewerFor(w) === raterId ? (
                           <span className="w-full font-sans text-body-sm text-ink-muted">
                             {raters.find((r) => r.id === raterId)?.name ?? "They"} rates{" "}
-                            {w.name} and decides the increment — they will do both steps.
+                            {w.name} and decides the increment on the same form — one
+                            step, straight to HR.
                           </span>
                         ) : null}
                       </li>
