@@ -119,12 +119,19 @@ export type WorkerAssignment = {
         change to the profile cannot move an in-flight round (P3-6). -- */
   supervisorId: string | null;
   /* -- 0100: the SUPERVISOR who reviews those ticks and records the comment,
-        the training tick and the recommended percentage. OPTIONAL, and that is
-        deliberate: without one the appraisal goes straight to HR when the team
-        leader submits, which is exactly what every round launched before 0100
-        does. Requiring it would strand a launch on a shop floor where nobody
-        holds the SUPERVISOR access level, and the fix for that is a role grant
-        rather than a blocked round. -- */
+        the training tick and the recommended percentage.
+
+        REQUIRED, at the owner's instruction — "before hr supervisor will review
+        rating given by TL". An earlier version made it optional so that a shop
+        floor with nobody holding the access level could still launch; the owner
+        chose the opposite, and it is the better call: a round that quietly
+        skipped the review step would produce appraisals with no comment, no
+        training tick and no recommendation, and nothing on screen to say why.
+
+        The TYPE stays nullable because the COLUMN is: every round launched
+        before 0100 has none, and `submit_worker_layer` still sends those
+        straight to HR. What changes is that a NEW round cannot be one of them,
+        and the guard below is what says so. -- */
   reviewerId: string | null;
 };
 
@@ -204,6 +211,19 @@ export async function launchWorkerCycle(
         Either would collapse the two steps into one and leave nothing for the
         review to be a review OF — the same objection AMEND-2 makes about HR
         approving their own proposal. -- */
+  /* -- The review step is not optional (0100 as amended). Refused by name,
+        rather than launched and discovered when the first sheet lands on HR's
+        desk with none of the three fields on it. -- */
+  const unreviewed = eligible.filter((p) => !reviewerOf.get(p.id));
+  if (unreviewed.length > 0) {
+    return fail(
+      "NO_REVIEWER",
+      `${unreviewed.map((p) => p.full_name).join(", ")} ${
+        unreviewed.length === 1 ? "has" : "have"
+      } nobody chosen to review the ratings and decide the increment. Pick a supervisor for each, or grant somebody the Supervisor access level on Settings › Users.`,
+    );
+  }
+
   const reviewsOwnRatings = eligible.filter(
     (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
   );
@@ -474,6 +494,19 @@ export async function addWorkersToRound(
         Either would collapse the two steps into one and leave nothing for the
         review to be a review OF — the same objection AMEND-2 makes about HR
         approving their own proposal. -- */
+  /* -- The review step is not optional (0100 as amended). Refused by name,
+        rather than launched and discovered when the first sheet lands on HR's
+        desk with none of the three fields on it. -- */
+  const unreviewed = eligible.filter((p) => !reviewerOf.get(p.id));
+  if (unreviewed.length > 0) {
+    return fail(
+      "NO_REVIEWER",
+      `${unreviewed.map((p) => p.full_name).join(", ")} ${
+        unreviewed.length === 1 ? "has" : "have"
+      } nobody chosen to review the ratings and decide the increment. Pick a supervisor for each, or grant somebody the Supervisor access level on Settings › Users.`,
+    );
+  }
+
   const reviewsOwnRatings = eligible.filter(
     (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
   );

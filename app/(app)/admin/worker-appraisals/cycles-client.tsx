@@ -319,7 +319,11 @@ export function StartRoundDialog({
         className={cn(
           "flex flex-col gap-0 overflow-hidden p-0",
           SHEET_ON_MOBILE,
-          "sm:w-[min(96vw,720px)]",
+          /* -- Widened at the owner's instruction. Every row now carries the
+                worker, who rates them and who reviews it — two labelled
+                selects — and at 720px the second wrapped under the first,
+                which read as two separate rows for one person. -- */
+          "sm:w-[min(96vw,1060px)]",
         )}
       >
         <DialogHeader className="shrink-0 border-b border-rule px-6 py-4">
@@ -481,7 +485,7 @@ export function StartRoundDialog({
                     round, and a box that cuts the fifth in half reads as though
                     something is missing. Still bounded, so twenty-eight people
                     do not push the footer off a laptop screen. */}
-                <ul className="max-h-80 overflow-y-auto">
+                <ul className="max-h-[52dvh] overflow-y-auto">
                   {shown.length === 0 ? (
                     /* §13.4: a list that empties without saying why reads as
                        broken. It also says the ticks survive, because the box
@@ -561,26 +565,36 @@ export function StartRoundDialog({
                           </select>
                         </label>
 
-                        {/* -- 0100: who reviews those ratings.
-                              The Supervisor pool only — this is the second pair
-                              of eyes, and offering the team leader's own name
-                              here would collapse the two steps into one. The
-                              rater is filtered out for the same reason, and the
-                              action refuses it anyway (§9: the screen is not
-                              the guard). -- */}
+                        {/* -- 0100: who reviews those ratings and decides the
+                              increment.
+
+                              THE STEP IS NOT OPTIONAL, at the owner's
+                              instruction: "before hr supervisor will review
+                              rating given by TL". So there is no "Straight to
+                              HR" — it was offered as the default and read as
+                              the ordinary way round, which is the opposite of
+                              the flow. Where it goes AFTERWARDS is not a choice
+                              either: HR always follows, and a control for
+                              something that only has one answer is a question
+                              nobody should be asked.
+
+                              The Supervisor access level only. The rater is
+                              filtered out because one person cannot be both
+                              pairs of eyes, and the action refuses it anyway
+                              (§9: the screen is not the guard). -- */}
                         <label className="flex items-center gap-2">
                           <span className="font-sans text-body-sm text-ink-muted">
-                            Reviewed by
+                            Review &amp; Salary decision
                           </span>
                           <select
                             value={reviewerOf[w.id] ?? ""}
                             onChange={(e) =>
                               setReviewerOf((prev) => ({ ...prev, [w.id]: e.target.value }))
                             }
-                            aria-label={`Who reviews the ratings for ${w.name}`}
-                            className="min-h-11 min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                            aria-label={`Who reviews the ratings and decides the increment for ${w.name}`}
+                            className="min-h-11 min-w-44 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
                           >
-                            <option value="">Straight to HR</option>
+                            <option value="">Choose a supervisor</option>
                             {raters
                               .filter((r) => r.id !== raterId && r.id !== w.id)
                               .map((r) => (
@@ -604,6 +618,14 @@ export function StartRoundDialog({
                         {included && !raterId ? (
                           <span className="w-full font-sans text-body-sm text-critical">
                             Choose who rates {w.name} before starting.
+                          </span>
+                        ) : null}
+
+                        {included && raterId && !reviewerOf[w.id] ? (
+                          <span className="w-full font-sans text-body-sm text-critical">
+                            {raters.filter((r) => r.id !== raterId && r.id !== w.id).length === 0
+                              ? `Nobody but ${raters.find((r) => r.id === raterId)?.name ?? "the rater"} holds the Supervisor access level, so there is nobody to review this. Grant it to somebody on Settings › Users.`
+                              : `Choose who reviews the ratings for ${w.name} and decides the increment.`}
                           </span>
                         ) : null}
                       </li>
@@ -644,7 +666,9 @@ export function StartRoundDialog({
             onClick={() => void submit()}
             disabled={busy || chosen.size === 0 || [...chosen].some((id) => {
               const w = workers.find((x) => x.id === id);
-              return !w || !raterFor(w);
+              // Both halves. The review step is not optional (0100 as amended),
+              // so a round missing one is a round that cannot run.
+              return !w || !raterFor(w) || !reviewerOf[w.id];
             })}
             className="min-h-11"
           >
@@ -788,23 +812,32 @@ export function AddWorkersDialog({
           </ul>
         )}
 
-        {/* -- 0100: the review step, for everybody being added. -- */}
+        {/* -- 0100: the review step, for everybody being added. Required, as
+              it is at launch — the supervisor reviews before HR, and there is
+              no version of this round where they do not. -- */}
         <label className="block space-y-1.5">
           <span className="font-sans text-body-sm text-ink-muted">
-            Reviewed by, once their team leader has rated them
+            Review &amp; Salary decision, once their team leader has rated them
           </span>
           <select
             value={reviewerId}
             onChange={(e) => setReviewerId(e.target.value)}
             className="min-h-11 w-full rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
           >
-            <option value="">Straight to HR</option>
+            <option value="">Choose a supervisor</option>
             {raters.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.designation ? `${r.name} · ${r.designation}` : r.name}
               </option>
             ))}
           </select>
+          {!reviewerId ? (
+            <span className="block font-sans text-body-sm text-ink-muted">
+              {raters.length === 0
+                ? "Nobody holds the Supervisor access level yet. Grant it to somebody on Settings › Users."
+                : "They review the team leader's ratings and decide the increment. HR sees it after that."}
+            </span>
+          ) : null}
         </label>
 
         {error ? (
@@ -819,7 +852,7 @@ export function AddWorkersDialog({
           </Button>
           <Button
             onClick={() => void submit()}
-            disabled={busy || chosen.size === 0}
+            disabled={busy || chosen.size === 0 || !reviewerId}
             className="min-h-11"
           >
             {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}

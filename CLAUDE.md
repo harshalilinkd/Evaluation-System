@@ -8711,3 +8711,31 @@ text was LF — §18 has recorded this three times (FIX-10 addendum, P35, FIX-68
 and each fix was local to one file. The patching helper used throughout this
 phase now detects the file's ending and asserts that every replacement matched
 exactly once, so a silent no-op cannot report success.
+
+**WORKER-2 addendum — the review step is not optional, and W2-3 is reversed.**
+
+Reported on the launch dialog: *"in Reviewed by its not hr before hr supervisor
+will review rating given by TL ... after TL and supervisor fill the form it will
+go to hr for rating and salary review by default that we dont need to set"*.
+
+W2-3 made the supervisor optional and offered **"Straight to HR"** as the
+dropdown's first entry — so it was also the DEFAULT, and every row in the
+screenshot read that way. The reasoning was that requiring one would strand a
+launch on a shop floor where nobody holds the access level. The owner chose the
+opposite, and it is the better call: a round that quietly skipped the review
+step would produce appraisals with no comment, no training tick and no
+recommendation, and nothing on screen to say why.
+
+| # | Decision | Why |
+|---|---|---|
+| W2-16 | **"Straight to HR" is gone from both dialogs**, replaced by "Choose a supervisor" | It was not merely an extra option — as the first entry it was what every row started on, so the exception was the default and the flow read backwards. Where it goes AFTERWARDS is not a choice either: HR always follows the supervisor, and a control for something with one answer is a question nobody should be asked. |
+| W2-17 | Required in the SCREEN and in both writers, in the same words | The button cannot start a round missing either half, the row says which half before the press, and `launchWorkerCycle` and `addWorkersToRound` refuse by name. §9 — the screen is not the guard; P13-6 — both halves say the same sentence, so the form cannot accept what the server then rejects. |
+| W2-18 | **The COLUMN stays nullable, and `submit_worker_layer` still routes a null straight to HR** | Every round launched before 0100 has no reviewer, and making the column NOT NULL would strand them mid-flight. What changed is that a NEW round cannot be one of them. The type is nullable for the same reason and says so. |
+| W2-19 | With nobody eligible, the row names the FIX rather than the state | "Nobody but {rater} holds the Supervisor access level, so there is nobody to review this. Grant it to somebody on Settings › Users." A disabled control with no explanation is a dead end (§13.4), and this one is resolved on a different screen — so saying which screen is the whole of the help. |
+| W2-20 | "Reviewed by" → **"Review & Salary decision"** | At the owner's instruction (§0.2). "Reviewed by" said who but not what, on the row where somebody is being handed a pay recommendation. |
+| W2-21 | The dialog is 720px → **1060px**, and the roster taller | Two labelled selects per row wrapped at 720, so one person's row read as two — which is what "increase the size of this model" was pointing at. |
+
+The dropdown's contents did not change and did not need to: `listWorkerRaters`
+has filtered to the SUPERVISOR access level since WORKER-1. The designations
+beside each name — HOD, Sr. Operator, HR — are job titles from `profiles`, not
+access levels, and were what made it look wider than it is.
