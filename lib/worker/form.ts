@@ -60,7 +60,7 @@ export type WorkerSheet = {
         sheet, because no policy admits them to that row and there is nothing to
         read (0051). Not "hidden": absent. -- */
   salary: {
-    salaryChanged: boolean;
+    salaryChanged: boolean | null;
     oldCtc: number | null;
     incrementPct: number | null;
     newCtc: number | null;
@@ -256,7 +256,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
           ? null
           : alsoDecides
             ? {
-                salaryChanged: combined?.salary_changed ?? false,
+                salaryChanged: combined?.salary_changed ?? null,
                 /* -- No amount, ever. 0064 took the figures from supervisors
                       and 0100 kept it that way; the combined path recommends a
                       percentage exactly as the separate one does. -- */
@@ -265,7 +265,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
                 newCtc: null,
               }
             : {
-                salaryChanged: decisions?.salary_changed ?? false,
+                salaryChanged: decisions?.salary_changed ?? null,
                 // What was recorded on this appraisal, else what they are on now.
                 oldCtc: decisions?.old_ctc ?? employment?.current_ctc ?? null,
                 incrementPct: decisions?.increment_pct ?? null,
@@ -445,7 +445,7 @@ export async function submitWorkerSheet(
 /* ---------- The salary block ---------- */
 
 export type WorkerSalaryInput = {
-  salaryChanged: boolean;
+  salaryChanged: boolean | null;
   oldCtc: number | null;
   incrementPct: number | null;
   newCtc: number | null;
@@ -512,7 +512,7 @@ export async function saveWorkerSalary(
 /* ---------- One form, where the rater is also the supervisor (0101) ---------- */
 
 export type WorkerCombinedInput = {
-  salaryChanged: boolean;
+  salaryChanged: boolean | null;
   incrementPct: number | null;
   comment: string;
   trainingRequired: boolean | null;

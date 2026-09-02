@@ -259,9 +259,11 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
     ? null
     : training === null
       ? "Say whether training is required before sending this to HR."
-      : salary.salaryChanged && !(salary.incrementPct && salary.incrementPct > 0)
-        ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
-        : null;
+      : salary.salaryChanged === null
+        ? "Say whether the salary stays the same or changes before sending this to HR."
+        : salary.salaryChanged && !(salary.incrementPct && salary.incrementPct > 0)
+          ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
+          : null;
 
   async function submit() {
     setBusy(true);
@@ -529,8 +531,16 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   key={option.label}
                   type="button"
                   aria-pressed={salary.salaryChanged === option.value}
+                  /* -- Three states, as the training tick has: pressing the
+                        chosen one clears it, and neither starts chosen. A
+                        preselected "Same" recorded the cheaper of the two
+                        decisions for somebody who never made it (0103). -- */
                   onClick={() => {
-                    setSalary((s) => ({ ...s, salaryChanged: option.value }));
+                    setSalary((s) => ({
+                      ...s,
+                      salaryChanged: s.salaryChanged === option.value ? null : option.value,
+                      incrementPct: option.value === true ? s.incrementPct : null,
+                    }));
                     setDirty(true);
                   }}
                   className={cn(
@@ -565,7 +575,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                 read-only. It is now the one thing they enter, so it is a real
                 field: HR turns it into money against a salary the supervisor
                 cannot see. -- */}
-          {salary.salaryChanged ? (
+          {salary.salaryChanged === true ? (
             <div className="space-y-1.5 sm:max-w-xs">
               <Label htmlFor="w_pct">Recommended increment %</Label>
               <Input

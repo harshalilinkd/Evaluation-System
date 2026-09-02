@@ -439,7 +439,8 @@ export type Database = {
       worker_evaluation_decisions: {
         Row: {
           evaluation_id: string;
-          salary_changed: boolean;
+          /* NULL until the supervisor answers Same or New (0103). */
+          salary_changed: boolean | null;
           old_ctc: number | null;
           increment_pct: number | null;
           new_ctc: number | null;
@@ -456,7 +457,7 @@ export type Database = {
         };
         Insert: {
           evaluation_id: string;
-          salary_changed?: boolean;
+          salary_changed?: boolean | null;
           old_ctc?: number | null;
           increment_pct?: number | null;
           new_ctc?: number | null;
@@ -467,7 +468,7 @@ export type Database = {
           decided_at?: string | null;
         };
         Update: {
-          salary_changed?: boolean;
+          salary_changed?: boolean | null;
           old_ctc?: number | null;
           increment_pct?: number | null;
           new_ctc?: number | null;
@@ -1805,7 +1806,7 @@ export type Database = {
       save_worker_review: {
         Args: {
           p_evaluation_id: string;
-          p_salary_changed: boolean;
+          p_salary_changed: boolean | null;
           p_increment_pct: number | null;
           p_comment: string | null;
           p_training: boolean | null;
@@ -1821,7 +1822,7 @@ export type Database = {
       submit_worker_combined: {
         Args: {
           p_evaluation_id: string;
-          p_salary_changed: boolean;
+          p_salary_changed: boolean | null;
           p_increment_pct: number | null;
           p_comment: string | null;
           p_training: boolean | null;

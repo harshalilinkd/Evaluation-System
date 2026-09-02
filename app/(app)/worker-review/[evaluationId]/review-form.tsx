@@ -41,7 +41,7 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
 
   const [comment, setComment] = React.useState(sheet.comment);
   const [training, setTraining] = React.useState<boolean | null>(sheet.trainingRequired);
-  const [salaryChanged, setSalaryChanged] = React.useState(sheet.salaryChanged);
+  const [salaryChanged, setSalaryChanged] = React.useState<boolean | null>(sheet.salaryChanged);
   const [pct, setPct] = React.useState<number | null>(sheet.incrementPct);
 
   const [busy, setBusy] = React.useState(false);
@@ -99,9 +99,11 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
   const blocker =
     training === null
       ? "Say whether training is required before sending this to HR."
-      : salaryChanged && !(pct && pct > 0)
-        ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
-        : null;
+      : salaryChanged === null
+        ? "Say whether the salary stays the same or changes before sending this to HR."
+        : salaryChanged && !(pct && pct > 0)
+          ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
+          : null;
 
   if (sent || sheet.isSent) {
     return (
@@ -197,14 +199,19 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
             rather than an empty card when they wrote nothing: a blank box
             headed with somebody's name reads as a comment that failed to
             load. -- */}
-      {sheet.raterComment ? (
-        <div className="card-surface space-y-2 p-4 sm:p-5">
-          <p className="type-label text-ink-muted">
-            {sheet.ratedByYou ? "Your comment" : `${sheet.ratedBy ?? "Team leader"}'s comment`}
-          </p>
-          <p className="whitespace-pre-wrap font-sans text-body text-ink">{sheet.raterComment}</p>
-        </div>
-      ) : null}
+      <div className="card-surface space-y-2 p-4 sm:p-5">
+        <p className="type-label text-ink-muted">
+          {sheet.ratedByYou ? "Your comment" : `${sheet.ratedBy ?? "Team leader"}'s comment`}
+        </p>
+        <p
+          className={cn(
+            "whitespace-pre-wrap font-sans text-body",
+            sheet.raterComment ? "text-ink" : "text-ink-muted",
+          )}
+        >
+          {sheet.raterComment || "Nothing written."}
+        </p>
+      </div>
 
       {/* ---------- The supervisor's own three fields ---------- */}
       <div className="card-surface space-y-5 p-4 sm:p-5">
@@ -297,9 +304,14 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
                 key={option.label}
                 type="button"
                 aria-pressed={salaryChanged === option.value}
+                /* -- Three states, as the training tick has: pressing the
+                      chosen one clears it. Neither starts chosen — a
+                      preselected "Same" recorded the cheaper of the two
+                      decisions for somebody who never made it (0103). -- */
                 onClick={() => {
-                  setSalaryChanged(option.value);
-                  if (!option.value) setPct(null);
+                  const next = salaryChanged === option.value ? null : option.value;
+                  setSalaryChanged(next);
+                  if (next !== true) setPct(null);
                   setDirty(true);
                 }}
                 className={cn(
@@ -315,7 +327,7 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
           </div>
         </fieldset>
 
-        {salaryChanged ? (
+        {salaryChanged === true ? (
           <div className="space-y-1.5 sm:max-w-xs">
             <Label htmlFor="review_pct">Recommended increment %</Label>
             <Input

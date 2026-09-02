@@ -156,6 +156,12 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0101_worker_rate_and_decide_together', 'worker_rate_and_decide',
      'a team leader who is also the supervisor fills ONE form',
      'Without it they do two steps: rate, submit, then reopen the same appraisal under "Waiting on your review". Nothing breaks — it is the 0100 flow — but on a floor where the team leader IS the only supervisor it is two screens for one person.'),
+  ('0103_salary_decision_can_be_unanswered', 'salary_answer_optional',
+     'Same or New can be UNANSWERED, so the screen stops preselecting Same',
+     'Without it salary_changed is NOT NULL and the supervisor opens a form with "Same" already chosen — so sending it on without touching it records the cheaper of the two decisions for somebody who never made it.'),
+  ('0104_combined_salary_answer_required', 'combined_salary_required',
+     'the one-press form refuses an unanswered Same or New',
+     'Without it the route where the team leader IS the supervisor still coalesces an unanswered decision to "Same" on the way to HR — the same fault 0103 fixed on the other route, and a second route to HR must not be the laxer one.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -576,6 +582,20 @@ select
     when 'worker_rate_and_decide' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'submit_worker_combined')
+
+    /* -- 0103 · on the COLUMN, which is what the migration changed. The
+          refusal in submit_worker_review is the other half and is detected by
+          0104's row below; matching only a function body would read TRUE while
+          the column was still NOT NULL and the screen still preselecting. -- */
+    when 'salary_answer_optional' then exists (
+      select 1 from information_schema.columns
+       where table_schema = 'public' and table_name = 'worker_evaluation_decisions'
+         and column_name = 'salary_changed' and is_nullable = 'YES')
+
+    when 'combined_salary_required' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'submit_worker_combined'
+         and pg_get_functiondef(p.oid) like '%p_salary_changed is null%')
 
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace

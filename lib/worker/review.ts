@@ -32,11 +32,17 @@ export type WorkerReview = {
   rows: WorkerReviewRow[];
   /** What the TEAM LEADER wrote beside their ticks (0102). */
   raterComment: string;
+  /* -- TRUE where two different people wrote about this worker. What decides
+        whether HR is shown two comments or one — not whether the two strings
+        happen to differ, which would collapse them the day two people wrote
+        the same sentence and would keep them apart on an older appraisal where
+        one person wrote one comment that was copied into both columns. -- */
+  twoAuthors: boolean;
   supervisorComment: string;
   trainingRequired: boolean | null;
   overallTick: string | null;
   salary: {
-    salaryChanged: boolean;
+    salaryChanged: boolean | null;
     oldCtc: number | null;
     incrementPct: number | null;
     newCtc: number | null;
@@ -101,7 +107,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
   const { data: evaluation } = await supabase
     .from("worker_evaluations")
     .select(
-      "id, cycle_id, worker_id, supervisor_id, status, overall_tick, supervisor_submitted_at, md_reviewed_at, closed_at",
+      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, overall_tick, supervisor_submitted_at, md_reviewed_at, closed_at",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -215,6 +221,8 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
             keeps every appraisal filed before 0100 readable: there, one person
             wrote one comment and it is on the response row. -- */
       raterComment: supervisorRow?.overall_comment ?? "",
+      twoAuthors:
+        evaluation.reviewer_id !== null && evaluation.reviewer_id !== evaluation.supervisor_id,
       supervisorComment:
         decisions?.supervisor_comment ?? (decisions ? "" : (supervisorRow?.overall_comment ?? "")),
       trainingRequired: decisions?.training_required ?? supervisorRow?.training_required ?? null,

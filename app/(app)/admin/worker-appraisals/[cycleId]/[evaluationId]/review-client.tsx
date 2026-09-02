@@ -418,16 +418,25 @@ export function WorkerReviewClient({
             {review.trainingRequired === null ? "Not answered" : review.trainingRequired ? "Yes" : "No"}
           </p>
         </div>
-        {/* -- Shown only when it differs from the supervisor's, which is the
-              case where two different people wrote about the same worker. On
-              an older appraisal, or where one person did both, there is one
-              comment and printing it twice under two headings would invent a
-              second author. -- */}
-        {review.raterComment && review.raterComment !== review.supervisorComment ? (
+        {/* -- BOTH, whenever two people wrote about this worker — including
+              where one of them wrote nothing, because "they left it blank" is
+              a different fact from "there was nobody to write it".
+
+              Keyed on whether there were two AUTHORS, not on whether the two
+              strings differ: that would collapse them the day two people wrote
+              the same sentence, and would keep them apart on an older appraisal
+              where one person wrote one comment that 0100 copied into both
+              columns. -- */}
+        {review.twoAuthors ? (
           <div className="sm:col-span-3">
             <p className="type-label text-ink-muted">Team leader&rsquo;s comment</p>
-            <p className="mt-1 whitespace-pre-wrap font-sans text-body text-ink">
-              {review.raterComment}
+            <p
+              className={cn(
+                "mt-1 whitespace-pre-wrap font-sans text-body",
+                review.raterComment ? "text-ink" : "text-ink-muted",
+              )}
+            >
+              {review.raterComment || "Nothing written."}
             </p>
           </div>
         ) : null}
@@ -458,7 +467,7 @@ export function WorkerReviewClient({
         evaluationId={review.evaluationId}
         salary={
           review.salary ?? {
-            salaryChanged: false,
+            salaryChanged: null,
             oldCtc: null,
             incrementPct: null,
             newCtc: null,
@@ -906,7 +915,13 @@ function WorkerSalaryPanel({
   dirty,
 }: {
   evaluationId: string;
-  salary: { salaryChanged: boolean; oldCtc: number | null; incrementPct: number | null; newCtc: number | null };
+  salary: {
+    /** Null where the supervisor has not answered Same or New yet (0103). */
+    salaryChanged: boolean | null;
+    oldCtc: number | null;
+    incrementPct: number | null;
+    newCtc: number | null;
+  };
   currentCtcOnRecord: number | null;
   /** Management is reading it and it is their move — not merely read-only. */
   mdIsSettling: boolean;

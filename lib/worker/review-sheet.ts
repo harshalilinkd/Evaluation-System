@@ -57,7 +57,7 @@ export type WorkerReviewSheet = {
   rows: WorkerReviewRow[];
   /** §11: the worker's score IS this tick, never a mean. */
   overallTick: WorkerTick | null;
-  salaryChanged: boolean;
+  salaryChanged: boolean | null;
   incrementPct: number | null;
   comment: string;
   trainingRequired: boolean | null;
@@ -182,7 +182,7 @@ export async function getWorkerReviewSheet(
         tick: answers[q.question_id] ?? null,
       })),
       overallTick: (evaluation.overall_tick as WorkerTick | null) ?? null,
-      salaryChanged: decision?.salary_changed ?? false,
+      salaryChanged: decision?.salary_changed ?? null,
       incrementPct: decision?.increment_pct ?? null,
       comment: decision?.supervisor_comment ?? "",
       /* -- The supervisor's own answer, falling back to the team leader's
@@ -199,7 +199,7 @@ export async function getWorkerReviewSheet(
 /* ---------- Writing ---------- */
 
 export type WorkerReviewInput = {
-  salaryChanged: boolean;
+  salaryChanged: boolean | null;
   incrementPct: number | null;
   comment: string;
   trainingRequired: boolean | null;
@@ -224,7 +224,7 @@ export async function saveWorkerReview(
   const { error } = await supabase.rpc("save_worker_review", {
     p_evaluation_id: evaluationId,
     p_salary_changed: input.salaryChanged,
-    p_increment_pct: input.salaryChanged ? input.incrementPct : null,
+    p_increment_pct: input.salaryChanged === true ? input.incrementPct : null,
     p_comment: input.comment,
     p_training: input.trainingRequired,
   });
