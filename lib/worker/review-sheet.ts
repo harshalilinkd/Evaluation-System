@@ -36,6 +36,11 @@ export type WorkerReviewSheet = {
   department: string | null;
   /** Who ticked it. `supervisor_id` on the row; "team leader" on every screen. */
   ratedBy: string | null;
+  /* -- TRUE where the same person rated and is now reviewing. On a small floor
+        the team leader IS the only supervisor, so they do both steps — at the
+        owner's instruction. The screen says "you" rather than naming them back
+        to themselves, which reads as the page not knowing who is looking. -- */
+  ratedByYou: boolean;
   ratedAt: string | null;
   cycleName: string;
   periodLabel: string;
@@ -153,6 +158,7 @@ export async function getWorkerReviewSheet(
       designation: worker?.designation ?? null,
       department: worker?.departments?.name ?? null,
       ratedBy: rater?.full_name ?? null,
+      ratedByYou: evaluation.supervisor_id === profile.id,
       ratedAt: response?.submitted_at ?? evaluation.supervisor_submitted_at,
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",

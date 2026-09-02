@@ -8739,3 +8739,29 @@ The dropdown's contents did not change and did not need to: `listWorkerRaters`
 has filtered to the SUPERVISOR access level since WORKER-1. The designations
 beside each name — HOD, Sr. Operator, HR — are job titles from `profiles`, not
 access levels, and were what made it look wider than it is.
+
+**WORKER-2 addendum 2 — the team leader may be the supervisor, and W2-15 is
+reversed.**
+
+Asked directly: *"for some employees rated by means reports to assign is
+supervisor means supervisor will rate them and take increment decision also —
+how will we manage this edge case"*.
+
+W2-15 refused it. The argument was AMEND-2's — one person cannot be both pairs
+of eyes — and on a shop floor where the team leader IS the only supervisor it
+does not produce a control, it produces a **dead end**: the review list empties,
+the row blocks, and the round cannot be launched at all. Whether one person does
+both is a fact about how small the team is, not a mistake to prevent.
+
+| # | Decision | Why |
+|---|---|---|
+| W2-22 | The rater is no longer filtered out of the review list; **the rule that carries the meaning is now a ROLE** | `launchWorkerCycle` and `addWorkersToRound` refuse a reviewer who does not hold the SUPERVISOR access level. That is the thing actually worth guaranteeing about a pay recommendation — that the company gave that person the standing — and unlike "not the rater" it cannot be satisfied by nobody. Re-checked server-side rather than trusted from the dialog (§9, and the action takes any payload). |
+| W2-23 | **They still do both STEPS, not one merged sheet** | Rate, submit, then open the review and record the comment, the training tick and the percentage. The alternative — let them fill everything on the rating sheet, as the pre-0100 flow does — was rejected on a concrete defect rather than on tidiness: that path writes the percentage through 0064's policy, and 0064 dropped the supervisor's READ, so the figure cannot be shown back to them when they reopen. The review screen goes through `worker_review_decision`, which reads back correctly. One pipeline, one place the three fields live, whoever filled them. |
+| W2-24 | The option is **marked** "· also rates them", and the row says so underneath | On a screen where every other row names two different people, one naming the same person twice reads as a slip. Naming it makes it a choice. |
+| W2-25 | On the review screen it says **"What you recorded"** | Naming somebody back to themselves reads as the page not knowing who is looking. `ratedByYou` is derived server-side from the row, not guessed in the component. |
+| W2-26 | The prefill also stops going stale | With the rater no longer excluded, the eligible list no longer empties when HR sets the sole supervisor as the rater — which was the case W2-x's derived default was written to survive, and now cannot arise at all. |
+
+**And the prefill reported as "not working" was working.** The screenshot carried
+the previous commit's wording and not the commit after it. Checked in the source
+before answering rather than replying "reload" — the assertion that matters is
+what the file says, not what the tab shows.

@@ -156,11 +156,14 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
       <div className="space-y-4">
         <div>
           <h2 className="font-sans text-body-lg text-ink">
-            What {sheet.ratedBy ?? "the team leader"} recorded
+            {sheet.ratedByYou
+              ? "What you recorded"
+              : `What ${sheet.ratedBy ?? "the team leader"} recorded`}
           </h2>
           <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
-            Their ratings, as submitted. You are not re-rating — read them, then record your
-            decision below.
+            {sheet.ratedByYou
+              ? "Your own ratings, as submitted and now locked. Read them back, then record your decision below."
+              : "Their ratings, as submitted. You are not re-rating — read them, then record your decision below."}
           </p>
         </div>
 

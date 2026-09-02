@@ -224,13 +224,47 @@ export async function launchWorkerCycle(
     );
   }
 
-  const reviewsOwnRatings = eligible.filter(
-    (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
-  );
-  if (reviewsOwnRatings.length > 0) {
+  /* -- THE REVIEWER MUST HOLD THE SUPERVISOR ACCESS LEVEL, and that replaces
+        an earlier "they cannot also be the rater".
+
+        The old rule was a second-pair-of-eyes argument and it produced a dead
+        end on a small floor: where the team leader IS the only supervisor,
+        nobody could be chosen and the round could not launch. The owner named
+        that case directly — "for some employees rated by means reports to
+        assign is supervisor means supervisor will rate them and take increment
+        decision also" — so one person doing both is a fact about the size of
+        the team rather than a mistake to prevent. They still do both STEPS:
+        rate, submit, then review and recommend, so the three fields live in
+        one place whoever filled them.
+
+        What must still be true is that the pay recommendation is made by
+        somebody the company has given that standing to, and that is a role.
+        Re-checked here rather than trusted from the dialog — §9, and the
+        action is callable with any payload. -- */
+  const namedReviewers = [
+    ...new Set(
+      eligible.map((p) => reviewerOf.get(p.id)).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const { data: supervisorGrants } = namedReviewers.length
+    ? await supabase
+        .from("user_roles")
+        .select("profile_id")
+        .eq("role", "SUPERVISOR")
+        .in("profile_id", namedReviewers)
+    : { data: [] };
+
+  const holdsSupervisor = new Set((supervisorGrants ?? []).map((r) => r.profile_id));
+  const notSupervisors = eligible.filter((p) => {
+    const id = reviewerOf.get(p.id);
+    return Boolean(id) && !holdsSupervisor.has(id as string);
+  });
+
+  if (notSupervisors.length > 0) {
     return fail(
-      "REVIEWER_IS_RATER",
-      `${reviewsOwnRatings.map((p) => p.full_name).join(", ")}: the same person is down to rate and to review. Pick a different supervisor, or leave it empty and it will go straight to HR.`,
+      "REVIEWER_NOT_SUPERVISOR",
+      `${notSupervisors.map((p) => p.full_name).join(", ")}: the person chosen to review and decide the increment does not hold the Supervisor access level. Grant it on Settings › Users, or pick somebody who has it.`,
     );
   }
 
@@ -507,13 +541,47 @@ export async function addWorkersToRound(
     );
   }
 
-  const reviewsOwnRatings = eligible.filter(
-    (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
-  );
-  if (reviewsOwnRatings.length > 0) {
+  /* -- THE REVIEWER MUST HOLD THE SUPERVISOR ACCESS LEVEL, and that replaces
+        an earlier "they cannot also be the rater".
+
+        The old rule was a second-pair-of-eyes argument and it produced a dead
+        end on a small floor: where the team leader IS the only supervisor,
+        nobody could be chosen and the round could not launch. The owner named
+        that case directly — "for some employees rated by means reports to
+        assign is supervisor means supervisor will rate them and take increment
+        decision also" — so one person doing both is a fact about the size of
+        the team rather than a mistake to prevent. They still do both STEPS:
+        rate, submit, then review and recommend, so the three fields live in
+        one place whoever filled them.
+
+        What must still be true is that the pay recommendation is made by
+        somebody the company has given that standing to, and that is a role.
+        Re-checked here rather than trusted from the dialog — §9, and the
+        action is callable with any payload. -- */
+  const namedReviewers = [
+    ...new Set(
+      eligible.map((p) => reviewerOf.get(p.id)).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const { data: supervisorGrants } = namedReviewers.length
+    ? await supabase
+        .from("user_roles")
+        .select("profile_id")
+        .eq("role", "SUPERVISOR")
+        .in("profile_id", namedReviewers)
+    : { data: [] };
+
+  const holdsSupervisor = new Set((supervisorGrants ?? []).map((r) => r.profile_id));
+  const notSupervisors = eligible.filter((p) => {
+    const id = reviewerOf.get(p.id);
+    return Boolean(id) && !holdsSupervisor.has(id as string);
+  });
+
+  if (notSupervisors.length > 0) {
     return fail(
-      "REVIEWER_IS_RATER",
-      `${reviewsOwnRatings.map((p) => p.full_name).join(", ")}: the same person is down to rate and to review. Pick a different supervisor, or leave it empty and it will go straight to HR.`,
+      "REVIEWER_NOT_SUPERVISOR",
+      `${notSupervisors.map((p) => p.full_name).join(", ")}: the person chosen to review and decide the increment does not hold the Supervisor access level. Grant it on Settings › Users, or pick somebody who has it.`,
     );
   }
 

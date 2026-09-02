@@ -186,10 +186,25 @@ export function StartRoundDialog({
         cannot be both pairs of eyes. Recomputed per row rather than once,
         because it depends on who is rating — change the rater and the reviewer
         list changes with it. -- */
-  const eligibleReviewers = (w: WorkerRow) => {
-    const rater = raterFor(w);
-    return raters.filter((r) => r.id !== rater && r.id !== w.id);
-  };
+  const eligibleReviewers = (w: WorkerRow) =>
+    /* -- THE RATER IS NOT EXCLUDED, at the owner's instruction: "for some
+          employees rated by means reports to assign is supervisor means
+          supervisor will rate them and take increment decision also".
+
+          An earlier version filtered them out on a second-pair-of-eyes
+          argument, and on a small shop floor that argument produces a dead
+          end rather than a control: where the team leader IS the only
+          supervisor, the list empties and the round cannot be launched at
+          all. The rule that carries the meaning is the one below in
+          `launchWorkerCycle` — the reviewer must hold the SUPERVISOR access
+          level — and whether they are also the rater is a fact about how
+          small the team is, not a mistake to prevent.
+
+          They still do BOTH STEPS: rate, submit, then open the review and
+          record the comment, the training tick and the percentage. Same
+          pipeline for everybody, so the three fields live in one place
+          whoever filled them. -- */
+    raters.filter((r) => r.id !== w.id);
 
   /* -- WHEN THERE IS EXACTLY ONE, IT FILLS ITSELF IN, at the owner's
         instruction: today one person holds the access level, and asking HR to
@@ -627,7 +642,13 @@ export function StartRoundDialog({
                             <option value="">Choose a supervisor</option>
                             {eligibleReviewers(w).map((r) => (
                               <option key={r.id} value={r.id}>
-                                {r.designation ? `${r.name} · ${r.designation}` : r.name}
+                                {/* -- Marked, so picking the rater reads as a
+                                      deliberate choice rather than a slip. -- */}
+                                {r.id === raterId
+                                  ? `${r.name} · also rates them`
+                                  : r.designation
+                                    ? `${r.name} · ${r.designation}`
+                                    : r.name}
                               </option>
                             ))}
                           </select>
@@ -651,9 +672,19 @@ export function StartRoundDialog({
 
                         {included && raterId && !reviewerFor(w) ? (
                           <span className="w-full font-sans text-body-sm text-critical">
-                            {eligibleReviewers(w).length === 0
-                              ? `Nobody but ${raters.find((r) => r.id === raterId)?.name ?? "the rater"} holds the Supervisor access level, so there is nobody to review this. Grant it to somebody on Settings › Users.`
+                            {raters.length === 0
+                              ? "Nobody holds the Supervisor access level yet, so there is nobody to review this. Grant it to somebody on Settings › Users."
                               : `Choose who reviews the ratings for ${w.name} and decides the increment.`}
+                          </span>
+                        ) : null}
+
+                        {/* -- Said out loud, because it is unusual enough to
+                              look like a mistake on a screen full of rows where
+                              two different people are named. -- */}
+                        {included && raterId && reviewerFor(w) === raterId ? (
+                          <span className="w-full font-sans text-body-sm text-ink-muted">
+                            {raters.find((r) => r.id === raterId)?.name ?? "They"} rates{" "}
+                            {w.name} and decides the increment — they will do both steps.
                           </span>
                         ) : null}
                       </li>
