@@ -224,9 +224,16 @@ export default async function Page({
     ),
   ];
   const { data: people } = ids.length
-    ? await supabase.from("profiles").select("id, full_name").in("id", ids)
+    ? await supabase.from("profiles").select("id, full_name, email, work_email").in("id", ids)
     : { data: [] };
   const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
+  /* -- The PERSONAL address, falling back to the work one. `contacts.ts` files
+        the production rating invite as personal, so this is the address the
+        sheet actually goes to — showing any other would be printing one thing
+        and sending to another. -- */
+  const emailOf = new Map(
+    (people ?? []).map((p) => [p.id, p.email ?? p.work_email ?? null] as const),
+  );
 
   return (
     <WorkerBoard
@@ -239,8 +246,10 @@ export default async function Page({
         workerId: r.worker_id,
         workerName: nameOf.get(r.worker_id) ?? "—",
         supervisorName: r.supervisor_id ? (nameOf.get(r.supervisor_id) ?? "—") : "—",
+        supervisorEmail: r.supervisor_id ? (emailOf.get(r.supervisor_id) ?? null) : null,
         // 0100: the supervisor who reviews those ratings, where one is assigned.
         reviewerName: r.reviewer_id ? (nameOf.get(r.reviewer_id) ?? "—") : null,
+        reviewerEmail: r.reviewer_id ? (emailOf.get(r.reviewer_id) ?? null) : null,
         selfIn: Boolean(r.self_submitted_at) || r.self_skipped,
         supervisorIn: Boolean(r.supervisor_submitted_at) || r.supervisor_skipped,
         selfSubmittedAt: r.self_submitted_at,

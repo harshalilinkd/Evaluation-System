@@ -33,7 +33,11 @@ export type BoardRow = {
   /** The profile, so the board can tell who is NOT yet in this round. */
   workerId: string;
   workerName: string;
+  /* -- The TEAM LEADER: who fills the tick sheet. `supervisor_id` on the row,
+        and the column is named for what the person does rather than what the
+        column has been called since 0047 (0100). -- */
   supervisorName: string;
+  supervisorEmail: string | null;
   selfIn: boolean;
   supervisorIn: boolean;
   selfSubmittedAt: string | null;
@@ -41,6 +45,7 @@ export type BoardRow = {
   handedOver: boolean;
   /** 0100: the supervisor reviewing the ratings, where one is assigned. */
   reviewerName: string | null;
+  reviewerEmail: string | null;
   status: string;
   overallTick: string | null;
   department: string | null;
@@ -94,6 +99,34 @@ function nextStep(row: BoardRow): { text: string; tone: "wait" | "ready" | "done
     return { text: "Filled in — ready for your review", tone: "ready" };
   }
   return { text: `Waiting on ${row.supervisorName} to fill it in`, tone: "wait" };
+}
+
+/**
+ * A person, with the address the sheet is actually sent to underneath.
+ *
+ * The board named one person and called them "Supervisor", which since 0100 is
+ * two different people doing two different jobs — and neither was reachable
+ * from the screen without going to look them up. The email is the personal one
+ * falling back to the work one, because `contacts.ts` files the production
+ * rating invite as personal: printing one address and sending to another is
+ * worse than printing none.
+ */
+function PersonCell({ name, email }: { name: string | null; email: string | null }) {
+  if (!name) return <GridCell value="—" />;
+  return (
+    <span className="block min-w-0">
+      <span title={name} className="block truncate text-body-sm text-ink">
+        {name}
+      </span>
+      {email ? (
+        <span title={email} className="block truncate text-body-sm text-ink-muted">
+          {email}
+        </span>
+      ) : (
+        <span className="block truncate text-body-sm text-warning">No email on file</span>
+      )}
+    </span>
+  );
 }
 
 export function WorkerBoard({
@@ -260,9 +293,29 @@ export function WorkerBoard({
         : []),
       {
         accessorKey: "supervisorName",
+        // Renamed at the owner's instruction: this column has always held the
+        // person who FILLS the sheet, and since 0100 that is the team leader.
+        header: "Team leader",
+        size: 220,
+        cell: ({ row }) => (
+          <PersonCell name={row.original.supervisorName} email={row.original.supervisorEmail} />
+        ),
+      },
+      {
+        id: "reviewer",
         header: "Supervisor",
-        size: 190,
-        cell: ({ row }) => <GridCell value={row.original.supervisorName} />,
+        size: 220,
+        /* -- Null where nobody reviews — every round launched before 0100, and
+              any HR has deliberately sent straight through. Said in words
+              rather than left as a dash, because an empty cell beside a filled
+              one reads as data that failed to load rather than as a round that
+              works differently (FIX-30). -- */
+        cell: ({ row }) =>
+          row.original.reviewerName ? (
+            <PersonCell name={row.original.reviewerName} email={row.original.reviewerEmail} />
+          ) : (
+            <GridCell value="Straight to HR" className="text-ink-muted" />
+          ),
       },
       {
         id: "supervisor",
@@ -593,7 +646,9 @@ export function WorkerBoard({
         storageKey="appraise.worker-board.column-widths"
         rowNoun="worker"
         rowTitle={(r) => r.workerName}
-        minWidth={1100}
+        // +250 for the Supervisor column and the widened Team leader one, so
+       // neither is squeezed below the address it now carries.
+       minWidth={1350}
         empty={
           <EmptyState
             title={filter === "all" ? "Nobody is in this round" : "Nothing matches"}
