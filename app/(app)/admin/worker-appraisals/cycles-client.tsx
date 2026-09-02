@@ -117,6 +117,7 @@ export function StartRoundDialog({
   workers,
   raters,
   lastReviewerId,
+  adminIds,
   preselect,
   preselectIds,
 }: {
@@ -133,6 +134,17 @@ export function StartRoundDialog({
    * Null on the very first round, and after that it fills itself in.
    */
   lastReviewerId?: string | null;
+  /**
+   * Everybody holding HR_ADMIN or MD.
+   *
+   * A worker's Reports-to is offered as their rater whatever access level they
+   * hold — the owner's instruction, and right: a line manager should not need a
+   * permission granted before they can rate their own people. What that cannot
+   * do is tell an administrator apart from a shop-floor manager, and a form
+   * landing on HR's desk is not something anybody notices until the message
+   * arrives.
+   */
+  adminIds?: readonly string[];
   /**
    * "increment-due" arrives from the increment calendar's "Start for Production
    * team" button: the name and period are filled in and everybody an increment
@@ -786,6 +798,20 @@ export function StartRoundDialog({
                         {!raterId && !w.supervisorId ? (
                           <span className="w-full font-sans text-body-sm text-ink-muted sm:col-span-3 sm:col-start-2">
                             No Reports-to is set for {w.name}, so there is nobody to default to.
+                          </span>
+                        ) : null}
+
+                        {/* -- The rater is an administrator. A caution, not a
+                              block: HR may genuinely be somebody's manager on a
+                              small site, and refusing would be the app
+                              overruling a fact about the company. It names what
+                              to change, because the fix is on another screen
+                              (§13.4). -- */}
+                        {included && raterId && (adminIds ?? []).includes(raterId) ? (
+                          <span className="w-full font-sans text-body-sm text-warning sm:col-span-3 sm:col-start-2">
+                            {rowRaters.find((r) => r.id === raterId)?.name ?? "That person"} is an
+                            administrator, not a shop-floor manager. The sheet will go to them —
+                            change it here, or fix {w.name}&rsquo;s Reports-to on Settings › Users.
                           </span>
                         ) : null}
 

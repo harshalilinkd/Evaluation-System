@@ -102,6 +102,7 @@ export function WorkerBoard({
   workers,
   raters,
   lastReviewerId,
+  adminIds,
   startDue,
   startWorkerId,
   mdView = false,
@@ -139,6 +140,8 @@ export function WorkerBoard({
   raters: RaterRow[];
   /** Whoever reviewed the last round — the launch dialog's default (0100). */
   lastReviewerId?: string | null;
+  /** Everybody holding HR_ADMIN or MD, so the launch dialog can flag them. */
+  adminIds?: readonly string[];
   /**
    * `?start=due` from the increment calendar's "Start for Production team".
    * Resolved on the server so the client never has to parse a query string, and
@@ -619,6 +622,7 @@ export function WorkerBoard({
         workers={workers}
         raters={raters}
         lastReviewerId={lastReviewerId}
+        adminIds={adminIds}
         preselect={startDue ? "increment-due" : startWorkerId ? "these-people" : undefined}
         preselectIds={startWorkerId ? [startWorkerId] : undefined}
       />

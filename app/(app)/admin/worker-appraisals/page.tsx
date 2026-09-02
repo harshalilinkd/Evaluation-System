@@ -150,6 +150,25 @@ export default async function Page({
     .limit(1)
     .maybeSingle();
 
+  /* -- WHO IS AN ADMINISTRATOR, so the launch dialog can say so.
+        A worker's Reports-to is trusted as their team leader whatever access
+        level they hold — the owner's instruction, and right: a line manager
+        should not need a permission granted before they can rate their own
+        people. What it cannot do is tell an administrator apart from a shop
+        floor manager, and three workers on this roster report to an HR admin
+        or the MD. The form then lands on a desk that has no business rating
+        anybody, and the first anybody knows is a message arriving.
+
+        A caution, not a block: HR may genuinely be somebody's manager on a
+        small site, and refusing it would be the app overruling a fact about
+        the company (§13.4 asks for the reason, not for the door). -- */
+  const { data: adminGrants } = await supabase
+    .from("user_roles")
+    .select("profile_id")
+    .in("role", ["HR_ADMIN", "MD"]);
+
+  const adminIds = [...new Set((adminGrants ?? []).map((r) => r.profile_id))];
+
   const poolIds = (workerPool ?? []).map((w) => w.id);
 
   const { data: liveRows } = poolIds.length
@@ -254,6 +273,7 @@ export default async function Page({
         nextIncrementOn: employmentOf.get(w.id)?.next_increment_date ?? null,
       }))}
       raters={raters}
+      adminIds={adminIds}
       lastReviewerId={lastReviewed?.reviewer_id ?? null}
       startDue={startDue}
       startWorkerId={startWorkerId}
