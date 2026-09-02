@@ -44,6 +44,12 @@ export type WorkerRow = {
    * applied to a date).
    */
   nextIncrementOn?: string | null;
+  /* -- The round they already have an OPEN appraisal in, if any. Not "have
+        they ever been appraised" — a CLOSED one is the ordinary case and a
+        worker is appraised again every period (FIX-43). This is the one that
+        is still being filled in, and a second live sheet for the same person
+        means their team leader is handed two forms in one period. -- */
+  openRoundName?: string | null;
 };
 
 /** A week out, ISO. The round's reminder deadline, derived rather than typed. */
@@ -150,12 +156,17 @@ export function StartRoundDialog({
        "Start increment" on one calendar row sends one id — and a worker paid
        early is precisely why that button exists, so the due rule must not be
        allowed to overrule it. */
+    /* -- Nobody with a live appraisal is ever ticked, whichever way in. Even
+          the named list: "Start increment" for one person is still the wrong
+          thing to do twice, and the row below says which round they are in so
+          HR can go and finish it. -- */
+    const free = workers.filter((w) => !w.openRoundName);
     if (preselect === "these-people") {
       const wanted = new Set(preselectIds ?? []);
-      return workers.filter((w) => wanted.has(w.id));
+      return free.filter((w) => wanted.has(w.id));
     }
     if (preselect === "increment-due") {
-      return workers.filter((w) => isIncrementDue(w.nextIncrementOn ?? null));
+      return free.filter((w) => isIncrementDue(w.nextIncrementOn ?? null));
     }
     return [];
   }, [preselect, preselectIds, workers]);
@@ -643,6 +654,7 @@ export function StartRoundDialog({
                       >
                         <Checkbox
                           checked={included}
+                          disabled={Boolean(w.openRoundName)}
                           onCheckedChange={(checked) =>
                             setChosen((prev) => {
                               const next = new Set(prev);
@@ -651,7 +663,11 @@ export function StartRoundDialog({
                               return next;
                             })
                           }
-                          aria-label={`Include ${w.name}`}
+                          aria-label={
+                            w.openRoundName
+                              ? `${w.name} is already being appraised in ${w.openRoundName}`
+                              : `Include ${w.name}`
+                          }
                         />
 
                         <span className="min-w-0 flex-1 font-sans text-body-sm text-ink sm:flex-none">
@@ -734,6 +750,17 @@ export function StartRoundDialog({
                             ))}
                           </select>
                         </label>
+
+                        {/* -- Already being appraised. §13.4: a control that
+                              cannot be pressed has to say why, and the reason
+                              here is on another screen — so the round is named
+                              rather than just "not available". -- */}
+                        {w.openRoundName ? (
+                          <span className="w-full font-sans text-body-sm text-ink-muted sm:col-span-3 sm:col-start-2">
+                            Already being appraised in {w.openRoundName}. Finish or bin that
+                            round before starting another for them.
+                          </span>
+                        ) : null}
 
                         {/* -- The only case left unresolved: nobody to default
                               to at all. Their Reports-to is now offered

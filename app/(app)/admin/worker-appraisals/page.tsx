@@ -123,6 +123,45 @@ export default async function Page({
       supabase.from("departments").select("id, name"),
     ]);
 
+  /* -- WHO ALREADY HAS A LIVE APPRAISAL, and in which round.
+        Somebody with one open elsewhere must not be ticked into a second: the
+        team leader would get two sheets for the same person in the same period,
+        which is the "multiple links" complaint the staff side had to fix (0096,
+        0091). CLOSED ones are deliberately not counted — a worker being
+        appraised again next period is the ordinary case (FIX-43), and a binned
+        round is not a round.
+
+        Two queries merged in TypeScript rather than an embedded join: the
+        hand-authored `types/database.ts` declares no relationship between these
+        two tables, and supabase-js resolves an embed from exactly that at
+        compile time (F24-19, P3-7). -- */
+  const poolIds = (workerPool ?? []).map((w) => w.id);
+
+  const { data: liveRows } = poolIds.length
+    ? await supabase
+        .from("worker_evaluations")
+        .select("worker_id, cycle_id, status")
+        .in("worker_id", poolIds)
+        .neq("status", "CLOSED")
+        .is("excluded_at", null)
+    : { data: [] };
+
+  const liveCycleIds = [...new Set((liveRows ?? []).map((r) => r.cycle_id))];
+  const { data: liveCycles } = liveCycleIds.length
+    ? await supabase
+        .from("worker_cycles")
+        .select("id, name")
+        .in("id", liveCycleIds)
+        .is("deleted_at", null)
+    : { data: [] };
+
+  const liveCycleName = new Map((liveCycles ?? []).map((c) => [c.id, c.name]));
+  const openRoundOf = new Map<string, string>();
+  for (const r of liveRows ?? []) {
+    const roundName = liveCycleName.get(r.cycle_id);
+    if (roundName && !openRoundOf.has(r.worker_id)) openRoundOf.set(r.worker_id, roundName);
+  }
+
   const decisionOf = new Map((decisions ?? []).map((d) => [d.evaluation_id, d]));
   const employmentOf = new Map((employment ?? []).map((e) => [e.profile_id, e]));
   /* -- 0100 moved the training tick to the decisions row, because the response
@@ -193,6 +232,7 @@ export default async function Page({
         employeeCode: w.employee_code,
         supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
+        openRoundName: openRoundOf.get(w.id) ?? null,
         /* Undefined where there is no employment record, which is "we do not
            know" and not "not due" — the dialog ticks on due, so the two must
            not collapse into one. */

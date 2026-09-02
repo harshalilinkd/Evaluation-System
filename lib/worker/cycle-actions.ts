@@ -268,6 +268,49 @@ export async function launchWorkerCycle(
     );
   }
 
+  /* -- NOBODY WITH A LIVE APPRAISAL ELSEWHERE.
+        Two open sheets for one worker means their team leader is handed two
+        forms for the same person in the same period — the "multiple links"
+        complaint the staff side had to fix (0096, 0091). CLOSED ones are not
+        counted: being appraised again next period is the ordinary case
+        (FIX-43), and a binned round is not a round.
+
+        Re-checked here rather than trusted from the dialog. §9, and the action
+        takes whatever payload it is given. -- */
+  const { data: liveElsewhere } = await supabase
+    .from("worker_evaluations")
+    .select("worker_id, cycle_id, status")
+    .in("worker_id", eligible.map((p) => p.id))
+    .neq("cycle_id", cycleId)
+    .neq("status", "CLOSED")
+    .is("excluded_at", null);
+
+  const liveCycleIds = [...new Set((liveElsewhere ?? []).map((r) => r.cycle_id))];
+  const { data: liveCycles } = liveCycleIds.length
+    ? await supabase
+        .from("worker_cycles")
+        .select("id, name")
+        .in("id", liveCycleIds)
+        .is("deleted_at", null)
+    : { data: [] };
+
+  const liveNames = new Map((liveCycles ?? []).map((c) => [c.id, c.name]));
+  const busy = eligible
+    .map((p) => {
+      const row = (liveElsewhere ?? []).find(
+        (r) => r.worker_id === p.id && liveNames.has(r.cycle_id),
+      );
+      return row ? `${p.full_name} (${liveNames.get(row.cycle_id)})` : null;
+    })
+    .filter((v): v is string => v !== null);
+
+  if (busy.length > 0) {
+    return fail(
+      "ALREADY_IN_A_ROUND",
+      `${busy.join(", ")} ${busy.length === 1 ? "is" : "are"} already being appraised in another round that is still open. Finish or bin it before starting a second one for them.`,
+    );
+  }
+
   const reviewsThemselves = eligible.filter((p) => reviewerOf.get(p.id) === p.id);
   if (reviewsThemselves.length > 0) {
     return fail(
@@ -582,6 +625,49 @@ export async function addWorkersToRound(
     return fail(
       "REVIEWER_NOT_SUPERVISOR",
       `${notSupervisors.map((p) => p.full_name).join(", ")}: the person chosen to review and decide the increment does not hold the Supervisor access level. Grant it on Settings › Users, or pick somebody who has it.`,
+    );
+  }
+
+  /* -- NOBODY WITH A LIVE APPRAISAL ELSEWHERE.
+        Two open sheets for one worker means their team leader is handed two
+        forms for the same person in the same period — the "multiple links"
+        complaint the staff side had to fix (0096, 0091). CLOSED ones are not
+        counted: being appraised again next period is the ordinary case
+        (FIX-43), and a binned round is not a round.
+
+        Re-checked here rather than trusted from the dialog. §9, and the action
+        takes whatever payload it is given. -- */
+  const { data: liveElsewhere } = await supabase
+    .from("worker_evaluations")
+    .select("worker_id, cycle_id, status")
+    .in("worker_id", eligible.map((p) => p.id))
+    .neq("cycle_id", cycleId)
+    .neq("status", "CLOSED")
+    .is("excluded_at", null);
+
+  const liveCycleIds = [...new Set((liveElsewhere ?? []).map((r) => r.cycle_id))];
+  const { data: liveCycles } = liveCycleIds.length
+    ? await supabase
+        .from("worker_cycles")
+        .select("id, name")
+        .in("id", liveCycleIds)
+        .is("deleted_at", null)
+    : { data: [] };
+
+  const liveNames = new Map((liveCycles ?? []).map((c) => [c.id, c.name]));
+  const busy = eligible
+    .map((p) => {
+      const row = (liveElsewhere ?? []).find(
+        (r) => r.worker_id === p.id && liveNames.has(r.cycle_id),
+      );
+      return row ? `${p.full_name} (${liveNames.get(row.cycle_id)})` : null;
+    })
+    .filter((v): v is string => v !== null);
+
+  if (busy.length > 0) {
+    return fail(
+      "ALREADY_IN_A_ROUND",
+      `${busy.join(", ")} ${busy.length === 1 ? "is" : "are"} already being appraised in another round that is still open. Finish or bin it before starting a second one for them.`,
     );
   }
 
