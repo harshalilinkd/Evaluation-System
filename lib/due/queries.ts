@@ -6,17 +6,36 @@ import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { createClient } from "@/lib/supabase/server";
 
 export type DueRow = {
+  /**
+   * The row's key, not the due item's id.
+   *
+   * The list covers the WHOLE Backend Team now, and most of them have nothing
+   * due — so there is no `due_items` row to borrow an id from. Somebody with
+   * nothing due gets `person:<profileId>`, which is stable across renders and,
+   * being obviously not a uuid, cannot be mistaken for one and handed to an
+   * action that expects one.
+   */
   id: string;
+  /**
+   * The `due_items` row, where there is one — and NULL is what says there is
+   * nothing to create for this person.
+   *
+   * Separate from `id` deliberately: every action on this screen operates on a
+   * due item, so making them one field is what would let a "nothing due" row be
+   * passed to `createAndSend` and open an evaluation nobody asked for.
+   */
+  dueItemId: string | null;
   profileId: string;
   name: string;
   employeeCode: string | null;
   department: string | null;
   departmentId: string | null;
-  milestoneType: string;
-  /** Plain language — no enum reaches a screen (§13.5). */
-  what: string;
-  dueOn: string;
-  daysRemaining: number;
+  /** Null where nothing is due for this person. */
+  milestoneType: string | null;
+  /** Plain language — no enum reaches a screen (§13.5). Null where nothing is due. */
+  what: string | null;
+  dueOn: string | null;
+  daysRemaining: number | null;
   designation: string | null;
   leadId: string | null;
   leadName: string | null;
@@ -50,7 +69,17 @@ export type DueRow = {
 
 export type DueList = {
   rows: DueRow[];
-  milestonesDue: number;
+  /**
+   * EVERYBODY on the Backend Team, at the owner's instruction — not the number
+   * of milestones outstanding.
+   *
+   * It counted `rows.length` when a row only existed for somebody with
+   * something due, so the two happened to be the same number and the card was
+   * named after the milestones. The screen now lists the whole team, and the
+   * card is the roster: "who is on this team", against which the other two
+   * cards are the subset that needs attention.
+   */
+  teamTotal: number;
   dueSoon: number;
   overdue: number;
   thisMonth: number;
@@ -125,15 +154,40 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
   if (error) return cycleError("QUERY_FAILED", `Could not read the list: ${error.message}`);
 
   const list = items ?? [];
-  if (list.length === 0) {
-    return { ok: true, data: { rows: [], milestonesDue: 0, dueSoon: 0, overdue: 0, thisMonth: 0 } };
-  }
 
-  const ids = [...new Set(list.map((i) => i.profile_id))];
+  /* -- THE ROSTER IS THE STARTING POINT, not the due items.
+        At the owner's instruction: the first card is "All Backend team" and
+        pressing it shows everybody on it. Built from `profiles` and then
+        joined to whatever is due, rather than the other way round — starting
+        from `due_items` can only ever produce rows for people who have
+        something outstanding, which is the list this replaces.
+
+        STAFF only, and active only. `track` is what separates the two modules
+        (§7): the Production team is appraised on its own rounds and its own
+        tick sheet, and has no milestone schedule at all, so listing them here
+        would offer an action that cannot run. Somebody who has left is not due
+        an appraisal either (P4-5). -- */
   const { data: people } = await supabase
     .from("profiles")
     .select("id, full_name, employee_code, designation, department_id, reports_to, is_active")
-    .in("id", ids);
+    .eq("track", "STAFF")
+    .eq("is_active", true)
+    .order("full_name");
+
+  if (!people || people.length === 0) {
+    return { ok: true, data: { rows: [], teamTotal: 0, dueSoon: 0, overdue: 0, thisMonth: 0 } };
+  }
+
+  const ids = people.map((p) => p.id);
+
+  /* The soonest pending milestone per person. `due_items` is already ordered by
+     `due_on`, so the first one seen is the one that matters — and 0096 keeps at
+     most one pending milestone per person anyway, so this is a backstop rather
+     than a choice. */
+  const dueFor = new Map<string, (typeof list)[number]>();
+  for (const item of list) {
+    if (!dueFor.has(item.profile_id)) dueFor.set(item.profile_id, item);
+  }
 
   const leadIds = [...new Set((people ?? []).map((p) => p.reports_to).filter(Boolean))] as string[];
   const deptIds = [...new Set((people ?? []).map((p) => p.department_id).filter(Boolean))] as string[];
@@ -161,7 +215,8 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
       .order("closed_at", { ascending: false }),
   ]);
 
-  const byId = new Map((people ?? []).map((p) => [p.id, p]));
+  // `byId` is gone with the loop that needed it: the rows are built by walking
+  // the roster itself now, so each person is already in hand.
   const lastClosed = new Map<string, string>();
   for (const row of closed ?? []) {
     if (row.closed_at && !lastClosed.has(row.evaluatee_id)) {
@@ -175,10 +230,8 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
   const deptHasQuestions = new Set((mapped ?? []).map((m) => m.department_id));
 
   const rows: DueRow[] = [];
-  for (const item of list) {
-    const person = byId.get(item.profile_id);
-    // Somebody who has left is not due an appraisal (P4-5).
-    if (!person || !person.is_active) continue;
+  for (const person of people) {
+    const item = dueFor.get(person.id) ?? null;
 
     /* -- Why the primary action would fail, said BEFORE it is pressed.
           §13.4: a disabled control with no explanation is a dead end, and each
@@ -211,22 +264,27 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
     }
 
     rows.push({
-      id: item.id,
-      profileId: item.profile_id,
+      id: item ? item.id : `person:${person.id}`,
+      dueItemId: item?.id ?? null,
+      profileId: person.id,
       name: person.full_name,
       employeeCode: person.employee_code,
       department: person.department_id ? (deptName.get(person.department_id) ?? null) : null,
       departmentId: person.department_id,
-      milestoneType: item.milestone_type,
-      what: milestoneLabel(item.milestone_type),
-      dueOn: item.due_on,
-      daysRemaining: daysUntil(item.due_on),
+      milestoneType: item?.milestone_type ?? null,
+      what: item ? milestoneLabel(item.milestone_type) : null,
+      dueOn: item?.due_on ?? null,
+      daysRemaining: item ? daysUntil(item.due_on) : null,
       designation: person.designation,
-      lastCompletedOn: lastClosed.get(item.profile_id) ?? null,
+      lastCompletedOn: lastClosed.get(person.id) ?? null,
       leadId: person.reports_to,
       leadName: person.reports_to ? (leadName.get(person.reports_to) ?? null) : null,
-      blockedBecause: blocked,
-      blockedFix: fix,
+      /* -- Only meaningful where there is something to create.
+            A person with nothing due has no blocked action, so reporting "no
+            department" against them would be flagging a problem the screen is
+            not offering to solve — noise on every row of a roster. -- */
+      blockedBecause: item ? blocked : null,
+      blockedFix: item ? fix : null,
     });
   }
 
@@ -236,14 +294,15 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
     ok: true,
     data: {
       rows,
-      milestonesDue: rows.length,
-      /* -- "Due soon" replaced "Increments due", which now belongs to the
-            increment calendar. Thirty days is the notice period the schedule
-            itself carries (0076), so the card and the message HR receives are
-            counting the same thing. -- */
-      dueSoon: rows.filter((r) => r.daysRemaining >= 0 && r.daysRemaining <= 30).length,
-      overdue: rows.filter((r) => r.daysRemaining < 0).length,
-      thisMonth: rows.filter((r) => r.dueOn.startsWith(month)).length,
+      // Everybody on the team — the roster the first card now counts.
+      teamTotal: rows.length,
+      /* -- The two attention counts stay counts of MILESTONES, which is why
+            they read `daysRemaining !== null`: a row with nothing due is on the
+            team but is not waiting on anybody, and folding it into either of
+            these would make the cards describe the roster twice. -- */
+      dueSoon: rows.filter((r) => r.daysRemaining !== null && r.daysRemaining >= 0 && r.daysRemaining <= 30).length,
+      overdue: rows.filter((r) => r.daysRemaining !== null && r.daysRemaining < 0).length,
+      thisMonth: rows.filter((r) => r.dueOn !== null && r.dueOn.startsWith(month)).length,
     },
   };
 }
@@ -266,5 +325,17 @@ export async function getDueList(): Promise<CycleResult<DueList>> {
 export async function dueProfileIds(): Promise<string[]> {
   const list = await getDueList();
   if (!list.ok) return [];
-  return [...new Set(list.data.rows.filter((r) => r.daysRemaining <= 30).map((r) => r.profileId))];
+  /* -- `!== null` IS LOAD-BEARING, not a type nicety.
+        The list now carries the whole Backend Team, and a row with nothing due
+        has `daysRemaining === null`. In JavaScript `null <= 30` is TRUE — so
+        without this the wizard would arrive with every employee ticked rather
+        than the ones actually due, which is the exact preselection bug this
+        function exists to keep honest. -- */
+  return [
+    ...new Set(
+      list.data.rows
+        .filter((r) => r.daysRemaining !== null && r.daysRemaining <= 30)
+        .map((r) => r.profileId),
+    ),
+  ];
 }

@@ -58,6 +58,24 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
     { tone: "ok" | "warn" | "error"; text: string } | null
   >(null);
   const [skipping, setSkipping] = React.useState<DueRow | null>(null);
+  /* -- CONFIRMED BEFORE ANYTHING OPENS, and it was not.
+        Reported: "i click on create and review button for one employee and
+        redirected to evaluation cycles page but i didnt launch cycle i close
+        the page so logically evaluation pending for that employee but in
+        evaluation due that employee name is not showing now".
+
+        Nothing was lost — the evaluation HAD been created and was live, which
+        is why they left the due list. The fault is that pressing the button
+        did all of it at once with nothing in between: a real appraisal opened
+        for a real person, their form went live, and the screen then navigated
+        away. The label reads like a way of getting somewhere and the redirect
+        confirms that reading, so closing the next page feels like backing out
+        of something that had not happened yet.
+
+        Every comparable act in the product stops to say what it is about to do
+        — launching a cycle shows a readiness report, skipping one of these
+        asks for a reason. This was the exception. -- */
+  const [creating, setCreating] = React.useState<DueRow | null>(null);
   const [reason, setReason] = React.useState("");
   const [refreshing, setRefreshing] = React.useState(false);
   /* -- The three counts, made pressable. Milestone and increment are the two
@@ -83,10 +101,19 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   const visible = React.useMemo(() => {
     const needle = search.trim().toLowerCase();
     return list.rows.filter((r) => {
-      if (tile === "overdue" && r.daysRemaining >= 0) return false;
+      /* -- `!== null` FIRST, on both, and it is not a formality: the list now
+            carries everybody on the team, and `null >= 0` is FALSE while
+            `null <= 30` is TRUE. Left implicit, "overdue" would silently
+            include every person with nothing due at all. -- */
+      if (tile === "overdue" && !(r.daysRemaining !== null && r.daysRemaining < 0)) return false;
       /* Thirty days AND not already late — the same predicate the count uses,
          so a tile can never disagree with its own number (F50-3). */
-      if (tile === "soon" && !(r.daysRemaining >= 0 && r.daysRemaining <= 30)) return false;
+      if (
+        tile === "soon" &&
+        !(r.daysRemaining !== null && r.daysRemaining >= 0 && r.daysRemaining <= 30)
+      ) {
+        return false;
+      }
       if (department !== ANY && r.department !== department) return false;
       if (!needle) return true;
       /* Name, employee ID and designation — the three things somebody has in
@@ -107,7 +134,14 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         a screen to find out. DISTINCT people, not items: somebody with two
         reviews falling together is one person in one cycle. -- */
   const dueOrOverdueCount = React.useMemo(
-    () => new Set(list.rows.filter((r) => r.daysRemaining <= 30).map((r) => r.profileId)).size,
+    () =>
+      new Set(
+        list.rows
+          // `null <= 30` is true, so without the null test this would count the
+          // whole team and the button would promise a round for everybody.
+          .filter((r) => r.daysRemaining !== null && r.daysRemaining <= 30)
+          .map((r) => r.profileId),
+      ).size,
     [list.rows],
   );
 
@@ -132,6 +166,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
   }
 
   async function onCreate(row: DueRow) {
+    setCreating(null);
     setBusyId(row.id);
     setMessage(null);
     const result = await createAndSend(row.id);
@@ -153,7 +188,10 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             where somebody working through several of these wants to be. -- */
       setMessage({
         tone: "ok",
-        text: `${row.name}'s ${row.what.toLowerCase()} is open. Review and send their links.`,
+        /* `?? "review"` never renders — this runs only from a row that has a
+           due item, and such a row always has a milestone. It is here because
+           the type is honestly nullable now, not because the case is real. */
+        text: `${row.name}'s ${(row.what ?? "review").toLowerCase()} is open. Review and send their links.`,
       });
       if (result.data.cycleId) {
         router.push(`/admin/cycles/${result.data.cycleId}/distribute`);
@@ -162,7 +200,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         // navigating nowhere (§13.4).
         setMessage({
           tone: "warn",
-          text: `${row.name}'s ${row.what.toLowerCase()} is open, but the round could not be opened. Find it under Evaluation Cycles to send their links.`,
+          text: `${row.name}'s ${(row.what ?? "review").toLowerCase()} is open, but the round could not be opened. Find it under Evaluation Cycles to send their links.`,
         });
         router.refresh();
       }
@@ -196,7 +234,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         meta: { frozen: true },
         cell: ({ row }) => (
           <span className="flex min-w-0 items-center gap-2">
-            {row.original.daysRemaining < 0 ? (
+            {row.original.daysRemaining !== null && row.original.daysRemaining < 0 ? (
               <AlertTriangle className="size-3.5 shrink-0 text-critical" aria-hidden />
             ) : null}
             <span title={row.original.name} className="truncate text-body-sm font-medium text-ink">
@@ -255,20 +293,35 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         accessorKey: "what",
         header: "What is due",
         size: 190,
-        cell: ({ row }) => <GridCell value={row.original.what} />,
+        /* -- "Nothing due", not an em dash. The roster now includes people with
+              no milestone outstanding, and a dash in this column would read as
+              a missing value — something the screen failed to work out — rather
+              than as the settled fact that they are not owed a review yet. -- */
+        cell: ({ row }) =>
+          row.original.what ? (
+            <GridCell value={row.original.what} />
+          ) : (
+            <span className="text-body-sm text-ink-faint">Nothing due</span>
+          ),
       },
       {
         id: "month",
         header: "Month",
         size: 130,
-        cell: ({ row }) => <GridCell value={monthLabel(row.original.dueOn.slice(0, 7))} />,
+        cell: ({ row }) => (
+          <GridCell
+            value={row.original.dueOn ? monthLabel(row.original.dueOn.slice(0, 7)) : "—"}
+          />
+        ),
       },
       {
         accessorKey: "dueOn",
         header: "Date",
         size: 120,
         cell: ({ row }) => (
-          <span className="tabular text-body-sm text-ink">{formatDate(row.original.dueOn)}</span>
+          <span className="tabular text-body-sm text-ink">
+            {row.original.dueOn ? formatDate(row.original.dueOn) : "—"}
+          </span>
         ),
       },
       {
@@ -277,7 +330,9 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         size: 96,
         meta: { align: "right" },
         cell: ({ row }) =>
-          row.original.daysRemaining < 0 ? (
+          row.original.daysRemaining === null ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : row.original.daysRemaining < 0 ? (
             // A word as well as the rose — colour is never the only signal (§13.8).
             <span className="tabular text-body-sm font-semibold text-critical">
               {Math.abs(row.original.daysRemaining)} late
@@ -292,7 +347,14 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
         size: 230,
         enableResizing: false,
         cell: ({ row }) =>
-          !canAct ? (
+          /* -- NOTHING TO ACT ON, so no control at all. Every action here
+                operates on a due item, and this row has none — offering a
+                disabled Create against somebody who simply is not owed a
+                review would read as a blocked task rather than as a settled
+                state (§13.4). -- */
+          !row.original.dueItemId ? (
+            <span className="text-body-sm text-ink-faint">—</span>
+          ) : !canAct ? (
             <span className="text-body-sm text-ink-muted">HR acts on this</span>
           ) : row.original.blockedBecause ? (
             // §13.4: the reason sits beside the disabled control, not in a
@@ -329,7 +391,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                 size="sm"
                 className="min-h-11 lg:h-8"
                 disabled={busyId === row.original.id}
-                onClick={() => onCreate(row.original)}
+                onClick={() => setCreating(row.original)}
               >
                 {busyId === row.original.id ? "Working…" : "Create · review links"}
               </Button>
@@ -349,7 +411,11 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
           ),
       },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    /* The disable that sat here is gone with the reason for it: the row's
+       button used to call `onCreate`, a function rebuilt every render, so the
+       dependency list could not be honest. It opens the confirmation now, and
+       `setCreating` is a stable setter — so these two really are the whole
+       list. */
     [canAct, busyId],
   );
 
@@ -368,9 +434,16 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
                 Nothing said it, so the owner reasonably expected to find them
                 here and asked for them to be removed. There was nothing to
                 remove; there was a sentence missing. -- */
+          /* -- THE COUNT NOW DESCRIBES THE TEAM, not the outstanding items.
+                The list is the whole Backend team since the first card became
+                the roster, so "22 in total" would have quietly changed meaning
+                from "milestones waiting" to "people" with the same wording
+                above it. Said as people, with the attention figure kept
+                separate — the two are different questions and the subtitle is
+                where somebody reads which is which. -- */
           list.rows.length === 0
-            ? "No evaluations are waiting. Reviews are worked out from each person's joining date and their last increment, and appear here as the dates approach. Office team only — the production team is not reviewed on intervals. If you have just added somebody, press Check again."
-            : `${list.thisMonth} ${list.thisMonth === 1 ? "thing needs" : "things need"} your attention this month · ${list.rows.length} in total · office team`
+            ? "Nobody is on the Backend team yet. Reviews are worked out from each person's joining date and their last increment, and appear here as the dates approach. Office team only — the production team is not reviewed on intervals."
+            : `${list.thisMonth} ${list.thisMonth === 1 ? "review needs" : "reviews need"} your attention this month · ${list.rows.length} ${list.rows.length === 1 ? "person" : "people"} on the Backend team`
         }
         /* -- ON DEMAND, because the sweep used to run only overnight.
               Somebody entered this morning did not appear until tomorrow, and
@@ -471,9 +544,16 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
       />
 
       <KpiRow>
+        {/* -- THE ROSTER, at the owner's instruction. It read "Milestone
+              evaluations due" and counted only people with something
+              outstanding, which made it a third attention count rather than the
+              denominator the other two are measured against. It is the team
+              now: press it to see everybody, including those with nothing due,
+              and the two cards beside it are the subset that needs work. -- */}
         <KpiCard
-          label="Milestone evaluations due"
-          value={list.milestonesDue}
+          label="All Backend team"
+          value={list.teamTotal}
+          caption="Everybody on the office team"
           tone="self"
           onSelect={() => toggleTile("milestone")}
           active={tile === "milestone"}
@@ -593,12 +673,18 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
               the person — and the gutter is the one focusable control per row,
               so it could not simply be deleted (F59-4). -- */
         rowLabel={{ header: "Employee ID", value: (r) => r.employeeCode ?? "—" }}
-        rowTitle={(r) => `${r.name} · ${r.what}`}
+        rowTitle={(r) => (r.what ? `${r.name} · ${r.what}` : r.name)}
         // §13.4: the reason a control is unavailable sits beside it, never in a
         // tooltip — and the dialog is where somebody reads the whole row, so it
         // is the right place to say why this one cannot go ahead.
         rowActions={(r) =>
-          !canAct ? (
+          // Same rule as the table's action column: no due item, nothing to
+          // offer — and saying so plainly rather than showing a dead button.
+          !r.dueItemId ? (
+            <span className="text-body-sm text-ink-muted">
+              Nothing is due for {r.name} yet.
+            </span>
+          ) : !canAct ? (
             <span className="text-body-sm text-ink-muted">HR acts on this</span>
           ) : r.blockedBecause ? (
             /* -- THE REASON AND THE WAY TO FIX IT, together.
@@ -622,7 +708,7 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
             <Button
               className="min-h-11"
               disabled={busyId === r.id}
-              onClick={() => onCreate(r)}
+              onClick={() => setCreating(r)}
             >
               {busyId === r.id ? "Working…" : "Create · review links"}
             </Button>
@@ -650,13 +736,53 @@ export function DueClient({ list, canAct }: { list: DueList; canAct: boolean }) 
       />
 
 
+      {/* -- WHAT PRESSING IT ACTUALLY DOES, before it does it.
+              Written as consequences rather than as a warning: the point is not
+              that this is dangerous — it is recoverable, and the dialog says
+              how — but that it HAPPENS NOW, which the old flow gave no way of
+              knowing until the person turned up in a cycle. -- */}
+      <Dialog open={creating !== null} onOpenChange={(open) => !open && setCreating(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {creating ? `Open ${creating.name}'s ${(creating.what ?? "review").toLowerCase()}?` : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {creating
+                ? `This creates the evaluation now and opens their form, and ${creating.leadName ?? "their manager"}'s. Nothing is sent yet — the next screen is where you review and send the links.`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* §13.4: the way back, said before the press rather than discovered
+              afterwards. */}
+          <p className="font-sans text-body-sm text-ink-muted">
+            If you change your mind, withdraw them from the round on the cycle
+            board — closing the next screen does not undo it.
+          </p>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreating(null)} className="min-h-11">
+              Cancel
+            </Button>
+            <Button
+              className="min-h-11"
+              disabled={busyId !== null}
+              onClick={() => creating && onCreate(creating)}
+            >
+              Open it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={skipping !== null} onOpenChange={(open) => !open && setSkipping(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Skip this one</DialogTitle>
             <DialogDescription>
               {skipping
-                ? `${skipping.name}'s ${skipping.what.toLowerCase()} will not be created. It stays on the record as skipped.`
+                ? `${skipping.name}'s ${(skipping.what ?? "review").toLowerCase()} will not be created. It stays on the record as skipped.`
                 : ""}
             </DialogDescription>
           </DialogHeader>
