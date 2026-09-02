@@ -6,6 +6,7 @@ import { WorkerBoard } from "@/app/(app)/admin/worker-appraisals/[cycleId]/board
 import { ErrorState } from "@/components/appraise/states";
 import { requireRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { CONTACT_COLUMNS, contactFor } from "@/lib/notify/contacts";
 import { listWorkerRaters } from "@/lib/worker/raters";
 
 export const metadata: Metadata = { title: "Worker appraisals" };
@@ -176,15 +177,22 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
     ),
   ];
   const { data: people } = ids.length
-    ? await supabase.from("profiles").select("id, full_name, email, work_email").in("id", ids)
+    ? await supabase
+        .from("profiles")
+        .select(`id, full_name, ${CONTACT_COLUMNS}`)
+        .in("id", ids)
     : { data: [] };
   const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
-  /* -- The PERSONAL address, falling back to the work one. `contacts.ts` files
-        the production rating invite as personal, so this is the address the
-        sheet actually goes to — showing any other would be printing one thing
-        and sending to another. -- */
+  /* -- THE ADDRESS THE SHEET ACTUALLY GOES TO, resolved by the same function
+        that sends it. Not "the personal one" or "the work one" — asking
+        `contactFor` means the screen cannot disagree with the send, and it
+        cannot drift the next time a template's purpose changes (which is
+        exactly what just happened: the production invite moved from personal
+        to official, and this line needed no edit). -- */
   const emailOf = new Map(
-    (people ?? []).map((p) => [p.id, p.email ?? p.work_email ?? null] as const),
+    (people ?? []).map(
+      (p) => [p.id, contactFor(p, "workerRatingInvite").email] as const,
+    ),
   );
 
   return (

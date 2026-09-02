@@ -28,28 +28,44 @@ import type { TemplateKey } from "@/lib/notify/templates";
 export type ContactPurpose = "personal" | "official";
 
 export const TEMPLATE_PURPOSE: Record<TemplateKey, ContactPurpose> = {
-  /* -- The person's own appraisal. Theirs, personally. -- */
+  /* ====================================================================
+     THE LINE, AT THE OWNER'S EXPLICIT INSTRUCTION:
+
+       PERSONAL is only ever YOUR OWN APPRAISAL — the form you fill in about
+       yourself, it coming back to you, and the result.
+
+       OFFICIAL is everything you receive BECAUSE OF A ROLE YOU HOLD: rating
+       your team, a report waiting on you, an overdue notice, a digest.
+
+     In their words: "all official emails on official no ... she'll get email
+     and message on personal ids only when cycle launch for hr as a employee,
+     they will fill the form self evaluation for them".
+     ==================================================================== */
+
+  /* -- Your own appraisal. Yours, personally. -- */
   selfEvaluationInvite: "personal",
   selfEvaluationReminder: "personal",
   selfEvaluationOverdue: "personal",
   formReturned: "personal",
   evaluationClosed: "personal",
 
-  /* -- The production sheet. PERSONAL, for the same reason the team ratings
-        below are: rating the people on your line is about you as a person in
-        the company rather than an administrative duty. -- */
-  workerRatingInvite: "personal",
+  /* -- Rating somebody else. OFFICIAL, and this REVERSES an earlier
+        instruction that filed it as personal on the reasoning that rating your
+        own reports is about you as a person rather than an administrative
+        duty. The owner has reversed it: you are asked to rate those people
+        because of the position you hold, and it should reach you where work
+        reaches you. Recorded rather than quietly swapped, because the note it
+        replaces argued the opposite.
 
-  /* -- Their team's appraisals.
-        PERSONAL, at the owner's instruction. Rating your own reports is about
-        you as a person in the company rather than an administrative duty — and
-        it is worth stating rather than assuming, because the other reading is
-        just as defensible and somebody will wonder. -- */
-  leadReviewInvite: "personal",
-  leadReviewReminder: "personal",
-  leadReviewOverdue: "personal",
+        It is also what makes the production sheet land correctly. HR is the
+        Reports-to of two shop-floor workers, so the sheet was going to their
+        personal address — reported, and this is the fix. -- */
+  workerRatingInvite: "official",
+  leadReviewInvite: "official",
+  leadReviewReminder: "official",
+  leadReviewOverdue: "official",
 
-  /* -- The administrative job. Everything HR receives BECAUSE they are HR. -- */
+  /* -- The administrative job. Everything received BECAUSE of the role. -- */
   hrDueDigest: "official",
   incrementsOverdue: "official",
   evaluationsOverdue: "official",
