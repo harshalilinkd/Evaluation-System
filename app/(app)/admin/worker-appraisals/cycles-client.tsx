@@ -218,22 +218,26 @@ export function StartRoundDialog({
           whoever filled them. -- */
     raters.filter((r) => r.id !== w.id);
 
-  /* -- WHEN THERE IS EXACTLY ONE, IT FILLS ITSELF IN, at the owner's
-        instruction: today one person holds the access level, and asking HR to
-        pick them from a list of one is a question with a single answer.
+  /* -- ONE CHOICE FOR THE WHOLE ROUND.
+        Prefilling only when exactly one person held the access level was the
+        first answer, and it stopped the moment a second supervisor was added —
+        reported as "when i added one more supervisor its not showing
+        Nandkishor Desai prefilled". With two names the app genuinely cannot
+        know which, and guessing one for a pay decision is worse than asking;
+        but asking twenty-seven times for the same answer is not the
+        alternative. So it is asked ONCE, at the top of the list.
 
-        DERIVED, not seeded into state. Seeding would fix the answer at the
-        moment the dialog opened and then be wrong the instant HR changed the
-        rater to that same person — the list would drop to zero and the stale
-        choice would still be sitting there. `undefined` means "not chosen", so
-        an explicit clear is respected and stays blocked; only an untouched row
-        takes the default. Same shape as `raterFor` above. -- */
-  const reviewerFor = (w: WorkerRow) => {
-    const picked = reviewerOf[w.id];
-    if (picked !== undefined) return picked;
-    const pool = eligibleReviewers(w);
-    return pool.length === 1 ? (pool[0] as RaterRow).id : "";
-  };
+        Seeded from the sole supervisor where there is one, so nothing about
+        that case changes. -- */
+  const [bulkReviewer, setBulkReviewer] = React.useState(() =>
+    raters.length === 1 ? ((raters[0] as RaterRow).id ?? "") : "",
+  );
+
+  /* -- A row falls back to the round's choice. `undefined` means "untouched",
+        so an explicit clear on one row is respected and stays blocked — only
+        rows nobody has set follow the top control, and setting the top control
+        does not overwrite a row somebody has already decided. -- */
+  const reviewerFor = (w: WorkerRow) => reviewerOf[w.id] ?? bulkReviewer;
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -537,6 +541,37 @@ export function StartRoundDialog({
                       : `All ${shown.length} shown`}
                   </span>
                 </label>
+
+                {/* -- ASKED ONCE, not per row.
+                      It sits above the headings rather than in them, because
+                      it is not a column — it is the answer the column takes
+                      unless a row says otherwise, and the sentence beside it
+                      says exactly that. -- */}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-rule bg-surface-mute px-4 py-2.5">
+                  <label className="flex min-w-0 items-center gap-2">
+                    <span className="font-sans text-body-sm text-ink">
+                      Review &amp; Salary decision
+                    </span>
+                    <select
+                      value={bulkReviewer}
+                      onChange={(e) => setBulkReviewer(e.target.value)}
+                      aria-label="Who reviews the ratings and decides the increment, for everybody in this round"
+                      className="min-h-11 min-w-48 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                    >
+                      <option value="">Choose a supervisor</option>
+                      {raters.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.designation ? `${r.name} · ${r.designation}` : r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="font-sans text-body-sm text-ink-muted">
+                    {raters.length === 0
+                      ? "Nobody holds the Supervisor access level yet. Grant it on Settings › Users."
+                      : "Applies to everybody below. Change a single row if one of them differs."}
+                  </span>
+                </div>
 
                 {/* -- COLUMN HEADINGS, and the rows below share their grid.
                       The rows used to be a flex-wrap, so every column started
