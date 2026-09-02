@@ -180,6 +180,33 @@ export function StartRoundDialog({
         appraisal goes straight to HR when the team leader submits, which is
         what every round before 0100 does. -- */
   const [reviewerOf, setReviewerOf] = React.useState<Record<string, string>>({});
+
+  /* -- Who is ELIGIBLE to review this row. The Supervisor access level, minus
+        the person already rating it and the worker themselves: one person
+        cannot be both pairs of eyes. Recomputed per row rather than once,
+        because it depends on who is rating — change the rater and the reviewer
+        list changes with it. -- */
+  const eligibleReviewers = (w: WorkerRow) => {
+    const rater = raterFor(w);
+    return raters.filter((r) => r.id !== rater && r.id !== w.id);
+  };
+
+  /* -- WHEN THERE IS EXACTLY ONE, IT FILLS ITSELF IN, at the owner's
+        instruction: today one person holds the access level, and asking HR to
+        pick them from a list of one is a question with a single answer.
+
+        DERIVED, not seeded into state. Seeding would fix the answer at the
+        moment the dialog opened and then be wrong the instant HR changed the
+        rater to that same person — the list would drop to zero and the stale
+        choice would still be sitting there. `undefined` means "not chosen", so
+        an explicit clear is respected and stays blocked; only an untouched row
+        takes the default. Same shape as `raterFor` above. -- */
+  const reviewerFor = (w: WorkerRow) => {
+    const picked = reviewerOf[w.id];
+    if (picked !== undefined) return picked;
+    const pool = eligibleReviewers(w);
+    return pool.length === 1 ? (pool[0] as RaterRow).id : "";
+  };
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -263,7 +290,10 @@ export function StartRoundDialog({
         [...chosen].map((id) => ({
           workerId: id,
           supervisorId: raterOf[id] ?? workers.find((w) => w.id === id)?.supervisorId ?? null,
-          reviewerId: reviewerOf[id] || null,
+          reviewerId: (() => {
+            const w = workers.find((x) => x.id === id);
+            return w ? reviewerFor(w) || null : null;
+          })(),
         })),
       );
       if (!launched.ok) {
@@ -587,7 +617,7 @@ export function StartRoundDialog({
                             Review &amp; Salary decision
                           </span>
                           <select
-                            value={reviewerOf[w.id] ?? ""}
+                            value={reviewerFor(w)}
                             onChange={(e) =>
                               setReviewerOf((prev) => ({ ...prev, [w.id]: e.target.value }))
                             }
@@ -595,13 +625,11 @@ export function StartRoundDialog({
                             className="min-h-11 min-w-44 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
                           >
                             <option value="">Choose a supervisor</option>
-                            {raters
-                              .filter((r) => r.id !== raterId && r.id !== w.id)
-                              .map((r) => (
-                                <option key={r.id} value={r.id}>
-                                  {r.designation ? `${r.name} · ${r.designation}` : r.name}
-                                </option>
-                              ))}
+                            {eligibleReviewers(w).map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.designation ? `${r.name} · ${r.designation}` : r.name}
+                              </option>
+                            ))}
                           </select>
                         </label>
 
@@ -621,9 +649,9 @@ export function StartRoundDialog({
                           </span>
                         ) : null}
 
-                        {included && raterId && !reviewerOf[w.id] ? (
+                        {included && raterId && !reviewerFor(w) ? (
                           <span className="w-full font-sans text-body-sm text-critical">
-                            {raters.filter((r) => r.id !== raterId && r.id !== w.id).length === 0
+                            {eligibleReviewers(w).length === 0
                               ? `Nobody but ${raters.find((r) => r.id === raterId)?.name ?? "the rater"} holds the Supervisor access level, so there is nobody to review this. Grant it to somebody on Settings › Users.`
                               : `Choose who reviews the ratings for ${w.name} and decides the increment.`}
                           </span>
@@ -668,7 +696,7 @@ export function StartRoundDialog({
               const w = workers.find((x) => x.id === id);
               // Both halves. The review step is not optional (0100 as amended),
               // so a round missing one is a round that cannot run.
-              return !w || !raterFor(w) || !reviewerOf[w.id];
+              return !w || !raterFor(w) || !reviewerFor(w);
             })}
             className="min-h-11"
           >
@@ -723,7 +751,13 @@ export function AddWorkersDialog({
         always join the same supervisor's line; a per-row picker here would be
         four controls to answer one question. Left empty means straight to HR,
         exactly as it does at launch. -- */
-  const [reviewerId, setReviewerId] = React.useState("");
+  /* -- Prefilled when exactly one person holds the access level, for the same
+        reason as the launch dialog: a list of one is not a choice. State rather
+        than derived here because there is no rater on this screen for it to
+        depend on — the value cannot go stale. -- */
+  const [reviewerId, setReviewerId] = React.useState(() =>
+    raters.length === 1 ? ((raters[0] as RaterRow).id ?? "") : "",
+  );
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
