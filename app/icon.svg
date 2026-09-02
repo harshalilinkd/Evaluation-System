@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Appraisal">
+  <!--
+    The browser-tab mark.
+
+    THREE ASCENDING BARS IN THE THREE TIER COLOURS — Self, Lead, Final, left to
+    right, in §13.1's own order. It is the one picture of what this product does
+    that nothing else on the machine will look like: a company logo shrunk to
+    16px reads as a coloured smudge, and a letter "A" is shared with half the
+    tabs already open.
+
+    The hues are the DARK-theme tier values (#22D3EE / #F472B6 / #818CF8), not
+    the light ones, because they sit on the navy of the sidebar rail — the light
+    values are tuned for a white page and go muddy here. This is the same
+    exception print.css takes: a favicon is a file, not a component, and there
+    is no custom property for it to read (§2's rule is about components).
+
+    Deliberately not decorative use of a reserved hue: the bars ARE the three
+    layers, in their order, which is what those colours mean everywhere else.
+  -->
+  <rect width="32" height="32" rx="7" fill="#1E293B"/>
+  <rect x="5"  y="18" width="6" height="8"  rx="1.5" fill="#22D3EE"/>
+  <rect x="13" y="13" width="6" height="13" rx="1.5" fill="#F472B6"/>
+  <rect x="21" y="8"  width="6" height="18" rx="1.5" fill="#818CF8"/>
+</svg>
