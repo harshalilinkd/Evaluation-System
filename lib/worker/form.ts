@@ -228,8 +228,17 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
       answers: (response?.answers ?? {}) as Record<string, WorkerTick>,
       hasReviewer,
       alsoDecides,
+      /* -- TWO DIFFERENT COMMENTS, at the owner's instruction.
+            With a separate supervisor this is the TEAM LEADER'S own comment,
+            written beside the ticks they are making and stored on their own
+            response row — theirs, and locked with the rest of their layer when
+            they submit. The SUPERVISOR's comment is a different field on a
+            different screen, filed with the salary decision they make.
+            Where one person does both, there is one comment and it is the
+            supervisor's, because that is the one HR reads beside the pay
+            recommendation. -- */
       overallComment: hasReviewer
-        ? ""
+        ? (response?.overall_comment ?? "")
         : alsoDecides
           ? (combined?.supervisor_comment ?? "")
           : (response?.overall_comment ?? ""),
@@ -310,16 +319,23 @@ export async function saveWorkerSheet(
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
-      /* -- 0100: only where nobody is reviewing. With a supervisor assigned
-            these two belong to them, on their own screen, and a browser still
-            sending them is out of date rather than malicious — so they are
-            dropped rather than refused. -- */
-      ...(sheet.data.layer === "SUPERVISOR" &&
-      !sheet.data.hasReviewer &&
-      !sheet.data.alsoDecides
+      /* -- The comment is written on EVERY supervisor-layer path, because on
+            each of them somebody is writing one: the team leader's own where a
+            supervisor reviews separately, and the decider's where they do not.
+
+            IT WAS BEING DROPPED. 0100 excluded it whenever a reviewer existed,
+            while the screen went on rendering the box — so a team leader typed
+            a comment, saw "saved", and it went nowhere. Rendered-and-ignored is
+            the worst of the three options (§0.7).
+
+            `training_required` is NOT written here once a supervisor reviews:
+            it is theirs, on their screen, filed with the salary decision. -- */
+      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
-            training_required: extras?.trainingRequired ?? null,
+            ...(sheet.data.hasReviewer
+              ? {}
+              : { training_required: extras?.trainingRequired ?? null }),
           }
         : {}),
     })
@@ -378,16 +394,23 @@ export async function submitWorkerSheet(
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
-      /* -- 0100: only where nobody is reviewing. With a supervisor assigned
-            these two belong to them, on their own screen, and a browser still
-            sending them is out of date rather than malicious — so they are
-            dropped rather than refused. -- */
-      ...(sheet.data.layer === "SUPERVISOR" &&
-      !sheet.data.hasReviewer &&
-      !sheet.data.alsoDecides
+      /* -- The comment is written on EVERY supervisor-layer path, because on
+            each of them somebody is writing one: the team leader's own where a
+            supervisor reviews separately, and the decider's where they do not.
+
+            IT WAS BEING DROPPED. 0100 excluded it whenever a reviewer existed,
+            while the screen went on rendering the box — so a team leader typed
+            a comment, saw "saved", and it went nowhere. Rendered-and-ignored is
+            the worst of the three options (§0.7).
+
+            `training_required` is NOT written here once a supervisor reviews:
+            it is theirs, on their screen, filed with the salary decision. -- */
+      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
-            training_required: extras?.trainingRequired ?? null,
+            ...(sheet.data.hasReviewer
+              ? {}
+              : { training_required: extras?.trainingRequired ?? null }),
           }
         : {}),
     })

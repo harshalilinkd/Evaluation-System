@@ -437,8 +437,16 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
             worker cannot read them however the screen changes later. -- */}
       {!isSelf ? (
         <div className="card-surface space-y-5 p-4 sm:p-5">
+          {/* -- NAMED FOR WHOEVER IS WRITING IT, at the owner's instruction.
+                Where a supervisor reviews separately this is the TEAM LEADER's
+                own comment — theirs, beside the ticks they are making — and the
+                supervisor writes a different one on their own screen, filed
+                with the salary decision. Where one person does both there is
+                one comment and it is the supervisor's. -- */}
           <div className="space-y-2">
-            <Label htmlFor="worker_comment">Supervisor comment</Label>
+            <Label htmlFor="worker_comment">
+              {sheet.hasReviewer ? "Team leader's comment" : "Supervisor comment"}
+            </Label>
             <Textarea
               id="worker_comment"
               value={comment}
@@ -450,9 +458,22 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
               rows={4}
               placeholder="Anything worth recording about how they have worked this period."
             />
+            {sheet.hasReviewer ? (
+              <p className="font-sans text-body-sm text-ink-muted">
+                Their supervisor reads this alongside your ratings before deciding on training
+                and any increment.
+              </p>
+            ) : null}
           </div>
 
-          <fieldset className="space-y-2" disabled={readOnly}>
+          {/* -- TRAINING IS THE SUPERVISOR'S, and it is not on this sheet once
+                one is assigned: it belongs with the salary decision they make.
+                It was being RENDERED here and dropped on save — a field
+                somebody fills in that goes nowhere (§0.7). -- */}
+          <fieldset
+            className={cn("space-y-2", sheet.hasReviewer && "hidden")}
+            disabled={readOnly || sheet.hasReviewer}
+          >
             <legend className="font-sans text-body font-medium text-ink">Training required</legend>
             <div className="flex gap-2">
               {/* Three states, not two: null is "not answered yet", which is a

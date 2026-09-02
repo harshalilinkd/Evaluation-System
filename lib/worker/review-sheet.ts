@@ -42,6 +42,11 @@ export type WorkerReviewSheet = {
         to themselves, which reads as the page not knowing who is looking. -- */
   ratedByYou: boolean;
   ratedAt: string | null;
+  /* -- What the TEAM LEADER wrote beside their ticks. Read-only here, and a
+        different field from the supervisor's own comment below — the two are
+        written by two people about the same person, and merging them would
+        lose which of them said it. -- */
+  raterComment: string;
   cycleName: string;
   periodLabel: string;
   rows: WorkerReviewRow[];
@@ -123,7 +128,7 @@ export async function getWorkerReviewSheet(
             theirs to read than they were before (§5). -- */
       supabase
         .from("worker_evaluation_responses")
-        .select("answers, submitted_at")
+        .select("answers, submitted_at, overall_comment")
         .eq("evaluation_id", evaluationId)
         .eq("layer", "SUPERVISOR")
         .maybeSingle(),
@@ -160,6 +165,7 @@ export async function getWorkerReviewSheet(
       ratedBy: rater?.full_name ?? null,
       ratedByYou: evaluation.supervisor_id === profile.id,
       ratedAt: response?.submitted_at ?? evaluation.supervisor_submitted_at,
+      raterComment: response?.overall_comment ?? "",
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",
       rows: (snapshot ?? []).map((q) => ({

@@ -30,6 +30,8 @@ export type WorkerReview = {
   periodLabel: string;
   status: string;
   rows: WorkerReviewRow[];
+  /** What the TEAM LEADER wrote beside their ticks (0102). */
+  raterComment: string;
   supervisorComment: string;
   trainingRequired: boolean | null;
   overallTick: string | null;
@@ -207,7 +209,14 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
             appraisal filed before 0100 has them there and nowhere else —
             dropping it would blank the comment on historic records rather than
             show it. -- */
-      supervisorComment: decisions?.supervisor_comment ?? supervisorRow?.overall_comment ?? "",
+      /* -- TWO COMMENTS NOW, and HR reads both.
+            The team leader writes theirs beside the ticks; the supervisor
+            writes theirs beside the salary decision. The fallback below is what
+            keeps every appraisal filed before 0100 readable: there, one person
+            wrote one comment and it is on the response row. -- */
+      raterComment: supervisorRow?.overall_comment ?? "",
+      supervisorComment:
+        decisions?.supervisor_comment ?? (decisions ? "" : (supervisorRow?.overall_comment ?? "")),
       trainingRequired: decisions?.training_required ?? supervisorRow?.training_required ?? null,
       overallTick: evaluation.overall_tick,
       currentCtcOnRecord: employment?.current_ctc ?? null,

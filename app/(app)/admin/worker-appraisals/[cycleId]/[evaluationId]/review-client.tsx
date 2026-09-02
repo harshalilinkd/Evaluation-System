@@ -418,6 +418,19 @@ export function WorkerReviewClient({
             {review.trainingRequired === null ? "Not answered" : review.trainingRequired ? "Yes" : "No"}
           </p>
         </div>
+        {/* -- Shown only when it differs from the supervisor's, which is the
+              case where two different people wrote about the same worker. On
+              an older appraisal, or where one person did both, there is one
+              comment and printing it twice under two headings would invent a
+              second author. -- */}
+        {review.raterComment && review.raterComment !== review.supervisorComment ? (
+          <div className="sm:col-span-3">
+            <p className="type-label text-ink-muted">Team leader&rsquo;s comment</p>
+            <p className="mt-1 whitespace-pre-wrap font-sans text-body text-ink">
+              {review.raterComment}
+            </p>
+          </div>
+        ) : null}
         <div className="sm:col-span-3">
           <p className="type-label text-ink-muted">Supervisor comment</p>
           <p className="mt-1 whitespace-pre-wrap font-sans text-body text-ink">

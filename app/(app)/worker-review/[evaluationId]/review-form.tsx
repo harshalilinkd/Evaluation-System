@@ -192,6 +192,20 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
         ))}
       </div>
 
+      {/* -- What the team leader wrote, if anything. Read-only, and above the
+            supervisor's own box so it is read before it is answered. Absent
+            rather than an empty card when they wrote nothing: a blank box
+            headed with somebody's name reads as a comment that failed to
+            load. -- */}
+      {sheet.raterComment ? (
+        <div className="card-surface space-y-2 p-4 sm:p-5">
+          <p className="type-label text-ink-muted">
+            {sheet.ratedByYou ? "Your comment" : `${sheet.ratedBy ?? "Team leader"}'s comment`}
+          </p>
+          <p className="whitespace-pre-wrap font-sans text-body text-ink">{sheet.raterComment}</p>
+        </div>
+      ) : null}
+
       {/* ---------- The supervisor's own three fields ---------- */}
       <div className="card-surface space-y-5 p-4 sm:p-5">
         <div>
