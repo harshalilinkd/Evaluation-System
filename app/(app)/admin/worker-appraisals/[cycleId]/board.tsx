@@ -101,6 +101,7 @@ export function WorkerBoard({
   rows,
   workers,
   raters,
+  lastReviewerId,
   startDue,
   startWorkerId,
   mdView = false,
@@ -136,6 +137,8 @@ export function WorkerBoard({
   rows: BoardRow[];
   workers: WorkerRow[];
   raters: RaterRow[];
+  /** Whoever reviewed the last round — the launch dialog's default (0100). */
+  lastReviewerId?: string | null;
   /**
    * `?start=due` from the increment calendar's "Start for Production team".
    * Resolved on the server so the client never has to parse a query string, and
@@ -615,6 +618,7 @@ export function WorkerBoard({
         onOpenChange={setStarting}
         workers={workers}
         raters={raters}
+        lastReviewerId={lastReviewerId}
         preselect={startDue ? "increment-due" : startWorkerId ? "these-people" : undefined}
         preselectIds={startWorkerId ? [startWorkerId] : undefined}
       />

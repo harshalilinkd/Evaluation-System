@@ -87,6 +87,21 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         hand-authored `types/database.ts` declares no relationship between these
         two tables, and supabase-js resolves an embed from exactly that at
         compile time (F24-19, P3-7). -- */
+  /* -- WHOEVER REVIEWED LAST TIME, as the launch dialog's default.
+        Once more than one person holds the Supervisor access level the app has
+        no basis for choosing between them, and picking one alphabetically
+        would assign a pay recommendation by accident. "The same person as last
+        round" is a real answer rather than a guess — and it comes from the
+        data, so it works for every HR user rather than only the browser that
+        set it. Null on the very first round. -- */
+  const { data: lastReviewed } = await supabase
+    .from("worker_evaluations")
+    .select("reviewer_id, created_at")
+    .not("reviewer_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const poolIds = (workerPool ?? []).map((w) => w.id);
 
   const { data: liveRows } = poolIds.length
@@ -184,6 +199,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         openRoundName: openRoundOf.get(w.id) ?? null,
       }))}
       raters={raters}
+      lastReviewerId={lastReviewed?.reviewer_id ?? null}
     />
   );
 }

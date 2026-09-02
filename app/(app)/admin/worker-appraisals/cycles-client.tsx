@@ -116,6 +116,7 @@ export function StartRoundDialog({
   onOpenChange,
   workers,
   raters,
+  lastReviewerId,
   preselect,
   preselectIds,
 }: {
@@ -123,6 +124,15 @@ export function StartRoundDialog({
   onOpenChange: (open: boolean) => void;
   workers: WorkerRow[];
   raters: RaterRow[];
+  /**
+   * Whoever reviewed the last round. "Same as last time" is the only honest
+   * default once more than one person holds the access level — the app has no
+   * basis for choosing between two names, and picking one alphabetically would
+   * assign a pay recommendation by accident.
+   *
+   * Null on the very first round, and after that it fills itself in.
+   */
+  lastReviewerId?: string | null;
   /**
    * "increment-due" arrives from the increment calendar's "Start for Production
    * team" button: the name and period are filled in and everybody an increment
@@ -240,9 +250,16 @@ export function StartRoundDialog({
 
         Seeded from the sole supervisor where there is one, so nothing about
         that case changes. -- */
-  const [bulkReviewer, setBulkReviewer] = React.useState(() =>
-    raters.length === 1 ? ((raters[0] as RaterRow).id ?? "") : "",
-  );
+  const [bulkReviewer, setBulkReviewer] = React.useState(() => {
+    /* -- Last round's reviewer first, and only if they still hold the access
+          level — somebody whose Supervisor grant has been taken away must not
+          come back as a default. Then the sole supervisor, where there is one.
+          Otherwise blank: two names and no basis to choose between them is a
+          question, and answering it by guessing would put a pay recommendation
+          on somebody by accident. -- */
+    if (lastReviewerId && raters.some((r) => r.id === lastReviewerId)) return lastReviewerId;
+    return raters.length === 1 ? ((raters[0] as RaterRow).id ?? "") : "";
+  });
 
   /* -- A row falls back to the round's choice. `undefined` means "untouched",
         so an explicit clear on one row is respected and stays blocked — only
