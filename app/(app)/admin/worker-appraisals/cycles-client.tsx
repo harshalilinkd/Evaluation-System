@@ -62,6 +62,18 @@ function thisMonthLabel(): string {
   });
 }
 
+/* -- ONE GRID TEMPLATE, shared by the roster's heading row and every row under
+      it. Declared here rather than repeated in both places: two copies of a
+      column template is two copies that must agree for ever, and the one that
+      drifts is the one nobody is looking at.
+
+      Four columns — tick, worker, rater, reviewer. Below `sm` it is not applied
+      at all and the row falls back to the wrapping flex layout underneath,
+      where each control carries its own label; four columns across a phone
+      would be about sixty pixels each. -- */
+const GRID_ROW =
+  "sm:grid sm:grid-cols-[1.25rem_minmax(0,1fr)_13rem_15rem] sm:items-center sm:gap-3";
+
 export type RaterRow = {
   id: string;
   name: string;
@@ -526,6 +538,28 @@ export function StartRoundDialog({
                   </span>
                 </label>
 
+                {/* -- COLUMN HEADINGS, and the rows below share their grid.
+                      The rows used to be a flex-wrap, so every column started
+                      wherever the previous one happened to end and no two lines
+                      agreed — which is what "not structured" was pointing at.
+                      One grid template, declared once here and reused on every
+                      row, is what makes the columns line up.
+
+                      Outside the scroller on purpose: a heading that scrolls
+                      away stops naming the thing underneath it. Hidden below
+                      `sm`, where the row stacks and carries its own labels. -- */}
+                <div
+                  className={cn(
+                    "hidden border-b border-rule bg-surface-mute px-4 py-2",
+                    GRID_ROW,
+                  )}
+                >
+                  <span aria-hidden />
+                  <span className="type-label text-ink-muted">Worker</span>
+                  <span className="type-label text-ink-muted">Rated by</span>
+                  <span className="type-label text-ink-muted">Review &amp; Salary decision</span>
+                </div>
+
                 {/* 320px rather than 256px: five rows is the common preselected
                     round, and a box that cuts the fifth in half reads as though
                     something is missing. Still bounded, so twenty-eight people
@@ -567,7 +601,10 @@ export function StartRoundDialog({
                     return (
                       <li
                         key={w.id}
-                        className="flex flex-wrap items-center gap-3 border-b border-rule px-4 py-2.5 last:border-b-0"
+                        className={cn(
+                          "flex flex-wrap items-center gap-3 border-b border-rule px-4 py-2.5 last:border-b-0",
+                          GRID_ROW,
+                        )}
                       >
                         <Checkbox
                           checked={included}
@@ -582,7 +619,7 @@ export function StartRoundDialog({
                           aria-label={`Include ${w.name}`}
                         />
 
-                        <span className="min-w-0 flex-1 font-sans text-body-sm text-ink">
+                        <span className="min-w-0 flex-1 font-sans text-body-sm text-ink sm:flex-none">
                           {w.name}
                         </span>
 
@@ -591,15 +628,24 @@ export function StartRoundDialog({
                               profile's Reports-to happened to say. Showing it
                               was not enough: somebody has to be able to fix it
                               at the moment they notice it is wrong. -- */}
-                        <label className="flex items-center gap-2">
-                          <span className="font-sans text-body-sm text-ink-muted">Rated by</span>
+                        {/* -- `sm:contents` makes the select a DIRECT grid
+                              child, so it lands in the column rather than
+                              inside a box of its own that the grid would then
+                              size. The visible label goes with it — the heading
+                              above names the column at that width — and the
+                              select keeps its own `aria-label`, which is what
+                              names it for a screen reader either way. -- */}
+                        <label className="flex items-center gap-2 sm:contents">
+                          <span className="font-sans text-body-sm text-ink-muted sm:hidden">
+                            Rated by
+                          </span>
                           <select
                             value={raterId}
                             onChange={(e) =>
                               setRaterOf((prev) => ({ ...prev, [w.id]: e.target.value }))
                             }
                             aria-label={`Who rates ${w.name}`}
-                            className="min-h-11 min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                            className="min-h-11 w-full min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink sm:min-w-0"
                           >
                             <option value="">Nobody chosen</option>
                             {rowRaters.map((r) => (
@@ -627,8 +673,8 @@ export function StartRoundDialog({
                               filtered out because one person cannot be both
                               pairs of eyes, and the action refuses it anyway
                               (§9: the screen is not the guard). -- */}
-                        <label className="flex items-center gap-2">
-                          <span className="font-sans text-body-sm text-ink-muted">
+                        <label className="flex items-center gap-2 sm:contents">
+                          <span className="font-sans text-body-sm text-ink-muted sm:hidden">
                             Review &amp; Salary decision
                           </span>
                           <select
@@ -637,7 +683,7 @@ export function StartRoundDialog({
                               setReviewerOf((prev) => ({ ...prev, [w.id]: e.target.value }))
                             }
                             aria-label={`Who reviews the ratings and decides the increment for ${w.name}`}
-                            className="min-h-11 min-w-44 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                            className="min-h-11 w-full min-w-44 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink sm:min-w-0"
                           >
                             <option value="">Choose a supervisor</option>
                             {eligibleReviewers(w).map((r) => (
@@ -659,19 +705,19 @@ export function StartRoundDialog({
                               regardless of access level, so this fires only
                               when the profile has no Reports-to set. -- */}
                         {!raterId && !w.supervisorId ? (
-                          <span className="w-full font-sans text-body-sm text-ink-muted">
+                          <span className="w-full font-sans text-body-sm text-ink-muted sm:col-span-3 sm:col-start-2">
                             No Reports-to is set for {w.name}, so there is nobody to default to.
                           </span>
                         ) : null}
 
                         {included && !raterId ? (
-                          <span className="w-full font-sans text-body-sm text-critical">
+                          <span className="w-full font-sans text-body-sm text-critical sm:col-span-3 sm:col-start-2">
                             Choose who rates {w.name} before starting.
                           </span>
                         ) : null}
 
                         {included && raterId && !reviewerFor(w) ? (
-                          <span className="w-full font-sans text-body-sm text-critical">
+                          <span className="w-full font-sans text-body-sm text-critical sm:col-span-3 sm:col-start-2">
                             {raters.length === 0
                               ? "Nobody holds the Supervisor access level yet, so there is nobody to review this. Grant it to somebody on Settings › Users."
                               : `Choose who reviews the ratings for ${w.name} and decides the increment.`}
@@ -682,7 +728,7 @@ export function StartRoundDialog({
                               look like a mistake on a screen full of rows where
                               two different people are named. -- */}
                         {included && raterId && reviewerFor(w) === raterId ? (
-                          <span className="w-full font-sans text-body-sm text-ink-muted">
+                          <span className="w-full font-sans text-body-sm text-ink-muted sm:col-span-3 sm:col-start-2">
                             {raters.find((r) => r.id === raterId)?.name ?? "They"} rates{" "}
                             {w.name} and decides the increment on the same form — one
                             step, straight to HR.
