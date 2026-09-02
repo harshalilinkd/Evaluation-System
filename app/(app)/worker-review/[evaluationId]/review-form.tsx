@@ -239,8 +239,7 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
           {sheet.raterTraining !== null ? (
             <p className="font-sans text-body-sm text-ink-muted">
               {sheet.ratedByYou ? "You" : (sheet.ratedBy ?? "The team leader")} recommended{" "}
-              <span className="text-ink">{sheet.raterTraining ? "Yes" : "No"}</span>. Yours is the
-              answer HR reads.
+              <span className="text-ink">{sheet.raterTraining ? "Yes" : "No"}</span>.
             </p>
           ) : null}
           <div className="flex gap-2">
