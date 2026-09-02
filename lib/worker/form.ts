@@ -242,11 +242,15 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         : alsoDecides
           ? (combined?.supervisor_comment ?? "")
           : (response?.overall_comment ?? ""),
-      trainingRequired: hasReviewer
-        ? null
-        : alsoDecides
-          ? (combined?.training_required ?? null)
-          : (response?.training_required ?? null),
+      /* -- The TEAM LEADER answers this too, at the owner's instruction —
+            they are the one who sees whether somebody needs training. It is
+            their RECOMMENDATION, on their own row; the supervisor's answer on
+            the decisions row is the one HR reads, and it arrives prefilled with
+            this. Not one control in two places (P8P-5): two stages of one
+            decision, like the recommended percentage and the figure HR sets. -- */
+      trainingRequired: alsoDecides
+        ? (combined?.training_required ?? null)
+        : (response?.training_required ?? null),
       salary:
         layer !== "SUPERVISOR" || hasReviewer
           ? null
@@ -333,9 +337,7 @@ export async function saveWorkerSheet(
       ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
-            ...(sheet.data.hasReviewer
-              ? {}
-              : { training_required: extras?.trainingRequired ?? null }),
+            training_required: extras?.trainingRequired ?? null,
           }
         : {}),
     })
@@ -408,9 +410,7 @@ export async function submitWorkerSheet(
       ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.alsoDecides
         ? {
             overall_comment: extras?.overallComment ?? null,
-            ...(sheet.data.hasReviewer
-              ? {}
-              : { training_required: extras?.trainingRequired ?? null }),
+            training_required: extras?.trainingRequired ?? null,
           }
         : {}),
     })

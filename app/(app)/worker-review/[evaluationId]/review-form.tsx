@@ -232,6 +232,17 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
 
         <fieldset className="space-y-2" disabled={readOnly}>
           <legend className="font-sans text-body font-medium text-ink">Training required</legend>
+          {/* -- What they recommended, said plainly. The control below starts on
+                it, so agreeing costs nothing and disagreeing is a deliberate
+                press — which is what makes this two stages of one decision
+                rather than the same question asked twice. -- */}
+          {sheet.raterTraining !== null ? (
+            <p className="font-sans text-body-sm text-ink-muted">
+              {sheet.ratedByYou ? "You" : (sheet.ratedBy ?? "The team leader")} recommended{" "}
+              <span className="text-ink">{sheet.raterTraining ? "Yes" : "No"}</span>. Yours is the
+              answer HR reads.
+            </p>
+          ) : null}
           <div className="flex gap-2">
             {/* Three states, not two: null is "not answered yet", which is a
                 different thing from No and must not default to it. */}

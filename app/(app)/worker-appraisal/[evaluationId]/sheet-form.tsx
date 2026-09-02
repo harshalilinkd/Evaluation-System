@@ -458,22 +458,20 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
               rows={4}
               placeholder="Anything worth recording about how they have worked this period."
             />
-            {sheet.hasReviewer ? (
-              <p className="font-sans text-body-sm text-ink-muted">
-                Their supervisor reads this alongside your ratings before deciding on training
-                and any increment.
-              </p>
-            ) : null}
+            {/* -- NOTHING HERE ABOUT WHAT HAPPENS NEXT, at the owner's
+                  instruction. The line that stood here said the supervisor
+                  reads this before deciding on an increment — which tells the
+                  team leader that somebody sets pay off the back of their
+                  ratings, and §5 confines salary to HR and the MD (0064 keeps
+                  even the supervisor to a percentage). The label already names
+                  whose comment it is; that is all this sheet needs to say. -- */}
           </div>
 
-          {/* -- TRAINING IS THE SUPERVISOR'S, and it is not on this sheet once
-                one is assigned: it belongs with the salary decision they make.
-                It was being RENDERED here and dropped on save — a field
-                somebody fills in that goes nowhere (§0.7). -- */}
-          <fieldset
-            className={cn("space-y-2", sheet.hasReviewer && "hidden")}
-            disabled={readOnly || sheet.hasReviewer}
-          >
+          {/* -- BACK ON THIS SHEET, at the owner's instruction. The team leader
+                is the one who sees whether somebody needs training, so they
+                answer it; where a supervisor reviews, theirs is the final
+                answer and it arrives prefilled with this one. -- */}
+          <fieldset className="space-y-2" disabled={readOnly}>
             <legend className="font-sans text-body font-medium text-ink">Training required</legend>
             <div className="flex gap-2">
               {/* Three states, not two: null is "not answered yet", which is a
@@ -692,7 +690,12 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                      the team leader their part was the last one, and the first
                      they would hear otherwise is somebody asking them about a
                      training tick they were never shown. -- */
-                `Your ratings for ${sheet.workerName} are recorded. Their supervisor reviews them next and decides on training and any increment.`
+                /* -- Says it has gone on, and NOT what happens to it. The
+                      earlier wording named the increment decision, which tells
+                      the team leader that pay is set off the back of their
+                      ratings — the same leak the hint above the comment box
+                      had, and §5 confines salary to HR and the MD. -- */
+                `Your ratings for ${sheet.workerName} are recorded. Their supervisor reviews them next.`
               : sheet.alsoDecides
                 ? `Your ratings and your decision for ${sheet.workerName} are recorded and are with HR. Nothing more is needed from you.`
                 : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`

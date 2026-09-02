@@ -47,6 +47,11 @@ export type WorkerReviewSheet = {
         written by two people about the same person, and merging them would
         lose which of them said it. -- */
   raterComment: string;
+  /* -- What the team leader RECOMMENDED for training. Context, and the
+        starting value for the supervisor's own answer below — theirs is the one
+        HR reads, so it has to be settable, and starting it blank would make
+        them re-answer a question already answered. -- */
+  raterTraining: boolean | null;
   cycleName: string;
   periodLabel: string;
   rows: WorkerReviewRow[];
@@ -128,7 +133,7 @@ export async function getWorkerReviewSheet(
             theirs to read than they were before (§5). -- */
       supabase
         .from("worker_evaluation_responses")
-        .select("answers, submitted_at, overall_comment")
+        .select("answers, submitted_at, overall_comment, training_required")
         .eq("evaluation_id", evaluationId)
         .eq("layer", "SUPERVISOR")
         .maybeSingle(),
@@ -166,6 +171,7 @@ export async function getWorkerReviewSheet(
       ratedByYou: evaluation.supervisor_id === profile.id,
       ratedAt: response?.submitted_at ?? evaluation.supervisor_submitted_at,
       raterComment: response?.overall_comment ?? "",
+      raterTraining: response?.training_required ?? null,
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",
       rows: (snapshot ?? []).map((q) => ({
@@ -179,7 +185,11 @@ export async function getWorkerReviewSheet(
       salaryChanged: decision?.salary_changed ?? false,
       incrementPct: decision?.increment_pct ?? null,
       comment: decision?.supervisor_comment ?? "",
-      trainingRequired: decision?.training_required ?? null,
+      /* -- The supervisor's own answer, falling back to the team leader's
+            recommendation until they set one. So an untouched review still
+            sends a real answer on rather than a blank the guard would refuse
+            for a question somebody already answered. -- */
+      trainingRequired: decision?.training_required ?? response?.training_required ?? null,
       isOpen: evaluation.status === "PENDING_SUPERVISOR" && !evaluation.reviewer_skipped,
       isSent: evaluation.reviewer_submitted_at !== null,
     },
