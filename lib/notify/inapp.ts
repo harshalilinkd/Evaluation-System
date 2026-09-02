@@ -42,6 +42,13 @@ const IN_APP_TEXT: Record<TemplateKey, { title: string; body: string }> = {
     title: "Your self-evaluation is overdue",
     body: "The date has passed. It can still be submitted.",
   },
+  /* -- Nothing interpolated, as in every other entry (N1-3): a bell body lands
+        on a phone in a meeting and on a shared screen, and a string with no
+        expression in it cannot carry a name, a score or a figure. -- */
+  workerRatingInvite: {
+    title: "A production appraisal is open for you",
+    body: "Somebody on your production team is due their appraisal. Open Production Team to tick their sheet.",
+  },
   leadReviewInvite: {
     title: "A rating is open for you",
     body: "Somebody who reports to you is due a rating this cycle. Open your team list to begin.",
@@ -117,6 +124,10 @@ const IN_APP_PATH: Record<TemplateKey, (evaluationId: string | null) => string> 
   leadReviewInvite: (id) => (id ? `/team/${id}` : "/team"),
   leadReviewReminder: (id) => (id ? `/team/${id}` : "/team"),
   leadReviewOverdue: (id) => (id ? `/team/${id}` : "/team"),
+
+  // The sheet itself. They are signed in when they see the bell, so this is
+  // the plain route, exactly as the staff ones above are.
+  workerRatingInvite: (id) => (id ? `/worker-appraisal/${id}` : "/worker-team"),
 
   hrDueDigest: () => "/admin/due",
   incrementsOverdue: () => "/admin/increments",

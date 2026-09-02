@@ -58,7 +58,14 @@ export type TemplateKey =
   | "reportReady"
   | "formReturned"
   | "evaluationFinalised"
-  | "evaluationClosed";
+  | "evaluationClosed"
+  /* -- The production round's own invite. The worker module has sent NOTHING
+        since it was built: a round opened and the only way anybody learned of
+        it was opening the app and noticing. Its own key rather than reusing
+        `leadReviewInvite`, because that one says the employee is rating
+        themselves at the same time — true on the staff form, and on the shop
+        floor the worker fills nothing (§7's isolation, applied to wording). -- */
+  | "workerRatingInvite";
 
 /** Shown in the history drawer and the template filter, so HR never reads a key. */
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
@@ -76,6 +83,7 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   formReturned: "Form returned",
   evaluationFinalised: "Finalised (to HR)",
   evaluationClosed: "Result available",
+  workerRatingInvite: "Production rating invite",
 };
 
 /* -- ONE VOICE, IN ONE PLACE.
@@ -383,6 +391,60 @@ export function leadReviewInvite(v: {
         ]) +
         signOff(),
       cta: { label: "Open your form", href: v.link },
+    }),
+  };
+}
+
+/**
+ * A production round has opened, and this person fills the sheet.
+ *
+ * NO TOKEN, a plain URL. PW-4's rule: a token is a way in for somebody with no
+ * account, and it scopes them to one record — which is right for an employee
+ * meeting the system once a year and wrong for a team leader who has several
+ * people to rate and a queue to work through. They sign in.
+ */
+export function workerRatingInvite(v: {
+  leadName: string;
+  employeeName: string;
+  department: string;
+  period: string;
+  dueDate: string;
+  link: string;
+}): RenderedMessage {
+  return {
+    subject: `Appraisal open for ${v.employeeName}`,
+    body:
+      `🦺 *A production appraisal is open for you*
+
+` +
+      `Hello ${v.leadName},
+
+` +
+      `The appraisal for ${v.employeeName} (${v.department}) is open for ${v.period}. ` +
+      `Please tick each quality on their sheet and submit it.
+
+` +
+      `Due by: ${v.dueDate}
+
+` +
+      `Open the sheet:
+${v.link}
+
+` +
+      SIGN_OFF,
+    html: shell({
+      heading: "🦺 A production appraisal is open for you",
+      bodyHtml:
+        p(`Dear ${v.leadName},`) +
+        p("An appraisal is now open for one of your production team. Tick each quality on their sheet and submit it.") +
+        details([
+          ["Worker", v.employeeName],
+          ["Team", v.department],
+          ["Period", v.period],
+          ["Please complete by", v.dueDate],
+        ]) +
+        signOff(),
+      cta: { label: "Open the sheet", href: v.link },
     }),
   };
 }

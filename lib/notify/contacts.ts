@@ -35,6 +35,11 @@ export const TEMPLATE_PURPOSE: Record<TemplateKey, ContactPurpose> = {
   formReturned: "personal",
   evaluationClosed: "personal",
 
+  /* -- The production sheet. PERSONAL, for the same reason the team ratings
+        below are: rating the people on your line is about you as a person in
+        the company rather than an administrative duty. -- */
+  workerRatingInvite: "personal",
+
   /* -- Their team's appraisals.
         PERSONAL, at the owner's instruction. Rating your own reports is about
         you as a person in the company rather than an administrative duty — and

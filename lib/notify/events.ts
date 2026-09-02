@@ -15,6 +15,7 @@ import {
   leadReviewInvite,
   mdReviewPending,
   reportReady,
+  workerRatingInvite,
   type RenderedMessage,
   type TemplateKey,
 } from "@/lib/notify/templates";
@@ -736,5 +737,97 @@ export async function notifyIfNowWithHr(evaluationId: string): Promise<Transitio
     });
   } catch {
     return NOTHING;
+  }
+}
+
+/* ---------- The production round (0100) ---------- */
+
+/**
+ * Tell each team leader that a production round has opened for them.
+ *
+ * THE WORKER MODULE HAS NEVER SENT ANYTHING. A round opened and the only way
+ * anybody learned of it was signing in and noticing — reported as "reports to
+ * manager didn't get link". The staff launch has dispatched invites since P10;
+ * this is the same event on the other track.
+ *
+ * A PLAIN URL, NOT A TOKEN (PW-4). A token is a way in for somebody with no
+ * account and scopes them to one record; a team leader has several people to
+ * rate and a queue to work through, so a token would scope them DOWN rather
+ * than help. They sign in.
+ *
+ * Hung off the launch rather than off the screen (PW-1), and it cannot throw:
+ * the round is already committed and audited by the time this runs, and a
+ * provider outage must never turn a launched round into a reported failure
+ * (PW-2). One message per PERSON, not per worker — a team leader with six
+ * people on the round gets one message naming the count, because six identical
+ * WhatsApps in a minute is how a channel stops being read (P22-12).
+ */
+export async function notifyWorkerRoundOpened(input: {
+  cycleName: string;
+  periodLabel: string;
+  dueOn: string | null;
+  /** One entry per evaluation just opened. */
+  opened: ReadonlyArray<{ evaluationId: string; raterId: string; workerName: string }>;
+}): Promise<void> {
+  try {
+    if (input.opened.length === 0) return;
+
+    const supabase = await createClient();
+
+    const raterIds = [...new Set(input.opened.map((o) => o.raterId))];
+    const { data: people } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, phone_e164, work_email, work_phone_e164, departments(name)")
+      .in("id", raterIds);
+
+    const byId = new Map((people ?? []).map((p) => [p.id, p]));
+    const due = input.dueOn ? formatDate(input.dueOn) : "as soon as you can";
+
+    for (const raterId of raterIds) {
+      const rater = byId.get(raterId);
+      if (!rater) continue;
+
+      const mine = input.opened.filter((o) => o.raterId === raterId);
+      const first = mine[0];
+      if (!first) continue;
+
+      /* -- One message, naming the first person and counting the rest. The
+            evaluation id is the FIRST one, so the bell and the email button
+            land on a real sheet rather than on a list they then have to
+            search. -- */
+      const subject =
+        mine.length === 1
+          ? first.workerName
+          : `${first.workerName} and ${mine.length - 1} other${mine.length === 2 ? "" : "s"}`;
+
+      await deliver({
+        template: "workerRatingInvite",
+        evaluationId: first.evaluationId,
+        profileId: raterId,
+        person: rater,
+        audience: "staff",
+        staffPath: "/worker-team",
+        render: (link) =>
+          workerRatingInvite({
+            leadName: rater.full_name,
+            employeeName: subject,
+            department: rater.departments?.name ?? "Production Team",
+            period: `${input.cycleName} · ${input.periodLabel}`,
+            dueDate: due,
+            link,
+          }),
+        vars: {
+          leadName: rater.full_name,
+          employeeName: subject,
+          department: rater.departments?.name ?? "Production Team",
+          period: `${input.cycleName} · ${input.periodLabel}`,
+          dueDate: due,
+        },
+      });
+    }
+  } catch {
+    /* -- Swallowed on purpose. The round is committed and audited before this
+          runs; a provider outage, a missing key or a team leader with no phone
+          must never be reported as a launch that failed (PW-2). -- */
   }
 }

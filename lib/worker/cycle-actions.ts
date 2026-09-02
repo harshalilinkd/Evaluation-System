@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { checkRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
+import { notifyWorkerRoundOpened } from "@/lib/notify/events";
 import type { Json } from "@/types/database";
 
 /*
@@ -151,7 +152,7 @@ export async function launchWorkerCycle(
 
   const { data: cycle } = await supabase
     .from("worker_cycles")
-    .select("id, status, self_due_on, supervisor_due_on")
+    .select("id, name, period_label, status, self_due_on, supervisor_due_on")
     .eq("id", cycleId)
     .maybeSingle();
 
@@ -319,6 +320,10 @@ export async function launchWorkerCycle(
     );
   }
 
+  /* -- Who was opened, so the raters can be told. Collected in the loop rather
+        than re-queried afterwards: a second read would have to work out which
+        rows are new, and a re-run would then message people twice. -- */
+  const openedRows: Array<{ evaluationId: string; raterId: string; workerName: string }> = [];
   let opened = 0;
   // Told apart, because they mean opposite things: a duplicate is an
   // idempotent re-run, anything else is a launch that did not happen.
@@ -401,6 +406,15 @@ export async function launchWorkerCycle(
       p_diff: { cycle_id: cycleId } as Json,
     });
 
+    const raterId = supervisorOf.get(person.id);
+    if (raterId) {
+      openedRows.push({
+        evaluationId: evaluation.id,
+        raterId,
+        workerName: person.full_name,
+      });
+    }
+
     opened += 1;
   }
 
@@ -427,6 +441,16 @@ export async function launchWorkerCycle(
     p_entity_id: cycleId,
     p_action: "worker_cycle.launched",
     p_diff: { opened } as Json,
+  });
+
+  /* -- AFTER THE COMMIT, and it cannot throw (PW-2). The round is durable and
+        audited by this point; a provider outage or a team leader with no phone
+        must never turn a launched round into a reported failure. -- */
+  await notifyWorkerRoundOpened({
+    cycleName: cycle.name,
+    periodLabel: cycle.period_label,
+    dueOn: cycle.supervisor_due_on,
+    opened: openedRows,
   });
 
   revalidate(cycleId);
@@ -472,7 +496,7 @@ export async function addWorkersToRound(
 
   const { data: cycle } = await supabase
     .from("worker_cycles")
-    .select("id, status")
+    .select("id, name, period_label, status, supervisor_due_on")
     .eq("id", cycleId)
     .maybeSingle();
 
@@ -679,6 +703,8 @@ export async function addWorkersToRound(
     );
   }
 
+  // Same as the launch: told, rather than left to notice.
+  const addedRows: Array<{ evaluationId: string; raterId: string; workerName: string }> = [];
   let added = 0;
   let already = 0;
   const failures: string[] = [];
@@ -727,6 +753,15 @@ export async function addWorkersToRound(
       p_diff: { cycle_id: cycleId, added_after_launch: true } as Json,
     });
 
+    const raterId = supervisorOf.get(person.id);
+    if (raterId) {
+      addedRows.push({
+        evaluationId: evaluation.id,
+        raterId,
+        workerName: person.full_name,
+      });
+    }
+
     added += 1;
   }
 
@@ -738,6 +773,14 @@ export async function addWorkersToRound(
         : failures[0] ?? "Nobody could be added to this round.",
     );
   }
+
+  // After the commit, and it cannot throw (PW-2).
+  await notifyWorkerRoundOpened({
+    cycleName: cycle.name,
+    periodLabel: cycle.period_label,
+    dueOn: cycle.supervisor_due_on,
+    opened: addedRows,
+  });
 
   revalidate(cycleId);
   return { ok: true, data: { added } };
