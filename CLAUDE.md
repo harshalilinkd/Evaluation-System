@@ -8624,3 +8624,90 @@ NOT something to resolve by editing 91 files inside a bug fix.
 entered nothing: her `LEAD_2` response row exists and is empty (0 answers, never
 submitted), while SELF and LEAD both carry 15 answers and a stored score. The
 form was open and waiting, so nothing about storage was broken.
+
+---
+
+### WORKER-2 — The team leader rates, their supervisor decides
+
+Migrations `0099_worker_review_status.sql`, `0100_worker_supervisor_review.sql`.
+`lib/worker/review-sheet.ts` and `/worker-review/[evaluationId]` are new;
+`lib/worker/{form,cycle-actions,raters,review}.ts`, `/worker-team`, both worker
+boards, the launch dialogs and the nav are edited.
+
+**NEW SCHEMA AND A NEW STATUS, AT THE OWNER'S EXPLICIT INSTRUCTION.** §0.4
+forbids inventing either without one; this is it, in their words: *"HR will
+launch cycle then their TL will fill their appraisal form (they will just fill
+ratings) and after filling this form they will submit it and this form will go
+to Supervisors screen and then supervisor will review the TLs ratings and then
+this fields will be fill by supervisor: Supervisor comment, Training required,
+Salary. ... everything else is same, only form is rated by TL and salary
+decision taken by Supervisor."*
+
+The production round becomes:
+
+```
+HR launches → TEAM LEADER ticks the eight qualities → SUPERVISOR reviews those
+ticks and records the comment, the training tick and the recommended
+percentage → HR prices it → management approves and closes
+```
+
+**Two things in the instruction forked the work and were asked rather than
+guessed** (§0.9), and both answers are recorded here because they shaped the
+schema:
+
+| Question | Answer |
+|---|---|
+| Does the supervisor see salary AMOUNTS? | **No — percentage only.** The instruction asked for "old salary, increment % and new salary" and, in the same breath, "never a supervisor's copy". 0064 had already taken the amounts away at the owner's explicit instruction; put to them again, they kept it that way. §5 is untouched. |
+| How is the supervisor chosen? | **Per worker, from the SUPERVISOR access-level list**, at launch. |
+
+| # | Decision | Why |
+|---|---|---|
+| W2-1 | **`supervisor_id` is NOT renamed, although it now holds the TEAM LEADER** | That column has meant "who fills the tick sheet" since 0047, and every policy, every helper, `submit_worker_layer`, the print sheet and the blindness invariant read it that way. Renaming it is a rename §0.2 forbids — and worse, it would silently change the MEANING of eight applied migrations rather than fail. The rater keeps the column, the new person gets `reviewer_id`, and the SCREENS carry the owner's vocabulary: Team leader ticks, Supervisor reviews. |
+| W2-2 | **A new status, in its own migration** | Postgres will not let a value added by `alter type ... add value` be USED in the transaction that adds it, so 0099 adds the label and 0100 uses it — the split AMEND-3 made for the same reason. `PENDING_SUPERVISOR` goes BEFORE `PENDING_REVIEW`, so the enum's own order still reads as the flow. Without a status of its own, "with the supervisor" and "with HR" are one value: HR's queue fills with rows nobody can act on yet, and the board cannot answer the one question a board exists for. |
+| W2-3 | **Leaving the supervisor blank is a real answer, and the row says what it does** | Without one the appraisal goes straight to HR when the team leader submits — which is exactly what every round launched before 0100 does. Requiring it would strand a launch on a shop floor where nobody holds the access level, and the fix for that is a role grant, not a blocked round. That branch is also what keeps every live round working, and it is asserted rather than assumed. |
+| W2-4 | **The comment and the training tick MOVE to `worker_evaluation_decisions`** | 0050 put them on the response row, which was right while one person did everything: they sat beside the ticks they qualify. They cannot stay. A response row locks on its own submission (§8), so the moment the team leader submits, the row holding those two fields is read-only — and the person who has to fill them has not started. The decisions table already holds the salary block, is already the table nobody but HR and the MD may read, and 0064 already built the column-level split this needs. |
+| W2-5 | **The old columns are NOT dropped, and every reader falls back to them** | They carry the values of every appraisal filed before today, and dropping a column is destroying a record. They are backfilled across, commented as superseded, and HR's review screen and both boards read the new location `?? the old one` — a column that silently empties for historic rows is worse than one extra lookup. |
+| W2-6 | **The reviewer's read is a FUNCTION, not a policy and not 0064's view** | RLS is row-level: any policy admitting them to the decisions row hands over `old_ctc` and `new_ctc` with it, because a policy cannot mask a column. `worker_review_decision` names four columns and cannot return a fifth — the absence is structural (P19-2's call, and 0064's own argument). 0064's `v_worker_supervisor_decision` could not do this job: it is `security_invoker` and the same migration dropped the supervisor's SELECT policy, so it returns nothing for the person it was written for. Pre-existing, recorded because it is why this took a different shape rather than reusing it. |
+| W2-7 | **The reviewer's write is a function too, and has no parameter for an amount** | `save_worker_review` names four columns. 0064's two guard triggers still run behind it as a backstop, but they are not what is doing the work — a call cannot move a figure it has no way to mention. |
+| W2-8 | **`submit_worker_layer` is RECREATED, not patched** | This log records both ways a patch goes wrong: 0056 matched three fragments from three unrelated arms and reported a success it had not achieved, and 0037 missed on a newline because the stored body is CRLF. Recreating reproduces all of it, which is safe here because 0057 is the ONLY definition — 0070 mentions it in a comment and nowhere else — and its full text is in the repository. |
+| W2-9 | The completeness guard is FIX-41's, one step earlier | A recommended rise with no percentage gives HR nothing to price and the MD nothing to approve. Refused at the hand-off rather than discovered three screens later — and the screen says the same sentence in the same words, so the form cannot accept what the server then rejects (P13-6). |
+| W2-10 | **Blindness is unchanged, and was checked from both sides** | The reviewer gains the SUPERVISOR layer — the ticks they were brought in to read — and no arm anywhere admits them to the SELF layer, at any status. 0100's own verification block raises if a `SELF … is_worker_reviewer_of` arm ever appears. |
+| W2-11 | **`is_my_worker` is EXTENDED rather than the profiles policy restated** | The reviewer must be able to read the worker's NAME, or the row renders "Unknown" — which reads as broken data rather than a missing policy (COREVIEWER-1, pre-empted). Restating a six-arm policy to add one clause REMOVES access silently rather than failing when an arm is dropped (SR2-5 caught that in a view, CR1-3 in this very policy). A name is not an answer: §5's blindness is about the layers. |
+| W2-12 | **The nav unlocks on the RELATIONSHIP, and there are two of them now** | A team leader is whoever the worker reports to — at the owner's earlier instruction, "despite their access level" — so a team leader with no SUPERVISOR grant had the sheet assigned to them and **no menu entry to reach it**. `navFor` already took `leadsTeam` for exactly this (a Design Coordinator whose work the queue found and nothing let them reach); it now takes `ratesWorkers` beside it. Both are still named explicitly rather than flagged on the item, so a third stays a decision somebody has to make. |
+| W2-13 | The pulse counts the new stage as **in progress**, not as HR's | An appraisal waiting on its supervisor is not in HR's queue, and putting it there would list rows they cannot act on. Falling into neither bucket was the third option, and a total that quietly does not add up is the worst of the three. |
+| W2-14 | The team leader's thank-you stops saying it goes to HR | It does not, when a reviewer is assigned. Telling them their part was the last one means the first they hear otherwise is somebody asking about a training tick they were never shown. The `/worker-team` banner deliberately names no destination at all: a reviewer is set per worker, so a sentence true of half the list is worse than one true of all of it. |
+| W2-15 | One person cannot rate and review the same appraisal | Refused in both writers, by name. It would collapse the two steps into one and leave nothing for the review to be a review OF — AMEND-2's objection to HR approving its own proposal, on a shop floor. |
+
+#### Verification — 8 checks against the LIVE database, then rolled back
+
+Run as the real people through `set role authenticated` with a JWT subject —
+PGlite is not involved and neither is a fixture: this is the running database,
+inside a `do` block that raises at the end so nothing is kept. Confirmed
+afterwards: 0 test rounds left, the appraisal count unchanged.
+
+```
+1 · team leader submits -> PENDING_SUPERVISOR, not straight to HR        OK
+2 · reviewer reads the ticks, the sheet and the name — NOT the SELF layer OK
+3 · reviewer cannot select the decisions table — no amount to leak        OK
+4 · sending on without the training tick is refused                      OK
+5 · "new salary" with no percentage is refused                           OK
+6 · a complete review reaches HR, stamped, audited, carrying no amount    OK
+7 · somebody who is not the reviewer is refused                          OK
+8 · with NO reviewer it still goes straight to HR — every existing round  OK
+```
+
+`whats-applied.sql` gained two rows. **0100's detector is anchored to
+`submit_worker_layer`'s ROUTING, not to the reviewer columns** — the columns
+are the cheap half and would read TRUE the moment somebody added them by hand
+while nothing sent an appraisal to the person they name, which is the 0056
+false positive in a different costume. Both were proved TRUE against the live
+database after applying.
+
+Typecheck 0 errors, lint 0 errors (11 pre-existing warnings), build clean.
+
+**The line-ending trap, twice, and the standing remedy finally written as
+code.** Two patches matched nothing because the files are CRLF and the search
+text was LF — §18 has recorded this three times (FIX-10 addendum, P35, FIX-68)
+and each fix was local to one file. The patching helper used throughout this
+phase now detects the file's ending and asserts that every replacement matched
+exactly once, so a silent no-op cannot report success.

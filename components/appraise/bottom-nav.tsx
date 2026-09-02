@@ -39,12 +39,14 @@ const MAX_TABS = 4;
 export function BottomNav({
   roles,
   leadsTeam = false,
+  ratesWorkers = false,
 }: {
   roles: readonly AppRole[];
   leadsTeam?: boolean;
+  ratesWorkers?: boolean;
 }) {
   const pathname = usePathname();
-  const active = activeHref(pathname, roles, leadsTeam);
+  const active = activeHref(pathname, roles, leadsTeam, ratesWorkers);
 
   /* -- The everyday group, capped — then the CURRENT page forced in.
         `navFor` has already removed anything this person may not open.
@@ -59,7 +61,7 @@ export function BottomNav({
         the current page is a nav destination that did not make the cut, it
         takes the last slot. The bar then always says where you are, and the
         screens somebody actually uses surface as they use them. -- */
-  const groups = navFor(roles, leadsTeam);
+  const groups = navFor(roles, leadsTeam, ratesWorkers);
   const everyday = groups[0]?.items ?? [];
 
   let items = everyday.slice(0, MAX_TABS);

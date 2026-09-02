@@ -93,9 +93,11 @@ export function SidebarBrand({ onNavy = true }: { onNavy?: boolean }) {
 export function Sidebar({
   roles,
   leadsTeam = false,
+  ratesWorkers = false,
 }: {
   roles: readonly AppRole[];
   leadsTeam?: boolean;
+  ratesWorkers?: boolean;
 }) {
   return (
     // Slate Navy, edge to edge, pinned left — the one large dark field in the
@@ -112,7 +114,7 @@ export function Sidebar({
         <SidebarBrand />
 
         <div className="-mr-2 min-h-0 flex-1 overflow-y-auto pr-2">
-          <SidebarNav roles={roles} leadsTeam={leadsTeam} />
+          <SidebarNav roles={roles} leadsTeam={leadsTeam} ratesWorkers={ratesWorkers} />
         </div>
 
         <p className="rail-label tabular whitespace-nowrap px-3 text-body-sm text-sidebar-ink-muted">

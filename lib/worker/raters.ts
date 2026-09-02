@@ -54,3 +54,32 @@ export async function listWorkerRaters(): Promise<RaterOption[]> {
     designation: p.designation,
   }));
 }
+
+/**
+ * Does this person have any production appraisal to fill in or to review?
+ *
+ * The nav item for `/worker-team` is gated on the SUPERVISOR access level, and
+ * that stopped being the whole answer twice over:
+ *
+ *   * a TEAM LEADER is whoever the worker reports to, and at the owner's
+ *     instruction that is true "despite their access level" — so a team leader
+ *     with no SUPERVISOR grant had the sheet assigned to them and no menu entry
+ *     to reach it;
+ *   * 0100 adds a reviewer, chosen from the Supervisor pool today but stored as
+ *     a relationship rather than a role, and a role check would go wrong the
+ *     first time that changes.
+ *
+ * The same shape as `leadsAnyEvaluation`, which exists because a Design
+ * Coordinator hit exactly this: the queue found their work and nothing let them
+ * reach it.
+ */
+export async function ratesAnyWorker(profileId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("worker_evaluations")
+    .select("id")
+    .or(`supervisor_id.eq.${profileId},reviewer_id.eq.${profileId}`)
+    .is("excluded_at", null)
+    .limit(1);
+  return (data ?? []).length > 0;
+}

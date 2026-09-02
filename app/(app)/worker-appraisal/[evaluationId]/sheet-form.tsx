@@ -615,7 +615,13 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         body={
           isSelf
             ? "HR will read your answers alongside your supervisor's ratings. Nothing more is needed from you."
-            : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`
+            : sheet.hasReviewer
+              ? /* -- 0100: it does not go to HR from here. Saying so would tell
+                     the team leader their part was the last one, and the first
+                     they would hear otherwise is somebody asking them about a
+                     training tick they were never shown. -- */
+                `Your ratings for ${sheet.workerName} are recorded. Their supervisor reviews them next and decides on training and any increment.`
+              : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`
         }
         actionLabel="Done"
         onAction={() => setThanked(false)}

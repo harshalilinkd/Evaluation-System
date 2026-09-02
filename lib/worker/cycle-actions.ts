@@ -118,6 +118,14 @@ export type WorkerAssignment = {
         shop-floor helper. It is copied onto the appraisal here, so a later
         change to the profile cannot move an in-flight round (P3-6). -- */
   supervisorId: string | null;
+  /* -- 0100: the SUPERVISOR who reviews those ticks and records the comment,
+        the training tick and the recommended percentage. OPTIONAL, and that is
+        deliberate: without one the appraisal goes straight to HR when the team
+        leader submits, which is exactly what every round launched before 0100
+        does. Requiring it would strand a launch on a shop floor where nobody
+        holds the SUPERVISOR access level, and the fix for that is a role grant
+        rather than a blocked round. -- */
+  reviewerId: string | null;
 };
 
 export async function launchWorkerCycle(
@@ -129,6 +137,7 @@ export async function launchWorkerCycle(
   if (assignments.length === 0) return fail("NO_PARTICIPANTS", "Add at least one worker first.");
 
   const supervisorOf = new Map(assignments.map((a) => [a.workerId, a.supervisorId]));
+  const reviewerOf = new Map(assignments.map((a) => [a.workerId, a.reviewerId]));
   const workerIds = assignments.map((a) => a.workerId);
 
   const supabase = await createClient();
@@ -190,6 +199,29 @@ export async function launchWorkerCycle(
     );
   }
 
+  /* -- 0100: the reviewer is a SECOND pair of eyes, so they cannot be the
+        person whose ticks they are reviewing, and they cannot be the worker.
+        Either would collapse the two steps into one and leave nothing for the
+        review to be a review OF — the same objection AMEND-2 makes about HR
+        approving their own proposal. -- */
+  const reviewsOwnRatings = eligible.filter(
+    (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
+  );
+  if (reviewsOwnRatings.length > 0) {
+    return fail(
+      "REVIEWER_IS_RATER",
+      `${reviewsOwnRatings.map((p) => p.full_name).join(", ")}: the same person is down to rate and to review. Pick a different supervisor, or leave it empty and it will go straight to HR.`,
+    );
+  }
+
+  const reviewsThemselves = eligible.filter((p) => reviewerOf.get(p.id) === p.id);
+  if (reviewsThemselves.length > 0) {
+    return fail(
+      "REVIEWER_IS_WORKER",
+      `${reviewsThemselves.map((p) => p.full_name).join(", ")} would be reviewing their own appraisal.`,
+    );
+  }
+
   let opened = 0;
   // Told apart, because they mean opposite things: a duplicate is an
   // idempotent re-run, anything else is a launch that did not happen.
@@ -203,6 +235,7 @@ export async function launchWorkerCycle(
         cycle_id: cycleId,
         worker_id: person.id,
         supervisor_id: supervisorOf.get(person.id) ?? null,
+        reviewer_id: reviewerOf.get(person.id) ?? null,
         department_id: person.department_id,
         status: "OPEN",
       })
@@ -337,6 +370,7 @@ export async function addWorkersToRound(
   if (assignments.length === 0) return fail("NO_PARTICIPANTS", "Choose at least one worker.");
 
   const supervisorOf = new Map(assignments.map((a) => [a.workerId, a.supervisorId]));
+  const reviewerOf = new Map(assignments.map((a) => [a.workerId, a.reviewerId]));
   const supabase = await createClient();
 
   const { data: cycle } = await supabase
@@ -435,6 +469,29 @@ export async function addWorkersToRound(
     );
   }
 
+  /* -- 0100: the reviewer is a SECOND pair of eyes, so they cannot be the
+        person whose ticks they are reviewing, and they cannot be the worker.
+        Either would collapse the two steps into one and leave nothing for the
+        review to be a review OF — the same objection AMEND-2 makes about HR
+        approving their own proposal. -- */
+  const reviewsOwnRatings = eligible.filter(
+    (p) => reviewerOf.get(p.id) && reviewerOf.get(p.id) === supervisorOf.get(p.id),
+  );
+  if (reviewsOwnRatings.length > 0) {
+    return fail(
+      "REVIEWER_IS_RATER",
+      `${reviewsOwnRatings.map((p) => p.full_name).join(", ")}: the same person is down to rate and to review. Pick a different supervisor, or leave it empty and it will go straight to HR.`,
+    );
+  }
+
+  const reviewsThemselves = eligible.filter((p) => reviewerOf.get(p.id) === p.id);
+  if (reviewsThemselves.length > 0) {
+    return fail(
+      "REVIEWER_IS_WORKER",
+      `${reviewsThemselves.map((p) => p.full_name).join(", ")} would be reviewing their own appraisal.`,
+    );
+  }
+
   let added = 0;
   let already = 0;
   const failures: string[] = [];
@@ -446,6 +503,7 @@ export async function addWorkersToRound(
         cycle_id: cycleId,
         worker_id: person.id,
         supervisor_id: supervisorOf.get(person.id) ?? null,
+        reviewer_id: reviewerOf.get(person.id) ?? null,
         department_id: person.department_id,
         status: "OPEN",
       })

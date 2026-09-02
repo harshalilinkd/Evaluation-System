@@ -9,6 +9,7 @@ import { SectionLabelProvider } from "@/components/appraise/section-labels";
 import { requireAuth } from "@/lib/auth/guards";
 import { getSectionConfig } from "@/lib/forms/section-config";
 import { leadsAnyEvaluation } from "@/lib/evaluations/team-queue";
+import { ratesAnyWorker } from "@/lib/worker/raters";
 
 /**
  * Nothing under /(app) may ever be prerendered or cached. Every page here is
@@ -56,10 +57,17 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         first row. Cheap enough to be honest with, and the alternative — granting
         HOD when a cycle launches — would write a permission HR did not ask for
         and could not easily see. -- */
-  const leadsTeam = await leadsAnyEvaluation(profile.id);
+  /* -- Two relationships, one round trip each, both answering "does this
+        person have work the sidebar has to let them reach". Issued together:
+        neither needs the other's answer, and a chain would put a second full
+        round trip in front of every authenticated page (F8-1). -- */
+  const [leadsTeam, ratesWorkers] = await Promise.all([
+    leadsAnyEvaluation(profile.id),
+    ratesAnyWorker(profile.id),
+  ]);
 
   return (
-    <AppShell profile={profile} roles={roles} leadsTeam={leadsTeam}>
+    <AppShell profile={profile} roles={roles} leadsTeam={leadsTeam} ratesWorkers={ratesWorkers}>
       <SectionLabelProvider labels={sections.labels}>
       {/* A pause is easy to set and easy to forget, and the failure it creates
           is silence. RLS decides who sees it — an employee gets nothing. */}

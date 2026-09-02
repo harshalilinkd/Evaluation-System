@@ -27,6 +27,9 @@ const TICK_WORD: Record<string, string> = Object.fromEntries(
 const STAGE_WORD: Record<string, string> = {
   DRAFT: "Not started",
   OPEN: "In progress",
+  /* §8: a worker never sees the stored status. Both review steps collapse to
+     one word for them — whose desk it is on is not their business. */
+  PENDING_SUPERVISOR: "Under review",
   PENDING_REVIEW: "Under review",
   REVIEWED: "Under review",
   CLOSED: "Completed",

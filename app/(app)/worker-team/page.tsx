@@ -19,12 +19,29 @@ export default async function Page() {
   /* -- Their own reports, in the open round. RLS admits exactly these rows
         anyway; the filter is what makes the query small, not what makes it
         safe. -- */
-  const { data: rows } = await supabase
-    .from("worker_evaluations")
-    .select("id, worker_id, status, supervisor_submitted_at, cycle_id")
-    .eq("supervisor_id", session.profile.id)
-    .eq("status", "OPEN")
-    .is("excluded_at", null);
+  const [{ data: rows }, { data: reviewRows }] = await Promise.all([
+    supabase
+      .from("worker_evaluations")
+      .select("id, worker_id, status, supervisor_submitted_at, cycle_id")
+      .eq("supervisor_id", session.profile.id)
+      .eq("status", "OPEN")
+      .is("excluded_at", null),
+    /* -- 0100: appraisals somebody has rated and handed to THIS person to
+          review. Across every round, deliberately — unlike the rating queue
+          below, these are finished pieces of work waiting on one decision, and
+          holding one back because it belongs to an older round would leave it
+          waiting for ever with nothing on screen to say so. Each row carries
+          its own round name instead. -- */
+    supabase
+      .from("worker_evaluations")
+      .select("id, worker_id, cycle_id, supervisor_submitted_at")
+      .eq("reviewer_id", session.profile.id)
+      .eq("status", "PENDING_SUPERVISOR")
+      .is("excluded_at", null)
+      .order("supervisor_submitted_at", { ascending: true }),
+  ]);
+
+  const toReview = reviewRows ?? [];
 
   /* -- ONE ROUND AT A TIME.
         This selected every OPEN appraisal assigned to the supervisor across
@@ -51,7 +68,7 @@ export default async function Page() {
   const round = openCycles?.[0] ?? null;
   const list = round ? all.filter((r) => r.cycle_id === round.id) : [];
 
-  if (list.length === 0) {
+  if (list.length === 0 && toReview.length === 0) {
     return (
       <EmptyState
         title="Nothing for your team right now"
@@ -68,9 +85,20 @@ export default async function Page() {
   const { data: people } = await supabase
     .from("profiles")
     .select("id, full_name, employee_code")
-    .in("id", list.map((r) => r.worker_id));
+    .in("id", [...new Set([...list, ...toReview].map((r) => r.worker_id))]);
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
+
+  /* -- The round each review belongs to. Named on the row rather than in a
+        header, because these span rounds. -- */
+  const { data: reviewCycles } = toReview.length
+    ? await supabase
+        .from("worker_cycles")
+        .select("id, name, period_label")
+        .in("id", [...new Set(toReview.map((r) => r.cycle_id))])
+    : { data: [] };
+
+  const cycleById = new Map((reviewCycles ?? []).map((c) => [c.id, c]));
 
   return (
     <div className="space-y-6">
@@ -80,20 +108,81 @@ export default async function Page() {
           Production Team
         </h1>
         <p className="mt-1 font-sans text-body-sm text-ink-muted">
-          {cycle?.name} · {cycle?.period_label}
-          {cycle?.supervisor_due_on ? ` · your ratings due ${formatDate(cycle.supervisor_due_on)}` : ""}
+          {cycle
+            ? `${cycle.name} · ${cycle.period_label}${
+                cycle.supervisor_due_on
+                  ? ` · your ratings due ${formatDate(cycle.supervisor_due_on)}`
+                  : ""
+              }`
+            : "Appraisals waiting on your review."}
         </p>
       </header>
+
+      {/* ---------- Waiting on your review (0100) ----------
+            First, because it is the older work: somebody has finished rating
+            and this is the one step between them and HR. A section that only
+            appears when it has something in it, so the page does not carry an
+            empty heading for a job this person may never do. */}
+      {toReview.length > 0 ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="font-sans text-body-lg text-ink">Waiting on your review</h2>
+            <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
+              The team leader has rated them. Read the ratings, then record your comment, whether
+              training is required, and the increment you recommend.
+            </p>
+          </div>
+
+          <ul className="space-y-3">
+            {toReview.map((row) => {
+              const worker = byId.get(row.worker_id);
+              const round = cycleById.get(row.cycle_id);
+
+              return (
+                <li key={row.id} className="card-surface p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-sans text-body-lg text-ink">
+                        {worker?.full_name ?? "Worker"}
+                      </p>
+                      <p className="tabular font-sans text-body-sm text-ink-muted">
+                        {worker?.employee_code ?? "—"}
+                        {round ? ` · ${round.name}` : ""}
+                        {row.supervisor_submitted_at
+                          ? ` · rated ${formatDate(row.supervisor_submitted_at)}`
+                          : ""}
+                      </p>
+                    </div>
+
+                    <Button asChild className="min-h-11">
+                      <Link href={`/worker-review/${row.id}`}>
+                        Review
+                        <ArrowRight className="ml-1.5 size-4" aria-hidden />
+                      </Link>
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {/* -- ONE STEP NOW, at the owner's instruction. The hand-over is gone,
             so the two-step explainer went with it: an instruction describing a
             button that is not there is worse than none. -- */}
-      <div className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-        Rate each person on the eight qualities, add the salary block, and submit. It goes to HR
-        for review as soon as you do.
-      </div>
+      {list.length > 0 ? (
+        <>
+          <div className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
+            {/* -- Deliberately does not name where it goes: a reviewer is set
+                  per worker, so on one round some of these go to a supervisor
+                  and some straight to HR. A sentence that is true of half the
+                  list is worse than one that is true of all of it. -- */}
+            Rate each person on the eight qualities and submit. Each one moves on for review as
+            soon as you do.
+          </div>
 
-      <ul className="space-y-3">
+          <ul className="space-y-3">
         {list.map((row) => {
           const worker = byId.get(row.worker_id);
           const yoursIn = Boolean(row.supervisor_submitted_at);
@@ -128,9 +217,11 @@ export default async function Page() {
                 </div>
               </div>
             </li>
-          );
-        })}
-      </ul>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
     </div>
   );
 }

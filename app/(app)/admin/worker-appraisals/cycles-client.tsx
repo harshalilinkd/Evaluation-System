@@ -169,6 +169,17 @@ export function StartRoundDialog({
         fine; a default nobody can see or override is not. -- */
   const [raterOf, setRaterOf] = React.useState<Record<string, string>>({});
   const raterFor = (w: WorkerRow) => raterOf[w.id] ?? w.supervisorId ?? "";
+
+  /* -- 0100: who reviews those ratings. Chosen from the Supervisor pool, per
+        worker, and NOT defaulted from anything — there is nothing on a profile
+        that means "the person above my team leader", and inheriting a field
+        set for a different purpose is exactly what put the MD down as a
+        shop-floor rater.
+
+        LEFT EMPTY IS A REAL ANSWER, and the row says what it does: the
+        appraisal goes straight to HR when the team leader submits, which is
+        what every round before 0100 does. -- */
+  const [reviewerOf, setReviewerOf] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -252,6 +263,7 @@ export function StartRoundDialog({
         [...chosen].map((id) => ({
           workerId: id,
           supervisorId: raterOf[id] ?? workers.find((w) => w.id === id)?.supervisorId ?? null,
+          reviewerId: reviewerOf[id] || null,
         })),
       );
       if (!launched.ok) {
@@ -549,6 +561,36 @@ export function StartRoundDialog({
                           </select>
                         </label>
 
+                        {/* -- 0100: who reviews those ratings.
+                              The Supervisor pool only — this is the second pair
+                              of eyes, and offering the team leader's own name
+                              here would collapse the two steps into one. The
+                              rater is filtered out for the same reason, and the
+                              action refuses it anyway (§9: the screen is not
+                              the guard). -- */}
+                        <label className="flex items-center gap-2">
+                          <span className="font-sans text-body-sm text-ink-muted">
+                            Reviewed by
+                          </span>
+                          <select
+                            value={reviewerOf[w.id] ?? ""}
+                            onChange={(e) =>
+                              setReviewerOf((prev) => ({ ...prev, [w.id]: e.target.value }))
+                            }
+                            aria-label={`Who reviews the ratings for ${w.name}`}
+                            className="min-h-11 min-w-40 rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+                          >
+                            <option value="">Straight to HR</option>
+                            {raters
+                              .filter((r) => r.id !== raterId && r.id !== w.id)
+                              .map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.designation ? `${r.name} · ${r.designation}` : r.name}
+                                </option>
+                              ))}
+                          </select>
+                        </label>
+
                         {/* -- The only case left unresolved: nobody to default
                               to at all. Their Reports-to is now offered
                               regardless of access level, so this fires only
@@ -640,15 +682,24 @@ export function AddWorkersDialog({
   onOpenChange,
   cycleId,
   available,
+  raters,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cycleId: string;
   /** Workers NOT already in this round — computed by the board. */
   available: WorkerRow[];
+  /** The Supervisor pool, for the review step (0100). */
+  raters: RaterRow[];
 }) {
   const router = useRouter();
   const [chosen, setChosen] = React.useState<Set<string>>(new Set());
+  /* -- 0100: one reviewer for everybody being added, rather than a select on
+        every row. Adding a latecomer is a small, one-off act and they almost
+        always join the same supervisor's line; a per-row picker here would be
+        four controls to answer one question. Left empty means straight to HR,
+        exactly as it does at launch. -- */
+  const [reviewerId, setReviewerId] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -669,6 +720,7 @@ export function AddWorkersDialog({
       [...chosen].map((id) => ({
         workerId: id,
         supervisorId: available.find((w) => w.id === id)?.supervisorId ?? null,
+        reviewerId: reviewerId || null,
       })),
     );
     setBusy(false);
@@ -735,6 +787,25 @@ export function AddWorkersDialog({
             ))}
           </ul>
         )}
+
+        {/* -- 0100: the review step, for everybody being added. -- */}
+        <label className="block space-y-1.5">
+          <span className="font-sans text-body-sm text-ink-muted">
+            Reviewed by, once their team leader has rated them
+          </span>
+          <select
+            value={reviewerId}
+            onChange={(e) => setReviewerId(e.target.value)}
+            className="min-h-11 w-full rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+          >
+            <option value="">Straight to HR</option>
+            {raters.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.designation ? `${r.name} · ${r.designation}` : r.name}
+              </option>
+            ))}
+          </select>
+        </label>
 
         {error ? (
           <p role="alert" className="font-sans text-body-sm text-critical">

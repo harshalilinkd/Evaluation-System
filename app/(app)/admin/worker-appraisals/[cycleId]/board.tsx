@@ -39,6 +39,8 @@ export type BoardRow = {
   selfSubmittedAt: string | null;
   supervisorSubmittedAt: string | null;
   handedOver: boolean;
+  /** 0100: the supervisor reviewing the ratings, where one is assigned. */
+  reviewerName: string | null;
   status: string;
   overallTick: string | null;
   department: string | null;
@@ -77,6 +79,16 @@ export type BoardRow = {
 function nextStep(row: BoardRow): { text: string; tone: "wait" | "ready" | "done" } {
   if (row.status === "REVIEWED" || row.status === "CLOSED") {
     return { text: "Finished", tone: "done" };
+  }
+  /* -- 0100: rated, and now with the supervisor. Named, because that is the
+        actionable half — HR cannot record the comment, the training tick or
+        the recommended percentage, so an outstanding row here resolves to
+        somebody to ring, exactly as an unrated one does. -- */
+  if (row.status === "PENDING_SUPERVISOR") {
+    return {
+      text: `Rated — with ${row.reviewerName ?? "their supervisor"} to review`,
+      tone: "wait",
+    };
   }
   if (row.supervisorIn) {
     return { text: "Filled in — ready for your review", tone: "ready" };
@@ -157,6 +169,8 @@ export function WorkerBoard({
      only state on this screen HR can act on. Counting reviewed ones too meant
      the number never fell as they worked through them. */
   const inProgress = rows.filter((r) => r.status === "OPEN").length;
+  // 0100: rated by the team leader, now with the supervisor. Not HR's yet.
+  const withSupervisor = rows.filter((r) => r.status === "PENDING_SUPERVISOR").length;
   const readyCount = rows.filter((r) => r.status === "PENDING_REVIEW").length;
   const withMd = rows.filter((r) => r.status === "REVIEWED").length;
   const closedCount = rows.filter((r) => r.status === "CLOSED").length;
@@ -172,7 +186,7 @@ export function WorkerBoard({
         is the same control where the eye already is. The row now reads as a
         total and its parts, and exactly one card is lit at any moment. -- */
   const [filter, setFilter] = React.useState<
-    "all" | "waiting" | "ready" | "md" | "closed"
+    "all" | "waiting" | "supervisor" | "ready" | "md" | "closed"
   >("all");
 
   const visible = React.useMemo(() => {
@@ -180,13 +194,14 @@ export function WorkerBoard({
        that distinguishes "waiting for HR" from "with the MD" — both have the
        supervisor's side in, so a timestamp cannot tell them apart. */
     if (filter === "waiting") return rows.filter((r) => r.status === "OPEN");
+    if (filter === "supervisor") return rows.filter((r) => r.status === "PENDING_SUPERVISOR");
     if (filter === "ready") return rows.filter((r) => r.status === "PENDING_REVIEW");
     if (filter === "md") return rows.filter((r) => r.status === "REVIEWED");
     if (filter === "closed") return rows.filter((r) => r.status === "CLOSED");
     return rows;
   }, [rows, filter]);
 
-  const toggle = (next: "waiting" | "ready" | "md" | "closed") =>
+  const toggle = (next: "waiting" | "supervisor" | "ready" | "md" | "closed") =>
     setFilter((current) => (current === next ? "all" : next));
 
   /* ---------- Columns ----------
@@ -492,6 +507,20 @@ export function WorkerBoard({
             onSelect={() => toggle("waiting")}
             active={filter === "waiting"}
           />
+          {/* -- 0100. Hidden at zero for the same reason "With management" is:
+                 a round where nobody has a supervisor assigned never reaches
+                 this stage, and a permanent zero teaches people to stop reading
+                 the row. -- */}
+          {withSupervisor > 0 ? (
+            <KpiCard
+              label="With supervisor"
+              value={withSupervisor}
+              caption="rated, waiting on their review"
+              tone="plain"
+              onSelect={() => toggle("supervisor")}
+              active={filter === "supervisor"}
+            />
+          ) : null}
           <KpiCard
             label={mdView ? "Under HR review" : "Ready for you"}
             value={readyCount}
@@ -576,6 +605,7 @@ export function WorkerBoard({
         onOpenChange={setAdding}
         cycleId={cycle?.id ?? ""}
         available={available}
+        raters={raters}
       />
 
       <BinRoundDialog cycle={binning && cycle ? cycle : null} onClose={() => setBinning(false)} />

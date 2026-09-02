@@ -376,8 +376,15 @@ export type Database = {
           cycle_id: string;
           worker_id: string;
           supervisor_id: string | null;
+          /* 0100: the SUPERVISOR who reviews the team leader's ticks and then
+             records the comment, the training tick and the recommended
+             percentage. `supervisor_id` above is the TEAM LEADER who rates —
+             the name is 0047's and is kept, because eight migrations read it. */
+          reviewer_id: string | null;
+          reviewer_submitted_at: string | null;
+          reviewer_skipped: boolean;
           department_id: string | null;
-          status: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          status: "DRAFT" | "OPEN" | "PENDING_SUPERVISOR" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
           self_submitted_at: string | null;
           supervisor_submitted_at: string | null;
           self_skipped: boolean;
@@ -397,8 +404,9 @@ export type Database = {
           cycle_id: string;
           worker_id: string;
           supervisor_id?: string | null;
+          reviewer_id?: string | null;
           department_id?: string | null;
-          status?: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          status?: "DRAFT" | "OPEN" | "PENDING_SUPERVISOR" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
           self_submitted_at?: string | null;
           supervisor_submitted_at?: string | null;
           self_skipped?: boolean;
@@ -407,7 +415,10 @@ export type Database = {
         };
         Update: {
           supervisor_id?: string | null;
-          status?: "DRAFT" | "OPEN" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
+          reviewer_id?: string | null;
+          reviewer_submitted_at?: string | null;
+          reviewer_skipped?: boolean;
+          status?: "DRAFT" | "OPEN" | "PENDING_SUPERVISOR" | "PENDING_REVIEW" | "REVIEWED" | "CLOSED";
           self_submitted_at?: string | null;
           supervisor_submitted_at?: string | null;
           self_skipped?: boolean;
@@ -432,6 +443,11 @@ export type Database = {
           old_ctc: number | null;
           increment_pct: number | null;
           new_ctc: number | null;
+          /* 0100: moved here from worker_evaluation_responses. A response
+             row locks on its own submission, and the person who fills
+             these has not started when the team leader submits. */
+          supervisor_comment: string | null;
+          training_required: boolean | null;
           md_remarks: string | null;
           decided_by: string | null;
           decided_at: string | null;
@@ -444,6 +460,8 @@ export type Database = {
           old_ctc?: number | null;
           increment_pct?: number | null;
           new_ctc?: number | null;
+          supervisor_comment?: string | null;
+          training_required?: boolean | null;
           md_remarks?: string | null;
           decided_by?: string | null;
           decided_at?: string | null;
@@ -453,6 +471,8 @@ export type Database = {
           old_ctc?: number | null;
           increment_pct?: number | null;
           new_ctc?: number | null;
+          supervisor_comment?: string | null;
+          training_required?: boolean | null;
           md_remarks?: string | null;
           decided_by?: string | null;
           decided_at?: string | null;
@@ -1768,6 +1788,34 @@ export type Database = {
          worker_evaluations is UPDATE-able by HR alone, and each side must be
          able to record its own submission without gaining the power to move
          the status. */
+      /* 0100 · the supervisor's review step. Each is SECURITY DEFINER and
+         re-checks that the caller is the assigned reviewer, so none of them
+         is a permission the interface grants. `worker_review_decision` names
+         four columns and no amount, which is what keeps §5 structural rather
+         than a policy somebody could widen. */
+      worker_review_decision: {
+        Args: { p_evaluation_id: string };
+        Returns: {
+          salary_changed: boolean;
+          increment_pct: number | null;
+          supervisor_comment: string | null;
+          training_required: boolean | null;
+        }[];
+      };
+      save_worker_review: {
+        Args: {
+          p_evaluation_id: string;
+          p_salary_changed: boolean;
+          p_increment_pct: number | null;
+          p_comment: string | null;
+          p_training: boolean | null;
+        };
+        Returns: undefined;
+      };
+      submit_worker_review: {
+        Args: { p_evaluation_id: string };
+        Returns: undefined;
+      };
       submit_worker_layer: {
         Args: {
           p_evaluation_id: string;

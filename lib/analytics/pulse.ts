@@ -220,8 +220,9 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
       .limit(25),
 
     /* -- The production module's own four states.
-          `worker_evaluations` has its own status vocabulary (0047) — OPEN,
-          PENDING_REVIEW, REVIEWED, CLOSED — and none of the counts above can
+          `worker_evaluations` has its own status vocabulary (0047, 0099) —
+          OPEN, PENDING_SUPERVISOR, PENDING_REVIEW, REVIEWED, CLOSED — and none
+          of the counts above can
           see it, because they read `evaluations` and §5 keeps a worker row out
           of that table entirely.
           One query, grouped in TypeScript: four HEAD counts would be four round
@@ -361,7 +362,14 @@ export async function getSystemPulse(): Promise<CycleResult<SystemPulse>> {
         column nobody asked for (§0.4). -- */
   const workerStatuses = (workerRows.data ?? []).map((r) => r.status);
   const worker = {
-    inProgress: workerStatuses.filter((s) => s === "OPEN").length,
+    /* -- 0100 added PENDING_SUPERVISOR between the two, and it is counted
+          HERE rather than left out. An appraisal rated by the team leader and
+          waiting on their supervisor is still in progress from the company's
+          point of view; it is not HR's, so counting it under `awaitingHr`
+          would put rows in their queue that they cannot act on. Falling into
+          neither bucket was the third option, and a total that quietly does
+          not add up is the worst of the three. -- */
+    inProgress: workerStatuses.filter((s) => s === "OPEN" || s === "PENDING_SUPERVISOR").length,
     awaitingHr: workerStatuses.filter((s) => s === "PENDING_REVIEW").length,
     withMd: workerStatuses.filter((s) => s === "REVIEWED").length,
     closedThisMonth: workerStatuses.filter((s) => s === "CLOSED").length,

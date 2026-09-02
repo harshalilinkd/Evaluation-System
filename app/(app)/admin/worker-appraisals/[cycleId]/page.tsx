@@ -26,7 +26,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
       supabase
         .from("worker_evaluations")
         .select(
-          "id, worker_id, supervisor_id, department_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped, self_filled_via, overall_tick",
+          "id, worker_id, supervisor_id, reviewer_id, department_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped, self_filled_via, overall_tick",
         )
         .eq("cycle_id", cycleId)
         .is("excluded_at", null),
@@ -56,7 +56,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
       evaluationIds.length
         ? supabase
             .from("worker_evaluation_decisions")
-            .select("evaluation_id, salary_changed, old_ctc, increment_pct, new_ctc")
+            .select("evaluation_id, salary_changed, old_ctc, increment_pct, new_ctc, supervisor_comment, training_required")
             .in("evaluation_id", evaluationIds)
         : Promise.resolve({ data: [] }),
       workerIds.length
@@ -77,13 +77,27 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
 
   const decisionOf = new Map((decisions ?? []).map((d) => [d.evaluation_id, d]));
   const employmentOf = new Map((employment ?? []).map((e) => [e.profile_id, e]));
-  const trainingOf = new Map((supervisorRows ?? []).map((r) => [r.evaluation_id, r.training_required]));
+  /* -- 0100 moved the training tick to the decisions row, because the response
+        row it used to live on locks when the team leader submits and the person
+        who answers it has not started then. The RESPONSE is still read as a
+        fallback: every appraisal filed before 0100 has it there and nowhere
+        else, and a column that silently empties for historic rows is worse than
+        one extra lookup. -- */
+  const legacyTrainingOf = new Map(
+    (supervisorRows ?? []).map((r) => [r.evaluation_id, r.training_required]),
+  );
+  const trainingOf = new Map(
+    evaluationIds.map((id) => [
+      id,
+      decisionOf.get(id)?.training_required ?? legacyTrainingOf.get(id) ?? null,
+    ]),
+  );
   const departmentOf = new Map((departments ?? []).map((d) => [d.id, d.name]));
 
   const ids = [
     ...new Set(
       [
-        ...(rows ?? []).flatMap((r) => [r.worker_id, r.supervisor_id]),
+        ...(rows ?? []).flatMap((r) => [r.worker_id, r.supervisor_id, r.reviewer_id]),
         ...(workerPool ?? []).map((w) => w.reports_to),
       ].filter((v): v is string => Boolean(v)),
     ),
@@ -101,6 +115,8 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         workerId: r.worker_id,
         workerName: nameOf.get(r.worker_id) ?? "—",
         supervisorName: r.supervisor_id ? (nameOf.get(r.supervisor_id) ?? "—") : "—",
+        // 0100: the supervisor who reviews those ratings, where one is assigned.
+        reviewerName: r.reviewer_id ? (nameOf.get(r.reviewer_id) ?? "—") : null,
         selfIn: Boolean(r.self_submitted_at) || r.self_skipped,
         supervisorIn: Boolean(r.supervisor_submitted_at) || r.supervisor_skipped,
         selfSubmittedAt: r.self_submitted_at,

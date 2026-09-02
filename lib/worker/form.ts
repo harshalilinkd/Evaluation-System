@@ -42,7 +42,14 @@ export type WorkerSheet = {
   dueOn: string | null;
   questions: WorkerSheetQuestion[];
   answers: Record<string, WorkerTick>;
-  /** Paper form: "Supervisor Comment". Supervisor layer only. */
+  /* -- 0100: TRUE when a supervisor is assigned to review these ticks.
+        When it is, the three fields below belong to THEM and are not on this
+        sheet at all — the team leader rates and nothing else. When it is not,
+        this is a round launched before the review step existed, and the rater
+        still fills them exactly as they always did. That second case is what
+        keeps every live round working rather than stranding it. -- */
+  hasReviewer: boolean;
+  /** Paper form: "Supervisor Comment". Only when there is no reviewer. */
   overallComment: string;
   /** Paper form: "Training Required Yes/No". Supervisor layer only. */
   trainingRequired: boolean | null;
@@ -83,7 +90,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   const { data: evaluation } = await supabase
     .from("worker_evaluations")
     .select(
-      "id, cycle_id, worker_id, supervisor_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped",
+      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -143,8 +150,13 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   /* -- Read through the AUTHENTICATED client, so RLS decides. A worker gets
         nothing back here and the field is null for them — the screen is not
         making that decision, the policy is. -- */
+  const hasReviewer = evaluation.reviewer_id !== null;
+
+  /* -- Not queried at all once a supervisor owns the decision. Fetching it and
+        choosing not to render it leaves the leak one careless line away; not
+        fetching it keeps the figure out of the process (A3-8's reasoning). -- */
   const [{ data: decisions }, { data: employment }] =
-    layer === "SUPERVISOR"
+    layer === "SUPERVISOR" && !hasReviewer
       ? await Promise.all([
           supabase
             .from("worker_evaluation_decisions")
@@ -192,10 +204,11 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         isOverall: q.is_overall,
       })),
       answers: (response?.answers ?? {}) as Record<string, WorkerTick>,
-      overallComment: response?.overall_comment ?? "",
-      trainingRequired: response?.training_required ?? null,
+      hasReviewer,
+      overallComment: hasReviewer ? "" : (response?.overall_comment ?? ""),
+      trainingRequired: hasReviewer ? null : (response?.training_required ?? null),
       salary:
-        layer === "SUPERVISOR"
+        layer === "SUPERVISOR" && !hasReviewer
           ? {
               salaryChanged: decisions?.salary_changed ?? false,
               // What was recorded on this appraisal, else what they are on now.
@@ -256,7 +269,11 @@ export async function saveWorkerSheet(
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
-      ...(sheet.data.layer === "SUPERVISOR"
+      /* -- 0100: only where nobody is reviewing. With a supervisor assigned
+            these two belong to them, on their own screen, and a browser still
+            sending them is out of date rather than malicious — so they are
+            dropped rather than refused. -- */
+      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.hasReviewer
         ? {
             overall_comment: extras?.overallComment ?? null,
             training_required: extras?.trainingRequired ?? null,
@@ -318,7 +335,11 @@ export async function submitWorkerSheet(
     .from("worker_evaluation_responses")
     .update({
       answers: answers as Json,
-      ...(sheet.data.layer === "SUPERVISOR"
+      /* -- 0100: only where nobody is reviewing. With a supervisor assigned
+            these two belong to them, on their own screen, and a browser still
+            sending them is out of date rather than malicious — so they are
+            dropped rather than refused. -- */
+      ...(sheet.data.layer === "SUPERVISOR" && !sheet.data.hasReviewer
         ? {
             overall_comment: extras?.overallComment ?? null,
             training_required: extras?.trainingRequired ?? null,

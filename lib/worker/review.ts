@@ -128,7 +128,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
         .eq("evaluation_id", evaluationId),
       supabase
         .from("worker_evaluation_decisions")
-        .select("salary_changed, old_ctc, increment_pct, new_ctc, decided_by, decided_at")
+        .select("salary_changed, old_ctc, increment_pct, new_ctc, decided_by, decided_at, supervisor_comment, training_required")
         .eq("evaluation_id", evaluationId)
         .maybeSingle(),
     ]);
@@ -201,8 +201,14 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
         isOverall: q.is_overall,
         supervisor: supervisorAnswers[q.question_id] ?? null,
       })),
-      supervisorComment: supervisorRow?.overall_comment ?? "",
-      trainingRequired: supervisorRow?.training_required ?? null,
+      /* -- 0100 moved both to the decisions row: the supervisor who writes
+            them is not the person who ticked, and a response row locks on its
+            own submission. The RESPONSE is read as a fallback, because every
+            appraisal filed before 0100 has them there and nowhere else —
+            dropping it would blank the comment on historic records rather than
+            show it. -- */
+      supervisorComment: decisions?.supervisor_comment ?? supervisorRow?.overall_comment ?? "",
+      trainingRequired: decisions?.training_required ?? supervisorRow?.training_required ?? null,
       overallTick: evaluation.overall_tick,
       currentCtcOnRecord: employment?.current_ctc ?? null,
       salary: decisions
@@ -652,6 +658,7 @@ export async function getWorkerActivity(evaluationId: string): Promise<WorkerAct
 const STAGE_WORD: Record<string, string> = {
   DRAFT: "not started",
   OPEN: "in progress",
+  PENDING_SUPERVISOR: "with the supervisor",
   PENDING_REVIEW: "with HR",
   REVIEWED: "with management",
   CLOSED: "finished",

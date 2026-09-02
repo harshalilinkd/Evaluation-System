@@ -203,7 +203,19 @@ export const NAV: readonly NavGroup[] = [
  * ticked HOD on their account. Optional, defaulting to false, so every existing
  * caller behaves exactly as it did.
  */
-export function navFor(roles: readonly AppRole[], leadsTeam = false): NavGroup[] {
+export function navFor(
+  roles: readonly AppRole[],
+  leadsTeam = false,
+  /* -- 0100: the same idea for the shop floor, and there are now two of them.
+        The comment below argued against a general mechanism on the grounds
+        that this was the ONE route unlocked by a relationship. It is not any
+        more: a team leader is whoever the worker reports to — at the owner's
+        instruction, "despite their access level" — and a reviewer is stored as
+        a relationship too. Both are still named explicitly rather than flagged
+        on the item, so adding a third stays a decision somebody has to make
+        rather than a switch already sitting there. -- */
+  ratesWorkers = false,
+): NavGroup[] {
   /* -- SCORECARD, HIDDEN FOR HR_ADMIN/MD, at the owner's explicit instruction.
         It moved inside Reports as a tab for them, so the standalone sidebar
         entry would be a second door to the same room. Everyone else keeps it
@@ -232,7 +244,8 @@ export function navFor(roles: readonly AppRole[], leadsTeam = false): NavGroup[]
           // whose access is decided by anything other than a role, and a
           // general mechanism for one case invites the next person to use it
           // for something else.
-          (leadsTeam && item.href === ROUTES.team)) &&
+          (leadsTeam && item.href === ROUTES.team) ||
+          (ratesWorkers && item.href === "/worker-team")) &&
         !(scorecardMovedIntoReports && item.href === ROUTES.scorecard),
     ),
   })).filter((group) => group.items.length > 0);
@@ -246,8 +259,9 @@ export function activeHref(
   pathname: string,
   roles: readonly AppRole[],
   leadsTeam = false,
+  ratesWorkers = false,
 ): string | null {
-  const candidates = navFor(roles, leadsTeam)
+  const candidates = navFor(roles, leadsTeam, ratesWorkers)
     .flatMap((group) => group.items)
     .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
     .sort((a, b) => b.href.length - a.href.length);
