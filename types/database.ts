@@ -1819,6 +1819,17 @@ export type Database = {
       };
       /* 0101 · one press, where the rater is also the supervisor: locks the
          ticks, files the decision and sends it to HR in one transaction. */
+      /* 0105 · deleting a production record. SECURITY DEFINER because
+         `app_notifications` has no DELETE policy for anyone (0059, N1-9) and
+         the bell entries must go with the record they point at. */
+      delete_worker_appraisal: {
+        Args: { p_evaluation_id: string };
+        Returns: undefined;
+      };
+      delete_worker_round: {
+        Args: { p_cycle_id: string };
+        Returns: number;
+      };
       submit_worker_combined: {
         Args: {
           p_evaluation_id: string;

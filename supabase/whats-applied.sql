@@ -165,6 +165,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0105_none — production chase is code, not schema', 'none_worker_chase',
      'the production round is chased nightly',
      'No migration. Recorded here because the FLOW changed: until this, a production due date passed and nobody was told. The ladder, the templates and the HR digest are all application code — nothing in the database says whether it is wired.'),
+  ('0105_delete_worker_records', 'worker_delete_fns',
+     'deleting a production record clears its bell entries',
+     'Without it both delete paths clear app_notifications from the caller''s own session — and 0059 gives that table no DELETE policy for anyone, so the clear matches zero rows and returns no error. Every bell entry survives, pointing at an appraisal that is gone.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -606,6 +609,12 @@ select
           reads the list. A detector that cannot detect must not answer NULL
           (DIAGNOSTIC-1), and must not pretend either: the note says so. -- */
     when 'none_worker_chase' then true
+
+    when 'worker_delete_fns' then (
+      select count(*) = 2 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public'
+         and p.proname in ('delete_worker_appraisal', 'delete_worker_round')
+         and p.prosecdef)
 
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace

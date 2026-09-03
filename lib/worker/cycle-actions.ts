@@ -923,40 +923,71 @@ export async function deleteWorkerRoundForever(
         The audit row survives all of it: `audit_log.entity_id` carries no
         foreign key (P3-2), so it outlives what it describes and is the only
         remaining evidence the round existed. -- */
-  const [{ count: appraisals }, { data: evaluationIds }] = await Promise.all([
-    supabase
-      .from("worker_evaluations")
-      .select("id", { count: "exact", head: true })
-      .eq("cycle_id", cycleId),
-    supabase.from("worker_evaluations").select("id").eq("cycle_id", cycleId),
-  ]);
+  /* -- THROUGH THE FUNCTION, and the reason is a bug this code had.
+        It cleared `app_notifications` from HERE, and 0059 gives that table no
+        DELETE policy for anyone — deliberately (N1-9). So the clear matched
+        zero rows and returned no error, and every bell entry survived a round
+        being deleted, pointing at appraisals that were gone. A refused DELETE
+        succeeds having done nothing; a refused INSERT raises. That asymmetry
+        is the trap, and it is the ninth time this log has recorded it.
 
-  // Logged BEFORE the rows go, and carrying the count — otherwise the trail
-  // records that something was deleted without recording how much.
-  await supabase.rpc("log_admin_action", {
-    p_entity: "worker_cycle",
-    p_entity_id: cycleId,
-    p_action: "worker_cycle.deleted_forever",
-    p_diff: {
-      name: cycle.name,
-      period_label: cycle.period_label,
-      status: cycle.status,
-      appraisals_destroyed: appraisals ?? 0,
-    } as Json,
-  });
+        0105 moves the whole thing into one SECURITY DEFINER call, which also
+        makes it atomic: the audit row, the bell entries and the cycle commit
+        together rather than in three round trips that could half-apply. -- */
+  const { error } = await supabase.rpc("delete_worker_round", { p_cycle_id: cycleId });
 
-  /* -- The bell first. `app_notifications.evaluation_id` carries no foreign
-        key (P3-2), so nothing cascades it — leave them and somebody opens the
-        app to "A production appraisal is open for you" pointing at a round
-        that no longer exists. F17-8 hit exactly this in the reset script. -- */
-  const ids = (evaluationIds ?? []).map((r) => r.id);
-  if (ids.length > 0) {
-    await supabase.from("app_notifications").delete().in("evaluation_id", ids);
+  if (error) {
+    return fail("DELETE_REFUSED", error.message.replace(/^.*?:\s*/, "").trim() || error.message);
   }
-
-  const { error } = await supabase.from("worker_cycles").delete().eq("id", cycleId);
-  if (error) return fail("DELETE_REFUSED", error.message);
 
   revalidate(cycleId);
   return { ok: true, data: { id: cycleId } };
+}
+
+/* ================================================ deleteWorkerAppraisal === */
+
+/**
+ * Delete ONE appraisal for good, leaving the round and everybody else in it.
+ *
+ * Asked for directly, after the round-level delete: a round is the wrong unit
+ * when one person was added by mistake, or is a test record sitting among real
+ * ones. Binning the round to remove one row would take everybody with it.
+ *
+ * IT DESTROYS AN APPRAISAL RECORD, and the cost is the same one F17-4 argued
+ * against and the owner has since overruled at the round level: the frozen
+ * sheet that person was given, their ticks, both comments, the training answer
+ * and the increment recommendation all cascade. There is no bin for a single
+ * row — a two-step delete over one appraisal would be a recycle bin holding
+ * fragments of rounds, which is harder to reason about than the thing it
+ * protects. What keeps it deliberate is that it is reached only by opening the
+ * row, and the confirmation names what goes.
+ *
+ * HR only. The MD reads this board and does not curate it (§9 as amended).
+ */
+export async function deleteWorkerAppraisal(
+  evaluationId: string,
+): Promise<WorkerResult<{ id: string }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  /* -- The cycle, read BEFORE the delete: it is what tells the revalidation
+        which board to refresh, and after the call there is nothing to read. -- */
+  const { data: evaluation } = await supabase
+    .from("worker_evaluations")
+    .select("cycle_id")
+    .eq("id", evaluationId)
+    .maybeSingle();
+
+  const { error } = await supabase.rpc("delete_worker_appraisal", {
+    p_evaluation_id: evaluationId,
+  });
+
+  if (error) {
+    return fail("DELETE_REFUSED", error.message.replace(/^.*?:\s*/, "").trim() || error.message);
+  }
+
+  revalidate(evaluation?.cycle_id ?? undefined);
+  return { ok: true, data: { id: evaluationId } };
 }

@@ -27,6 +27,16 @@ const OVERALL_WORD: Record<string, string> = {
   NEEDS_IMPROVEMENT: "Needs improvement",
 };
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { deleteWorkerAppraisal } from "@/lib/worker/cycle-actions";
 import type { ColumnDef } from "@tanstack/react-table";
 
 export type BoardRow = {
@@ -249,6 +259,15 @@ export function WorkerBoard({
         escape was a "Show all" link nobody reads until they need it, and a tile
         is the same control where the eye already is. The row now reads as a
         total and its parts, and exactly one card is lit at any moment. -- */
+  const router = useRouter();
+  /* -- 0100: removing ONE appraisal, leaving the round and everybody else in
+        it. Held here rather than inside the details dialog because that dialog
+        closes when this one opens, and a confirmation whose subject vanished
+        with the screen behind it has nothing to name. -- */
+  const [deleting, setDeleting] = React.useState<BoardRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
   const [filter, setFilter] = React.useState<
     "all" | "waiting" | "supervisor" | "ready" | "md" | "closed"
   >("all");
@@ -701,6 +720,38 @@ export function WorkerBoard({
         storageKey="appraise.worker-board.column-widths"
         rowNoun="worker"
         rowTitle={(r) => r.workerName}
+        /* -- Rendered INSIDE the details dialog, so removing an appraisal takes
+              opening the row first. That is the friction this needs: one press
+              on a table row should not be able to destroy a record, and the
+              dialog is where somebody is already looking at what they would be
+              deleting.
+
+              HR only. The MD reads this board and does not curate it (§9 as
+              amended), and the action refuses them server-side regardless. -- */
+        rowActions={
+          mdView
+            ? undefined
+            : (row) => (
+                <>
+                  <Button asChild variant="secondary" className="min-h-11">
+                    <Link href={`/admin/worker-appraisals/${row.cycleId}/${row.id}`}>
+                      Open the report
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="min-h-11 text-critical hover:text-critical"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleting(row);
+                    }}
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                    Delete this appraisal
+                  </Button>
+                </>
+              )
+        }
         // +250 for the Supervisor column and the widened Team leader one, so
        // neither is squeezed below the address it now carries.
        // 110 narrower: the unnamed Review column is gone and its job moved
@@ -725,6 +776,60 @@ export function WorkerBoard({
         available={available}
         raters={raters}
       />
+
+      {/* -- WHAT GOES, NAMED. This is the last press before an appraisal
+            record is destroyed, and §13.4 asks an irreversible action to
+            describe itself precisely — "are you sure?" is not a description.
+            There is no bin for a single row, and the text says so rather than
+            letting somebody assume one. -- */}
+      <Dialog
+        open={deleting !== null}
+        onOpenChange={(open) => (open ? null : setDeleting(null))}
+      >
+        <DialogContent className="w-[min(96vw,480px)] border-rule">
+          <DialogHeader>
+            <DialogTitle className="text-display-sm text-ink">
+              Delete {deleting?.workerName}&rsquo;s appraisal?
+            </DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              This removes their ratings, both comments, the training answer, the increment
+              recommendation and the frozen sheet they were given. The round and everybody else in
+              it are untouched. It cannot be undone and there is no recycle bin for one appraisal.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteError ? (
+            <p role="alert" className="font-sans text-body-sm text-critical">
+              {deleteError}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="ghost" className="min-h-11" onClick={() => setDeleting(null)}>
+              Keep it
+            </Button>
+            <Button
+              className="min-h-11 bg-critical text-ink-invert hover:bg-critical/90"
+              disabled={deleteBusy}
+              onClick={async () => {
+                if (!deleting) return;
+                setDeleteBusy(true);
+                setDeleteError(null);
+                const result = await deleteWorkerAppraisal(deleting.id);
+                setDeleteBusy(false);
+                if (!result.ok) {
+                  setDeleteError(result.error.message);
+                  return;
+                }
+                setDeleting(null);
+                router.refresh();
+              }}
+            >
+              Delete for good
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BinRoundDialog cycle={binning && cycle ? cycle : null} onClose={() => setBinning(false)} />
 
