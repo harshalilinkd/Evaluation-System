@@ -82,24 +82,48 @@ export type BoardRow = {
  * It names WHO is holding it, because that is the actionable half: HR cannot
  * fill either sheet, so every outstanding row resolves to somebody to ring.
  */
-function nextStep(row: BoardRow): { text: string; tone: "wait" | "ready" | "done" } {
-  if (row.status === "REVIEWED" || row.status === "CLOSED") {
-    return { text: "Finished", tone: "done" };
+function nextStep(
+  row: BoardRow,
+  mdView: boolean,
+): { text: string; action: string | null; tone: "wait" | "ready" | "done" } {
+  /* -- REVIEWED IS NOT FINISHED, and calling it that was the bug.
+        In this module REVIEWED means "HR has sent it UP" — it is sitting with
+        management, waiting to be signed off. The board said "Finished" in grey
+        for exactly the row the MD had to act on, so the one person who could
+        move it was told there was nothing to do. -- */
+  if (row.status === "CLOSED") {
+    return { text: "Finished", action: "View", tone: "done" };
   }
+
+  if (row.status === "REVIEWED") {
+    return mdView
+      ? { text: "Waiting on you to sign off", action: "Sign off", tone: "ready" }
+      : { text: "With management", action: "View", tone: "wait" };
+  }
+
+  if (row.status === "PENDING_REVIEW") {
+    return mdView
+      ? { text: "With HR", action: null, tone: "wait" }
+      : { text: "Filled in — ready for your review", action: "Review", tone: "ready" };
+  }
+
   /* -- 0100: rated, and now with the supervisor. Named, because that is the
-        actionable half — HR cannot record the comment, the training tick or
-        the recommended percentage, so an outstanding row here resolves to
-        somebody to ring, exactly as an unrated one does. -- */
+        actionable half — neither HR nor the MD can record the comment, the
+        training tick or the recommended percentage, so an outstanding row here
+        resolves to somebody to ring. -- */
   if (row.status === "PENDING_SUPERVISOR") {
     return {
       text: `Rated — with ${row.reviewerName ?? "their supervisor"} to review`,
+      action: null,
       tone: "wait",
     };
   }
-  if (row.supervisorIn) {
-    return { text: "Filled in — ready for your review", tone: "ready" };
-  }
-  return { text: `Waiting on ${row.supervisorName} to fill it in`, tone: "wait" };
+
+  return {
+    text: `Waiting on ${row.supervisorName} to fill it in`,
+    action: null,
+    tone: "wait",
+  };
 }
 
 /**
@@ -422,31 +446,59 @@ export function WorkerBoard({
               in has no report behind it, so "Waiting on X to fill it in" stays
               plain text — a link to an empty page is worse than no link, and
               the honest reading is that there is nothing to see yet. -- */
-        cell: ({ row }) => {
-          const step = nextStep(row.original);
-          const className = cn(
-            "truncate font-sans text-body-sm",
-            step.tone === "ready"
-              ? "font-medium text-primary"
-              : step.tone === "done"
-                ? "text-ink-muted"
-                : "text-ink",
-          );
+        /* -- A SENTENCE AND, WHERE THERE IS ONE, A BUTTON.
+              An underlined phrase in grey is not a control — reported exactly
+              that way, by the person it was blocking: "how will she know she
+              need to click this text". A button looks pressable because it is,
+              and the sentence beside it says why.
 
-          if (!row.original.supervisorIn) return <span className={className}>{step.text}</span>;
+              THE STAGE IS READ FROM THE VIEWER, not only from the row. The
+              same appraisal is "with management" to HR and "waiting on you" to
+              the MD, and one wording for both told one of them the wrong
+              thing.
+
+              No button where there is nothing behind it: a sheet nobody has
+              filled in has no report to open, and a row that is not yours to
+              act on gets a sentence rather than a control that would do
+              somebody else's job. -- */
+        cell: ({ row }) => {
+          const step = nextStep(row.original, mdView);
 
           return (
-            <Link
-              href={`/admin/worker-appraisals/${row.original.cycleId}/${row.original.id}`}
-              className={cn(className, "block underline underline-offset-2")}
-            >
-              {step.text}
-            </Link>
+            <span className="flex min-w-0 items-center gap-3">
+              <span
+                className={cn(
+                  "truncate font-sans text-body-sm",
+                  step.tone === "ready"
+                    ? "font-medium text-ink"
+                    : step.tone === "done"
+                      ? "text-ink-muted"
+                      : "text-ink",
+                )}
+              >
+                {step.text}
+              </span>
+
+              {step.action ? (
+                <Button
+                  asChild
+                  size="sm"
+                  variant={step.tone === "ready" ? "default" : "outline"}
+                  className="h-8 shrink-0"
+                >
+                  <Link
+                    href={`/admin/worker-appraisals/${row.original.cycleId}/${row.original.id}`}
+                  >
+                    {step.action}
+                  </Link>
+                </Button>
+              ) : null}
+            </span>
           );
         },
       },
     ],
-    [allRounds],
+    [allRounds, mdView],
   );
 
   return (
