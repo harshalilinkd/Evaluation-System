@@ -84,7 +84,7 @@ export default async function Page() {
 
   const { data: people } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code")
+    .select("id, full_name, employee_code, designation, date_of_joining, departments(name)")
     .in("id", [...new Set([...list, ...toReview].map((r) => r.worker_id))]);
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
@@ -145,12 +145,24 @@ export default async function Page() {
                       <p className="font-sans text-body-lg text-ink">
                         {worker?.full_name ?? "Worker"}
                       </p>
-                      <p className="tabular font-sans text-body-sm text-ink-muted">
-                        {worker?.employee_code ?? "—"}
-                        {round ? ` · ${round.name}` : ""}
-                        {row.supervisor_submitted_at
-                          ? ` · rated ${formatDate(row.supervisor_submitted_at)}`
-                          : ""}
+                      <p className="font-sans text-body-sm text-ink-muted">
+                        {[
+                          worker?.employee_code,
+                          worker?.designation,
+                          worker?.departments?.name,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "No employee ID or designation on their profile"}
+                      </p>
+                      <p className="font-sans text-body-sm text-ink-muted">
+                        {[
+                          round ? `${round.name} · ${round.period_label}` : null,
+                          row.supervisor_submitted_at
+                            ? `rated ${formatDate(row.supervisor_submitted_at)}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
                       </p>
                     </div>
 
@@ -192,8 +204,34 @@ export default async function Page() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="font-sans text-body-lg text-ink">{worker?.full_name ?? "Worker"}</p>
-                  <p className="tabular font-sans text-body-sm text-ink-muted">
-                    {worker?.employee_code ?? "—"}
+                  {/* -- WHO, WHERE AND BY WHEN.
+                        The card was a name and an em dash — the dash being an
+                        employee code nobody had filled in — which is not enough
+                        to rate somebody from, and on a floor with two people of
+                        similar names it is not even enough to identify them.
+                        Every field is dropped rather than shown empty, so the
+                        line carries only what is actually known. -- */}
+                  <p className="font-sans text-body-sm text-ink-muted">
+                    {[
+                      worker?.employee_code,
+                      worker?.designation,
+                      worker?.departments?.name,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "No employee ID or designation on their profile"}
+                  </p>
+                  <p className="font-sans text-body-sm text-ink-muted">
+                    {[
+                      cycle ? `${cycle.name} · ${cycle.period_label}` : null,
+                      worker?.date_of_joining
+                        ? `joined ${formatDate(worker.date_of_joining)}`
+                        : null,
+                      cycle?.supervisor_due_on
+                        ? `due ${formatDate(cycle.supervisor_due_on)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </p>
                 </div>
 

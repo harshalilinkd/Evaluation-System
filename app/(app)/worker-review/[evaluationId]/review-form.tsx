@@ -138,6 +138,7 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
             ["Employee ID", sheet.employeeCode],
             ["Designation", sheet.designation],
             ["Team", sheet.department],
+            ["With the company since", sheet.joinedOn ? formatDate(sheet.joinedOn) : null],
             ["Round", `${sheet.cycleName}${sheet.periodLabel ? ` · ${sheet.periodLabel}` : ""}`],
             ["Rated by", sheet.ratedBy],
             ["Rated on", sheet.ratedAt ? formatDate(sheet.ratedAt) : null],

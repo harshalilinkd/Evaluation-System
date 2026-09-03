@@ -34,6 +34,8 @@ export type WorkerReviewSheet = {
   employeeCode: string | null;
   designation: string | null;
   department: string | null;
+  /** How long they have been doing the job — the context a rating is read against. */
+  joinedOn: string | null;
   /** Who ticked it. `supervisor_id` on the row; "team leader" on every screen. */
   ratedBy: string | null;
   /* -- TRUE where the same person rated and is now reviewing. On a small floor
@@ -119,7 +121,7 @@ export async function getWorkerReviewSheet(
         .maybeSingle(),
       supabase
         .from("profiles")
-        .select("full_name, employee_code, designation, departments(name)")
+        .select("full_name, employee_code, designation, date_of_joining, departments(name)")
         .eq("id", evaluation.worker_id)
         .maybeSingle(),
       supabase
@@ -167,6 +169,7 @@ export async function getWorkerReviewSheet(
       employeeCode: worker?.employee_code ?? null,
       designation: worker?.designation ?? null,
       department: worker?.departments?.name ?? null,
+      joinedOn: worker?.date_of_joining ?? null,
       ratedBy: rater?.full_name ?? null,
       ratedByYou: evaluation.supervisor_id === profile.id,
       ratedAt: response?.submitted_at ?? evaluation.supervisor_submitted_at,

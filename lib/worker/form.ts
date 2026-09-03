@@ -33,6 +33,12 @@ export type WorkerSheet = {
         the record it was drawn from. -- */
   department: string | null;
   designation: string | null;
+  /* -- Enough to know WHO is being rated. A name alone identifies nobody on a
+        floor with two people of similar names, and it says nothing about how
+        long they have been doing the job — which is the context a rating is
+        made against. -- */
+  employeeCode: string | null;
+  dateOfJoining: string | null;
   supervisorName: string | null;
   /** Which side the VIEWER is on. Decided here, never sent by the browser. */
   layer: "SELF" | "SUPERVISOR";
@@ -125,7 +131,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         .maybeSingle(),
       supabase
         .from("profiles")
-        .select("full_name, designation, departments(name)")
+        .select("full_name, employee_code, designation, date_of_joining, departments(name)")
         .eq("id", evaluation.worker_id)
         .maybeSingle(),
       supabase
@@ -214,6 +220,8 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
       workerName: worker?.full_name ?? "This worker",
       department: worker?.departments?.name ?? null,
       designation: worker?.designation ?? null,
+      employeeCode: worker?.employee_code ?? null,
+      dateOfJoining: worker?.date_of_joining ?? null,
       supervisorName: supervisor?.full_name ?? null,
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",

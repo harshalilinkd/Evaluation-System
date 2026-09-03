@@ -343,8 +343,8 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           <dd className="font-sans text-body text-ink">{sheet.workerName}</dd>
         </div>
         <div>
-          <dt className="type-label text-ink-muted">Period</dt>
-          <dd className="font-sans text-body text-ink">{sheet.periodLabel || "—"}</dd>
+          <dt className="type-label text-ink-muted">Employee ID</dt>
+          <dd className="tabular font-sans text-body text-ink">{sheet.employeeCode ?? "—"}</dd>
         </div>
         <div>
           <dt className="type-label text-ink-muted">Department</dt>
@@ -354,9 +354,25 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           <dt className="type-label text-ink-muted">Designation</dt>
           <dd className="font-sans text-body text-ink">{sheet.designation ?? "—"}</dd>
         </div>
-        <div className="col-span-2">
-          <dt className="type-label text-ink-muted">Supervisor</dt>
+        <div>
+          <dt className="type-label text-ink-muted">With the company since</dt>
+          <dd className="font-sans text-body text-ink">
+            {sheet.dateOfJoining ? formatDate(sheet.dateOfJoining) : "—"}
+          </dd>
+        </div>
+        <div>
+          {/* Named for what they do, as the board is: this person fills the
+              tick sheet. On their own sheet it is their own name, which is the
+              truthful answer to "whose ratings are these". */}
+          <dt className="type-label text-ink-muted">Rated by</dt>
           <dd className="font-sans text-body text-ink">{sheet.supervisorName ?? "—"}</dd>
+        </div>
+        <div className="col-span-2">
+          <dt className="type-label text-ink-muted">Round</dt>
+          <dd className="font-sans text-body text-ink">
+            {[sheet.cycleName, sheet.periodLabel].filter(Boolean).join(" · ") || "—"}
+            {sheet.dueOn ? ` · due ${formatDate(sheet.dueOn)}` : ""}
+          </dd>
         </div>
       </dl>
 
