@@ -100,7 +100,28 @@ export default async function SettingsPage({
       .order("created_at", { ascending: false }),
   ]);
   const binnedCycles = binState.ok ? binState.data : [];
-  const binnedRounds = binnedRoundRows.data ?? [];
+  /* -- How many appraisals each binned round holds, so the delete
+        confirmation can name what will be destroyed rather than saying
+        "everything in it". One query for all of them, counted in TypeScript:
+        a count per round would be a round trip per row on a screen that
+        usually has none. -- */
+  const binnedRoundIds = (binnedRoundRows.data ?? []).map((r) => r.id);
+  const { data: binnedRoundEvaluations } = binnedRoundIds.length
+    ? await supabase
+        .from("worker_evaluations")
+        .select("cycle_id")
+        .in("cycle_id", binnedRoundIds)
+    : { data: [] };
+
+  const appraisalsIn = new Map<string, number>();
+  for (const row of binnedRoundEvaluations ?? []) {
+    appraisalsIn.set(row.cycle_id, (appraisalsIn.get(row.cycle_id) ?? 0) + 1);
+  }
+
+  const binnedRounds = (binnedRoundRows.data ?? []).map((r) => ({
+    ...r,
+    appraisals: appraisalsIn.get(r.id) ?? 0,
+  }));
   const outbound = outboundState.ok
     ? outboundState.data
     : { paused: false, pausedByName: null, pausedAt: null, reason: null };

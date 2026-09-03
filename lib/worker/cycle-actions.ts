@@ -907,22 +907,52 @@ export async function deleteWorkerRoundForever(
     );
   }
 
-  if (cycle.status !== "DRAFT") {
-    return fail(
-      "LAUNCHED",
-      `${cycle.name} was launched, so it holds the frozen sheet and the ticks of everyone in it. Those cannot be destroyed — it stays in the recycle bin, where it takes up nothing and can be restored.`,
-    );
-  }
+  /* -- A LAUNCHED ROUND MAY NOW BE DELETED, at the owner's explicit
+        instruction: "hr should able to delete cycles even if they are
+        completed". This REVERSES the refusal that stood here, which kept a
+        launched round in the bin because it cascades to every frozen sheet and
+        every tick in it, and §5's snapshot rule is what makes an appraisal a
+        record rather than a picture of a form.
 
-  // Logged BEFORE the row goes: `audit_log.entity_id` carries no foreign key,
-  // so the record outlives what it describes and is the only remaining evidence
-  // that this round existed.
+        That reasoning is not wrong; it has been overruled, and the cost is
+        real: what goes is gone. Two things keep it deliberate rather than
+        merely possible — it is still the SECOND step, reachable only from the
+        recycle bin, and the confirmation names exactly how many appraisals and
+        frozen sheets will be destroyed rather than saying "everything in it".
+
+        The audit row survives all of it: `audit_log.entity_id` carries no
+        foreign key (P3-2), so it outlives what it describes and is the only
+        remaining evidence the round existed. -- */
+  const [{ count: appraisals }, { data: evaluationIds }] = await Promise.all([
+    supabase
+      .from("worker_evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("cycle_id", cycleId),
+    supabase.from("worker_evaluations").select("id").eq("cycle_id", cycleId),
+  ]);
+
+  // Logged BEFORE the rows go, and carrying the count — otherwise the trail
+  // records that something was deleted without recording how much.
   await supabase.rpc("log_admin_action", {
     p_entity: "worker_cycle",
     p_entity_id: cycleId,
     p_action: "worker_cycle.deleted_forever",
-    p_diff: { name: cycle.name, period_label: cycle.period_label, status: cycle.status } as Json,
+    p_diff: {
+      name: cycle.name,
+      period_label: cycle.period_label,
+      status: cycle.status,
+      appraisals_destroyed: appraisals ?? 0,
+    } as Json,
   });
+
+  /* -- The bell first. `app_notifications.evaluation_id` carries no foreign
+        key (P3-2), so nothing cascades it — leave them and somebody opens the
+        app to "A production appraisal is open for you" pointing at a round
+        that no longer exists. F17-8 hit exactly this in the reset script. -- */
+  const ids = (evaluationIds ?? []).map((r) => r.id);
+  if (ids.length > 0) {
+    await supabase.from("app_notifications").delete().in("evaluation_id", ids);
+  }
 
   const { error } = await supabase.from("worker_cycles").delete().eq("id", cycleId);
   if (error) return fail("DELETE_REFUSED", error.message);

@@ -22,6 +22,8 @@ export type BinnedRound = {
   name: string;
   period_label: string;
   status: string;
+  /** How many appraisals go with it, so the confirmation can say so. */
+  appraisals: number;
 };
 
 const STATUS_WORD: Record<string, string> = {
@@ -105,22 +107,20 @@ export function BinnedRounds({ rounds }: { rounds: BinnedRound[] }) {
                 )}
                 Restore
               </Button>
-              {/* -- Offered only where it can succeed. A round that was ever
-                    LAUNCHED cascades to every frozen sheet and every tick in it,
-                    and §5's snapshot rule is what makes an appraisal a record
-                    rather than a picture of a form that has since changed. The
-                    action refuses it server-side; not offering the button is
-                    what stops somebody discovering that by pressing it. -- */}
-              {round.status === "DRAFT" ? (
-                <Button
-                  variant="ghost"
-                  className="min-h-11 text-critical hover:text-critical"
-                  onClick={() => setPurging(round)}
-                >
-                  <Trash2 aria-hidden className="size-4" />
-                  Delete for good
-                </Button>
-              ) : null}
+              {/* -- OFFERED ON EVERY BINNED ROUND, at the owner's instruction:
+                    "hr should able to delete cycles even if they are
+                    completed". It used to appear only on a round that was never
+                    started, because a launched one cascades to every frozen
+                    sheet and every tick in it. That is still what happens — the
+                    confirmation says so, and names the number. -- */}
+              <Button
+                variant="ghost"
+                className="min-h-11 text-critical hover:text-critical"
+                onClick={() => setPurging(round)}
+              >
+                <Trash2 aria-hidden className="size-4" />
+                Delete for good
+              </Button>
             </span>
           </li>
         ))}
@@ -132,9 +132,22 @@ export function BinnedRounds({ rounds }: { rounds: BinnedRound[] }) {
             <DialogTitle className="text-display-sm text-ink">
               Delete {purging?.name} for good?
             </DialogTitle>
+            {/* -- WHAT GOES, COUNTED. "Everything in it" is not something
+                  somebody can weigh; a number is. This is the last press before
+                  appraisal records are destroyed, and §13.4 asks an
+                  irreversible action to describe itself precisely — vague is
+                  how somebody clears a round they meant to keep. -- */}
             <DialogDescription className="font-sans text-body-sm text-ink-muted">
-              This cannot be undone. The round and everything in it are removed. Only a round that
-              was never started can be deleted — anything with sheets in it stays in the bin.
+              {purging && purging.appraisals > 0 ? (
+                <>
+                  This destroys <span className="text-ink">{purging.appraisals}</span>{" "}
+                  {purging.appraisals === 1 ? "appraisal" : "appraisals"} — the ratings, the
+                  comments, the training answer, the increment recommendation and the frozen sheet
+                  each person was given. It cannot be undone.
+                </>
+              ) : (
+                <>This round holds no appraisals. Deleting it removes the round itself. It cannot be undone.</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
