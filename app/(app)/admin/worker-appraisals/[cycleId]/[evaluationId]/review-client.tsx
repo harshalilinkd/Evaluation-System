@@ -430,21 +430,26 @@ export function WorkerReviewClient({
         {review.twoAuthors ? (
           <div className="sm:col-span-3">
             <p className="type-label text-ink-muted">Team leader&rsquo;s comment</p>
-            <p
+            <blockquote
               className={cn(
-                "mt-1 whitespace-pre-wrap font-sans text-body",
-                review.raterComment ? "text-ink" : "text-ink-muted",
+                "mt-1 whitespace-pre-wrap rounded-control border-l-4 border-rule bg-surface-mute px-4 py-3 font-sans",
+                review.raterComment ? "text-body-lg text-ink" : "text-body text-ink-muted",
               )}
             >
               {review.raterComment || "Nothing written."}
-            </p>
+            </blockquote>
           </div>
         ) : null}
         <div className="sm:col-span-3">
           <p className="type-label text-ink-muted">Supervisor comment</p>
-          <p className="mt-1 whitespace-pre-wrap font-sans text-body text-ink">
+          <blockquote
+            className={cn(
+              "mt-1 whitespace-pre-wrap rounded-control border-l-4 border-rule bg-surface-mute px-4 py-3 font-sans",
+              review.supervisorComment ? "text-body-lg text-ink" : "text-body text-ink-muted",
+            )}
+          >
             {review.supervisorComment || "Nothing written."}
-          </p>
+          </blockquote>
         </div>
       </div>
 

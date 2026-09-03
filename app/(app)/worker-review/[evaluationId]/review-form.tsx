@@ -201,18 +201,29 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
             rather than an empty card when they wrote nothing: a blank box
             headed with somebody's name reads as a comment that failed to
             load. -- */}
+      {/* -- SET AS A QUOTATION, not as a field value.
+            It read as a caption over a line of body text, which is how a
+            label/value pair looks — and this is the one thing on the screen
+            that is somebody's own WORDS about the person being appraised, and
+            the thing the decision below is made against. A tinted well, a left
+            bar and a larger face make it read as speech.
+
+            The bar is `--rule`, not a tier hue. §13.1 reserves those for whose
+            RATING a figure is, and a comment is not a rating — borrowing pink
+            here would say "the lead scored this", which is a different claim
+            from "the lead said this". -- */}
       <div className="card-surface space-y-2 p-4 sm:p-5">
         <p className="type-label text-ink-muted">
           {sheet.ratedByYou ? "Your comment" : `${sheet.ratedBy ?? "Team leader"}'s comment`}
         </p>
-        <p
+        <blockquote
           className={cn(
-            "whitespace-pre-wrap font-sans text-body",
-            sheet.raterComment ? "text-ink" : "text-ink-muted",
+            "whitespace-pre-wrap rounded-control border-l-4 border-rule bg-surface-mute px-4 py-3 font-sans",
+            sheet.raterComment ? "text-body-lg text-ink" : "text-body text-ink-muted",
           )}
         >
           {sheet.raterComment || "Nothing written."}
-        </p>
+        </blockquote>
       </div>
 
       {/* ---------- The supervisor's own three fields ---------- */}
