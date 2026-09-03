@@ -115,12 +115,21 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         A caution, not a block: HR may genuinely be somebody's manager on a
         small site, and refusing it would be the app overruling a fact about
         the company (§13.4 asks for the reason, not for the door). -- */
-  const { data: adminGrants } = await supabase
-    .from("user_roles")
-    .select("profile_id")
-    .in("role", ["HR_ADMIN", "MD"]);
+  const [{ data: adminGrants }, { data: supervisorGrants }] = await Promise.all([
+    supabase.from("user_roles").select("profile_id").in("role", ["HR_ADMIN", "MD"]),
+    supabase.from("user_roles").select("profile_id").eq("role", "SUPERVISOR"),
+  ]);
 
-  const adminIds = [...new Set((adminGrants ?? []).map((r) => r.profile_id))];
+  /* -- A SUPERVISOR GRANT ANSWERS THE QUESTION THIS FLAG ASKS.
+        The warning exists to say "this is an administrator, not a shop-floor
+        manager" — and holding the Supervisor access level is exactly the
+        evidence that they are one. Somebody who holds both is not a mistake to
+        warn about, so they are subtracted here rather than flagged and then
+        explained away. -- */
+  const isSupervisor = new Set((supervisorGrants ?? []).map((r) => r.profile_id));
+  const adminIds = [
+    ...new Set((adminGrants ?? []).map((r) => r.profile_id).filter((id) => !isSupervisor.has(id))),
+  ];
 
   const poolIds = (workerPool ?? []).map((w) => w.id);
 
@@ -179,7 +188,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
   const { data: people } = ids.length
     ? await supabase
         .from("profiles")
-        .select(`id, full_name, ${CONTACT_COLUMNS}`)
+        .select(`id, full_name, designation, ${CONTACT_COLUMNS}`)
         .in("id", ids)
     : { data: [] };
   const nameOf = new Map((people ?? []).map((p) => [p.id, p.full_name]));
@@ -189,6 +198,9 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         cannot drift the next time a template's purpose changes (which is
         exactly what just happened: the production invite moved from personal
         to official, and this line needed no edit). -- */
+  const designationOf = new Map(
+    (people ?? []).map((p) => [p.id, p.designation ?? null] as const),
+  );
   const emailOf = new Map(
     (people ?? []).map(
       (p) => [p.id, contactFor(p, "workerRatingInvite").email] as const,
@@ -232,6 +244,11 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
         employeeCode: w.employee_code,
         supervisorId: w.reports_to,
         supervisorName: w.reports_to ? (nameOf.get(w.reports_to) ?? null) : null,
+        /* -- Their job title, so "Harshali Bhopale · HR-Admin" and "Harshali ·
+              Design Coordinator" are tellable apart. Two people whose names
+              start the same way read as one person otherwise, which is exactly
+              how an administrator's name was mistaken for a supervisor's. -- */
+        supervisorDesignation: w.reports_to ? (designationOf.get(w.reports_to) ?? null) : null,
         openRoundName: openRoundOf.get(w.id) ?? null,
       }))}
       raters={raters}

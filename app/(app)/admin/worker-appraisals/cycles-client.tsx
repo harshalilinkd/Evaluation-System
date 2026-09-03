@@ -35,6 +35,8 @@ export type WorkerRow = {
   /** Their `reports_to`. The DEFAULT rater, not the only possible one. */
   supervisorId: string | null;
   supervisorName: string | null;
+  /** Their job title, so two people with the same first name are tellable apart. */
+  supervisorDesignation?: string | null;
   /**
    * `employment_records.next_increment_date`, so the dialog can tick the people
    * an increment is owed to when it is opened from the calendar.
@@ -669,7 +671,18 @@ export function StartRoundDialog({
                     const raterId = seeded;
                     const rowRaters =
                       w.supervisorId && !raters.some((r) => r.id === w.supervisorId)
-                        ? [{ id: w.supervisorId, name: w.supervisorName ?? "Their manager", designation: null }, ...raters]
+                        ? [
+                            {
+                              id: w.supervisorId,
+                              name: w.supervisorName ?? "Their manager",
+                              // Carried, not dropped. It was null here, so the
+                              // one name in the list WITHOUT a job title was the
+                              // worker's own manager — the person most likely to
+                              // be confused with somebody of a similar name.
+                              designation: w.supervisorDesignation ?? null,
+                            },
+                            ...raters,
+                          ]
                         : raters;
                     const included = chosen.has(w.id);
 
@@ -809,9 +822,13 @@ export function StartRoundDialog({
                               (§13.4). -- */}
                         {included && raterId && (adminIds ?? []).includes(raterId) ? (
                           <span className="w-full font-sans text-body-sm text-warning sm:col-span-3 sm:col-start-2">
-                            {rowRaters.find((r) => r.id === raterId)?.name ?? "That person"} is an
-                            administrator, not a shop-floor manager. The sheet will go to them —
-                            change it here, or fix {w.name}&rsquo;s Reports-to on Settings › Users.
+                            {(() => {
+                              const r = rowRaters.find((x) => x.id === raterId);
+                              return r?.designation ? `${r.name} · ${r.designation}` : (r?.name ?? "That person");
+                            })()}{" "}
+                            is an administrator, not a shop-floor manager, and does not hold the
+                            Supervisor access level. The sheet will go to them — change it here,
+                            or fix {w.name}&rsquo;s Reports-to on Settings › Users.
                           </span>
                         ) : null}
 
