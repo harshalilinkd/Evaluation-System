@@ -516,6 +516,41 @@ export function WorkerBoard({
           );
         },
       },
+      /* -- DELETE, ON THE ROW, at the owner's instruction — asked for twice.
+            It was put inside the details dialog first, on the reasoning that a
+            destructive control one press from a table row is too easy to hit.
+            That is a real risk and it is answered by the confirmation rather
+            than by hiding the control: an action nobody can find is not safe,
+            it is just absent, and the owner went looking for it twice.
+
+            An icon with an accessible name rather than a word, because it sits
+            at the end of eleven columns and a "Delete" label there would read
+            as another field. HR only — the MD reads this board and does not
+            curate it, and the function refuses them regardless (§9). -- */
+      ...(mdView
+        ? []
+        : [
+            {
+              id: "delete",
+              header: "",
+              size: 56,
+              enableResizing: false,
+              cell: ({ row }: { row: { original: BoardRow } }) => (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleting(row.original);
+                  }}
+                  aria-label={`Delete ${row.original.workerName}'s appraisal`}
+                  title={`Delete ${row.original.workerName}'s appraisal`}
+                  className="inline-flex size-8 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-critical-tint hover:text-critical"
+                >
+                  <Trash2 aria-hidden className="size-4" />
+                </button>
+              ),
+            } as ColumnDef<BoardRow>,
+          ]),
     ],
     [allRounds, mdView],
   );
@@ -756,7 +791,7 @@ export function WorkerBoard({
        // neither is squeezed below the address it now carries.
        // 110 narrower: the unnamed Review column is gone and its job moved
        // onto the sentence in "What happens next".
-       minWidth={1240}
+       minWidth={1300}
         empty={
           <EmptyState
             title={filter === "all" ? "Nobody is in this round" : "Nothing matches"}
