@@ -18,6 +18,7 @@ import { KpiCard, KpiRow } from "@/components/appraise/screen";
 import { EmptyState } from "@/components/appraise/states";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatInr } from "@/lib/utils/date";
+import { roundLabel } from "@/lib/utils/round-label";
 
 /* §17 keeps the source form's wording; these are the three cells it prints. */
 const OVERALL_WORD: Record<string, string> = {
@@ -283,9 +284,7 @@ export function WorkerBoard({
                   href={`/admin/worker-appraisals/${row.original.cycleId}`}
                   className="block truncate px-3 py-2 text-body-sm text-ink underline-offset-2 hover:underline"
                 >
-                  {[row.original.roundName, row.original.roundPeriod]
-                    .filter(Boolean)
-                    .join(" · ") || "—"}
+                  {roundLabel(row.original.roundName, row.original.roundPeriod) || "—"}
                 </Link>
               ),
             } as ColumnDef<BoardRow>,
@@ -485,7 +484,7 @@ export function WorkerBoard({
           <p className="mt-0.5 text-body-sm text-ink-muted">
             {allRounds
               ? `Every round, every worker — ${rows.length} appraisal${rows.length === 1 ? "" : "s"} in all.`
-              : `${cycle.name} · ${cycle.period_label} · supervisor due ${formatDate(cycle.supervisor_due_on)}`}
+              : `${roundLabel(cycle.name, cycle.period_label)} · supervisor due ${formatDate(cycle.supervisor_due_on)}`}
           </p>
         </div>
 

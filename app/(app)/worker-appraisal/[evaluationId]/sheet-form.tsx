@@ -25,6 +25,7 @@ import {
 } from "@/lib/worker/form";
 import { saveWorkerReview } from "@/lib/worker/review-sheet";
 import { formatDate } from "@/lib/utils/date";
+import { roundLabel } from "@/lib/utils/round-label";
 
 /*
  * ONE RENDERER RULE, honoured across the module boundary. `TickScale` is a UI
@@ -308,7 +309,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           {isSelf ? "Your appraisal" : sheet.workerName}
         </p>
         <p className="mt-1 font-sans text-body-sm text-ink-invert-muted">
-          {sheet.cycleName} · {sheet.periodLabel}
+          {roundLabel(sheet.cycleName, sheet.periodLabel)}
           {sheet.dueOn ? ` · due ${formatDate(sheet.dueOn)}` : ""}
         </p>
         {/* -- The save state, where somebody filling the form can see it.
@@ -370,7 +371,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         <div className="col-span-2">
           <dt className="type-label text-ink-muted">Round</dt>
           <dd className="font-sans text-body text-ink">
-            {[sheet.cycleName, sheet.periodLabel].filter(Boolean).join(" · ") || "—"}
+            {roundLabel(sheet.cycleName, sheet.periodLabel) || "—"}
             {sheet.dueOn ? ` · due ${formatDate(sheet.dueOn)}` : ""}
           </dd>
         </div>

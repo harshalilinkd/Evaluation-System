@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/utils/date";
+import { roundLabel } from "@/lib/utils/round-label";
 import {
   saveWorkerReview,
   submitWorkerReview,
@@ -139,7 +140,7 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
             ["Designation", sheet.designation],
             ["Team", sheet.department],
             ["With the company since", sheet.joinedOn ? formatDate(sheet.joinedOn) : null],
-            ["Round", `${sheet.cycleName}${sheet.periodLabel ? ` · ${sheet.periodLabel}` : ""}`],
+            ["Round", roundLabel(sheet.cycleName, sheet.periodLabel)],
             ["Rated by", sheet.ratedBy],
             ["Rated on", sheet.ratedAt ? formatDate(sheet.ratedAt) : null],
           ].map(([label, value]) => (

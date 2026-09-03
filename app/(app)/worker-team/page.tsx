@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { requireAuth } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils/date";
+import { roundLabel } from "@/lib/utils/round-label";
 
 export const metadata: Metadata = { title: "Production Team" };
 
@@ -109,7 +110,7 @@ export default async function Page() {
         </h1>
         <p className="mt-1 font-sans text-body-sm text-ink-muted">
           {cycle
-            ? `${cycle.name} · ${cycle.period_label}${
+            ? `${roundLabel(cycle.name, cycle.period_label)}${
                 cycle.supervisor_due_on
                   ? ` · your ratings due ${formatDate(cycle.supervisor_due_on)}`
                   : ""
@@ -156,7 +157,7 @@ export default async function Page() {
                       </p>
                       <p className="font-sans text-body-sm text-ink-muted">
                         {[
-                          round ? `${round.name} · ${round.period_label}` : null,
+                          round ? roundLabel(round.name, round.period_label) : null,
                           row.supervisor_submitted_at
                             ? `rated ${formatDate(row.supervisor_submitted_at)}`
                             : null,
@@ -222,7 +223,7 @@ export default async function Page() {
                   </p>
                   <p className="font-sans text-body-sm text-ink-muted">
                     {[
-                      cycle ? `${cycle.name} · ${cycle.period_label}` : null,
+                      cycle ? roundLabel(cycle.name, cycle.period_label) : null,
                       worker?.date_of_joining
                         ? `joined ${formatDate(worker.date_of_joining)}`
                         : null,
