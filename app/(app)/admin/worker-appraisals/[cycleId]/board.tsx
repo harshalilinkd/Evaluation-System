@@ -404,40 +404,44 @@ export function WorkerBoard({
               different screen with the ticks, the comment and the salary on it.
               A board that says "ready for your review" and offers nothing to
               press is the gap this closes. -- */
-        id: "open",
-        header: "",
-        size: 110,
-        cell: ({ row }) =>
-          row.original.supervisorIn ? (
-            <Link
-              href={`/admin/worker-appraisals/${row.original.cycleId}/${row.original.id}`}
-              className="font-sans text-body-sm font-medium text-primary underline underline-offset-2"
-            >
-              {row.original.status === "REVIEWED" || row.original.status === "CLOSED"
-                ? "View"
-                : "Review"}
-            </Link>
-          ) : null,
-      },
-      {
         id: "next",
         header: "What happens next",
         size: 340,
+        /* -- THE SENTENCE IS THE LINK, at the owner's instruction. There was a
+              column with no heading holding a "Review" link, which is a column
+              whose job nobody could read — and the sentence beside it already
+              said what was waiting. Two controls for one destination, one of
+              them unlabelled.
+
+              The row itself still opens the details dialog, so the two are
+              distinct: the row gives the summary, this gives the full report.
+              `DataGrid`'s row handler already steps aside for a click that
+              lands on an `<a>`, so no change was needed there.
+
+              ONLY WHERE THERE IS SOMETHING TO OPEN. A sheet nobody has filled
+              in has no report behind it, so "Waiting on X to fill it in" stays
+              plain text — a link to an empty page is worse than no link, and
+              the honest reading is that there is nothing to see yet. -- */
         cell: ({ row }) => {
           const step = nextStep(row.original);
+          const className = cn(
+            "truncate font-sans text-body-sm",
+            step.tone === "ready"
+              ? "font-medium text-primary"
+              : step.tone === "done"
+                ? "text-ink-muted"
+                : "text-ink",
+          );
+
+          if (!row.original.supervisorIn) return <span className={className}>{step.text}</span>;
+
           return (
-            <span
-              className={cn(
-                "truncate font-sans text-body-sm",
-                step.tone === "ready"
-                  ? "font-medium text-primary"
-                  : step.tone === "done"
-                    ? "text-ink-muted"
-                    : "text-ink",
-              )}
+            <Link
+              href={`/admin/worker-appraisals/${row.original.cycleId}/${row.original.id}`}
+              className={cn(className, "block underline underline-offset-2")}
             >
               {step.text}
-            </span>
+            </Link>
           );
         },
       },
@@ -647,7 +651,9 @@ export function WorkerBoard({
         rowTitle={(r) => r.workerName}
         // +250 for the Supervisor column and the widened Team leader one, so
        // neither is squeezed below the address it now carries.
-       minWidth={1350}
+       // 110 narrower: the unnamed Review column is gone and its job moved
+       // onto the sentence in "What happens next".
+       minWidth={1240}
         empty={
           <EmptyState
             title={filter === "all" ? "Nobody is in this round" : "Nothing matches"}
