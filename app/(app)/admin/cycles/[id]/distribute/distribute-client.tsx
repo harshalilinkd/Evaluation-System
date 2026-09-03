@@ -47,7 +47,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { plural } from "@/lib/cycles/schema";
 import type { Channel } from "@/lib/notify/dispatch";
 import type { Preflight } from "@/lib/notify/preflight";
@@ -61,7 +61,7 @@ import {
 import type { DistributionBoard, DistributionRow, LinkStatus } from "@/lib/notify/queries";
 import { HistoryDrawer } from "@/app/(app)/admin/cycles/[id]/distribute/history-drawer";
 import { cn } from "@/lib/utils";
-import { formatDateTime } from "@/lib/utils/date";
+import { formatDate, formatDateTime } from "@/lib/utils/date";
 
 /** DESIGN.md §5.3 pills. Tier tints carry tier meaning — cyan is the employee. */
 const LINK_STATUS: Record<LinkStatus, { label: string; classes: string }> = {
@@ -496,6 +496,8 @@ export function DistributeClient({
                   </TableHead>
                   <TableHead>Person</TableHead>
                   <TableHead>Contact</TableHead>
+                  <TableHead>Rated by</TableHead>
+                  <TableHead>Last appraised</TableHead>
                   <TableHead>Link</TableHead>
                   <TableHead>Last sent</TableHead>
                   <TableHead>Result</TableHead>
@@ -528,21 +530,28 @@ export function DistributeClient({
                           <p className="tabular truncate text-body-sm text-ink-muted">
                             {row.employeeCode ?? "—"} · {row.departmentName ?? "No department"}
                           </p>
+                          {row.designation ? (
+                            <p className="truncate text-body-sm text-ink-faint">{row.designation}</p>
+                          ) : null}
                         </div>
                       </div>
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <ContactIcon
+                      {/* -- THE ADDRESS ITSELF, not only an icon.
+                             The value was behind a tooltip, so HR could not
+                             read where a link was about to go without hovering
+                             each row one at a time — and there is no hover on
+                             a phone at all (§13.2). The icon stays as the
+                             channel marker beside it. -- */}
+                      <div className="flex min-w-0 flex-col gap-1">
+                        <ContactLine
                           kind="phone"
                           present={Boolean(row.phoneE164)}
-                          // The specific reason, not "invalid" — the fix for a
-                          // landline differs from the fix for a typo.
                           problem={row.phoneRaw && !row.phoneE164 ? row.phoneError?.message ?? null : null}
                           value={row.phoneE164 ?? row.phoneRaw}
                         />
-                        <ContactIcon kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
+                        <ContactLine kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
 
                         {row.phoneRaw && !row.phoneE164 ? (
                           <button
@@ -554,6 +563,14 @@ export function DistributeClient({
                           </button>
                         ) : null}
                       </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <ManagerList managers={row.managers} />
+                    </TableCell>
+
+                    <TableCell>
+                      <LastAppraised on={row.lastEvaluatedOn} />
                     </TableCell>
 
                     <TableCell>
@@ -668,6 +685,9 @@ export function DistributeClient({
                     <p className="tabular truncate text-body-sm text-ink-muted">
                       {row.employeeCode ?? "—"} · {row.departmentName ?? "No department"}
                     </p>
+                    {row.designation ? (
+                      <p className="truncate text-body-sm text-ink-faint">{row.designation}</p>
+                    ) : null}
                   </div>
                   <RowMenu
                     row={row}
@@ -682,25 +702,33 @@ export function DistributeClient({
                   />
                 </div>
 
-                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-rule pt-3">
-                  <span className="flex items-center gap-2">
-                    <ContactIcon
-                      kind="phone"
-                      present={Boolean(row.phoneE164)}
-                      problem={row.phoneRaw && !row.phoneE164 ? row.phoneError?.message ?? null : null}
-                      value={row.phoneE164 ?? row.phoneRaw}
-                    />
-                    <ContactIcon kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
-                    {row.phoneRaw && !row.phoneE164 ? (
-                      <button
-                        type="button"
-                        onClick={() => setFixing(row)}
-                        className="min-h-11 text-body-sm font-medium text-critical underline underline-offset-2"
-                      >
-                        Fix number
-                      </button>
-                    ) : null}
-                  </span>
+                {/* -- The same facts as the desktop row, stacked. The card is
+                       not a reduced version: somebody on a phone deciding whom
+                       to chase needs the manager and the contact just as much,
+                       and hiding them here is how a screen becomes
+                       desktop-only by accident (§13.2). -- */}
+                <div className="mt-3 space-y-1 border-t border-rule pt-3">
+                  <ContactLine
+                    kind="phone"
+                    present={Boolean(row.phoneE164)}
+                    problem={row.phoneRaw && !row.phoneE164 ? row.phoneError?.message ?? null : null}
+                    value={row.phoneE164 ?? row.phoneRaw}
+                  />
+                  <ContactLine kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
+                  <ManagerList managers={row.managers} />
+                  <LastAppraised on={row.lastEvaluatedOn} />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  {row.phoneRaw && !row.phoneE164 ? (
+                    <button
+                      type="button"
+                      onClick={() => setFixing(row)}
+                      className="min-h-11 text-body-sm font-medium text-critical underline underline-offset-2"
+                    >
+                      Fix number
+                    </button>
+                  ) : null}
 
                   <span
                     className={cn(
@@ -874,9 +902,18 @@ export function DistributeClient({
   );
 }
 
-/* ---------- Contact icons ---------- */
+/* ---------- Person detail ---------- */
 
-function ContactIcon({
+/**
+ * A contact route, written out.
+ *
+ * The icon alone was the whole cell, with the address behind a tooltip — so
+ * "where is this link going?" cost a hover per row, and cost nothing at all on
+ * a phone because it could not be answered there. §13.8 keeps the icon as a
+ * second channel beside the text rather than instead of it, and the struck
+ * marker stays for an absent route so missing is never colour alone.
+ */
+function ContactLine({
   kind,
   present,
   problem,
@@ -891,30 +928,78 @@ function ContactIcon({
   const label = kind === "phone" ? "Phone" : "Email";
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="relative inline-flex">
-          <Icon
-            aria-label={
-              problem ? `${label}: ${problem}` : present ? `${label}: ${value}` : `No ${label.toLowerCase()}`
-            }
-            className={cn(
-              "size-4",
-              problem ? "text-critical" : present ? "text-ink-muted" : "text-ink-faint",
-            )}
-          />
-          {/* Struck through when missing — §13.8: colour is never the only
-              signal, and a greyed icon alone is invisible to a lot of people. */}
-          {!present ? (
-            <span aria-hidden className="absolute left-0 top-1/2 h-px w-4 -rotate-45 bg-ink-faint/60" />
-          ) : null}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>
-        {problem ?? (present ? value : `No ${label.toLowerCase()} on record`)}
-      </TooltipContent>
-    </Tooltip>
+    <span className="flex min-w-0 items-center gap-2">
+      <span className="relative inline-flex shrink-0">
+        <Icon
+          aria-hidden
+          className={cn("size-4", problem ? "text-critical" : present ? "text-ink-muted" : "text-ink-faint")}
+        />
+        {!present ? (
+          <span aria-hidden className="absolute left-0 top-1/2 h-px w-4 -rotate-45 bg-ink-faint/60" />
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "tabular truncate text-body-sm",
+          problem ? "text-critical" : present ? "text-ink" : "text-ink-faint",
+        )}
+        title={problem ?? value ?? undefined}
+      >
+        <span className="sr-only">{label}: </span>
+        {problem ? `${value ?? ""} — ${problem}` : (value ?? `No ${label.toLowerCase()} on record`)}
+      </span>
+    </span>
   );
+}
+
+/**
+ * Who rates this person.
+ *
+ * The address is the one a message to them would ACTUALLY use — official where
+ * they have one (0081) — so what HR reads here and what the link does agree.
+ * A second reviewer is labelled; the reporting manager is not, because a label
+ * on the ordinary case is a badge on every row and teaches people to stop
+ * reading badges (N2-11).
+ */
+function ManagerList({ managers }: { managers: DistributionRow["managers"] }) {
+  if (managers.length === 0) {
+    return (
+      <span className="text-body-sm text-critical">
+        No manager assigned — nobody can rate them.
+      </span>
+    );
+  }
+
+  return (
+    <ul className="min-w-0 space-y-1">
+      {managers.map((manager) => (
+        <li key={`${manager.role}-${manager.name}`} className="min-w-0">
+          <p className="truncate text-body-sm font-medium text-ink">
+            {manager.name}
+            {manager.role === "SECOND" ? (
+              <span className="ml-1.5 font-normal text-ink-faint">· second reviewer</span>
+            ) : null}
+          </p>
+          <p className="truncate text-body-sm text-ink-muted" title={manager.email ?? undefined}>
+            {manager.email ?? "No email on record"}
+            {manager.designation ? ` · ${manager.designation}` : ""}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * When their last appraisal closed.
+ *
+ * "First appraisal" rather than an em dash: an absent date here is a fact
+ * about the person, not a figure that failed to load, and the two look
+ * identical when the empty state is a dash (FIX-30).
+ */
+function LastAppraised({ on }: { on: string | null }) {
+  if (!on) return <span className="text-body-sm text-ink-faint">First appraisal</span>;
+  return <span className="tabular text-body-sm text-ink">{formatDate(on)}</span>;
 }
 
 /* ---------- Row menu ---------- */

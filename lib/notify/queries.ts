@@ -3,6 +3,7 @@
 import "server-only";
 
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
+import { contactFor } from "@/lib/notify/contacts";
 import { normaliseToE164, type PhoneFailure } from "@/lib/notify/phone";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
@@ -19,12 +20,30 @@ import type { Enums } from "@/types/database";
  */
 export type LinkStatus = "NOT_SENT" | "SENT" | "OPENED" | "SUBMITTED";
 
+/**
+ * A manager on somebody's evaluation, as this screen shows them.
+ *
+ * `email` is resolved through `contactFor`, NOT read off the profile — a
+ * manager receives their review link because of the position they hold, so
+ * 0081 sends it to their OFFICIAL address where they have one. Printing the
+ * personal address here would show HR one thing and send to another, and the
+ * question that follows ("why did it go there?") has no answer on screen.
+ */
+export type RowManager = {
+  role: "MANAGER" | "SECOND";
+  name: string;
+  designation: string | null;
+  email: string | null;
+  phone: string | null;
+};
+
 export type DistributionRow = {
   evaluationId: string;
   profileId: string;
   name: string;
   initials: string;
   employeeCode: string | null;
+  designation: string | null;
   departmentId: string | null;
   departmentName: string | null;
   evaluationStatus: Enums<"evaluation_status">;
@@ -35,6 +54,21 @@ export type DistributionRow = {
   phoneE164: string | null;
   phoneError: { reason: PhoneFailure; message: string } | null;
   email: string | null;
+
+  /* -- Who rates them. Ordinarily one; two where the evaluatee carries a
+        second reviewer (0083), and BOTH are shown, because this screen is
+        where HR decides whose link to send. -- */
+  managers: RowManager[];
+
+  /**
+   * When their last appraisal CLOSED — null for a first evaluation.
+   *
+   * The date only. Not the score: this is the send list, and §11 keeps a
+   * rating to the report where both sides can be read together. Somebody
+   * deciding who to chase needs to know whether this is their first form,
+   * not how they did last time.
+   */
+  lastEvaluatedOn: string | null;
 
   linkStatus: LinkStatus;
   lastSentAt: string | null;
@@ -83,7 +117,7 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
 
   const { data: evaluations, error: evaluationError } = await supabase
     .from("evaluations")
-    .select("id, evaluatee_id, department_id, status, excluded_at, self_submitted_at, co_lead_id")
+    .select("id, evaluatee_id, lead_id, department_id, status, excluded_at, self_submitted_at, co_lead_id")
     .eq("cycle_id", cycleId)
     .is("excluded_at", null);
 
@@ -114,10 +148,37 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
 
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, full_name, employee_code, email, phone_e164")
+    .select("id, full_name, employee_code, designation, email, phone_e164")
     .in("id", live.map((e) => e.evaluatee_id));
 
   const { data: departments } = await supabase.from("departments").select("id, name");
+
+  /* -- The managers, and when each person was last appraised.
+        Both are issued alongside everything else rather than in sequence: no
+        query here needs another's answer, so they are one round trip's wait
+        instead of three (FIX-8's correction to /my-evaluation). RLS still
+        judges each on its own — batching is not a join. -- */
+  const managerIds = [
+    ...new Set(
+      live.flatMap((e) => [e.lead_id, e.co_lead_id].filter((id): id is string => Boolean(id))),
+    ),
+  ];
+
+  const [{ data: managers }, { data: previous }] = await Promise.all([
+    managerIds.length
+      ? supabase
+          .from("profiles")
+          .select("id, full_name, designation, email, phone_e164, work_email, work_phone_e164")
+          .in("id", managerIds)
+      : Promise.resolve({ data: [] as never[] }),
+    supabase
+      .from("evaluations")
+      .select("evaluatee_id, closed_at")
+      .in("evaluatee_id", live.map((e) => e.evaluatee_id))
+      .neq("cycle_id", cycleId)
+      .not("closed_at", "is", null)
+      .order("closed_at", { ascending: false }),
+  ]);
 
   // Every send for this cycle, newest first. Reduced in TypeScript to "the
   // latest per evaluation" — PostgREST has no DISTINCT ON, and a view would put
@@ -138,6 +199,15 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
     .not("used_at", "is", null);
 
   const byProfile = new Map((profiles ?? []).map((p) => [p.id, p]));
+  const byManager = new Map((managers ?? []).map((p) => [p.id, p]));
+
+  // Newest first out of the query, so the first sighting of a person wins.
+  const lastClosed = new Map<string, string>();
+  for (const row of previous ?? []) {
+    if (row.closed_at && !lastClosed.has(row.evaluatee_id)) {
+      lastClosed.set(row.evaluatee_id, row.closed_at);
+    }
+  }
   const departmentName = new Map((departments ?? []).map((d) => [d.id, d.name]));
   const opened = new Set((invites ?? []).map((i) => i.evaluation_id));
 
@@ -172,6 +242,28 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
   for (const evaluation of live) {
     const person = byProfile.get(evaluation.evaluatee_id);
     if (!person) continue;
+
+    /* -- The reporting manager first, the second reviewer after. The order is
+          the flow, not the alphabet: the second reviewer exists BECAUSE the
+          first one does, and reading them the other way round would make a
+          designer's row look like it had swapped managers. -- */
+    const rowManagers: RowManager[] = [];
+    for (const [id, role] of [
+      [evaluation.lead_id, "MANAGER"] as const,
+      [evaluation.co_lead_id, "SECOND"] as const,
+    ]) {
+      if (!id) continue;
+      const manager = byManager.get(id);
+      if (!manager) continue;
+      const to = contactFor(manager, "leadReviewInvite");
+      rowManagers.push({
+        role,
+        name: manager.full_name,
+        designation: manager.designation,
+        email: to.email,
+        phone: to.phone,
+      });
+    }
 
     const phone = normaliseToE164(person.phone_e164, defaultCountry);
     const last = latest.get(evaluation.id);
@@ -211,6 +303,7 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
       name: person.full_name,
       initials: initialsOf(person.full_name),
       employeeCode: person.employee_code,
+      designation: person.designation,
       departmentId: evaluation.department_id,
       departmentName: evaluation.department_id
         ? (departmentName.get(evaluation.department_id) ?? null)
@@ -220,6 +313,8 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
       phoneE164: phone.ok ? phone.e164 : null,
       phoneError: phone.ok ? null : { reason: phone.reason, message: phone.message },
       email: person.email,
+      managers: rowManagers,
+      lastEvaluatedOn: lastClosed.get(person.id) ?? null,
       linkStatus,
       lastSentAt: last?.at ?? null,
       lastChannels: last ? [...last.channels] : [],
