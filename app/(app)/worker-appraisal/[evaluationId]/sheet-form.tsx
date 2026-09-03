@@ -609,12 +609,13 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                   setSalary((s) => ({ ...s, incrementPct: pct, oldCtc: null, newCtc: null }));
                   setDirty(true);
                 }}
-                placeholder="e.g. 10"
+                // No specimen figure — see the note on the review screen's copy
+                // of this field. Grey text in a box reads as a value.
+                placeholder=""
                 className="min-h-11 tabular"
               />
               <p className="font-sans text-body-sm text-ink-muted">
-                Your recommendation. HR works out the amount — you are not shown
-                anybody&rsquo;s salary and do not need it to answer this.
+                The rise you are suggesting for {sheet.workerName}.
               </p>
             </div>
           ) : null}

@@ -358,11 +358,17 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
                 setPct(next);
                 setDirty(true);
               }}
-              placeholder="e.g. 10"
+              /* -- NO SPECIMEN FIGURE. "e.g. 10" is grey text sitting in a
+                    box, which is what a filled field looks like — the same
+                    thing the salary input's "50,000" was doing before it was
+                    taken out. On a field that becomes somebody's pay, a
+                    suggestion that reads as an entry is worse than an empty
+                    box. -- */
+              placeholder=""
               className="min-h-11 tabular"
             />
             <p className="font-sans text-body-sm text-ink-muted">
-              You are not shown anybody&rsquo;s salary and do not need it to answer this.
+              The rise you are suggesting for {sheet.workerName}.
             </p>
           </div>
         ) : null}
