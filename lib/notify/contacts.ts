@@ -61,6 +61,9 @@ export const TEMPLATE_PURPOSE: Record<TemplateKey, ContactPurpose> = {
         Reports-to of two shop-floor workers, so the sheet was going to their
         personal address — reported, and this is the fix. -- */
   workerRatingInvite: "official",
+  workerSheetReminder: "official",
+  workerSheetOverdue: "official",
+  workerOverdueDigest: "official",
   leadReviewInvite: "official",
   leadReviewReminder: "official",
   leadReviewOverdue: "official",

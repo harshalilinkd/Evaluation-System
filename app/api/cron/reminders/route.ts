@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import { contactFor } from "@/lib/notify/contacts";
 import { sendNotification, type Channel } from "@/lib/notify/dispatch";
+import { chaseWorkerRounds } from "@/lib/notify/worker-chase";
 import {
   dayInKolkata,
   daysUntil,
@@ -189,13 +190,24 @@ export async function GET(request: Request) {
     };
   }
 
+  /* ---------- P22 again, on the other track ----------
+     The production module went out with NO chase: a due date passed and
+     nobody was told, on either side, because everything below reads
+     `evaluations` and §5 keeps a worker row out of that table entirely.
+
+     Run HERE, before the staff section's early returns. Three of them fire on
+     a quiet day for staff cycles — no ACTIVE cycle, no OPEN evaluation, nobody
+     holding anything — and every one of them would have skipped this. A day
+     with no staff form to chase is still a day a production sheet is late. */
+  const workerChase = await chaseWorkerRounds(supabase, today, now);
+
   /* ---------- Who is holding what ---------- */
   const { data: cycles } = await supabase
     .from("evaluation_cycles")
     .select("id, name, period_label, self_due_on, lead_due_on, md_due_on")
     .eq("status", "ACTIVE");
 
-  if (!cycles?.length) return NextResponse.json({ ok: true, people: 0, ...totals(digests) });
+  if (!cycles?.length) return NextResponse.json({ ok: true, people: 0, ...totals(digests), worker: workerChase });
 
   /* -- AMEND-3. This asked for CYCLE_ACTIVE and SELF_SUBMITTED, both retired —
         so it matched nothing and the nightly chase has been silent ever since.
@@ -212,7 +224,7 @@ export async function GET(request: Request) {
     .in("cycle_id", cycles.map((c) => c.id));
 
   const rows = evaluations ?? [];
-  if (rows.length === 0) return NextResponse.json({ ok: true, people: 0, ...totals(digests) });
+  if (rows.length === 0) return NextResponse.json({ ok: true, people: 0, ...totals(digests), worker: workerChase });
 
   const byCycle = new Map(cycles.map((c) => [c.id, c]));
 
@@ -293,7 +305,7 @@ export async function GET(request: Request) {
     }
   }
 
-  if (holders.size === 0) return NextResponse.json({ ok: true, people: 0, ...totals(digests) });
+  if (holders.size === 0) return NextResponse.json({ ok: true, people: 0, ...totals(digests), worker: workerChase });
 
   const { data: people } = await supabase
     .from("profiles")
@@ -459,6 +471,10 @@ export async function GET(request: Request) {
     // Read notifications older than ninety days, removed. Reported so a run
     // that prunes nothing is distinguishable from one that never tried.
     pruned,
+    // Its own figures, not folded into the staff counts: two tracks that share
+    // a ladder and nothing else, and a run that chased four production sheets
+    // and no staff form should say so rather than reporting four.
+    worker: workerChase,
     day: today,
   });
 }

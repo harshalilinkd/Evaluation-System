@@ -45,6 +45,18 @@ const IN_APP_TEXT: Record<TemplateKey, { title: string; body: string }> = {
   /* -- Nothing interpolated, as in every other entry (N1-3): a bell body lands
         on a phone in a meeting and on a shared screen, and a string with no
         expression in it cannot carry a name, a score or a figure. -- */
+  workerSheetReminder: {
+    title: "A production appraisal is due soon",
+    body: "One on your production team is still waiting on you. Open Production Team to finish it.",
+  },
+  workerSheetOverdue: {
+    title: "A production appraisal is overdue",
+    body: "It has passed its date and is still open. Open Production Team to finish it.",
+  },
+  workerOverdueDigest: {
+    title: "Production sheets are overdue",
+    body: "Some production appraisals have passed their date. Open Production Appraisals to see who is holding them.",
+  },
   workerRatingInvite: {
     title: "A production appraisal is open for you",
     body: "Somebody on your production team is due their appraisal. Open Production Team to tick their sheet.",
@@ -128,6 +140,12 @@ const IN_APP_PATH: Record<TemplateKey, (evaluationId: string | null) => string> 
   // The sheet itself. They are signed in when they see the bell, so this is
   // the plain route, exactly as the staff ones above are.
   workerRatingInvite: (id) => (id ? `/worker-appraisal/${id}` : "/worker-team"),
+  // Always the queue, never one sheet: whichever of the two owes
+  // something, Production Team is the screen that shows it — and it
+  // stays right if the round hands over between send and read.
+  workerSheetReminder: () => "/worker-team",
+  workerSheetOverdue: () => "/worker-team",
+  workerOverdueDigest: () => "/admin/worker-appraisals",
 
   hrDueDigest: () => "/admin/due",
   incrementsOverdue: () => "/admin/increments",

@@ -65,7 +65,14 @@ export type TemplateKey =
         `leadReviewInvite`, because that one says the employee is rating
         themselves at the same time — true on the staff form, and on the shop
         floor the worker fills nothing (§7's isolation, applied to wording). -- */
-  | "workerRatingInvite";
+  | "workerRatingInvite"
+  /* -- Chasing a production round. The worker module went out with no chase at
+        all: a due date passed and nobody was told, on either side. These three
+        put it on the ladder the staff cycles already use, so nobody has to
+        learn a second rhythm. -- */
+  | "workerSheetReminder"
+  | "workerSheetOverdue"
+  | "workerOverdueDigest";
 
 /** Shown in the history drawer and the template filter, so HR never reads a key. */
 export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
@@ -84,6 +91,9 @@ export const TEMPLATE_LABELS: Record<TemplateKey, string> = {
   evaluationFinalised: "Finalised (to HR)",
   evaluationClosed: "Result available",
   workerRatingInvite: "Production rating invite",
+  workerSheetReminder: "Production sheet reminder",
+  workerSheetOverdue: "Production sheet overdue",
+  workerOverdueDigest: "Production overdue (to HR)",
 };
 
 /* -- ONE VOICE, IN ONE PLACE.
@@ -445,6 +455,123 @@ ${v.link}
         ]) +
         signOff(),
       cta: { label: "Open the sheet", href: v.link },
+    }),
+  };
+}
+
+/**
+ * A production sheet is waiting on somebody — the team leader who rates it, or
+ * the supervisor who reviews it.
+ *
+ * ONE PAIR OF TEMPLATES FOR BOTH, and the link is always `/worker-team`. That
+ * screen carries both sections, so it is the right destination whichever of the
+ * two owes something — and it stays right if a round hands over between the
+ * message being sent and being read. Two bodies differing only in a verb would
+ * be two things to keep in step for no gain.
+ */
+export function workerSheetReminder(v: {
+  name: string;
+  employeeName: string;
+  period: string;
+  dueDate: string;
+  days: number;
+  link: string;
+}): RenderedMessage {
+  return {
+    subject: `${v.employeeName}'s appraisal is due ${v.days === 0 ? "today" : `in ${v.days} days`}`,
+    body:
+      `🦺 *A production appraisal needs you*\n\n` +
+      `Hello ${v.name},\n\n` +
+      `The appraisal for ${v.employeeName} (${v.period}) is still waiting on you.\n\n` +
+      `Due by: ${v.dueDate}\n\n` +
+      `Open it:\n${v.link}\n\n` +
+      SIGN_OFF,
+    html: shell({
+      heading: "🦺 A production appraisal needs you",
+      bodyHtml:
+        p(`Dear ${v.name},`) +
+        p("An appraisal on your production team is still waiting on you.") +
+        details([
+          ["Worker", v.employeeName],
+          ["Period", v.period],
+          ["Please complete by", v.dueDate],
+        ]) +
+        signOff(),
+      cta: { label: "Open it", href: v.link },
+    }),
+  };
+}
+
+export function workerSheetOverdue(v: {
+  name: string;
+  employeeName: string;
+  period: string;
+  dueDate: string;
+  link: string;
+}): RenderedMessage {
+  return {
+    subject: `${v.employeeName}'s appraisal is overdue`,
+    body:
+      `🦺 *A production appraisal is overdue*\n\n` +
+      `Hello ${v.name},\n\n` +
+      `The appraisal for ${v.employeeName} (${v.period}) was due on ${v.dueDate} and is still ` +
+      `waiting on you. It is still open — please complete it when you can.\n\n` +
+      `Open it:\n${v.link}\n\n` +
+      SIGN_OFF,
+    html: shell({
+      heading: "🦺 A production appraisal is overdue",
+      bodyHtml:
+        p(`Dear ${v.name},`) +
+        p(
+          "This one has passed its date and is still waiting on you. It remains open — nothing has been lost.",
+        ) +
+        details([
+          ["Worker", v.employeeName],
+          ["Period", v.period],
+          ["Was due", v.dueDate],
+        ]) +
+        signOff(),
+      cta: { label: "Open it", href: v.link },
+    }),
+  };
+}
+
+/**
+ * HR's own list. ONE message naming everybody, never one per worker — twelve
+ * overdue sheets is twelve WhatsApps otherwise (P22-14). Capped at eight names
+ * inline with "and {n} more", for the same reason.
+ *
+ * Names and who holds each, and nothing else: no tick, no score, no salary
+ * (§5, §11), and no link to anybody's sheet.
+ */
+export function workerOverdueDigest(v: {
+  count: number;
+  lines: string[];
+  link: string;
+}): RenderedMessage {
+  const shown = v.lines.slice(0, 8);
+  const rest = v.count - shown.length;
+  const opening = `${v.count} production ${
+    v.count === 1 ? "appraisal has" : "appraisals have"
+  } passed their date and are still waiting on the person holding them.`;
+
+  return {
+    subject: `${v.count} production ${v.count === 1 ? "sheet is" : "sheets are"} overdue`,
+    body:
+      `🦺 *Production sheets overdue*\n\n` +
+      `${opening}\n\n` +
+      shown.map((line) => `• ${line}`).join("\n") +
+      (rest > 0 ? `\n…and ${rest} more` : "") +
+      `\n\nSee the board:\n${v.link}\n\n` +
+      SIGN_OFF,
+    html: shell({
+      heading: "🦺 Production sheets overdue",
+      bodyHtml:
+        p(opening) +
+        details(shown.map((line) => ["", line] as [string, string])) +
+        (rest > 0 ? p(`…and ${rest} more.`) : "") +
+        signOff(),
+      cta: { label: "Open the board", href: v.link },
     }),
   };
 }

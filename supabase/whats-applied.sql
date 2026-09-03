@@ -162,6 +162,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0104_combined_salary_answer_required', 'combined_salary_required',
      'the one-press form refuses an unanswered Same or New',
      'Without it the route where the team leader IS the supervisor still coalesces an unanswered decision to "Same" on the way to HR — the same fault 0103 fixed on the other route, and a second route to HR must not be the laxer one.'),
+  ('0105_none — production chase is code, not schema', 'none_worker_chase',
+     'the production round is chased nightly',
+     'No migration. Recorded here because the FLOW changed: until this, a production due date passed and nobody was told. The ladder, the templates and the HR digest are all application code — nothing in the database says whether it is wired.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -596,6 +599,13 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'submit_worker_combined'
          and pg_get_functiondef(p.oid) like '%p_salary_changed is null%')
+
+    /* -- Not a schema check. The production chase is code — there is nothing
+          in the database that says whether the cron calls it — so this row
+          answers TRUE and exists only to keep the flow recorded where somebody
+          reads the list. A detector that cannot detect must not answer NULL
+          (DIAGNOSTIC-1), and must not pretend either: the note says so. -- */
+    when 'none_worker_chase' then true
 
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
