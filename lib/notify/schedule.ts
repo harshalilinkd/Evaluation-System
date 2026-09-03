@@ -89,8 +89,21 @@ export function sweepSkipReason(now: Date): SweepSkip {
 
 export type ReminderKind = "ahead" | "due_today" | "overdue" | null;
 
-/** Overdue nudges stop after this many consecutive days (P17). */
-export const OVERDUE_STOP_AFTER_DAYS = 7;
+/**
+ * The overdue nudge is sent ONCE, the day after the deadline.
+ *
+ * AT THE OWNER'S EXPLICIT INSTRUCTION, and it reduces this from seven:
+ * "not this much — only 3 reminders in both staff and production team cycles:
+ * 3 days before, the day itself, and 1 day after when it's due."
+ *
+ * P17-5 chose seven on the reasoning that a system finding a reason to message
+ * every day gets muted. That reasoning argues for this number, not against it:
+ * seven consecutive nudges is six more than anybody reads, and the sixth is
+ * what teaches somebody to ignore the first. After one, it stops asking and
+ * becomes a conversation for a human to have — which is what HR's own overdue
+ * list is for.
+ */
+export const OVERDUE_STOP_AFTER_DAYS = 1;
 
 /** A reminder this many days before a deadline. */
 export const AHEAD_DAYS = 3;
@@ -106,8 +119,8 @@ export function reminderFor(daysUntilDue: number): ReminderKind {
   if (daysUntilDue === AHEAD_DAYS) return "ahead";
   if (daysUntilDue === 0) return "due_today";
   if (daysUntilDue < 0) {
-    // Day 1 through 7 past the deadline. After that the system stops asking and
-    // it becomes a conversation for a human to have.
+    // The day after the deadline, and only that day. Three reminders in total
+    // per record — three days out, the day itself, and one day late.
     return Math.abs(daysUntilDue) <= OVERDUE_STOP_AFTER_DAYS ? "overdue" : null;
   }
   return null;
