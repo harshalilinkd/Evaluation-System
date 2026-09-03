@@ -12,7 +12,20 @@ import { listWorkerRaters } from "@/lib/worker/raters";
 export const metadata: Metadata = { title: "Worker appraisals" };
 
 export default async function Page({ params }: { params: Promise<{ cycleId: string }> }) {
-  await requireRole(["HR_ADMIN", "MD"]);
+  /* -- THE SESSION WAS BEING DISCARDED HERE, and the all-rounds page beside
+        this one already knew better. Without it `mdView` defaulted to false, so
+        the MD opening a round got HR's vocabulary throughout: a row the MD had
+        sent BACK to HR read "Filled in — ready for your review" with a Review
+        button, and the "Ready for you" tile counted it — telling the MD that
+        something was waiting on her which she had just handed back.
+
+        Which vocabulary to use is a property of the READER, so the reader has
+        to reach the component. Same rule as the other page, word for word: an
+        MD who also holds HR_ADMIN is HR here, because they do HR's job on this
+        screen. -- */
+  const session = await requireRole(["HR_ADMIN", "MD"]);
+  const viewerIsMdOnly =
+    session.roles.includes("MD") && !session.roles.includes("HR_ADMIN");
 
   const { cycleId } = await params;
   const supabase = await createClient();
@@ -209,6 +222,7 @@ export default async function Page({ params }: { params: Promise<{ cycleId: stri
 
   return (
     <WorkerBoard
+      mdView={viewerIsMdOnly}
       cycle={cycle}
       rows={(rows ?? []).map((r) => ({
         id: r.id,
