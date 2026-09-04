@@ -891,54 +891,39 @@ export async function restoreCycleFromBin(cycleId: string): Promise<CycleResult<
  * The pre-check below exists to give HR a sentence instead of a constraint
  * violation. The trigger is still what makes it true.
  */
-export async function deleteCycleForever(cycleId: string): Promise<CycleResult<{ id: string }>> {
+export async function deleteCycleForever(
+  cycleId: string,
+): Promise<CycleResult<{ id: string; evaluationsDestroyed: number }>> {
   const auth = await guard();
   if (!auth.ok) return auth;
 
   const supabase = await createClient();
 
-  const { data: cycle } = await supabase
-    .from("evaluation_cycles")
-    .select("id, name, period_label, status, deleted_at, launched_at")
-    .eq("id", cycleId)
-    .maybeSingle();
+  /* -- THE LAUNCHED CHECK IS GONE, at the owner's instruction (0106).
+        It refused any cycle past DRAFT — which is every cycle anybody would
+        actually want out of the way. §0.9: the concern was put and the
+        instruction repeated, so it is theirs to take.
 
-  if (!cycle) return cycleError("CYCLE_NOT_FOUND", "That cycle no longer exists.");
+        Two deliberate acts are KEPT. Bin first, destroy second, and the
+        database says so too: 0106's trigger now tests the bin rather than the
+        launch, so a live cycle still cannot be destroyed by a stray statement.
 
-  // Two deliberate acts, not one. Deleting straight from the list would make an
-  // irreversible thing a single click away from an ordinary one.
-  if (!cycle.deleted_at) {
-    return cycleError(
-      "NOT_BINNED",
-      "Move it to the recycle bin first. Deleting for good is a second, separate step.",
-    );
-  }
-
-  if (cycle.status !== "DRAFT") {
-    return cycleError(
-      "LAUNCHED",
-      `${cycle.name} was launched, so it holds the frozen question set and the answers of everyone in it. Those cannot be destroyed — it stays in the recycle bin, where it takes up nothing and can be restored.`,
-    );
-  }
-
-  // Logged BEFORE the row goes. audit_log.entity_id carries no foreign key, so
-  // the record outlives what it describes — the only remaining evidence that
-  // this cycle ever existed.
-  await supabase.rpc("log_admin_action", {
-    p_entity: "cycle",
-    p_entity_id: cycleId,
-    p_action: "cycle.deleted_forever",
-    p_diff: { name: cycle.name, period_label: cycle.period_label, status: cycle.status } as Json,
+        ONE RPC, not a read then a log then a delete. Three round trips could
+        half-apply and leave the trail asserting a deletion that did not
+        happen; the function moves the audit row, the bell entries and the
+        record together (P14-1, P10-2). Every guard it needs — HR, the bin, the
+        audit — is inside it, so bypassing this action cannot bypass them. -- */
+  const { data: destroyed, error } = await supabase.rpc("delete_cycle_forever", {
+    p_cycle_id: cycleId,
   });
 
-  const { error } = await supabase.from("evaluation_cycles").delete().eq("id", cycleId);
-
-  // The trigger's own message is written for HR, so it is passed through rather
-  // than replaced with a guess about what went wrong.
+  // The function's own messages are written for HR — "move it to the recycle
+  // bin first", "only HR can delete a cycle for good" — so they are passed
+  // through rather than replaced with a guess about what went wrong.
   if (error) return fromPostgres("DELETE_REFUSED", error.message);
 
   revalidateCycles(cycleId);
-  return { ok: true, data: { id: cycleId } };
+  return { ok: true, data: { id: cycleId, evaluationsDestroyed: destroyed ?? 0 } };
 }
 
 /* ==================================================== post-launch edits === */

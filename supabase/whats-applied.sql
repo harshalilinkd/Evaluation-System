@@ -168,6 +168,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0105_delete_worker_records', 'worker_delete_fns',
      'deleting a production record clears its bell entries',
      'Without it both delete paths clear app_notifications from the caller''s own session — and 0059 gives that table no DELETE policy for anyone, so the clear matches zero rows and returns no error. Every bell entry survives, pointing at an appraisal that is gone.'),
+  ('0106_delete_launched_cycle', 'binned_cycle_deletable',
+     'a cycle in the recycle bin can be destroyed, launched or not',
+     'Without it 0009''s trigger refuses any cycle past DRAFT, so "Delete for good" fails on every cycle anybody would want removed. WITH it a binned cycle really is destroyed - answers, ratings and the frozen question set - while a LIVE one still cannot be, salary history survives detached, and the audit row remains.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -615,6 +618,17 @@ select
        where n.nspname = 'public'
          and p.proname in ('delete_worker_appraisal', 'delete_worker_round')
          and p.prosecdef)
+
+    /* -- Anchored on what 0106 WROTE, not on the function existing.
+          `guard_cycle_delete` has existed since 0009 and its whole subject is
+          which test it applies, so a name check would read TRUE throughout the
+          old behaviour — the 0056 false positive in a different costume. This
+          asks whether the bin test replaced the launch test. -- */
+    when 'binned_cycle_deletable' then (
+      select pg_get_functiondef(p.oid) like '%deleted_at is null%'
+         and pg_get_functiondef(p.oid) not like '%<> ''DRAFT''%'
+        from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'guard_cycle_delete')
 
     when 'cycle_per_milestone' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace

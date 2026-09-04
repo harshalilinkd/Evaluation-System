@@ -196,9 +196,10 @@ export function RecycleBinTab({ cycles }: { cycles: BinnedCycleRow[] }) {
             and from there to the frozen question sets, so the bin marks the row
             and hides it, and restoring is the mark going away.
           */}
-          Deleting a cycle never destroys anything. Everything inside it — answers, ratings and
-          the frozen question set each person was launched with — stays exactly as it was, and
-          restoring brings the whole cycle back.
+          Binning a cycle destroys nothing. Everything inside it — answers, ratings and the
+          frozen question set each person was launched with — stays exactly as it was, and
+          restoring brings the whole cycle back. <strong className="font-medium text-ink">Delete
+          for good</strong> is the second step, and that one does destroy it.
         </p>
       </div>
 
@@ -276,12 +277,15 @@ function PurgeDialog({
 
   if (!cycle) return null;
 
-  // 0009's trigger refuses to delete anything that is not a DRAFT, because
-  // `evaluation_cycles` cascades to `evaluations` and from there to
-  // `evaluation_questions` — a launched cycle's frozen question sets would go
-  // with it, which §5 exists to prevent. Checked here so the dialog can EXPLAIN
-  // rather than let somebody press a button that always fails.
-  const canDestroy = cycle.status === "DRAFT";
+  /* -- EVERYTHING IN THE BIN CAN NOW BE DESTROYED, at the owner's instruction
+        (0106). 0009's trigger refused anything past DRAFT and this mirrored it,
+        so the dialog could explain rather than let somebody press a button that
+        always failed — a good rule serving a restriction that has been lifted.
+
+        What replaces the check is the WARNING: a launched cycle really does
+        hold work, and the dialog's job is now to say exactly whose and what,
+        before the press rather than after it (§13.4). -- */
+  const holdsWork = cycle.status !== "DRAFT";
 
   async function purge() {
     if (!cycle) return;
@@ -300,42 +304,47 @@ function PurgeDialog({
     <Dialog open onOpenChange={(next) => !next && onClose()}>
       <DialogContent onInteractOutside={(event) => event.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>
-            {canDestroy ? `Delete ${cycle.name} for good?` : `${cycle.name} cannot be deleted`}
-          </DialogTitle>
+          <DialogTitle>Delete {cycle.name} for good?</DialogTitle>
           <DialogDescription>
-            {canDestroy
-              ? "This cannot be undone. The cycle and its participant list are removed from the database entirely."
-              : "It stays in the recycle bin, where it takes up nothing and can be restored at any time."}
+            This cannot be undone, and there is no second recycle bin behind this one.
           </DialogDescription>
         </DialogHeader>
 
-        {canDestroy ? (
+        {holdsWork ? (
+          <div className="space-y-2 rounded-control border-l-2 border-l-critical bg-critical-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
+            {/* -- The whole point of the dialog now.
+                  A launched cycle genuinely holds appraisals, so this names
+                  what goes and whose — before the press, because afterwards
+                  there is nothing to read it against. -- */}
+            <p>
+              <span className="font-medium">This cycle was launched.</span> Deleting it destroys the
+              appraisals of {cycle.participants}{" "}
+              {cycle.participants === 1 ? "person" : "people"} — every answer and rating on both
+              sides, the scores, the frozen question set each was given, and the review and decision
+              on top. It disappears from their scorecard too.
+            </p>
+            {/* -- WHOSE appraisals, named.
+                  This counted them and left HR to work out which three — on a
+                  screen holding nine cycles with the same name, the same period
+                  and the same count. -- */}
+            {cycle.participantNames.length > 0 ? (
+              <p className="text-ink-muted">{cycle.participantNames.join(", ")}</p>
+            ) : null}
+            {/* -- What SURVIVES, because the two questions somebody asks at
+                  this moment are "what am I losing" and "does this touch
+                  pay". The pay ledger is append-only evidence of what
+                  somebody was paid (P19-3), and a cycle being deleted is not
+                  a reason anybody stopped being paid it. -- */}
+            <p className="text-ink-muted">
+              Salary records and the audit trail are not touched. If you only want it out of the
+              way, leaving it in the bin already does that.
+            </p>
+          </div>
+        ) : (
           <p className="rounded-control border-l-2 border-l-critical bg-critical-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
             {cycle.name} was never launched, so nothing has been answered and no question set was
             frozen — there is nothing inside it to lose. Restoring will no longer be possible.
           </p>
-        ) : (
-          <div className="space-y-2 rounded-control border-l-2 border-l-warning bg-warning-tint/40 py-3 pl-4 pr-4 text-body-sm text-ink">
-            <p>
-              <span className="font-medium">This cycle was launched.</span> It holds the frozen
-              question set each of its {cycle.participants}{" "}
-              {cycle.participants === 1 ? "person" : "people"} was given, and whatever they have
-              answered so far. Destroying the cycle would destroy those with it, which the database
-              refuses.
-            </p>
-            {/* -- WHOSE appraisals, named.
-                  This paragraph counted them and left HR to work out which
-                  three — on a screen holding nine cycles with the same name,
-                  the same period and the same count. -- */}
-            {cycle.participantNames.length > 0 ? (
-              <p className="text-ink-muted">{cycle.participantNames.join(", ")}</p>
-            ) : null}
-            <p className="text-ink-muted">
-              Being in the bin is enough: it is already out of every list and every report. If you
-              want it out of the way permanently, leave it here.
-            </p>
-          </div>
         )}
 
         {error ? (
@@ -349,18 +358,16 @@ function PurgeDialog({
 
         <DialogFooter>
           <Button variant="outline" className="min-h-11" onClick={onClose} disabled={busy}>
-            {canDestroy ? "Keep it in the bin" : "Close"}
+            Keep it in the bin
           </Button>
-          {canDestroy ? (
-            <Button
-              variant="destructive"
-              className="min-h-11"
-              onClick={() => void purge()}
-              disabled={busy}
-            >
-              {busy ? "Deleting…" : "Delete for good"}
-            </Button>
-          ) : null}
+          <Button
+            variant="destructive"
+            className="min-h-11"
+            onClick={() => void purge()}
+            disabled={busy}
+          >
+            {busy ? "Deleting…" : "Delete for good"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

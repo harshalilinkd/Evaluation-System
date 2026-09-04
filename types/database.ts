@@ -1830,6 +1830,11 @@ export type Database = {
         Args: { p_cycle_id: string };
         Returns: number;
       };
+      // 0106. Returns how many evaluations went with the cycle.
+      delete_cycle_forever: {
+        Args: { p_cycle_id: string };
+        Returns: number;
+      };
       submit_worker_combined: {
         Args: {
           p_evaluation_id: string;
