@@ -306,11 +306,11 @@ function TeamCard({ row, showCycle }: { row: TeamRow; showCycle: boolean }) {
             </div>
           ) : null}
           <div className="flex items-baseline gap-1.5">
-            <dt className="text-ink-faint">Last appraised</dt>
+            <dt className="text-ink-faint">Last evaluated</dt>
             {/* An absent date is a fact about them, not a figure that failed to
                 load, and a dash cannot tell the two apart (FIX-30). */}
             <dd className="tabular text-ink-muted">
-              {row.lastAppraisedOn ? formatDate(row.lastAppraisedOn) : "First appraisal"}
+              {row.lastEvaluatedOn ? formatDate(row.lastEvaluatedOn) : "First evaluation"}
             </dd>
           </div>
         </dl>

@@ -63,8 +63,8 @@ export type TeamRow = {
         instruction: a manager rating somebody already knows how to reach
         them, and the row is read down a list rather than looked up in. -- */
   joinedOn: string | null;
-  /** When their last appraisal CLOSED. Null on a first one. */
-  lastAppraisedOn: string | null;
+  /** When their last evaluation CLOSED. Null on a first one. */
+  lastEvaluatedOn: string | null;
   /**
    * The OTHER manager rating this person, where there is one.
    *
@@ -304,10 +304,10 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
   const byOtherManager = new Map((otherManagers ?? []).map((p) => [p.id, p.full_name]));
 
   // Newest first out of the query, so the first sighting of a person wins.
-  const lastAppraised = new Map<string, string>();
+  const lastEvaluated = new Map<string, string>();
   for (const past of history ?? []) {
-    if (past.closed_at && !lastAppraised.has(past.evaluatee_id)) {
-      lastAppraised.set(past.evaluatee_id, past.closed_at);
+    if (past.closed_at && !lastEvaluated.has(past.evaluatee_id)) {
+      lastEvaluated.set(past.evaluatee_id, past.closed_at);
     }
   }
 
@@ -376,7 +376,7 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
       leadDueOn: rowCycle?.lead_due_on ?? null,
       cycleType: rowCycle?.cycle_type ?? null,
       joinedOn: person?.date_of_joining ?? null,
-      lastAppraisedOn: lastAppraised.get(row.evaluatee_id) ?? null,
+      lastEvaluatedOn: lastEvaluated.get(row.evaluatee_id) ?? null,
       /* -- The one that is NOT the viewer. On an ordinary evaluation there is
             no second manager and this is null; where there is one, each of the
             two sees the other named. -- */

@@ -61,7 +61,7 @@ export type DistributionRow = {
   managers: RowManager[];
 
   /**
-   * When their last appraisal CLOSED — null for a first evaluation.
+   * When their last evaluation CLOSED — null for a first one.
    *
    * The date only. Not the score: this is the send list, and §11 keeps a
    * rating to the report where both sides can be read together. Somebody
@@ -153,7 +153,7 @@ export async function getDistributionBoard(cycleId: string): Promise<CycleResult
 
   const { data: departments } = await supabase.from("departments").select("id, name");
 
-  /* -- The managers, and when each person was last appraised.
+  /* -- The managers, and when each person was last evaluated.
         Both are issued alongside everything else rather than in sequence: no
         query here needs another's answer, so they are one round trip's wait
         instead of three (FIX-8's correction to /my-evaluation). RLS still

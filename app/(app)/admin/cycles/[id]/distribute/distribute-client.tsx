@@ -497,7 +497,7 @@ export function DistributeClient({
                   <TableHead>Person</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Rated by</TableHead>
-                  <TableHead>Last appraised</TableHead>
+                  <TableHead>Last evaluated</TableHead>
                   <TableHead>Link</TableHead>
                   <TableHead>Last sent</TableHead>
                   <TableHead>Result</TableHead>
@@ -570,7 +570,7 @@ export function DistributeClient({
                     </TableCell>
 
                     <TableCell>
-                      <LastAppraised on={row.lastEvaluatedOn} />
+                      <LastEvaluated on={row.lastEvaluatedOn} />
                     </TableCell>
 
                     <TableCell>
@@ -716,7 +716,7 @@ export function DistributeClient({
                   />
                   <ContactLine kind="email" present={Boolean(row.email)} problem={null} value={row.email} />
                   <ManagerList managers={row.managers} />
-                  <LastAppraised on={row.lastEvaluatedOn} />
+                  <LastEvaluated on={row.lastEvaluatedOn} />
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -993,12 +993,12 @@ function ManagerList({ managers }: { managers: DistributionRow["managers"] }) {
 /**
  * When their last appraisal closed.
  *
- * "First appraisal" rather than an em dash: an absent date here is a fact
+ * "First evaluation" rather than an em dash: an absent date here is a fact
  * about the person, not a figure that failed to load, and the two look
  * identical when the empty state is a dash (FIX-30).
  */
-function LastAppraised({ on }: { on: string | null }) {
-  if (!on) return <span className="text-body-sm text-ink-faint">First appraisal</span>;
+function LastEvaluated({ on }: { on: string | null }) {
+  if (!on) return <span className="text-body-sm text-ink-faint">First evaluation</span>;
   return <span className="tabular text-body-sm text-ink">{formatDate(on)}</span>;
 }
 
