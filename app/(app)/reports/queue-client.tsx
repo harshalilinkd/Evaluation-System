@@ -144,14 +144,25 @@ export function ReportsQueueClient({
     setTile((current) => (current === next ? null : next));
 
 
-  const rows = React.useMemo(() => {
-    const threshold = Number(minGap);
-    return queue.rows.filter((r) => {
+  /* -- ONE predicate, read three ways.
+        The table, the type tabs and the five tiles all filter the same rows
+        and differ only in which dimension each leaves OUT of its own count —
+        because a count that included the control it labels would read 0 the
+        moment somebody pressed it. There were two copies of this already,
+        identical but for one clause; a third would be the one that drifts,
+        and the drift would only show as a number nobody could reconcile. -- */
+  const passes = React.useCallback(
+    (r: QueueRow, skip?: { type?: boolean; state?: boolean }) => {
+      const threshold = Number(minGap);
       if (cycle !== ANY && r.cycleId !== cycle) return false;
-      if (r.cycleType !== type) return false;
+      if (!skip?.type && r.cycleType !== type) return false;
       if (department !== ANY && r.department !== department) return false;
-      if (status !== ANY && r.status !== status) return false;
-      if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
+      // The status select and the tiles are one dimension — both say "which
+      // stage" — so they are skipped together or not at all.
+      if (!skip?.state) {
+        if (status !== ANY && r.status !== status) return false;
+        if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
+      }
       if (flaggedOnly && r.flaggedCount === 0) return false;
       if (minGap !== "" && Number.isFinite(threshold)) {
         if (r.gap === null || Math.abs(r.gap) < threshold) return false;
@@ -162,36 +173,55 @@ export function ReportsQueueClient({
         if (!haystack.includes(needle)) return false;
       }
       return true;
-    });
-  }, [queue.rows, cycle, type, department, status, tile, flaggedOnly, minGap, search]);
+    },
+    [cycle, type, department, status, tile, flaggedOnly, minGap, search],
+  );
+
+  const rows = React.useMemo(() => queue.rows.filter((r) => passes(r)), [queue.rows, passes]);
 
   /* -- How many of each kind, under everything EXCEPT the type itself.
         Counted against the same search, cycle, department and status the reader
         has set, so the inactive tab answers "and how many of those are
         increments" rather than a number from a different question. -- */
   const typeCounts = React.useMemo(() => {
-    const threshold = Number(minGap);
-    const matches = queue.rows.filter((r) => {
-      if (cycle !== ANY && r.cycleId !== cycle) return false;
-      if (department !== ANY && r.department !== department) return false;
-      if (status !== ANY && r.status !== status) return false;
-      if (tile && !TILE_STATUSES[tile].includes(r.status)) return false;
-      if (flaggedOnly && r.flaggedCount === 0) return false;
-      if (minGap !== "" && Number.isFinite(threshold)) {
-        if (r.gap === null || Math.abs(r.gap) < threshold) return false;
-      }
-      if (search.trim()) {
-        const needle = search.trim().toLowerCase();
-        const haystack = `${r.employeeName} ${r.employeeCode ?? ""} ${r.department ?? ""}`.toLowerCase();
-        if (!haystack.includes(needle)) return false;
-      }
-      return true;
-    });
+    const matches = queue.rows.filter((r) => passes(r, { type: true }));
     return {
       Evaluation: matches.filter((r) => r.cycleType === "Evaluation").length,
       Increment: matches.filter((r) => r.cycleType === "Increment").length,
     };
-  }, [queue.rows, cycle, department, status, tile, flaggedOnly, minGap, search]);
+  }, [queue.rows, passes]);
+
+  /* -- THE TILES, counted under the reader's own view.
+        They came from the server over every row, so switching to Increment
+        left five numbers describing the whole queue — "Pending your review 1"
+        above a list that had nothing in it. An evaluation and an increment are
+        two different exercises (§1), and a count that spans both answers a
+        question nobody asked.
+
+        Under everything except the stage itself: the type tab, the cycle, the
+        department, the gap, the flag and the search all narrow these, and the
+        status select and the tiles do not, for the reason in `passes`. -- */
+  const tileCounts = React.useMemo(() => {
+    const scope = queue.rows.filter((r) => passes(r, { state: true }));
+    /* -- The subtitle's own figure, from the SAME set as the tile beneath it.
+          It came from the server over every row, so it could read "1 report is
+          waiting for your review" directly above a Pending tile showing 0 —
+          which is the reported symptom one line higher up. -- */
+    const waitingDays = scope
+      .filter((r) => TILE_STATUSES.hr.includes(r.status))
+      .map((r) => r.daysWaiting)
+      .filter((d): d is number => d !== null);
+    const count = (key: TileKey) =>
+      scope.filter((r) => TILE_STATUSES[key].includes(r.status)).length;
+    return {
+      oldestWaiting: waitingDays.length ? Math.max(...waitingDays) : null,
+      partial: count("partial"),
+      hr: count("hr"),
+      md: count("md"),
+      ready: count("ready"),
+      closed: count("closed"),
+    };
+  }, [queue.rows, passes]);
 
   /* -- ONE GRID, and the cycle is a COLUMN.
         It was a card per cycle, each with its own header and its own <table>.
@@ -430,13 +460,13 @@ export function ReportsQueueClient({
               closing, and saying nothing is waiting sends somebody away from
               work that is theirs. It now names the next thing to do. -- */
         subtitle={
-          queue.pendingHr === 0
-            ? queue.readyToClose > 0
-              ? `${queue.readyToClose} ${queue.readyToClose === 1 ? "report has" : "reports have"} been reviewed by the MD and can be closed.`
+          tileCounts.hr === 0
+            ? tileCounts.ready > 0
+              ? `${tileCounts.ready} ${tileCounts.ready === 1 ? "report has" : "reports have"} been reviewed by the MD and can be closed.`
               : "Nothing is waiting for review."
-            : queue.oldestWaiting !== null
-              ? `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review · the oldest has waited ${queue.oldestWaiting} ${queue.oldestWaiting === 1 ? "day" : "days"}`
-              : `${queue.pendingHr} ${queue.pendingHr === 1 ? "report is" : "reports are"} waiting for your review`
+            : tileCounts.oldestWaiting !== null
+              ? `${tileCounts.hr} ${tileCounts.hr === 1 ? "report is" : "reports are"} waiting for your review · the oldest has waited ${tileCounts.oldestWaiting} ${tileCounts.oldestWaiting === 1 ? "day" : "days"}`
+              : `${tileCounts.hr} ${tileCounts.hr === 1 ? "report is" : "reports are"} waiting for your review`
         }
       />
 
@@ -455,7 +485,7 @@ export function ReportsQueueClient({
               would otherwise look like a fifth. -- */}
         <KpiCard
           label="One side in"
-          value={queue.partlyIn}
+          value={tileCounts.partial}
           caption="Readable now · not ready to review"
           tone="plain"
           onSelect={() => toggleTile("partial")}
@@ -463,28 +493,28 @@ export function ReportsQueueClient({
         />
         <KpiCard
           label="Pending your review"
-          value={queue.pendingHr}
+          value={tileCounts.hr}
           tone="self"
           onSelect={() => toggleTile("hr")}
           active={tile === "hr"}
         />
         <KpiCard
           label="With the MD"
-          value={queue.withMd}
+          value={tileCounts.md}
           tone="lead"
           onSelect={() => toggleTile("md")}
           active={tile === "md"}
         />
         <KpiCard
           label="Ready to close"
-          value={queue.readyToClose}
+          value={tileCounts.ready}
           tone="final"
           onSelect={() => toggleTile("ready")}
           active={tile === "ready"}
         />
         <KpiCard
           label="Closed"
-          value={queue.closedThisCycle}
+          value={tileCounts.closed}
           tone="final"
           onSelect={() => toggleTile("closed")}
           active={tile === "closed"}
