@@ -299,18 +299,6 @@ function TeamCard({ row, showCycle }: { row: TeamRow; showCycle: boolean }) {
                Nothing reports their side of this cycle: A3-8 keeps that out of
                the query, not merely off the screen. -- */}
         <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-body-sm">
-          {row.email ? (
-            <div className="flex min-w-0 items-baseline gap-1.5">
-              <dt className="text-ink-faint">Email</dt>
-              <dd className="truncate text-ink-muted">{row.email}</dd>
-            </div>
-          ) : null}
-          {row.phone ? (
-            <div className="flex items-baseline gap-1.5">
-              <dt className="text-ink-faint">Mobile</dt>
-              <dd className="tabular text-ink-muted">{row.phone}</dd>
-            </div>
-          ) : null}
           {row.joinedOn ? (
             <div className="flex items-baseline gap-1.5">
               <dt className="text-ink-faint">Joined</dt>

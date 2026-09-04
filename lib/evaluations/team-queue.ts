@@ -58,9 +58,10 @@ export type TeamRow = {
    */
   cycleType: string | null;
 
-  /* -- Context for the person, not for their appraisal. -- */
-  email: string | null;
-  phone: string | null;
+  /* -- Context for the person, not for their appraisal.
+        Their email and mobile were here and are gone at the owner's
+        instruction: a manager rating somebody already knows how to reach
+        them, and the row is read down a list rather than looked up in. -- */
   joinedOn: string | null;
   /** When their last appraisal CLOSED. Null on a first one. */
   lastAppraisedOn: string | null;
@@ -245,7 +246,7 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
     await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, designation, department_id, date_of_joining, email, phone_e164")
+      .select("id, full_name, employee_code, designation, department_id, date_of_joining")
       .in("id", employeeIds),
     supabase.from("departments").select("id, name"),
     otherManagerIds.length
@@ -374,8 +375,6 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
       periodLabel: rowCycle?.period_label ?? null,
       leadDueOn: rowCycle?.lead_due_on ?? null,
       cycleType: rowCycle?.cycle_type ?? null,
-      email: person?.email ?? null,
-      phone: person?.phone_e164 ?? null,
       joinedOn: person?.date_of_joining ?? null,
       lastAppraisedOn: lastAppraised.get(row.evaluatee_id) ?? null,
       /* -- The one that is NOT the viewer. On an ordinary evaluation there is
