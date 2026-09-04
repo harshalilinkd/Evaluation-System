@@ -67,24 +67,37 @@ export function TeamClient({ queue, firstName }: { queue: TeamQueue; firstName: 
   // self-evaluations, and a banner naming one leaves the other unprompted.
   const ownOpen = queue.ownEvaluations.filter((e) => e.status === "OPEN");
 
-  /* -- The subtitle when there is more than one cycle. Naming one of them and
-        its date would state a deadline that is wrong for half the list, so it
-        says how many and quotes the SOONEST — which is the one that matters. */
-  const soonestDue = queue.cycles
-    .map((c) => c.leadDueOn)
-    .filter((d): d is string => Boolean(d))
-    .sort()[0];
+  /* -- The soonest date THIS MANAGER IS ACTUALLY WORKING TO.
+        It was taken from every running cycle, whether or not they had anybody
+        to rate in it — so a manager with one review due next March was told
+        "your soonest review is due 27-08-2026", a date already past, from a
+        cycle they have no part in. A deadline that is not yours and is
+        overdue is worse than none: it says you are late when you are not.
 
+        From the OUTSTANDING rows instead. Already-submitted ones are excluded
+        for the same reason — a date you have already met is not a deadline. -- */
+  const outstandingDue = queue.rows
+    .filter((r) => r.leadState !== "submitted")
+    .map((r) => r.leadDueOn)
+    .filter((d): d is string => Boolean(d))
+    .sort();
+
+  const soonestDue = outstandingDue[0];
   const onlyCycle = queue.cycles.length === 1 ? queue.cycles[0] : undefined;
 
   const subtitle =
     queue.cycles.length === 0
       ? "No cycle is running at the moment."
-      : onlyCycle
-        ? onlyCycle.periodLabel
-          ? `${onlyCycle.periodLabel} · your review is due ${formatDate(onlyCycle.leadDueOn)}`
-          : "Your reviews are open."
-        : `${queue.cycles.length} cycles open · your soonest review is due ${formatDate(soonestDue ?? null)}`;
+      : queue.rows.length === 0
+        ? "No reviews are open for you."
+        : !soonestDue
+          ? // Everything is in, or none of it carries a date.
+            queue.rows.every((r) => r.leadState === "submitted")
+            ? "You have submitted every review."
+            : "Your reviews are open."
+          : onlyCycle
+            ? `${onlyCycle.periodLabel ? `${onlyCycle.periodLabel} · ` : ""}your review is due ${formatDate(soonestDue)}`
+            : `${queue.cycles.length} cycles open · your soonest review is due ${formatDate(soonestDue)}`;
 
   /* -- The greeting, three tiles and a filter row cost ~430px before the first
         report. The greeting and the due date are one line now, the three counts
@@ -266,6 +279,65 @@ function TeamCard({ row, showCycle }: { row: TeamRow; showCycle: boolean }) {
             {row.periodLabel ? <span>{row.periodLabel}</span> : null}
           </p>
         ) : null}
+        {/* -- WHAT THEY ARE BEING ASKED FOR.
+               An increment cycle puts the promotion recommendation and the
+               hike percentage on the manager's form (0072) — a pay opinion
+               rather than a rating — and the row said nothing about which of
+               the two this was. Shown only for an increment: labelling the
+               ordinary case puts a badge on every row and teaches people to
+               stop reading badges (N2-11). -- */}
+        {row.cycleType === "INCREMENT" ? (
+          <p className="mt-1">
+            <span className="type-label rounded-pill bg-final-tint px-2 py-0.5 text-final">
+              Increment · you will be asked for a hike recommendation
+            </span>
+          </p>
+        ) : null}
+
+        {/* -- The person, for somebody about to write about them.
+               Every field here is either theirs or about the arrangement.
+               Nothing reports their side of this cycle: A3-8 keeps that out of
+               the query, not merely off the screen. -- */}
+        <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-body-sm">
+          {row.email ? (
+            <div className="flex min-w-0 items-baseline gap-1.5">
+              <dt className="text-ink-faint">Email</dt>
+              <dd className="truncate text-ink-muted">{row.email}</dd>
+            </div>
+          ) : null}
+          {row.phone ? (
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-ink-faint">Mobile</dt>
+              <dd className="tabular text-ink-muted">{row.phone}</dd>
+            </div>
+          ) : null}
+          {row.joinedOn ? (
+            <div className="flex items-baseline gap-1.5">
+              <dt className="text-ink-faint">Joined</dt>
+              <dd className="tabular text-ink-muted">{formatDate(row.joinedOn)}</dd>
+            </div>
+          ) : null}
+          <div className="flex items-baseline gap-1.5">
+            <dt className="text-ink-faint">Last appraised</dt>
+            {/* An absent date is a fact about them, not a figure that failed to
+                load, and a dash cannot tell the two apart (FIX-30). */}
+            <dd className="tabular text-ink-muted">
+              {row.lastAppraisedOn ? formatDate(row.lastAppraisedOn) : "First appraisal"}
+            </dd>
+          </div>
+        </dl>
+
+        {/* -- Somebody else rates them too.
+               A NAME and no state. Without this, two managers each reasonably
+               assume theirs is the only rating — and telling one whether the
+               other has submitted would be the employee's leak one person
+               along (§5). -- */}
+        {row.otherManagerName ? (
+          <p className="mt-1 text-body-sm text-ink-muted">
+            {row.otherManagerName} also rates this person, separately.
+          </p>
+        ) : null}
+
         {row.isSelfLed ? (
           // P13 edge case. Neutral, not a warning: a department head with nobody
           // above them is a fact about the org chart, not a mistake they made.
@@ -287,16 +359,22 @@ function TeamCard({ row, showCycle }: { row: TeamRow; showCycle: boolean }) {
         </p>
         {row.daysToLeadDue !== null && !row.isOverdue && row.leadState !== "submitted" ? (
           <p className="tabular text-body-sm text-ink-muted">
+            {/* The DATE as well as the count. "208 days left" is a countdown
+                and not a deadline: nobody can put it in a diary. */}
             {row.daysToLeadDue === 0
               ? "Due today"
               : row.daysToLeadDue > 0
-                ? `${row.daysToLeadDue} ${row.daysToLeadDue === 1 ? "day" : "days"} left`
+                ? `${row.daysToLeadDue} ${row.daysToLeadDue === 1 ? "day" : "days"} left${
+                    row.leadDueOn ? ` · ${formatDate(row.leadDueOn)}` : ""
+                  }`
                 : null}
           </p>
         ) : null}
         {row.isOverdue ? (
           <span className="type-label rounded-pill border border-critical/40 bg-critical-tint px-2.5 py-1 text-critical">
-            Overdue
+            {/* The date, here too. "Overdue" alone leaves somebody to work out
+                by how much, which decides whether they finish it today. */}
+            Overdue{row.leadDueOn ? ` · was due ${formatDate(row.leadDueOn)}` : ""}
           </span>
         ) : null}
       </div>

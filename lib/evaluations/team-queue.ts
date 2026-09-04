@@ -47,6 +47,30 @@ export type TeamRow = {
   cycleId: string;
   cycleName: string;
   periodLabel: string | null;
+  /** The date itself, beside "208 days left" — a countdown is not a deadline. */
+  leadDueOn: string | null;
+  /**
+   * EVALUATION or INCREMENT.
+   *
+   * Not decoration. On an increment the manager's form carries the promotion
+   * recommendation and the hike percentage (0072), so they are being asked for
+   * a pay opinion rather than a rating — and the row said nothing about which.
+   */
+  cycleType: string | null;
+
+  /* -- Context for the person, not for their appraisal. -- */
+  email: string | null;
+  phone: string | null;
+  joinedOn: string | null;
+  /** When their last appraisal CLOSED. Null on a first one. */
+  lastAppraisedOn: string | null;
+  /**
+   * The OTHER manager rating this person, where there is one.
+   *
+   * A NAME and nothing else. Their progress is the same signal as the
+   * employee's, one person along, and is not fetched (A3-8).
+   */
+  otherManagerName: string | null;
 };
 
 export type TeamCycle = {
@@ -128,7 +152,7 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
   // the newest unreachable for the lead who owed it.
   const { data: cycleRows } = await supabase
     .from("evaluation_cycles")
-    .select("id, name, period_label, self_due_on, lead_due_on")
+    .select("id, name, period_label, cycle_type, self_due_on, lead_due_on")
     .eq("status", "ACTIVE")
     // A binned cycle is still ACTIVE — 0032's recycle bin is a `deleted_at`,
     // not a status. Without this the queue could open on a cycle HR had
@@ -202,12 +226,40 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
 
   const employeeIds = rowsRaw.map((r) => r.evaluatee_id);
 
-  const [{ data: people }, { data: departments }] = await Promise.all([
+  /* -- The second manager, where there is one (0083).
+        NAMED ONLY. Whether they have submitted is deliberately not fetched —
+        it is the same signal as the employee's, one person along, and a
+        manager who could see "the coordinator rated her three weeks ago" is
+        anchored exactly as §1 removed the self column to prevent. Who else is
+        rating is a fact about the ARRANGEMENT, and it is worth saying: without
+        it each of two managers reasonably assumes theirs is the only rating. -- */
+  const otherManagerIds = [
+    ...new Set(
+      rowsRaw
+        .flatMap((r) => [r.lead_id, r.co_lead_id])
+        .filter((id): id is string => Boolean(id) && id !== profileId),
+    ),
+  ];
+
+  const [{ data: people }, { data: departments }, { data: otherManagers }, { data: history }] =
+    await Promise.all([
     supabase
       .from("profiles")
-      .select("id, full_name, employee_code, designation, department_id")
+      .select("id, full_name, employee_code, designation, department_id, date_of_joining, email, phone_e164")
       .in("id", employeeIds),
     supabase.from("departments").select("id, name"),
+    otherManagerIds.length
+      ? supabase.from("profiles").select("id, full_name").in("id", otherManagerIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; full_name: string }> }),
+    /* -- When each report was last appraised. A CLOSED evaluation only — this
+          says nothing about anything in flight, so it cannot report the
+          employee's side of a cycle that is still running (A3-8). -- */
+    supabase
+      .from("evaluations")
+      .select("evaluatee_id, closed_at")
+      .in("evaluatee_id", employeeIds)
+      .not("closed_at", "is", null)
+      .order("closed_at", { ascending: false }),
     // The audit read that used to sit here is gone. It looked for
     // SELF_SUBMITTED → CYCLE_ACTIVE so the queue could say "returned" — which
     // is a fact about the EMPLOYEE'S side. Returns are HR's now (§8), and a
@@ -248,6 +300,15 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
 
   const byPerson = new Map((people ?? []).map((p) => [p.id, p]));
   const byDepartment = new Map((departments ?? []).map((d) => [d.id, d.name]));
+  const byOtherManager = new Map((otherManagers ?? []).map((p) => [p.id, p.full_name]));
+
+  // Newest first out of the query, so the first sighting of a person wins.
+  const lastAppraised = new Map<string, string>();
+  for (const past of history ?? []) {
+    if (past.closed_at && !lastAppraised.has(past.evaluatee_id)) {
+      lastAppraised.set(past.evaluatee_id, past.closed_at);
+    }
+  }
 
   const rows: TeamRow[] = rowsRaw.map((row) => {
     const person = byPerson.get(row.evaluatee_id);
@@ -311,6 +372,20 @@ export async function getTeamQueue(profileId: string): Promise<TeamQueue> {
       cycleId: row.cycle_id,
       cycleName: rowCycle?.name ?? "Cycle",
       periodLabel: rowCycle?.period_label ?? null,
+      leadDueOn: rowCycle?.lead_due_on ?? null,
+      cycleType: rowCycle?.cycle_type ?? null,
+      email: person?.email ?? null,
+      phone: person?.phone_e164 ?? null,
+      joinedOn: person?.date_of_joining ?? null,
+      lastAppraisedOn: lastAppraised.get(row.evaluatee_id) ?? null,
+      /* -- The one that is NOT the viewer. On an ordinary evaluation there is
+            no second manager and this is null; where there is one, each of the
+            two sees the other named. -- */
+      otherManagerName:
+        [row.lead_id, row.co_lead_id]
+          .filter((id): id is string => Boolean(id) && id !== profileId)
+          .map((id) => byOtherManager.get(id))
+          .find(Boolean) ?? null,
     };
   });
 
