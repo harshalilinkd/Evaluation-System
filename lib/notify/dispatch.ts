@@ -88,7 +88,7 @@ export type DispatchResult =
       suppressing them meant an MD who leads a team could never be sent the
       review they are the only person able to write. Reported as six identical
       failures on one launch. -- */
-const MD_MAY_RECEIVE: ReadonlySet<TemplateKey> = new Set<TemplateKey>([
+export const MD_MAY_RECEIVE: ReadonlySet<TemplateKey> = new Set<TemplateKey>([
   "mdReviewPending",
   // Their own appraisal.
   "selfEvaluationInvite",

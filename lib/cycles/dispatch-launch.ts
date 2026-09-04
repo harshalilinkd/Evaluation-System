@@ -6,7 +6,7 @@ import { absoluteUrl } from "@/lib/notify/preflight";
 import { inviteUrl, issueInviteToken } from "@/lib/auth/invites";
 import type { LaunchPlan } from "@/lib/cycles/launch";
 import { contactFor, type ContactSource } from "@/lib/notify/contacts";
-import { isSuppressedFor, sendNotification } from "@/lib/notify/dispatch";
+import { MD_MAY_RECEIVE, sendNotification } from "@/lib/notify/dispatch";
 import type { RenderedMessage, TemplateKey } from "@/lib/notify/templates";
 import { leadReviewInvite, selfEvaluationInvite } from "@/lib/notify/templates";
 import { createClient } from "@/lib/supabase/server";
@@ -128,6 +128,38 @@ async function sendLaunchInvites(
   const departmentName = new Map((departments ?? []).map((d) => [d.id, d.name]));
   const period = cycle?.period_label ?? "";
 
+  /* -- FIX-13's rule, asked ONCE rather than once per recipient.
+        The MD receives only the approved report, so every other message to
+        somebody whose sole administrative role is MD is suppressed. That was
+        being decided inside `deliverInvite` — which built a Supabase client
+        and read `user_roles` for EVERY invite, so a launch of forty-seven paid
+        for a hundred round trips to answer a question about two or three
+        people.
+
+        `sendNotification` still applies the rule itself and is the real
+        guarantee; this is the cheap version of the same answer, and it exists
+        here because the email branch mints a token BEFORE sending, and a token
+        issued for a message that is then suppressed is an orphan that has also
+        revoked whatever it replaced (§10). -- */
+  const { data: roleRows } = personIds.length
+    ? await supabase.from("user_roles").select("profile_id, role").in("profile_id", personIds)
+    : { data: [] as Array<{ profile_id: string; role: string }> };
+
+  const held = new Map<string, Set<string>>();
+  for (const row of roleRows ?? []) {
+    const set = held.get(row.profile_id) ?? new Set<string>();
+    set.add(row.role);
+    held.set(row.profile_id, set);
+  }
+
+  // Holding HR as well is not suppressed: the rule is about somebody whose
+  // ONLY administrative role is MD (F13-3).
+  const mdOnly = new Set(
+    [...held.entries()]
+      .filter(([, roles]) => roles.has("MD") && !roles.has("HR_ADMIN"))
+      .map(([id]) => id),
+  );
+
   /* -- The per-HOD cap. Counted as we go, so the first ten of a large team go
         out now and the rest are left for cron — which is why nothing is
         silently dropped. -- */
@@ -143,6 +175,7 @@ async function sendLaunchInvites(
       : undefined;
     if (employee) {
       const result = await deliverInvite({
+        mdOnly,
         evaluationId: link.evaluationId,
         layer: "SELF",
         profileId: employee.id,
@@ -179,6 +212,7 @@ async function sendLaunchInvites(
       perLead.set(lead.id, already + 1);
 
       const result = await deliverInvite({
+        mdOnly,
         evaluationId: link.evaluationId,
         layer: "LEAD",
         profileId: lead.id,
@@ -229,6 +263,7 @@ async function sendLaunchInvites(
       perLead.set(coLead.id, already + 1);
 
       const result = await deliverInvite({
+        mdOnly,
         evaluationId: link.evaluationId,
         layer: "LEAD_2",
         profileId: coLead.id,
@@ -284,6 +319,8 @@ function inviteLink(token: string): string {
  * actually went wrong and can be retried.
  */
 async function deliverInvite(opts: {
+  /** Profile ids whose only administrative role is MD, resolved once per launch. */
+  mdOnly: Set<string>;
   evaluationId: string;
   /** Whose link. Decides which token is minted for the email channel. */
   layer: "SELF" | "LEAD" | "LEAD_2";
@@ -314,52 +351,65 @@ async function deliverInvite(opts: {
 }): Promise<{ sent: number; failed: number }> {
   const out = { sent: 0, failed: 0 };
 
-  /* -- Asked once, up front, rather than letting dispatch refuse each channel.
-        `sendNotification` applies the rule itself and is the real guarantee;
-        this is here because the email branch below MINTS a token first, and a
-        token issued for a message that is then suppressed is an orphan that has
-        also revoked whatever it replaced (§10). -- */
-  if (await isSuppressedFor(await createClient(), opts.profileId, opts.template)) return out;
+  // Resolved once for the whole launch — see `mdOnly` in sendLaunchInvites.
+  if (!MD_MAY_RECEIVE.has(opts.template) && opts.mdOnly.has(opts.profileId)) return out;
 
   const to = contactFor(opts.person, opts.template);
 
-  // WhatsApp first: §13.2 — most people open the link on a phone, and a
-  // WhatsApp message is read in minutes where an email may not be read at all.
-  if (to.phone) {
-    const result = await sendNotification({
-      channel: "WHATSAPP",
-      recipient: to.phone,
-      template: opts.template,
-      message: opts.render(inviteLink(opts.whatsappToken)),
-      vars: { ...(opts.vars ?? {}), link: inviteLink(opts.whatsappToken) },
-      evaluationId: opts.evaluationId,
-      profileId: opts.profileId,
-      context: opts.context,
-    });
+  /* -- THE TWO CHANNELS TOGETHER.
+        They were awaited in turn, so every recipient waited out a WhatsApp
+        round trip and then an SMTP one before the next person was even
+        started. They share nothing: §10 scopes a token to a channel, so each
+        link is separately minted, and `sendNotification` writes its own log
+        row per send. Sending them at the same time halves the wait per person
+        and changes nothing about what is sent or recorded.
+
+        Not widened past this. The loop over PEOPLE stays sequential, because
+        the per-HOD cap is a running count and "the first ten of a large team"
+        is only meaningful in an order. -- */
+  const [whatsapp, email] = await Promise.all([
+    // §13.2 — most people open the link on a phone, and a WhatsApp message is
+    // read in minutes where an email may not be read at all.
+    to.phone
+      ? sendNotification({
+          channel: "WHATSAPP",
+          recipient: to.phone,
+          template: opts.template,
+          message: opts.render(inviteLink(opts.whatsappToken)),
+          vars: { ...(opts.vars ?? {}), link: inviteLink(opts.whatsappToken) },
+          evaluationId: opts.evaluationId,
+          profileId: opts.profileId,
+          context: opts.context,
+        })
+      : null,
+    to.email
+      ? (async () => {
+          const issued = await issueInviteToken(opts.evaluationId, "email", opts.layer);
+          if (!issued.ok) return "MINT_FAILED" as const;
+          return sendNotification({
+            channel: "EMAIL",
+            recipient: to.email as string,
+            template: opts.template,
+            message: opts.render(inviteUrl(issued.data.token)),
+            vars: { ...(opts.vars ?? {}), link: inviteUrl(issued.data.token) },
+            evaluationId: opts.evaluationId,
+            profileId: opts.profileId,
+            context: opts.context,
+          });
+        })()
+      : null,
+  ]);
+
+  for (const result of [whatsapp, email]) {
+    if (result === null) continue;
+    if (result === "MINT_FAILED") {
+      out.failed += 1;
+      continue;
+    }
     if (result.ok) out.sent += 1;
     // Not a failure — the MD is deliberately not invited as an employee or a
     // HOD, and there is nothing here for HR to retry.
     else if (!result.suppressed) out.failed += 1;
-  }
-
-  if (to.email) {
-    const issued = await issueInviteToken(opts.evaluationId, "email", opts.layer);
-    if (!issued.ok) {
-      out.failed += 1;
-    } else {
-      const result = await sendNotification({
-        channel: "EMAIL",
-        recipient: to.email,
-        template: opts.template,
-        message: opts.render(inviteUrl(issued.data.token)),
-        vars: { ...(opts.vars ?? {}), link: inviteUrl(issued.data.token) },
-        evaluationId: opts.evaluationId,
-        profileId: opts.profileId,
-        context: opts.context,
-      });
-      if (result.ok) out.sent += 1;
-      else if (!result.suppressed) out.failed += 1;
-    }
   }
 
   return out;

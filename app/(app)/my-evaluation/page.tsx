@@ -125,7 +125,7 @@ export default async function Page({
     supabase
       .from("evaluations")
       .select(
-        "id, status, cycle_id, milestone_type, final_overall, self_submitted_at, excluded_at, evaluation_cycles!inner(deleted_at)",
+        "id, status, cycle_id, milestone_type, final_overall, self_submitted_at, self_skipped, excluded_at, evaluation_cycles!inner(deleted_at)",
       )
       .eq("evaluatee_id", session.profile.id)
       .is("excluded_at", null)
@@ -170,7 +170,28 @@ export default async function Page({
         page STAYS and lets `AccessNotice` say why (§13.4 — a bounce with no
         explanation reads as the app losing your click). -- */
   const only = open[0];
-  if (!bouncedWith && open.length === 1 && past.length === 0 && only) {
+
+  /* -- AND ONLY WHILE IT STILL NEEDS THEM.
+        Reported: an employee submitted their form and pressed "Back to your
+        evaluations", and nothing happened. Nothing was broken about the link —
+        it came here, and this redirect sent them straight back to the form
+        they had just left. A navigation that returns you to where you started
+        is indistinguishable from a dead control (§13.4), and it is the one
+        control on that screen.
+
+        P12-15's reasoning is intact and is the reason for the narrowing rather
+        than the removal: "a list of one is a page that exists only to be
+        clicked through" — TRUE while there is something to click through TO.
+        Once the layer is submitted it locks (§8), so the destination is a
+        read-only form and the list of one is the more useful page: it says
+        Submitted, and says what happens next.
+
+        A SKIPPED layer counts as finished too. HR advanced past it
+        deliberately, so there is nothing for this person to fill in and
+        bouncing them into a form they cannot write is the same dead end. -- */
+  const stillNeedsThem = only && !only.self_submitted_at && !only.self_skipped;
+
+  if (!bouncedWith && open.length === 1 && past.length === 0 && stillNeedsThem) {
     redirect(`/my-evaluation/${only.id}`);
   }
 

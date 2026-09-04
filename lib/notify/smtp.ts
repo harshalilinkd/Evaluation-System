@@ -106,6 +106,76 @@ function explain(error: unknown): string {
  * that a given recipient will accept the mail. The From address is checked by
  * `checkMailFrom` in preflight.ts, which is where that rule already lives.
  */
+/* ---------- The connection, reused ---------- */
+
+/**
+ * ONE authenticated connection, kept for the life of the process.
+ *
+ * Reported as "cycles taking too much time to launch", and this was most of
+ * it. A launch sends every invite in turn, and each one was opening a NEW
+ * connection: TCP, then a TLS handshake, then SMTP AUTH, for every single
+ * message. Against Gmail that is a second or two of pure setup before a byte
+ * of the message moves — so the cost was not the mail, it was reintroducing
+ * ourselves to the server once per recipient.
+ *
+ * `pool: true` reuses the authenticated connection instead. `maxMessages`
+ * exists because Gmail drops a session after a while whatever we do; letting
+ * nodemailer retire a connection on its own terms is cheaper than discovering
+ * it mid-send.
+ *
+ * Keyed on the credentials, so changing the account in Settings › Messages
+ * builds a new transport rather than going on using the old login (P32 exists
+ * precisely so a wrong login is found before a launch, and a cached one that
+ * outlived the setting would defeat it).
+ *
+ * NOT shared with `verifySmtp`. That one is a connection test, and testing a
+ * connection we are already holding open proves the pool is warm rather than
+ * that the credentials work — which is the whole question it is asked.
+ */
+type Creds = Extract<ReturnType<typeof credentials>, { ok: true }>;
+
+let pooled: { key: string; transport: nodemailer.Transporter } | null = null;
+
+function transportFor(creds: Creds): nodemailer.Transporter {
+  const key = `${creds.host}:${creds.port}:${creds.user}:${creds.pass}`;
+  if (pooled?.key === key) return pooled.transport;
+
+  // A credentials change orphans the old pool; close it rather than leaving
+  // its sockets open for the rest of the process.
+  pooled?.transport.close();
+
+  const transport = nodemailer.createTransport({
+    host: creds.host,
+    port: creds.port,
+    secure: creds.port === 465,
+    auth: { user: creds.user, pass: creds.pass },
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 50,
+    connectionTimeout: TIMEOUT_MS,
+    greetingTimeout: TIMEOUT_MS,
+    socketTimeout: TIMEOUT_MS,
+  });
+
+  pooled = { key, transport };
+  return transport;
+}
+
+/**
+ * A failure that means "the connection we were holding is gone", not "this
+ * message is wrong".
+ *
+ * A serverless function can be frozen between requests and its sockets closed
+ * underneath it, so the first send after a pause can fail on a connection that
+ * looked fine. Retried ONCE on a fresh pool — and only for these, because
+ * retrying a rejected recipient or a bad password would send the same message
+ * twice or lock the account faster.
+ */
+function isStaleConnection(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code ?? "";
+  return ["ECONNRESET", "EPIPE", "ETIMEDOUT", "ESOCKET", "ECONNECTION"].includes(code);
+}
+
 export async function verifySmtp(): Promise<SendResult> {
   const creds = credentials();
   if (!creds.ok) {
@@ -174,28 +244,24 @@ export async function sendEmailViaSmtp(
     };
   }
 
+  // 465 is implicit TLS; 587 upgrades with STARTTLS. Never plaintext — see
+  // `transportFor`, which owns the connection now.
+  const envelope = { from: creds.from, to, subject, text, html };
+
   try {
-    const transport = nodemailer.createTransport({
-      host: creds.host,
-      port: creds.port,
-      // 465 is implicit TLS; 587 upgrades with STARTTLS. Never plaintext.
-      secure: creds.port === 465,
-      auth: { user: creds.user, pass: creds.pass },
-      connectionTimeout: TIMEOUT_MS,
-      greetingTimeout: TIMEOUT_MS,
-      socketTimeout: TIMEOUT_MS,
-    });
-
-    const info = await transport.sendMail({
-      from: creds.from,
-      to,
-      subject,
-      text,
-      html,
-    });
-
+    const info = await transportFor(creds).sendMail(envelope);
     return { ok: true, providerMessageId: info.messageId ?? null };
   } catch (error) {
+    if (isStaleConnection(error)) {
+      pooled?.transport.close();
+      pooled = null;
+      try {
+        const info = await transportFor(creds).sendMail(envelope);
+        return { ok: true, providerMessageId: info.messageId ?? null };
+      } catch (retryError) {
+        return { ok: false, code: "SMTP_FAILED", message: explain(retryError) };
+      }
+    }
     /* -- `explain` redacts before anything reaches a log or a screen.
           An SMTP failure echoes the envelope back, and on a bad password Gmail
           replies with the username in the error string. §0.3 and §17 keep
