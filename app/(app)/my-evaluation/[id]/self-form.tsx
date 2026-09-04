@@ -72,6 +72,9 @@ const AUTOSAVE_FLUSH_MS = 20_000;
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormMeta }) {
+  // §5: the record being finished says nothing about what the OTHER side
+  // wrote, and nothing below reaches for it. This only changes the wording.
+  const closed = form.evaluationStatus === "CLOSED";
   // HR's own name for it, not the shipped default (P25).
   const metadataSection = useSectionLabel("METADATA");
   const router = useRouter();
@@ -471,14 +474,39 @@ export function SelfForm({ form, meta }: { form: FormDefinition; meta: SelfFormM
           <div className="flex items-start gap-3">
             <Check aria-hidden className="mt-1 size-5 shrink-0 text-accent-green" />
             <div>
-              <h1 className="text-display-sm text-ink-invert">
-                Your evaluation is submitted and locked.
-              </h1>
-              <p className="mt-1 text-body text-ink-invert-muted">
-                {meta.leadName
-                  ? `${meta.leadName} rates the same form separately. HR reads both together.`
-                  : "Your manager rates the same form separately. HR reads both together."}
-              </p>
+              {/* -- CLOSED is a different sentence, not the same one aged.
+                     "Your manager rates the same form separately" is true
+                     while the cycle is running and stale once it has finished
+                     — it describes something that has already happened as
+                     though it were still to come.
+
+                     What an employee opening a finished appraisal needs to
+                     know is that these are their own answers and that they
+                     are kept, because the reason they came back is to read
+                     them. RLS has always allowed it ("their own answers,
+                     always", 0021); nothing on screen said so. -- */}
+              {closed ? (
+                <>
+                  <h1 className="text-display-sm text-ink-invert">
+                    This appraisal is complete.
+                  </h1>
+                  <p className="mt-1 text-body text-ink-invert-muted">
+                    These are the answers you gave. They stay on your record and you can read
+                    them here whenever you want.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-display-sm text-ink-invert">
+                    Your evaluation is submitted and locked.
+                  </h1>
+                  <p className="mt-1 text-body text-ink-invert-muted">
+                    {meta.leadName
+                      ? `${meta.leadName} rates the same form separately. HR reads both together.`
+                      : "Your manager rates the same form separately. HR reads both together."}
+                  </p>
+                </>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-4">
                 <Link
                   href="/my-evaluation"

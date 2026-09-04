@@ -274,11 +274,21 @@ export default async function Page({
               "Under review" — whether the MD has finalised is not their
               business until the result is disclosed. Overdue is checked
               first and only ever against THEIR OWN due date. */}
+          {/* -- Their OWN side, not the record's.
+                 Reported from a live cycle: somebody submitted their form and
+                 the card went on saying "In progress", because the record
+                 stays OPEN until their manager has submitted too. That is a
+                 fact about the manager, shown to the employee as though it
+                 were a fact about them — and §5 is why the card cannot say
+                 what it is really waiting for. "Submitted" is true, is one of
+                 §8's four employee words, and says the part that is theirs. -- */}
           <StatusChip
             status={
               selfIsOverdue(row.status, row.self_submitted_at, cycle.self_due_on)
                 ? "OVERDUE"
-                : row.status
+                : row.status === "OPEN" && row.self_submitted_at
+                  ? "SUBMITTED"
+                  : row.status
             }
             audience="employee"
           />
@@ -312,11 +322,16 @@ export default async function Page({
                         {formatScore(row.final_overall)}
                       </span>
                     ) : null}
+                    {/* -- "View" did not say what was behind it, so a finished
+                           appraisal read as a receipt rather than as something
+                           to open. Their own answers are readable for as long
+                           as the record exists (0021), and the link is the
+                           only place that fact is visible. -- */}
                     <Link
                       href={`/my-evaluation/${row.id}`}
                       className="inline-flex min-h-11 items-center text-body-sm font-medium text-primary underline underline-offset-2"
                     >
-                      View
+                      View your answers
                     </Link>
                   </div>
                 </li>

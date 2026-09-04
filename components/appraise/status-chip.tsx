@@ -23,7 +23,8 @@ export type ChipStatus =
   | "MD_FINALIZED"
   | "CLOSED"
   | "RETURNED"
-  | "OVERDUE";
+  | "OVERDUE"
+  | "SUBMITTED";
 
 /**
  * Two vocabularies, deliberately.
@@ -104,6 +105,23 @@ const STATUS: Record<
     internal: "Closed",
     employee: "Completed",
     classes: "bg-surface-mute border-rule text-ink-muted",
+  },
+  /* -- NOT A STORED STATUS, like RETURNED and OVERDUE above.
+        Under blind rating a layer locks on its own timestamp and the RECORD
+        stays OPEN until both sides are in (§8, A3-3) — so an employee who had
+        submitted was shown "In progress", which reads as "you have not
+        finished" on the one screen where that is the only thing they want to
+        know. §8 fixes their vocabulary at four words and Submitted is one of
+        them; it simply had no way to be reached.
+
+        A new token rather than borrowing the retired `SELF_SUBMITTED` value:
+        P23-FIX had to unpick exactly that on the team queue, where a retired
+        status was standing in for a submission and rendered correctly while
+        meaning something else. -- */
+  SUBMITTED: {
+    internal: "Submitted",
+    employee: "Submitted",
+    classes: "bg-self-tint border-self/40 text-self",
   },
   RETURNED: {
     internal: "Returned",
