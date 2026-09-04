@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         the whole page however many components consume it. It falls back to the
         shipped defaults on its own, which is the behaviour every screen had
         before this existed. -- */
-  const sections = await getSectionConfig();
+
 
   /* -- The cycle query that fed the topbar selector is GONE with it.
         The selector had no handler and nothing read its value, so this was
@@ -61,7 +61,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         person have work the sidebar has to let them reach". Issued together:
         neither needs the other's answer, and a chain would put a second full
         round trip in front of every authenticated page (F8-1). -- */
-  const [leadsTeam, ratesWorkers] = await Promise.all([
+  /* -- THREE READS, ONE WAIT. The section config was awaited on its own line
+        above these two, so every authenticated page paid for its round trip
+        before either of them was even sent — and it depends on nothing. -- */
+  const [sections, leadsTeam, ratesWorkers] = await Promise.all([
+    getSectionConfig(),
     leadsAnyEvaluation(profile.id),
     ratesAnyWorker(profile.id),
   ]);

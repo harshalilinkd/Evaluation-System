@@ -7,6 +7,11 @@ import { jobSkillCountsByDepartment } from "@/lib/cycles/validate";
 import { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/types/database";
 
+/* -- `.in()` with an empty array is a syntax error at PostgREST, so an empty
+      list is passed a uuid nobody holds. It was written out twice; naming it
+      says what it is for, which "00000000-…" beside a real id does not. -- */
+const NOBODY = "00000000-0000-0000-0000-000000000000";
+
 /* ---------- Screen 1: the list ---------- */
 
 export type CycleListRow = {
@@ -785,54 +790,64 @@ export async function getCycleBoard(cycleId: string): Promise<CycleResult<CycleB
     if (row.lead_id) profileIds.add(row.lead_id);
   }
 
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, full_name")
-    .in("id", profileIds.size > 0 ? [...profileIds] : ["00000000-0000-0000-0000-000000000000"]);
+  /* -- FOUR READS, ONE WAIT.
+        Names, departments, the frozen counts and the return history were
+        awaited one after another, and not one of them needs another's answer —
+        each keys off `profileIds` or `live`, which the evaluations query above
+        has already produced. Four round trips in series became one, on the
+        board HR opens to see where a cycle has got to (FIX-8's correction,
+        applied where it costs most).
 
-  const { data: departments } = await supabase.from("departments").select("id, name");
+        RLS still judges each on its own. Batching is not a join. -- */
+  const [{ data: profiles }, { data: departments }, { data: frozen }, { data: returns }] =
+    await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", profileIds.size > 0 ? [...profileIds] : [NOBODY]),
+      supabase.from("departments").select("id, name"),
+      /* -- How many questions actually froze into each evaluation.
+            From evaluation_questions, never the live bank: the card asks "did
+            this department launch thin?", and the bank would answer with what
+            is mapped TODAY — the number that cannot be trusted after an edit
+            (§5). -- */
+      supabase
+        .from("evaluation_questions")
+        .select("evaluation_id, section")
+        .in("evaluation_id", live.length > 0 ? live.map((r) => r.id) : [NOBODY])
+        .eq("section", "DEPARTMENT_SPECIFIC"),
+      /* -- Which evaluations were sent back.
+            §8 has exactly two return transitions, and an evaluation counts as
+            returned when its current status matches the destination of one.
+            Derived from the audit log because that is the only place a
+            backwards move is recorded — the status afterwards is
+            indistinguishable from never having submitted.
+
+            AMEND-3 gave both returns to HR and renamed both ends: a return is
+            now PENDING_HR_REVIEW -> OPEN. The old pair matched nothing, so the
+            board never showed that a record had been sent back. -- */
+      live.length > 0
+        ? supabase
+            .from("audit_log")
+            .select("entity_id, from_status, to_status, created_at")
+            .eq("entity", "evaluation")
+            .in("entity_id", live.map((r) => r.id))
+            .eq("from_status", "PENDING_HR_REVIEW")
+            .eq("to_status", "OPEN")
+            .order("created_at", { ascending: false })
+        : Promise.resolve({ data: [] as Array<{ entity_id: string; from_status: string | null; to_status: string | null; created_at: string }> }),
+    ]);
 
   const nameOf = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const departmentName = new Map((departments ?? []).map((d) => [d.id, d.name]));
-
-  /* -- How many questions actually froze into each evaluation. -- */
-  //
-  // Read from evaluation_questions, not from the live bank. The whole point of
-  // the "did this department launch thin?" card is to show what was frozen —
-  // reading the bank would show what is mapped TODAY, which is exactly the
-  // number that cannot be trusted after an edit (§5).
-  const { data: frozen } = await supabase
-    .from("evaluation_questions")
-    .select("evaluation_id, section")
-    .in("evaluation_id", live.length > 0 ? live.map((r) => r.id) : ["00000000-0000-0000-0000-000000000000"])
-    .eq("section", "DEPARTMENT_SPECIFIC");
 
   const frozenPer = new Map<string, number>();
   for (const row of frozen ?? []) {
     frozenPer.set(row.evaluation_id, (frozenPer.get(row.evaluation_id) ?? 0) + 1);
   }
 
-  /* -- Which evaluations were sent back. -- */
-  //
-  // §8 has exactly two return transitions. An evaluation counts as returned
-  // when its current status matches the destination of one — i.e. it went
-  // backwards and has not yet climbed out again. Derived from the audit log
-  // because that is the only place a backwards move is recorded: the status
-  // column afterwards is indistinguishable from never having submitted.
   const returned = new Set<string>();
-  if (live.length > 0) {
-    const { data: returns } = await supabase
-      .from("audit_log")
-      .select("entity_id, from_status, to_status, created_at")
-      .eq("entity", "evaluation")
-      .in("entity_id", live.map((r) => r.id))
-      // AMEND-3 gave both returns to HR and renamed both ends: a return is now
-      // PENDING_HR_REVIEW -> OPEN. The old pair matched nothing, so the board
-      // never showed that a record had been sent back.
-      .eq("from_status", "PENDING_HR_REVIEW")
-      .eq("to_status", "OPEN")
-      .order("created_at", { ascending: false });
-
+  {
     const statusNow = new Map(live.map((r) => [r.id, r.status]));
     const seen = new Set<string>();
     for (const row of returns ?? []) {

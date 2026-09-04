@@ -36,7 +36,12 @@ export type GuardedSession = {
  * so this cannot be turned into an open redirect.
  */
 export async function requireAuth(next?: string): Promise<GuardedSession> {
-  const profile = await getCurrentProfile();
+  /* -- BOTH READS TOGETHER. `requireAuth` awaited the profile, decided, and
+        only then asked for the roles — two full round trips in series in front
+        of every authenticated page, and the roles are needed on every path that
+        does not redirect. They share one validated session (`getAuthUser`), so
+        the second no longer re-checks anything either. -- */
+  const [profile, roles] = await Promise.all([getCurrentProfile(), getRoles()]);
 
   if (!profile) {
     // Two very different failures land here, and telling them apart matters.
@@ -69,7 +74,7 @@ export async function requireAuth(next?: string): Promise<GuardedSession> {
     redirect(`${ROUTES.login}?error=account_inactive`);
   }
 
-  return { profile, roles: await getRoles() };
+  return { profile, roles };
 }
 
 /* ---------- requireRole ---------- */

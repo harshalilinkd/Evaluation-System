@@ -57,16 +57,34 @@ export class AuthorizationError extends Error {
  * stands, getUser() revalidates the JWT with the auth server. Only the latter
  * is safe to authorise on.
  */
-export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
+/**
+ * The signed-in user, validated once per request.
+ *
+ * `getUser()` is a NETWORK CALL to the auth server, not a cookie read — that is
+ * the whole reason it is safe to authorise on, and the whole reason it is not
+ * free. `getCurrentProfile` and `getRoles` each made their own, so every
+ * authenticated page paid for TWO round trips to answer one question, in series
+ * because `requireAuth` awaits one and then the other. The middleware makes a
+ * third, and cannot share this one — it runs in its own context, before React.
+ *
+ * Cached, so the layout, the page and every action in the same request get one.
+ * Nothing about the check is weakened: it is still `getUser`, still revalidated
+ * against the auth server, still never `getSession`.
+ */
+const getAuthUser = cache(async () => {
   const supabase = await createClient();
-
   const {
     data: { user },
-    error: authError,
+    error,
   } = await supabase.auth.getUser();
+  return error ? null : user;
+});
 
-  if (authError || !user) return null;
+export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
+  const user = await getAuthUser();
+  if (!user) return null;
 
+  const supabase = await createClient();
   const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single();
 
   // A session with no profile row means the on_auth_user_created trigger did not
@@ -85,15 +103,10 @@ export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
  * switching on a single "primary" role.
  */
 export const getRoles = cache(async (): Promise<AppRole[]> => {
+  const user = await getAuthUser();
+  if (!user) return [];
+
   const supabase = await createClient();
-
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) return [];
-
   const { data, error } = await supabase.from("user_roles").select("role").eq("profile_id", user.id);
 
   if (error || !data) return [];
