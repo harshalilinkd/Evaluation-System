@@ -246,7 +246,16 @@ export type DataGridProps<TData> = {
    * "Open scorecard" or "Send links" there passes it, and the grid stays
    * ignorant of what its rows mean.
    */
-  rowActions?: (row: TData) => React.ReactNode;
+  /**
+   * Per-row controls, in the details dialog's footer and on the phone card.
+   *
+   * `close` dismisses the details dialog. An action that takes the reader back
+   * to the TABLE — putting one row into edit, say — has to, or it leaves the
+   * dialog covering the row it just changed. An action that opens its own
+   * confirmation ignores it, which is why it is a second argument rather than
+   * something every caller must handle.
+   */
+  rowActions?: (row: TData, close: () => void) => React.ReactNode;
   /**
    * Extra detail beneath the field list, for anything a COLUMN cannot hold.
    *
@@ -667,7 +676,7 @@ export function DataGrid<TData>({
                             in on a phone. -- */}
                       {rowActions || onRowClick ? (
                         <div className="flex flex-wrap items-center gap-2 border-t border-rule bg-surface-mute px-4 py-3">
-                          {rowActions ? rowActions(row.original) : null}
+                          {rowActions ? rowActions(row.original, () => setOpenRowIndex(null)) : null}
                           {onRowClick ? (
                             <button
                               type="button"
@@ -1080,7 +1089,9 @@ export function DataGrid<TData>({
           ) : null}
 
           {openRow && rowActions ? (
-            <DialogFooter className="gap-2">{rowActions(openRow.original)}</DialogFooter>
+            <DialogFooter className="gap-2">
+              {rowActions(openRow.original, () => setOpenRowIndex(null))}
+            </DialogFooter>
           ) : null}
         </DialogContent>
       </Dialog>

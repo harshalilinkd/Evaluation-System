@@ -33,7 +33,7 @@
 
 import * as React from "react";
 import type { CellContext, Column, ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Pencil, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +77,15 @@ type PersonDraft = { dateOfJoining?: string; joiningCtc?: number };
  * and every control loses focus mid-interaction."
  */
 type GridEditing = {
-  editing: boolean;
+  /**
+   * Whether THIS row is open for editing — not whether the sheet is.
+   *
+   * Two ways in and one answer: "Edit the table" opens every row, a row's own
+   * "Edit this row" opens one. A boolean could only express the first, and a
+   * second boolean beside it is two things that must agree about the same
+   * question (P8P-5's objection to two controls for one decision).
+   */
+  isRowEditing: (profileId: string) => boolean;
   personDrafts: Map<string, PersonDraft>;
   slotDrafts: Map<string, SlotDraft>;
   setPersonField: <K extends keyof PersonDraft>(
@@ -128,8 +136,9 @@ function slotKey(profileId: string, index: number) {
 // cannot be rebuilt by a render, so no keystroke can remount an input.
 
 function JoinedCell({ row }: CellContext<HistoryGridRow, unknown>) {
-  const { editing, personDrafts, setPersonField } = useGridEditing();
+  const { isRowEditing, personDrafts, setPersonField } = useGridEditing();
   const p = row.original;
+  const editing = isRowEditing(p.profileId);
   const draft = personDrafts.get(p.profileId)?.dateOfJoining;
   return editing ? (
     <DateCell
@@ -144,8 +153,9 @@ function JoinedCell({ row }: CellContext<HistoryGridRow, unknown>) {
 }
 
 function JoiningSalaryCell({ row }: CellContext<HistoryGridRow, unknown>) {
-  const { editing, personDrafts, setPersonField } = useGridEditing();
+  const { isRowEditing, personDrafts, setPersonField } = useGridEditing();
   const p = row.original;
+  const editing = isRowEditing(p.profileId);
   const draft = personDrafts.get(p.profileId)?.joiningCtc;
   return editing ? (
     <MoneyCell
@@ -166,9 +176,10 @@ function slotOf(column: Column<HistoryGridRow, unknown>): number {
 }
 
 function IncrementDateCell({ row, column }: CellContext<HistoryGridRow, unknown>) {
-  const { editing, slotDrafts, setSlotField } = useGridEditing();
+  const { isRowEditing, slotDrafts, setSlotField } = useGridEditing();
   const n = slotOf(column);
   const p = row.original;
+  const editing = isRowEditing(p.profileId);
   const existing = p.increments[n - 1];
   const draft = slotDrafts.get(slotKey(p.profileId, n));
   return editing ? (
@@ -184,9 +195,10 @@ function IncrementDateCell({ row, column }: CellContext<HistoryGridRow, unknown>
 }
 
 function IncrementAmountCell({ row, column }: CellContext<HistoryGridRow, unknown>) {
-  const { editing, slotDrafts, setSlotField } = useGridEditing();
+  const { isRowEditing, slotDrafts, setSlotField } = useGridEditing();
   const n = slotOf(column);
   const p = row.original;
+  const editing = isRowEditing(p.profileId);
   const existing = p.increments[n - 1];
   const draft = slotDrafts.get(slotKey(p.profileId, n));
   return editing ? (
@@ -208,6 +220,12 @@ function NameCell({ row }: CellContext<HistoryGridRow, unknown>) {
 export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
   const [search, setSearch] = React.useState("");
   const [editing, setEditing] = React.useState(false);
+  /* -- ONE ROW, at the owner's instruction: "we have given bulk edit option
+        but i want single row edit option also". Held as the profile id rather
+        than a flag beside `editing`, so "which row" and "is a row open" cannot
+        disagree — and so opening a second row closes the first by assignment
+        rather than by remembering to. -- */
+  const [rowEditing, setRowEditing] = React.useState<string | null>(null);
   const [personDrafts, setPersonDrafts] = React.useState<Map<string, PersonDraft>>(new Map());
   const [slotDrafts, setSlotDrafts] = React.useState<Map<string, SlotDraft>>(new Map());
   const [saving, setSaving] = React.useState(false);
@@ -284,6 +302,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
 
   function leaveEditMode() {
     setEditing(false);
+    setRowEditing(null);
     setPersonDrafts(new Map());
     setSlotDrafts(new Map());
   }
@@ -348,9 +367,34 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
   }
 
   const editingValue = React.useMemo<GridEditing>(
-    () => ({ editing, personDrafts, slotDrafts, setPersonField, setSlotField }),
-    [editing, personDrafts, slotDrafts, setPersonField, setSlotField],
+    () => ({
+      isRowEditing: (profileId) => editing || rowEditing === profileId,
+      personDrafts,
+      slotDrafts,
+      setPersonField,
+      setSlotField,
+    }),
+    [editing, rowEditing, personDrafts, slotDrafts, setPersonField, setSlotField],
   );
+
+  /** Whoever is open on their own, for the toolbar to name. */
+  const rowEditingPerson = rowEditing ? rows.find((r) => r.profileId === rowEditing) : undefined;
+
+  /* -- NAMED ONLY WHEN THE NAME IS THE WHOLE TRUTH.
+        Editing one row does not discard what was typed into another: a draft
+        somebody made a minute ago is theirs, and silently dropping it to keep
+        a button label tidy is the wrong trade. So the button names the person
+        only when they really are the only one with changes — otherwise it
+        counts, and saving covers everything that changed, which is what it
+        says. -- */
+  const namesOne =
+    rowEditingPerson && changedProfiles.size === 1 && changedProfiles.has(rowEditingPerson.profileId)
+      ? rowEditingPerson.name
+      : null;
+
+  /* -- Either way in counts as editing, so the toolbar, the Save button and
+        the banner have ONE condition to read rather than two that must agree. -- */
+  const anyEditing = editing || rowEditing !== null;
 
   const columns = React.useMemo<ColumnDef<HistoryGridRow>[]>(() => {
     const cols: ColumnDef<HistoryGridRow>[] = [
@@ -447,8 +491,20 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
           />
         </div>
 
+        {/* -- WHO is being edited, when it is one person. The row's own cells
+               turn into inputs, which is visible — but on a sheet of forty
+               rows the one that changed can be off screen by the time somebody
+               looks up at the toolbar, and a Save button that does not say
+               whose figures it is about is a button nobody should press. -- */}
+        {rowEditingPerson ? (
+          <p className="hidden items-center gap-2 text-body-sm text-ink-muted sm:flex">
+            <Pencil aria-hidden className="size-3.5" />
+            Editing <span className="font-medium text-ink">{rowEditingPerson.name}</span>
+          </p>
+        ) : null}
+
         <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
-          {editing ? (
+          {anyEditing ? (
             <>
               <Button variant="ghost" className="min-h-11" onClick={leaveEditMode} disabled={saving}>
                 Cancel
@@ -462,7 +518,9 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
                   ? "Saving…"
                   : changedProfiles.size === 0
                     ? "Nothing changed yet"
-                    : `Save ${changedProfiles.size} ${changedProfiles.size === 1 ? "person" : "people"}`}
+                    : namesOne
+                      ? `Save ${namesOne}`
+                      : `Save ${changedProfiles.size} ${changedProfiles.size === 1 ? "person" : "people"}`}
               </Button>
             </>
           ) : (
@@ -476,7 +534,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
       {/* -- What edit mode is, said once, where somebody is standing when they
             enter it — the same placement and shape as Users tab's own
             explanation banner. -- */}
-      {editing ? (
+      {anyEditing ? (
         <p className="rounded-control border border-primary/40 bg-primary/10 px-4 py-3 font-sans text-body-sm text-ink">
           <span className="font-medium">Change a number that is already there</span> to fix a typo —
           the same entry is corrected, nothing new is added.{" "}
@@ -519,6 +577,25 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         storageKey="appraise.salary-history.column-widths"
         minWidth={Math.max(1100, 480 + maxIncrements * 280)}
         rowLabel={{ header: "Employee ID", value: (p) => p.employeeCode || "—" }}
+        /* -- ONE ROW, from the row. Opening a person's details is already how
+              somebody gets to "everything about this one", so the way into
+              editing them belongs there rather than as a second pencil column
+              competing with the row itself. `close` dismisses the dialog: it
+              would otherwise sit over the row it had just opened for editing. -- */
+        rowActions={(person, close) => (
+          <Button
+            variant="outline"
+            className="min-h-11"
+            onClick={() => {
+              setEditing(false);
+              setRowEditing(person.profileId);
+              close();
+            }}
+          >
+            <Pencil aria-hidden className="size-4" />
+            Edit this row
+          </Button>
+        )}
         empty={
           <EmptyState
             title="Nobody matches that"
