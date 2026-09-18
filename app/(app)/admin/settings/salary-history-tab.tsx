@@ -86,6 +86,10 @@ type GridEditing = {
    * question (P8P-5's objection to two controls for one decision).
    */
   isRowEditing: (profileId: string) => boolean;
+  /** Whether the WHOLE sheet is open — which is not the same question. */
+  bulkEditing: boolean;
+  /** Open one row from the row itself. */
+  startRowEdit: (profileId: string) => void;
   personDrafts: Map<string, PersonDraft>;
   slotDrafts: Map<string, SlotDraft>;
   setPersonField: <K extends keyof PersonDraft>(
@@ -214,7 +218,41 @@ function IncrementAmountCell({ row, column }: CellContext<HistoryGridRow, unknow
 }
 
 function NameCell({ row }: CellContext<HistoryGridRow, unknown>) {
-  return <GridCell value={row.original.name} />;
+  const { isRowEditing, bulkEditing, startRowEdit } = useGridEditing();
+  const p = row.original;
+
+  /* -- THE PENCIL LIVES HERE, in the Name cell, at the owner's instruction:
+        "without opening this model can i edit row level".
+
+        Not a trailing actions column, which is where one normally goes. This
+        table is three increment pairs wide and scrolls horizontally, so a
+        control on the right-hand edge is a long scroll away from the name it
+        belongs to — and off screen entirely at the width the sheet is usually
+        read at. Name is a FROZEN column, so a button in it stays put however
+        far across somebody has scrolled.
+
+        Hidden once the row is open, because the toolbar then carries Save and
+        Cancel and a third control saying "edit" would be the one that does
+        nothing. Hidden in bulk mode for the same reason: every row is already
+        open, so a per-row way in answers a question nobody is asking. -- */
+  return (
+    <span className="flex w-full items-center gap-1">
+      <span className="min-w-0 flex-1 truncate">{p.name}</span>
+      {!bulkEditing && !isRowEditing(p.profileId) ? (
+        <button
+          type="button"
+          onClick={() => startRowEdit(p.profileId)}
+          aria-label={`Edit ${p.name}`}
+          title={`Edit ${p.name}`}
+          /* 44px where there are fingers, compact where there is a pointer —
+             the same pair every other icon control in this product uses. */
+          className="grid size-11 shrink-0 place-items-center rounded-control text-ink-muted transition-colors hover:bg-surface-mute hover:text-ink lg:size-8"
+        >
+          <Pencil aria-hidden className="size-4" />
+        </button>
+      ) : null}
+    </span>
+  );
 }
 
 export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
@@ -369,6 +407,11 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
   const editingValue = React.useMemo<GridEditing>(
     () => ({
       isRowEditing: (profileId) => editing || rowEditing === profileId,
+      bulkEditing: editing,
+      startRowEdit: (profileId) => {
+        setEditing(false);
+        setRowEditing(profileId);
+      },
       personDrafts,
       slotDrafts,
       setPersonField,
