@@ -136,7 +136,7 @@ export function EmploymentClient({
   }
 
   return (
-    <div className="mx-auto w-full max-w-content space-y-5">
+    <div className="mx-auto w-full max-w-content space-y-4">
       <div>
         <Link
           href="/admin/people"
@@ -159,8 +159,14 @@ export function EmploymentClient({
       ) : null}
 
       {/* ---------- Dates and terms ---------- */}
-      <DashboardCard title="Employment">
-        <div className="grid gap-4 sm:grid-cols-2">
+      {/* -- p-5 rather than the shared p-6, and THREE columns once there is
+             room to have them. Five fields across two columns is three rows
+             with an orphan on the last; across three it is two rows with none,
+             which is most of the scrolling that was reported. 1180px of content
+             less the padding leaves ~366px a column — comfortably more than a
+             date input needs. -- */}
+      <DashboardCard title="Employment" className="p-5">
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Date of joining" required>
             <Input
               type="date"
@@ -270,7 +276,7 @@ export function EmploymentClient({
         </div>
 
         {canEditRecord ? (
-          <div className="mt-5 flex justify-end">
+          <div className="mt-4 flex justify-end">
             <Button className="min-h-11" onClick={() => void onSave()} disabled={busy}>
               {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
               Save employment details
@@ -301,6 +307,7 @@ export function EmploymentClient({
           pay record that can be quietly rewritten is not a record. */}
       <DashboardCard
         title="Current pay"
+        className="p-5"
         action={
           <div className="flex flex-wrap gap-2">
             {r?.current_ctc != null ? (
@@ -320,7 +327,7 @@ export function EmploymentClient({
           </div>
         }
       >
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-3">
           <Readout label="Current salary" value={moneyMonthly(r?.current_ctc ?? null)} emphasis />
           <Readout label="Effective from" value={formatDate(r?.salary_effective_from ?? null)} />
 
@@ -346,7 +353,7 @@ export function EmploymentClient({
       </DashboardCard>
 
       {/* ---------- History ---------- */}
-      <DashboardCard title="Salary history">
+      <DashboardCard title="Salary history" className="p-5">
         {revisions.length === 0 && r?.joining_ctc == null ? (
           <p className="text-body-sm text-ink-muted">
             Nothing recorded yet. Every entry stays on record — a mistake is fixed on the row itself,
