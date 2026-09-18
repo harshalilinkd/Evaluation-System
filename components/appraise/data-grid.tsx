@@ -52,6 +52,16 @@ declare module "@tanstack/react-table" {
      * same hairline every ordinary column pair shares.
      */
     partition?: boolean;
+    /**
+     * WHICH repeat of a generated column pair this is — "Increment 2"'s date
+     * and its amount both carry `slot: 2`.
+     *
+     * Here rather than captured in a closure, so ONE cell component can serve
+     * every repeat. A closure per column is a new component type per column,
+     * and a new type is a remount — which is what took focus out of an input
+     * after a single keystroke (see salary-history-tab's `GridEditing`).
+     */
+    slot?: number;
   }
 }
 

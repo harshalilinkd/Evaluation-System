@@ -32,7 +32,7 @@
  */
 
 import * as React from "react";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { CellContext, Column, ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,59 @@ import { cn } from "@/lib/utils";
 type SlotDraft = { effectiveFrom?: string; newCtc?: number };
 type PersonDraft = { dateOfJoining?: string; joiningCtc?: number };
 
+/**
+ * WHAT THE CELLS READ, AND WHY IT IS NOT A CLOSURE.
+ *
+ * Reported as "box getting deselected after adding 1 digit", and the cause is
+ * one line of TanStack: `flexRender` renders a column's `cell` with
+ * `React.createElement(Comp, props)` — so THE CELL FUNCTION IS THE COMPONENT
+ * TYPE. A new function identity is a new type, and React unmounts and remounts
+ * the whole subtree rather than updating it. The input is destroyed and a
+ * fresh one put in its place, which is exactly what losing focus after one
+ * keystroke looks like.
+ *
+ * The column memo listed the two draft maps in its dependencies, so every
+ * keystroke built new `cell` closures and remounted every cell in the table.
+ * Its comment defended those dependencies, and for a closure it was right:
+ * leaving them out would have read stale state for ever. The mistake was
+ * reaching for a closure at all.
+ *
+ * So the mutable half moves to context. The closures now depend on nothing
+ * that changes while somebody types, and the cells still see current values
+ * because a context change re-renders its consumers — which is the same thing
+ * the dependency array was buying, without the remount.
+ *
+ * P14-12 recorded this exact failure from the other direction: "a component
+ * created during render is a new type every render, so the subtree remounts
+ * and every control loses focus mid-interaction."
+ */
+type GridEditing = {
+  editing: boolean;
+  personDrafts: Map<string, PersonDraft>;
+  slotDrafts: Map<string, SlotDraft>;
+  setPersonField: <K extends keyof PersonDraft>(
+    profileId: string,
+    key: K,
+    value: PersonDraft[K],
+  ) => void;
+  setSlotField: <K extends keyof SlotDraft>(
+    profileId: string,
+    index: number,
+    key: K,
+    value: SlotDraft[K],
+  ) => void;
+};
+
+const EditingContext = React.createContext<GridEditing | null>(null);
+
+/* Called from inside a `cell`, which TanStack renders AS a component — so
+   hooks are legal there, and this is an ordinary consumer. */
+function useGridEditing(): GridEditing {
+  const value = React.useContext(EditingContext);
+  if (!value) throw new Error("A salary-history cell was rendered outside the grid.");
+  return value;
+}
+
 /* -- THE BARE FIGURE, at the owner's instruction — every other salary readout
       in the product says "₹15,000 a month" (`moneyMonthly`, money-input.tsx),
       spelling the unit out because it usually sits beside an annual figure
@@ -64,6 +117,92 @@ function bareMonthly(annual: number | null): string {
 
 function slotKey(profileId: string, index: number) {
   return `${profileId}#${index}`;
+}
+
+/* ---------- The cells, as real components ---------- */
+//
+// NAMED AND CAPITALISED because TanStack renders a `cell` with
+// `createElement(cell, ctx)` — it really is a component, and writing it as one
+// is what lets it use a hook without the linter having to take that on faith.
+// It also makes the identity permanently stable: a module-scope reference
+// cannot be rebuilt by a render, so no keystroke can remount an input.
+
+function JoinedCell({ row }: CellContext<HistoryGridRow, unknown>) {
+  const { editing, personDrafts, setPersonField } = useGridEditing();
+  const p = row.original;
+  const draft = personDrafts.get(p.profileId)?.dateOfJoining;
+  return editing ? (
+    <DateCell
+      value={draft ?? p.dateOfJoining ?? ""}
+      onChange={(v) => setPersonField(p.profileId, "dateOfJoining", v)}
+      label={`Joining date for ${p.name}`}
+      dirty={draft !== undefined}
+    />
+  ) : (
+    <GridCell value={p.dateOfJoining ? formatDate(p.dateOfJoining) : "—"} className="tabular" />
+  );
+}
+
+function JoiningSalaryCell({ row }: CellContext<HistoryGridRow, unknown>) {
+  const { editing, personDrafts, setPersonField } = useGridEditing();
+  const p = row.original;
+  const draft = personDrafts.get(p.profileId)?.joiningCtc;
+  return editing ? (
+    <MoneyCell
+      annual={draft ?? p.joiningCtc}
+      onChangeAnnual={(v) => setPersonField(p.profileId, "joiningCtc", v ?? undefined)}
+      label={`Joining salary for ${p.name}`}
+      dirty={draft !== undefined}
+    />
+  ) : (
+    <GridCell value={bareMonthly(p.joiningCtc)} className="tabular" />
+  );
+}
+
+/* WHICH increment comes off the column, not off a closure — one component
+   serves every Increment N, so adding a column pair cannot add a component. */
+function slotOf(column: Column<HistoryGridRow, unknown>): number {
+  return column.columnDef.meta?.slot ?? 1;
+}
+
+function IncrementDateCell({ row, column }: CellContext<HistoryGridRow, unknown>) {
+  const { editing, slotDrafts, setSlotField } = useGridEditing();
+  const n = slotOf(column);
+  const p = row.original;
+  const existing = p.increments[n - 1];
+  const draft = slotDrafts.get(slotKey(p.profileId, n));
+  return editing ? (
+    <DateCell
+      value={draft?.effectiveFrom ?? existing?.effectiveFrom ?? ""}
+      onChange={(v) => setSlotField(p.profileId, n, "effectiveFrom", v)}
+      label={`Increment ${n} date for ${p.name}`}
+      dirty={draft?.effectiveFrom !== undefined}
+    />
+  ) : (
+    <GridCell value={existing ? formatDate(existing.effectiveFrom) : "—"} className="tabular" />
+  );
+}
+
+function IncrementAmountCell({ row, column }: CellContext<HistoryGridRow, unknown>) {
+  const { editing, slotDrafts, setSlotField } = useGridEditing();
+  const n = slotOf(column);
+  const p = row.original;
+  const existing = p.increments[n - 1];
+  const draft = slotDrafts.get(slotKey(p.profileId, n));
+  return editing ? (
+    <MoneyCell
+      annual={draft?.newCtc ?? existing?.newCtc ?? null}
+      onChangeAnnual={(v) => setSlotField(p.profileId, n, "newCtc", v ?? undefined)}
+      label={`Increment ${n} amount for ${p.name}`}
+      dirty={draft?.newCtc !== undefined}
+    />
+  ) : (
+    <GridCell value={existing ? bareMonthly(existing.newCtc) : "—"} className="tabular" />
+  );
+}
+
+function NameCell({ row }: CellContext<HistoryGridRow, unknown>) {
+  return <GridCell value={row.original.name} />;
 }
 
 export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
@@ -208,6 +347,11 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
     if (failed.length === 0) leaveEditMode();
   }
 
+  const editingValue = React.useMemo<GridEditing>(
+    () => ({ editing, personDrafts, slotDrafts, setPersonField, setSlotField }),
+    [editing, personDrafts, slotDrafts, setPersonField, setSlotField],
+  );
+
   const columns = React.useMemo<ColumnDef<HistoryGridRow>[]>(() => {
     const cols: ColumnDef<HistoryGridRow>[] = [
       {
@@ -215,46 +359,20 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         header: "Name",
         size: 200,
         meta: { frozen: true },
-        cell: ({ row }) => <GridCell value={row.original.name} />,
+        cell: NameCell,
       },
       {
         id: "dateOfJoining",
         header: "Joined",
         size: 135,
-        cell: ({ row }) => {
-          const p = row.original;
-          const draft = personDrafts.get(p.profileId)?.dateOfJoining;
-          return editing ? (
-            <DateCell
-              value={draft ?? p.dateOfJoining ?? ""}
-              onChange={(v) => setPersonField(p.profileId, "dateOfJoining", v)}
-              label={`Joining date for ${p.name}`}
-              dirty={draft !== undefined}
-            />
-          ) : (
-            <GridCell value={p.dateOfJoining ? formatDate(p.dateOfJoining) : "—"} className="tabular" />
-          );
-        },
+        cell: JoinedCell,
       },
       {
         id: "joiningCtc",
         header: "Joining salary",
         size: 150,
         meta: { align: "right" },
-        cell: ({ row }) => {
-          const p = row.original;
-          const draft = personDrafts.get(p.profileId)?.joiningCtc;
-          return editing ? (
-            <MoneyCell
-              annual={draft ?? p.joiningCtc}
-              onChangeAnnual={(v) => setPersonField(p.profileId, "joiningCtc", v ?? undefined)}
-              label={`Joining salary for ${p.name}`}
-              dirty={draft !== undefined}
-            />
-          ) : (
-            <GridCell value={bareMonthly(p.joiningCtc)} className="tabular" />
-          );
-        },
+        cell: JoiningSalaryCell,
       },
     ];
 
@@ -274,22 +392,8 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
             id: `inc_${n}_date`,
             header: "Date",
             size: 130,
-            meta: { label: `Increment ${n} date` },
-            cell: ({ row }) => {
-              const p = row.original;
-              const existing = p.increments[n - 1];
-              const draft = slotDrafts.get(slotKey(p.profileId, n));
-              return editing ? (
-                <DateCell
-                  value={draft?.effectiveFrom ?? existing?.effectiveFrom ?? ""}
-                  onChange={(v) => setSlotField(p.profileId, n, "effectiveFrom", v)}
-                  label={`Increment ${n} date for ${p.name}`}
-                  dirty={draft?.effectiveFrom !== undefined}
-                />
-              ) : (
-                <GridCell value={existing ? formatDate(existing.effectiveFrom) : "—"} className="tabular" />
-              );
-            },
+            meta: { label: `Increment ${n} date`, slot: n },
+            cell: IncrementDateCell,
           },
           {
             id: `inc_${n}_amount`,
@@ -299,32 +403,24 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
             // directly, so the boundary between "Increment 1" and
             // "Increment 2" reads as a partition rather than the same
             // hairline every ordinary column pair shares.
-            meta: { align: "right", label: `Increment ${n} amount`, partition: true },
-            cell: ({ row }) => {
-              const p = row.original;
-              const existing = p.increments[n - 1];
-              const draft = slotDrafts.get(slotKey(p.profileId, n));
-              return editing ? (
-                <MoneyCell
-                  annual={draft?.newCtc ?? existing?.newCtc ?? null}
-                  onChangeAnnual={(v) => setSlotField(p.profileId, n, "newCtc", v ?? undefined)}
-                  label={`Increment ${n} amount for ${p.name}`}
-                  dirty={draft?.newCtc !== undefined}
-                />
-              ) : (
-                <GridCell value={existing ? bareMonthly(existing.newCtc) : "—"} className="tabular" />
-              );
-            },
+            meta: { align: "right", label: `Increment ${n} amount`, partition: true, slot: n },
+            cell: IncrementAmountCell,
           },
         ],
       });
     }
 
     return cols;
-    // `editing`, the two draft maps and the two setters are load-bearing —
-    // the same reasoning Users tab's own column memo carries (F25-6): leaving
-    // any out would memoise a set of cells that read stale state for ever.
-  }, [editing, personDrafts, slotDrafts, maxIncrements, setPersonField, setSlotField]);
+    /* -- ONE DEPENDENCY, and it is the one that genuinely changes the SHAPE of
+          the table rather than its contents. Everything mutable is read from
+          context inside the cells now, so typing cannot produce a new `cell`
+          identity — and a new identity is a new component type, which remounts
+          the input being typed into. See `GridEditing` above.
+
+          `maxIncrements` stays because a new column pair really is a different
+          column set; it changes when the DATA gains a rise, never while
+          somebody is typing. -- */
+  }, [maxIncrements]);
 
   return (
     // Same shape as Team review and Users: `data-full-bleed` drops the
@@ -411,6 +507,12 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         </div>
       ) : null}
 
+      {/* -- The mutable half of the grid, handed to the cells by context so
+             the column definitions can stay identical between renders. The
+             value is memoised for the ordinary reason — a new object every
+             render would re-render every consumer — not to prevent a remount,
+             which is now impossible: `columns` no longer depends on it. -- */}
+      <EditingContext.Provider value={editingValue}>
       <DataGrid
         data={filtered}
         columns={columns}
@@ -429,6 +531,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
           </span>
         }
       />
+      </EditingContext.Provider>
     </div>
   );
 }
