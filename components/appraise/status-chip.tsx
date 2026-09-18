@@ -24,7 +24,8 @@ export type ChipStatus =
   | "CLOSED"
   | "RETURNED"
   | "OVERDUE"
-  | "SUBMITTED";
+  | "SUBMITTED"
+  | "READY_TO_ARCHIVE";
 
 /**
  * Two vocabularies, deliberately.
@@ -118,6 +119,26 @@ const STATUS: Record<
         P23-FIX had to unpick exactly that on the team queue, where a retired
         status was standing in for a submission and rendered correctly while
         meaning something else. -- */
+  /* -- NOT A STORED STATUS either — derived, like RETURNED and OVERDUE.
+        A cycle whose every live participant is CLOSED is finished, but its own
+        status stays ACTIVE until HR archives it, and the list read "Cycle
+        active" beside a full progress bar. Both facts were true and the row
+        contradicted itself.
+
+        "Ready to archive" says both halves: nothing is outstanding, and there
+        is one act left — which is HR's. It is not done automatically, because
+        `ensure_rolling_cycle` reuses a rolling cycle by name as each new
+        joiner falls due, and one that shut itself after its first participant
+        would be reused while closed or duplicated.
+
+        §8 fixes the EMPLOYEE vocabulary at four words, so this borrows
+        "Completed" rather than inventing a fifth — and it never reaches an
+        employee anyway: it is shown on the administrators' cycle list. -- */
+  READY_TO_ARCHIVE: {
+    internal: "Ready to archive",
+    employee: "Completed",
+    classes: "bg-final-tint border-final/40 text-final",
+  },
   SUBMITTED: {
     internal: "Submitted",
     employee: "Submitted",

@@ -31,7 +31,26 @@ export type CycleListRow = {
    * tell two live cycles apart.
    */
   cycleType: "EVALUATION" | "INCREMENT";
+  /** Every live participant is CLOSED — see where it is computed. */
+  finished: boolean;
   participants: number;
+  /**
+   * WHO this cycle is for, in one line — the thing a row could not answer.
+   *
+   * The list said "Increment round · August 2026 · 1 employee" and left the
+   * reader to open it to find out WHICH employee. For a one-person round that
+   * is the whole question, and a count is no answer at all.
+   *
+   * Names while there are few enough to read, departments once there are not:
+   * on a 47-person cycle "47 people" is exactly what the Employees column
+   * already says, and it is the departments that distinguish one company-wide
+   * round from another.
+   *
+   * Composed here rather than in the cell, because it reads `employees` AND the
+   * department names — and a component that assembles its own sentence out of
+   * two sources is where the two come to disagree.
+   */
+  who: string;
   /**
    * How many DISTINCT managers are rating in this cycle.
    *
@@ -237,7 +256,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     // concatenated: supabase-js infers the row type from this string at compile
     // time and degrades everything it cannot statically parse (P3-11).
     .select(
-      "id, cycle_id, evaluatee_id, lead_id, co_lead_id, status, self_submitted_at, lead_submitted_at, co_lead_submitted_at, co_lead_skipped",
+      "id, cycle_id, evaluatee_id, lead_id, co_lead_id, department_id, status, self_submitted_at, lead_submitted_at, co_lead_submitted_at, co_lead_skipped",
     )
     .is("excluded_at", null);
 
@@ -252,6 +271,11 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
       self: number;
       lead: number;
       final: number;
+      /* -- GENUINELY FINISHED, which `final` is not: that counts MD_REVIEWED
+            and INTERVIEW_DONE too, so it answers "has the MD done their bit"
+            rather than "is this over". A cycle is over when every live
+            participant is CLOSED, and nothing else says so. -- */
+      closed: number;
       /* -- THE TWO MANAGERS, COUNTED SEPARATELY — asked for directly, having
             reported "Manager in 0/1" as unclear beside a breakdown showing one
             of the two managers already at "1 of 1". `lead` above is the
@@ -277,6 +301,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
       self: 0,
       lead: 0,
       final: 0,
+      closed: 0,
       reportingLeadDone: 0,
       coLeadDone: 0,
       coLeadTotal: 0,
@@ -285,6 +310,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     if (reachedSelf(row)) entry.self += 1;
     if (reachedLead(row)) entry.lead += 1;
     if (reachedFinal(row)) entry.final += 1;
+    if (row.status === "CLOSED") entry.closed += 1;
     if (reachedReportingLead(row)) entry.reportingLeadDone += 1;
     if (row.co_lead_id) {
       entry.coLeadTotal += 1;
@@ -335,6 +361,22 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
   const { data: named } = namedIds.length
     ? await supabase.from("profiles").select("id, full_name, designation").in("id", namedIds)
     : { data: [] };
+  /* -- The departments a cycle covers, for the WHO line below. A ten-row
+        table, fetched whole rather than filtered: the `in` list would be nearly
+        every row anyway, and an unfiltered read of ten rows is cheaper than
+        composing the filter. -- */
+  const { data: departmentRows } = await supabase.from("departments").select("id, name");
+  const departmentName = new Map((departmentRows ?? []).map((d) => [d.id, d.name] as const));
+
+  /* Distinct departments per cycle, in the order they were met. */
+  const departmentsIn = new Map<string, Set<string>>();
+  for (const row of evaluations ?? []) {
+    if (!row.department_id) continue;
+    const set = departmentsIn.get(row.cycle_id) ?? new Set<string>();
+    set.add(row.department_id);
+    departmentsIn.set(row.cycle_id, set);
+  }
+
   const nameOf = new Map((named ?? []).map((p) => [p.id, p.full_name] as const));
   const designationOf = new Map((named ?? []).map((p) => [p.id, p.designation] as const));
 
@@ -409,10 +451,34 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
     }
   }
 
+  /* -- WHO, in one line, from what is already loaded.
+        Names while they are few enough to read; departments once they are not.
+        The cut-off is TWO because a third name pushes the line past the frozen
+        column's width and it truncates — a line that ends in an ellipsis
+        answers nothing, which is the state this replaces.
+
+        A cycle with nobody in it says so. That is a real state — a DRAFT cycle
+        before the roster is built — and an empty line there would read as a
+        figure that failed to load rather than a step not yet taken (§13.4). -- */
+  const whoFor = (cycleId: string, people: Array<{ name: string }>): string => {
+    if (people.length === 0) return "Nobody added yet";
+    if (people.length <= 2) return people.map((p) => p.name).join(", ");
+
+    const departments = [...(departmentsIn.get(cycleId) ?? [])]
+      .map((id) => departmentName.get(id))
+      .filter((n): n is string => Boolean(n))
+      .sort((a, b) => a.localeCompare(b));
+
+    if (departments.length === 0) return `${people.length} people`;
+    if (departments.length <= 2) return `${people.length} people · ${departments.join(", ")}`;
+    return `${people.length} people · ${departments.length} departments`;
+  };
+
   return {
     ok: true,
     data: cycles.map((c) => {
       const counts = tally.get(c.id) ?? {
+        closed: 0,
         participants: 0,
         self: 0,
         lead: 0,
@@ -436,6 +502,7 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
         // silently claiming to be an increment cycle.
         cycleType: c.cycle_type === "INCREMENT" ? "INCREMENT" : "EVALUATION",
         participants: counts.participants,
+        who: whoFor(c.id, employeesIn.get(c.id) ?? []),
         managers: managers.get(c.id)?.size ?? 0,
         employees: employeesIn.get(c.id) ?? [],
         managerRows: [...(managerTally.get(c.id)?.entries() ?? [])]
@@ -450,6 +517,22 @@ export async function listCycles(): Promise<CycleResult<CycleListRow[]>> {
             (a, b) => a.done / a.total - b.done / b.total || a.name.localeCompare(b.name),
           ),
         progress: { self: counts.self, lead: counts.lead, final: counts.final },
+        /* -- NOTHING LEFT IN IT.
+              Reported: a round whose only participant was closed still read
+              "Cycle active" on this list while the report screen said CLOSED.
+              Both were telling the truth about different things — the
+              EVALUATION was closed, the CYCLE had never been archived — and
+              the row was left contradicting itself, a full progress bar beside
+              a chip implying work remained.
+
+              Derived rather than stored, and the cycle is NOT closed
+              automatically: `ensure_rolling_cycle` reuses a rolling cycle by
+              name as each new joiner's milestone falls due, so a cycle that
+              shut itself the moment its first participant finished would
+              either be reused while closed or duplicated. Archiving stays
+              HR's deliberate act (P10); this only stops the list pretending
+              there is work in it. -- */
+        finished: c.launched_at !== null && counts.participants > 0 && counts.closed === counts.participants,
         reportingLeadIn: { done: counts.reportingLeadDone, total: counts.participants },
         coReviewerIn:
           counts.coLeadTotal > 0 ? { done: counts.coLeadDone, total: counts.coLeadTotal } : null,

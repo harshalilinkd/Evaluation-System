@@ -9,6 +9,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   CalendarPlus,
   Check,
+  Archive,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -41,7 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { moveCycleToBin } from "@/lib/cycles/actions";
+import { archiveCycle, moveCycleToBin } from "@/lib/cycles/actions";
 import type { CycleListRow } from "@/lib/cycles/queries";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,8 @@ export function CyclesClient({
   greetingName: string;
 }) {
   const router = useRouter();
+  /** Which cycle is mid-archive, so its own button can say so. */
+  const [archiving, setArchiving] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState("");
   const [binning, setBinning] = React.useState<CycleListRow | null>(null);
   /* -- The two kinds of cycle, kept apart.
@@ -117,16 +120,36 @@ export function CyclesClient({
       {
         accessorKey: "name",
         header: "Cycle",
-        size: 200,
+        size: 240,
         meta: { frozen: true },
+        /* -- A SECOND LINE SAYING WHO, because the row could not answer it.
+              "Increment round · August 2026 · 1 employee" left the reader to
+              open the cycle to find out WHICH employee — and on a one-person
+              round that is the entire question.
+
+              Under the name rather than in a column of its own: this table is
+              already fifteen columns and scrolls sideways, so a sixteenth would
+              cost more than it gave. The Cycle column is FROZEN, so a line put
+              here is the one that never scrolls out of view.
+
+              240px rather than 200 to hold two names; the line truncates beyond
+              that and carries the full text in `title`. -- */
         cell: ({ row }) => (
-          <Link
-            href={`/admin/cycles/${row.original.id}`}
-            title={row.original.name}
-            className="block truncate text-body-sm font-medium text-ink hover:underline"
-          >
-            {row.original.name}
-          </Link>
+          <div className="min-w-0">
+            <Link
+              href={`/admin/cycles/${row.original.id}`}
+              title={row.original.name}
+              className="block truncate text-body-sm font-medium text-ink hover:underline"
+            >
+              {row.original.name}
+            </Link>
+            <p
+              title={row.original.who}
+              className="truncate text-body-xs text-ink-muted"
+            >
+              {row.original.who}
+            </p>
+          </div>
         ),
       },
       {
@@ -142,11 +165,19 @@ export function CyclesClient({
         cell: ({ row }) => (
           <StatusChip
             status={
-              cycleIsOverdue(row.original)
-                ? "OVERDUE"
-                : row.original.status === "ACTIVE"
-                  ? "CYCLE_ACTIVE"
-                  : row.original.status
+              /* -- FINISHED FIRST, and ahead of overdue on purpose: a cycle
+                    everybody has completed is not late, whatever its due date
+                    said. `finished` means every live participant is CLOSED;
+                    the cycle's own status is still ACTIVE until HR archives
+                    it, which is why this reads "Ready to archive" rather than
+                    claiming the cycle is closed. -- */
+              row.original.status === "ACTIVE" && row.original.finished
+                ? "READY_TO_ARCHIVE"
+                : cycleIsOverdue(row.original)
+                  ? "OVERDUE"
+                  : row.original.status === "ACTIVE"
+                    ? "CYCLE_ACTIVE"
+                    : row.original.status
             }
           />
         ),
@@ -568,6 +599,29 @@ export function CyclesClient({
         )}
         rowActions={(c) => (
           <>
+            {/* -- ONLY WHERE THE CHIP SAYS SO. It appears exactly when the
+                   status reads "Ready to archive" — every live participant
+                   closed, the cycle itself still open — so the row names the
+                   one act left and offers it in the same place. Absent
+                   otherwise rather than shown and disabled: a cycle somebody
+                   is still filling in has no business offering to be put
+                   away. -- */}
+            {c.status === "ACTIVE" && c.finished ? (
+              <Button
+                variant="outline"
+                className="min-h-11"
+                disabled={archiving === c.id}
+                onClick={async () => {
+                  setArchiving(c.id);
+                  const result = await archiveCycle(c.id);
+                  setArchiving(null);
+                  if (result.ok) router.refresh();
+                }}
+              >
+                <Archive className="size-4" aria-hidden />
+                {archiving === c.id ? "Archiving…" : "Archive"}
+              </Button>
+            ) : null}
             <Button asChild variant="secondary" className="min-h-11">
               <Link href={`/admin/cycles/${c.id}/distribute`}>
                 <Send className="size-4" aria-hidden />
