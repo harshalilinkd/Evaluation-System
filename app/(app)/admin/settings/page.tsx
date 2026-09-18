@@ -327,12 +327,71 @@ export default async function SettingsPage({
     coReviewerScoreByEvaluation(supabase, teamEvaluationIds),
   ]);
 
+  /* -- THE PRODUCTION TEAM'S OWN FIGURES.
+        Reported as a gap: Self / HOD / 2nd rating / Average are a staff form's
+        four layers, and a production worker has none of them — their sheet is
+        ticked once by a team leader and decided by a supervisor (§7), so all
+        four read as an em dash for half the roster.
+
+        This is NOT a staff read widened to cover workers, which §7 forbids —
+        it is the worker module's own tables, read alongside, exactly as the
+        roster already reads `profiles` and `departments` for both. Their
+        latest live appraisal: newest first, so the first sighting wins.
+
+        No salary. The screen is HR/MD only so §5 would permit it, but a
+        roster answers "where is everybody" — an increment belongs on the
+        appraisal itself, where somebody is deciding it. -- */
+  const { data: workerAppraisals } = await supabase
+    .from("worker_evaluations")
+    .select(
+      "id, worker_id, status, overall_tick, supervisor_id, reviewer_id, worker_cycles!inner(deleted_at)",
+    )
+    .is("worker_cycles.deleted_at", null)
+    .is("excluded_at", null)
+    .order("created_at", { ascending: false });
+
+  const latestWorkerAppraisal = new Map<string, NonNullable<typeof workerAppraisals>[number]>();
+  for (const row of workerAppraisals ?? []) {
+    if (!latestWorkerAppraisal.has(row.worker_id)) latestWorkerAppraisal.set(row.worker_id, row);
+  }
+
+  const workerAppraisalIds = [...latestWorkerAppraisal.values()].map((r) => r.id);
+
+  /* -- Training sits in TWO places and both have to be read.
+        0100 moved it to the decisions row, because a response row locks on
+        submission and the person who fills it in has not started by then
+        (W2-4). Appraisals filed before that still carry it on the response,
+        and a column that silently emptied for them would be worse than no
+        column (W2-5's rule, applied to a reader). -- */
+  const [{ data: workerDecisions }, { data: workerResponses }] = workerAppraisalIds.length
+    ? await Promise.all([
+        supabase
+          .from("worker_evaluation_decisions")
+          .select("evaluation_id, training_required")
+          .in("evaluation_id", workerAppraisalIds),
+        supabase
+          .from("worker_evaluation_responses")
+          .select("evaluation_id, training_required")
+          .eq("layer", "SUPERVISOR")
+          .in("evaluation_id", workerAppraisalIds),
+      ])
+    : [{ data: [] }, { data: [] }];
+
+  const trainingByAppraisal = new Map<string, boolean>();
+  for (const row of workerResponses ?? []) {
+    if (row.training_required !== null) trainingByAppraisal.set(row.evaluation_id, row.training_required);
+  }
+  for (const row of workerDecisions ?? []) {
+    if (row.training_required !== null) trainingByAppraisal.set(row.evaluation_id, row.training_required);
+  }
+
   const teamDepartmentName = new Map((teamDepartments ?? []).map((d) => [d.id, d.name]));
   const teamLeadName = new Map((teamPeople ?? []).map((p) => [p.id, p.full_name]));
   const teamByPerson = new Map((teamEvaluations ?? []).map((e) => [e.evaluatee_id, e]));
 
   const teamRows: TeamReviewRow[] = (teamPeople ?? []).map((p) => {
     const evaluation = teamByPerson.get(p.id) ?? null;
+    const worker = latestWorkerAppraisal.get(p.id) ?? null;
     return {
       id: p.id,
       fullName: p.full_name,
@@ -360,6 +419,13 @@ export default async function SettingsPage({
       // above — null for anybody with no second reviewer.
       coReviewerScore: evaluation ? (teamCoReviewerScores.get(evaluation.id) ?? null) : null,
       final: evaluation?.final_overall ?? null,
+      /* -- The worker half. Null for everybody on the Backend Team, and the
+            columns that read them are only drawn when the Production Team is
+            selected — so a null here is never rendered as a gap. -- */
+      workerOverallTick: worker?.overall_tick ?? null,
+      workerTraining: worker ? (trainingByAppraisal.get(worker.id) ?? null) : null,
+      workerRatedBy: worker?.supervisor_id ? (teamLeadName.get(worker.supervisor_id) ?? null) : null,
+      workerDecidedBy: worker?.reviewer_id ? (teamLeadName.get(worker.reviewer_id) ?? null) : null,
     };
   });
 

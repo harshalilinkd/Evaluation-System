@@ -11,7 +11,7 @@ import { BadgeIndianRupee, LineChart, MoreHorizontal, Search, Users } from "luci
 import { DataGrid, GridCell } from "@/components/appraise/data-grid";
 import { EmptyState } from "@/components/appraise/states";
 import { StatusChip } from "@/components/appraise/status-chip";
-import { TIER_CLASSES } from "@/components/appraise/tier";
+import { TICK_3_OPTIONS, TIER_CLASSES } from "@/components/appraise/tier";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -50,9 +50,29 @@ export type PersonRow = {
    *  mean of both once both are in (0087). Null for anybody with no second
    *  reviewer, or whose second reviewer has not submitted yet. */
   coReviewerScore: number | null;
+
+  /* -- THE PRODUCTION TEAM'S OWN FIGURES, which are not scores at all.
+        §11: a worker's overall IS the supervisor's Overall Performance tick,
+        never a mean — and §6.2 keeps the 5/3/1 analytics number off any
+        worker-facing surface, so the WORD is what travels. Null for everybody
+        on the Backend Team, and read only by columns that are drawn when the
+        Production Team is selected. -- */
+  workerOverallTick: string | null;
+  workerTraining: boolean | null;
+  /** Who ticks their sheet — the team leader (§7, `supervisor_id`). */
+  workerRatedBy: string | null;
+  /** Who decides the comment, training and any rise (0100, `reviewer_id`). */
+  workerDecidedBy: string | null;
 };
 
 const ANY = "__any__";
+
+/* -- The tick's own WORD, from the one place §6 defines it rather than a
+      second list beside it. §6.2 keeps the 5/3/1 analytics number off any
+      worker surface, so the word is what a roster shows. -- */
+const TICK_WORD: Record<string, string> = Object.fromEntries(
+  TICK_3_OPTIONS.map((t) => [t.value, t.label]),
+);
 
 
 /** Initials for the avatar. Two at most — three stops reading as initials. */
@@ -157,8 +177,30 @@ export function PeopleClient({
     [rows],
   );
 
-  const columns = React.useMemo<ColumnDef<PersonRow>[]>(
-    () => [
+  /* -- THE RATING COLUMNS FOLLOW THE TEAM FILTER, at the owner's instruction:
+        "for production team we have different flow so this columns are not
+        meaningful for them but for backend team they are useful".
+
+        Self / HOD / 2nd rating / Average are a STAFF form's four layers. A
+        production worker has none of them — one sheet, ticked by a team leader
+        and decided by a supervisor (§7) — so all four read as an em dash for
+        half the roster, and four dashes in a row say "not rated yet", which is
+        a different and untrue claim.
+
+        So the columns change with the filter rather than the rows being made
+        to fit one set:
+
+          Backend Team     Self · HOD · 2nd rating · Average
+          Production Team  Overall · Training · Rated by · Decided by
+          Both teams       one Result column, which reads correctly for either
+                           — a number for staff, the tick's own WORD for a
+                           worker (§11: their overall IS the tick, never a
+                           mean; §6.2 keeps the 5/3/1 number off it).
+
+        Team and Second reviewer drop out when a team is chosen: the first is
+        then the same on every row, and the second is a staff idea. -- */
+  const columns = React.useMemo<ColumnDef<PersonRow>[]>(() => {
+    const common: ColumnDef<PersonRow>[] = [
       {
         accessorKey: "fullName",
         header: "Person",
@@ -254,8 +296,11 @@ export function PeopleClient({
             <span className="text-body-sm text-ink-muted">Not in this cycle</span>
           ),
       },
-      /* The three layers, in their reserved colours, in the same order on every
-         screen in the product (§13.1). */
+    ];
+
+    /* The three layers, in their reserved colours, in the same order on every
+       screen in the product (§13.1). */
+    const staffScores: ColumnDef<PersonRow>[] = [
       {
         id: "self",
         header: "Self",
@@ -333,6 +378,75 @@ export function PeopleClient({
           return <Score value={mean} className="text-ink" />;
         },
       },
+    ];
+
+    const workerColumns: ColumnDef<PersonRow>[] = [
+      {
+        id: "workerOverall",
+        header: "Overall",
+        size: 150,
+        cell: ({ row }) => {
+          const tick = row.original.workerOverallTick;
+          if (!tick) return <span className="text-body-sm text-ink-faint">—</span>;
+          return <span className="text-body-sm text-ink">{TICK_WORD[tick] ?? tick}</span>;
+        },
+      },
+      {
+        id: "workerTraining",
+        header: "Training",
+        size: 96,
+        cell: ({ row }) => {
+          const training = row.original.workerTraining;
+          // Three states, not two: null is "not answered yet", which is a
+          // different fact from "no training needed" (§11's missing-is-not-zero,
+          // applied to a tick).
+          if (training === null) return <span className="text-body-sm text-ink-faint">—</span>;
+          return <span className="text-body-sm text-ink">{training ? "Yes" : "No"}</span>;
+        },
+      },
+      {
+        id: "workerRatedBy",
+        header: "Rated by",
+        size: 160,
+        cell: ({ row }) => (
+          <GridCell value={row.original.workerRatedBy ?? "Nobody chosen"} />
+        ),
+      },
+      {
+        id: "workerDecidedBy",
+        header: "Decided by",
+        size: 160,
+        cell: ({ row }) => <GridCell value={row.original.workerDecidedBy ?? "—"} />,
+      },
+    ];
+
+    /* -- ONE COLUMN THAT READS CORRECTLY FOR EITHER, for the mixed view.
+          The same question — "how did they do" — answered in each track's own
+          language rather than one language imposed on both. -- */
+    const bothTeams: ColumnDef<PersonRow>[] = [
+      {
+        id: "result",
+        header: "Result",
+        size: 130,
+        meta: { align: "right" },
+        cell: ({ row }) => {
+          const r = row.original;
+          if (r.track === "WORKER") {
+            return r.workerOverallTick ? (
+              <span className="text-body-sm text-ink">
+                {TICK_WORD[r.workerOverallTick] ?? r.workerOverallTick}
+              </span>
+            ) : (
+              <span className="text-body-sm text-ink-faint">—</span>
+            );
+          }
+          const mean = r.self !== null && r.lead !== null ? (r.self + r.lead) / 2 : null;
+          return <Score value={mean} className="text-ink" />;
+        },
+      },
+    ];
+
+    const actions: ColumnDef<PersonRow>[] = [
       {
         id: "actions",
         header: "",
@@ -372,9 +486,23 @@ export function PeopleClient({
           </DropdownMenu>
         ),
       },
-    ],
-    [],
-  );
+    ];
+
+    /* -- Identity first, then whatever the chosen team's figures are, then the
+          row menu. `base` is everything true of both teams; the two that are
+          true of only one drop out when a team is chosen. -- */
+    const base = common.filter((c) => {
+      if (team === ANY) return true;
+      if (c.id === "team") return false; // same on every row once filtered
+      if (team === "WORKER" && c.id === "coReviewerName") return false; // a staff idea
+      return true;
+    });
+
+    const figures =
+      team === "WORKER" ? workerColumns : team === "STAFF" ? staffScores : bothTeams;
+
+    return [...base, ...figures, ...actions];
+  }, [team]);
 
   return (
     // The grid IS this screen, so it takes the viewport — the same shape as
