@@ -412,6 +412,37 @@ export function CyclesClient({
                 </Link>
               </DropdownMenuItem>
 
+              {/* -- ARCHIVE, IN THE MENU where the other row actions are.
+                     It was added to the details dialog and the phone card
+                     only, which is where `rowActions` renders — so somebody
+                     opening this menu, which is the obvious place to look for
+                     it, found Open, Links and Recycle bin and reasonably
+                     concluded there was no Archive at all.
+
+                     Only on a cycle the chip already calls Closed: offering to
+                     file away a round people are still filling in is offering
+                     to do the wrong thing, and shown-and-disabled would be a
+                     dead end (§13.4). -- */}
+              {row.original.status === "ACTIVE" && row.original.finished ? (
+                <DropdownMenuItem
+                  disabled={archiving === row.original.id}
+                  onSelect={(event) => {
+                    // Keeps the menu open while the request is in flight, so
+                    // the item can say so rather than vanishing mid-press.
+                    event.preventDefault();
+                    void (async () => {
+                      setArchiving(row.original.id);
+                      const result = await archiveCycle(row.original.id);
+                      setArchiving(null);
+                      if (result.ok) router.refresh();
+                    })();
+                  }}
+                >
+                  <Archive className="size-4" aria-hidden />
+                  {archiving === row.original.id ? "Archiving…" : "Archive"}
+                </DropdownMenuItem>
+              ) : null}
+
               <DropdownMenuSeparator className="bg-rule" />
 
               <DropdownMenuItem
