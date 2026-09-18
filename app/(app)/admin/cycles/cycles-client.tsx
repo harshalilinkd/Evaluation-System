@@ -165,19 +165,26 @@ export function CyclesClient({
         cell: ({ row }) => (
           <StatusChip
             status={
-              /* -- FINISHED FIRST, and ahead of overdue on purpose: a cycle
-                    everybody has completed is not late, whatever its due date
-                    said. `finished` means every live participant is CLOSED;
-                    the cycle's own status is still ACTIVE until HR archives
-                    it, which is why this reads "Ready to archive" rather than
-                    claiming the cycle is closed. -- */
-              row.original.status === "ACTIVE" && row.original.finished
-                ? "READY_TO_ARCHIVE"
-                : cycleIsOverdue(row.original)
-                  ? "OVERDUE"
-                  : row.original.status === "ACTIVE"
-                    ? "CYCLE_ACTIVE"
-                    : row.original.status
+              /* -- THREE STATES, at the owner's instruction, and the order
+                    matters as much as the words.
+
+                    Archived   HR filed it. The cycle's own status is CLOSED.
+                    Closed     every live participant is finished. The work is
+                               over and the cycle is still sitting here, not
+                               put away — which is what was asked for: "it
+                               should stay in evaluation as closed if user
+                               want to archive they will archive".
+                    Overdue    only a cycle that is genuinely still running.
+                               Finished comes first because a round everybody
+                               completed is not late, whatever its date said.
+                 -- */
+              row.original.status === "CLOSED"
+                ? "ARCHIVED"
+                : row.original.finished
+                  ? "CLOSED"
+                  : cycleIsOverdue(row.original)
+                    ? "OVERDUE"
+                    : "CYCLE_ACTIVE"
             }
           />
         ),

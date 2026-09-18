@@ -25,7 +25,7 @@ export type ChipStatus =
   | "RETURNED"
   | "OVERDUE"
   | "SUBMITTED"
-  | "READY_TO_ARCHIVE";
+  | "ARCHIVED";
 
 /**
  * Two vocabularies, deliberately.
@@ -119,25 +119,28 @@ const STATUS: Record<
         P23-FIX had to unpick exactly that on the team queue, where a retired
         status was standing in for a submission and rendered correctly while
         meaning something else. -- */
-  /* -- NOT A STORED STATUS either — derived, like RETURNED and OVERDUE.
-        A cycle whose every live participant is CLOSED is finished, but its own
-        status stays ACTIVE until HR archives it, and the list read "Cycle
-        active" beside a full progress bar. Both facts were true and the row
-        contradicted itself.
+  /* -- ARCHIVED IS NOT THE SAME AS CLOSED, at the owner's instruction:
+        "it should stay in evaluation as closed if user want to archive they
+        will archive".
 
-        "Ready to archive" says both halves: nothing is outstanding, and there
-        is one act left — which is HR's. It is not done automatically, because
-        `ensure_rolling_cycle` reuses a rolling cycle by name as each new
-        joiner falls due, and one that shut itself after its first participant
-        would be reused while closed or duplicated.
+        So the cycles list uses two words for two different states, where it
+        would otherwise use one for both:
 
-        §8 fixes the EMPLOYEE vocabulary at four words, so this borrows
+          Closed    every live participant is finished. The work is over. The
+                    cycle is still on the list and still open — nothing has
+                    been put away.
+          Archived  HR has deliberately filed it. The cycle's OWN status is
+                    CLOSED.
+
+        Sharing "Closed" for both would have made the archive button look like
+        it did nothing: press it, and the chip says exactly what it said
+        before. §8 fixes the EMPLOYEE vocabulary at four words, so this borrows
         "Completed" rather than inventing a fifth — and it never reaches an
-        employee anyway: it is shown on the administrators' cycle list. -- */
-  READY_TO_ARCHIVE: {
-    internal: "Ready to archive",
+        employee anyway, being shown on the administrators' cycle list. -- */
+  ARCHIVED: {
+    internal: "Archived",
     employee: "Completed",
-    classes: "bg-final-tint border-final/40 text-final",
+    classes: "bg-surface-mute border-rule text-ink-muted",
   },
   SUBMITTED: {
     internal: "Submitted",
