@@ -141,6 +141,19 @@ export type PersonPatch = {
         authoritative for it, so a hand-typed date would be overruled by the
         next recorded rise — a cell that does not hold its value. It moves when
         a salary change is recorded, and its column is read-only. -- */
+  /* -- The personal columns the grid SHOWS but could not FIX. They were
+        read-only for no reason beyond not having been added when the grid was
+        built around the employment fields.
+
+        `email` is deliberately absent: it mirrors the auth account, so changing
+        it changes how somebody signs in — an Admin API call, not a column
+        write. A cell that looked editable and silently wrote nothing is the
+        failure class §18 has recorded nine times. -- */
+  full_name?: string;
+  /** As typed. Normalised to E.164 server-side (P11-12); "" clears it. */
+  phone?: string;
+  work_email?: string;
+  work_phone?: string;
   track?: "STAFF" | "WORKER";
   /** ISO. 0024's ONE joining date; moving it recomputes the whole schedule. */
   date_of_joining?: string;
@@ -2123,9 +2136,17 @@ export function UsersTab({
         header: "Name",
         size: 220,
         meta: { frozen: true },
-        cell: ({ row }) => (
-          <GridCell value={row.original.full_name} className="font-medium" />
-        ),
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "full_name", row.original.full_name) ?? ""}
+              onChange={(v) => setCell(row.original.id, "full_name", v)}
+              label={`Name of ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "full_name")}
+            />
+          ) : (
+            <GridCell value={row.original.full_name} className="font-medium" />
+          ),
       },
       {
         accessorKey: "email",
@@ -2148,7 +2169,17 @@ export function UsersTab({
         accessorKey: "work_email",
         header: "Official Email",
         size: 240,
-        cell: ({ row }) => <GridCell value={dash(row.original.work_email)} className="tabular" />,
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "work_email", row.original.work_email ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "work_email", v)}
+              label={`Official email for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "work_email")}
+            />
+          ) : (
+            <GridCell value={dash(row.original.work_email)} className="tabular" />
+          ),
       },
       {
         accessorKey: "designation",
@@ -2208,15 +2239,38 @@ export function UsersTab({
         accessorKey: "phone_e164",
         header: "Mobile No",
         size: 150,
-        cell: ({ row }) => <GridCell value={dash(row.original.phone_e164)} className="tabular" />,
+        /* -- Typed however it comes, normalised server-side: `normaliseToE164`
+              is `server-only` and answers with a REASON, so a refusal names the
+              fault rather than saying "invalid" on a grid of fifty-four rows
+              (P11-12). Emptying it is refused for Backend Team (CONTACT-1) —
+              in the action, because a screen is never the only guard. -- */
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "phone", row.original.phone_e164 ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "phone", v)}
+              label={`Mobile number for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "phone")}
+            />
+          ) : (
+            <GridCell value={dash(row.original.phone_e164)} className="tabular" />
+          ),
       },
       {
         accessorKey: "work_phone_e164",
         header: "Official Mobile No",
         size: 170,
-        cell: ({ row }) => (
-          <GridCell value={dash(row.original.work_phone_e164)} className="tabular" />
-        ),
+        cell: ({ row }) =>
+          tableEdit ? (
+            <TextCell
+              value={cellValue(row.original, "work_phone", row.original.work_phone_e164 ?? "") ?? ""}
+              onChange={(v) => setCell(row.original.id, "work_phone", v)}
+              label={`Official mobile for ${row.original.full_name}`}
+              dirty={isDirty(row.original.id, "work_phone")}
+            />
+          ) : (
+            <GridCell value={dash(row.original.work_phone_e164)} className="tabular" />
+          ),
       },
       {
         accessorKey: "date_of_joining",

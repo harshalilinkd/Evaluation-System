@@ -49,6 +49,27 @@ const cellPatchSchema = z.object({
         key as an instruction to clear would empty a column the moment anybody
         edited a different one (P19D-4's rule, on a different surface). -- */
   employee_code: z.string().trim().max(40).optional(),
+  /* -- THE NAME AND THE CONTACT PAIRS, so every profile column the grid SHOWS
+        is a column the grid can FIX. They were read-only for no reason beyond
+        not having been added — F25-1 built the grid around employment fields
+        and the personal ones were never brought across.
+
+        THE LOGIN EMAIL IS DELIBERATELY NOT HERE, and that is the one absence
+        worth stating. `profiles.email` mirrors the auth account; changing it
+        means changing how somebody signs in, which is an Admin API call, not a
+        column write — `updatePerson` does not write it either. A cell that
+        looked editable and silently wrote nothing is the failure class this
+        log has recorded nine times, so it stays read-only until the auth half
+        is built with it. -- */
+  full_name: z.string().trim().min(2, "Enter their full name").max(120).optional(),
+  /* -- Normalised to E.164 server-side, below — `normaliseToE164` is
+        `server-only` and returns a structured reason, so a refusal can say WHAT
+        is wrong rather than just "invalid" (P11-12). Empty is allowed here and
+        checked against CONTACT-1 afterwards, because whether a blank is legal
+        depends on which team they are on. -- */
+  phone: z.string().trim().max(20).optional(),
+  work_email: z.string().trim().max(160).optional(),
+  work_phone: z.string().trim().max(20).optional(),
   designation: z.string().trim().max(120).optional(),
   department_id: z.string().uuid().nullable().optional(),
   reports_to: z.string().uuid().nullable().optional(),
@@ -169,6 +190,13 @@ export async function bulkUpdatePeople(
           smuggled in by a caller shaping its own payload. */
     const profilePatch: {
       employee_code?: string;
+      full_name?: string;
+      phone_e164?: string | null;
+      work_email?: string | null;
+      // The COLUMN is `work_phone_e164` (0081). The patch key stays `work_phone`
+      // because that is what the grid's header calls it; only one of the two is
+      // free to differ, and it is not the column (P8P-1).
+      work_phone_e164?: string | null;
       designation?: string;
       department_id?: string | null;
       reports_to?: string | null;
@@ -176,6 +204,43 @@ export async function bulkUpdatePeople(
       date_of_joining?: string;
     } = {};
     if (patch.employee_code !== undefined) profilePatch.employee_code = patch.employee_code;
+    if (patch.full_name !== undefined) profilePatch.full_name = patch.full_name;
+
+    /* -- BOTH NUMBERS GO THROUGH THE ONE NORMALISER, and a bad one stops that
+          person's row rather than storing something §10 cannot send to.
+          Blank clears the column — on a grid an emptied cell can only mean
+          "there is no such number", which is the opposite of the absent-key
+          rule above (an untouched cell sends no key at all). -- */
+    const { normaliseToE164 } = await import("@/lib/notify/phone");
+    let badNumber = false;
+    for (const [key, column] of [
+      ["phone", "phone_e164"],
+      ["work_phone", "work_phone_e164"],
+    ] as const) {
+      const typed = patch[key];
+      if (typed === undefined) continue;
+      if (typed === "") {
+        profilePatch[column] = null;
+        continue;
+      }
+      const result = normaliseToE164(typed);
+      if (!result.ok) {
+        rows.push({
+          profileId,
+          ok: false,
+          error: `That mobile number is not usable: ${result.reason}`,
+        });
+        badNumber = true;
+        break;
+      }
+      profilePatch[column] = result.e164;
+    }
+    if (badNumber) continue;
+
+    if (patch.work_email !== undefined) {
+      profilePatch.work_email = patch.work_email === "" ? null : patch.work_email;
+    }
+
     if (patch.designation !== undefined) profilePatch.designation = patch.designation;
     if (patch.department_id !== undefined) profilePatch.department_id = patch.department_id;
     if (patch.reports_to !== undefined) profilePatch.reports_to = patch.reports_to;
@@ -184,6 +249,35 @@ export async function bulkUpdatePeople(
        the trigger that recomputes the whole increment schedule (P19B-2), which
        is why it is not also written to `employment_records` here. */
     if (patch.date_of_joining !== undefined) profilePatch.date_of_joining = patch.date_of_joining;
+
+    /* -- CONTACT-1, ON THE THIRD SURFACE. A Backend Team person must keep a
+          mobile — §10 sends every invite over WhatsApp and/or email, and P28
+          records that WhatsApp is the channel that works without SMTP
+          configured. The create form refuses a blank and so does the edit
+          dialog; a grid cell that let the same number be emptied would be the
+          way round both.
+
+          The track is read from the PATCH where it was changed and from the
+          record otherwise — clearing the number and moving somebody to
+          Production Team in one edit is legal, and judging it on the stored
+          track alone would refuse it. Production Team are exempt for the reason
+          the schema gives: nothing in the system ever writes to them. -- */
+    if (profilePatch.phone_e164 === null) {
+      const { data: current } = await supabase
+        .from("profiles")
+        .select("track")
+        .eq("id", profileId)
+        .maybeSingle();
+      const track = patch.track ?? current?.track ?? "STAFF";
+      if (track === "STAFF") {
+        rows.push({
+          profileId,
+          ok: false,
+          error: "Enter a mobile number — this is where their form link is sent",
+        });
+        continue;
+      }
+    }
 
     if (Object.keys(profilePatch).length > 0) {
       const { data, error } = await supabase
