@@ -21,7 +21,8 @@ import {
 import { approveAndClose, saveApproval, saveProposal } from "@/lib/increment/actions";
 import type { SalaryBand } from "@/lib/increment/queries";
 import { formatInr } from "@/lib/utils/date";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";import { DatePopoverInput } from "@/components/appraise/date-popover";
+
 
 /**
  * EVERY FIGURE COMES FROM `calc.ts`. There is no arithmetic in this file.
@@ -337,12 +338,12 @@ export function HikeCalculator({
       {settled ? null : (
         <div className="sm:max-w-xs">
           <Label htmlFor="hike-effective">Effective from</Label>
-          <Input
-            id="hike-effective"
-            type="date"
+          <DatePopoverInput
+            tone="field"
+            label="Effective from"
+            className="mt-1"
             value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
-            className="tabular mt-1"
+            onChange={setEffectiveFrom}
           />
           <p className="mt-0.5 font-sans text-body-sm text-ink-muted">
             When the new salary starts being paid. Used by Approve and close.

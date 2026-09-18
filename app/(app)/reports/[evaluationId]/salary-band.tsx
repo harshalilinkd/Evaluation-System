@@ -43,7 +43,8 @@ import { approveAndClose, confirmIncrement, saveProposal } from "@/lib/increment
 import type { SalaryBand as SalaryBandData } from "@/lib/increment/queries";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
-import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
+import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";import { DatePopoverInput } from "@/components/appraise/date-popover";
+
 
 /* -- COLOUR ON THESE CARDS, at the owner's instruction, drawn from the KPI
       palette so the two agree by construction rather than by coincidence.
@@ -1178,13 +1179,12 @@ function MdApproval({
               >
                 Effective from
               </Label>
-              <Input
-                id="md_effective_from"
-                type="date"
+              <DatePopoverInput
+                tone="field"
+                label="Effective from"
                 value={effectiveFrom}
-                onChange={(e) => setEffectiveFrom(e.target.value)}
+                onChange={setEffectiveFrom}
                 disabled={settled || !canApprove}
-                className="min-h-11 tabular"
               />
             </div>
           </div>
@@ -1401,8 +1401,12 @@ function InterviewCard({
           <Label htmlFor="effective_from" className="font-sans text-body font-medium text-ink">
             Effective from
           </Label>
-          <Input id="effective_from" type="date" value={effectiveFrom}
-            onChange={(e) => setEffectiveFrom(e.target.value)} className="min-h-11 tabular" />
+          <DatePopoverInput
+            tone="field"
+            label="Effective from"
+            value={effectiveFrom}
+            onChange={setEffectiveFrom}
+          />
         </div>
       </div>
 

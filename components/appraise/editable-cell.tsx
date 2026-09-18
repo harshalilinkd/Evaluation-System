@@ -110,6 +110,31 @@ export function MoneyCell({
     annual === null ? "" : String(Math.round(annual / 12)),
   );
 
+  /* -- …AND IT MUST LET GO THE MOMENT THE CELL IS NOT BEING TYPED IN.
+        The initialiser above runs ONCE per mount, and this cell stays mounted
+        across a save and the refresh after it. So once the grid's own drafts
+        were cleared, the cell went on showing the figure that had been typed
+        into it — a number matching neither the stored value nor any pending
+        edit, above a Save button correctly reporting "Nothing changed yet".
+        The sheet said one thing and the button said another, and the button
+        was right.
+
+        FOCUS is what decides, not a prop comparison alone. Clearing a cell
+        sets its draft to "no change", so `annual` falls back to the STORED
+        figure — and a bare prop-watch would snap the stored number back under
+        the cursor of somebody who had just pressed Delete to retype it. While
+        the cell has focus the typed text is untouchable; the instant it does
+        not, it re-reads.
+
+        Adjusted DURING RENDER rather than in an effect: an effect paints once
+        with the stale figure first, and that flicker is what PC-4 records. -- */
+  const [focused, setFocused] = React.useState(false);
+  const [lastAnnual, setLastAnnual] = React.useState(annual);
+  if (!focused && annual !== lastAnnual) {
+    setLastAnnual(annual);
+    setText(annual === null ? "" : String(Math.round(annual / 12)));
+  }
+
   return (
     <span className="flex items-center gap-1">
       <span aria-hidden className="shrink-0 font-sans text-body-sm text-ink-muted">
@@ -121,6 +146,20 @@ export function MoneyCell({
           const next = e.target.value.replace(/[^\d]/g, "");
           setText(next);
           onChangeAnnual(next === "" ? null : Number(next) * 12);
+        }}
+        onFocus={(e) => {
+          setFocused(true);
+          // Straight into overtype. Correcting a figure is nearly always
+          // replacing it, and the alternative is select-all before every edit.
+          e.currentTarget.select();
+        }}
+        onBlur={() => {
+          setFocused(false);
+          // Whatever the grid holds is what shows from here — so a cell that
+          // was cleared reads back as the stored figure it reverted to,
+          // rather than staying blank and looking like a pending deletion.
+          setLastAnnual(annual);
+          setText(annual === null ? "" : String(Math.round(annual / 12)));
         }}
         aria-label={`${label}, a monthly figure`}
         inputMode="numeric"

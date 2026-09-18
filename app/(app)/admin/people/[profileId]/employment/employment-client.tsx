@@ -36,6 +36,7 @@ import type { EmploymentDetail } from "@/lib/employment/queries";
 import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
+import { DatePopoverInput } from "@/components/appraise/date-popover";
 
 const EMPLOYMENT_TYPES = [
   { value: "PERMANENT", label: "Permanent" },
@@ -165,14 +166,33 @@ export function EmploymentClient({
              which is most of the scrolling that was reported. 1180px of content
              less the padding leaves ~366px a column — comfortably more than a
              date input needs. -- */}
-      <DashboardCard title="Employment" className="p-5">
+      <DashboardCard
+        title="Employment"
+        className="p-5"
+        /* -- SAVE SITS IN THE HEADER, as "Current pay" already puts Correct and
+              Add salary change. It had a row of its own below the fields, which
+              on a two-row form is an entire row of card spent on one button —
+              and the form is short enough that the control is never out of
+              sight of the field being edited, which is the usual reason a
+              submit belongs at the end. Still the only primary action on the
+              card (§13.3), still 44px (§13.8). -- */
+        action={
+          canEditRecord ? (
+            <Button className="min-h-11" onClick={() => void onSave()} disabled={busy}>
+              {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
+              Save employment details
+            </Button>
+          ) : null
+        }
+      >
         <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="Date of joining" required>
-            <Input
-              type="date"
+            <DatePopoverInput
+              tone="field"
+              label="dateOfJoining"
               value={form.dateOfJoining}
               disabled={!canEditRecord}
-              onChange={(e) => setForm({ ...form, dateOfJoining: e.target.value })}
+              onChange={(next) => setForm({ ...form, dateOfJoining: next })}
             />
           </Field>
           {/*
@@ -204,11 +224,12 @@ export function EmploymentClient({
                 falls. "Increment every" sat FIRST, which put the cause after
                 the effect and orphaned "Next increment" on a row of its own. -- */}
           <Field label="Last increment">
-            <Input
-              type="date"
+            <DatePopoverInput
+              tone="field"
+              label="lastIncrementDate"
               value={form.lastIncrementDate}
               disabled={!canEditRecord}
-              onChange={(e) => setForm({ ...form, lastIncrementDate: e.target.value })}
+              onChange={(next) => setForm({ ...form, lastIncrementDate: next })}
             />
           </Field>
           <Field label="Increment every (months)">
@@ -225,16 +246,28 @@ export function EmploymentClient({
           {/* Read-only and DERIVED. A field here would be a second
               implementation of a rule the database already owns, and the two
               would disagree the first time somebody changed the frequency. */}
-          <Field label="Next increment" hint="Worked out from the last increment and the frequency.">
+          {/* -- ONE line of helper text, not two. It printed "HR will be
+                 reminded on …" and "Worked out from the last increment and the
+                 frequency." on separate lines under a single read-only value —
+                 two facts about the same field, costing two lines in a card
+                 whose height was the complaint. -- */}
+          <Field label="Next increment">
             <p className="tabular flex h-10 items-center rounded-control bg-surface-mute px-3 text-body text-ink">
               {formatDate(r?.next_increment_date ?? null)}
             </p>
-            {detail.remindOn ? (
-              <p className="mt-1.5 flex items-center gap-1.5 text-body-sm text-ink-muted">
-                <BellRing aria-hidden className="size-3.5" />
-                HR will be reminded on {formatDate(detail.remindOn)}.
-              </p>
-            ) : null}
+            <p className="mt-1 flex items-center gap-1.5 text-body-xs text-ink-muted">
+              {detail.remindOn ? (
+                <>
+                  <BellRing aria-hidden className="size-3.5 shrink-0" />
+                  <span>
+                    From the last increment and the frequency. HR is reminded{" "}
+                    {formatDate(detail.remindOn)}.
+                  </span>
+                </>
+              ) : (
+                <span>Worked out from the last increment and the frequency.</span>
+              )}
+            </p>
           </Field>
 
           {/* -- LAST, because it is the only optional field here.
@@ -265,26 +298,20 @@ export function EmploymentClient({
                   : "The day they became permanent. Kept as a record; nothing is worked out from it."
               }
             >
-              <Input
-                type="date"
+              <DatePopoverInput
+                tone="field"
+                label="Confirmation date"
                 value={form.confirmationDate}
                 disabled={!canEditRecord}
-                onChange={(e) => setForm({ ...form, confirmationDate: e.target.value })}
+                onChange={(next) => setForm({ ...form, confirmationDate: next })}
               />
             </Field>
           ) : null}
         </div>
 
-        {canEditRecord ? (
-          <div className="mt-4 flex justify-end">
-            <Button className="min-h-11" onClick={() => void onSave()} disabled={busy}>
-              {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
-              Save employment details
-            </Button>
-          </div>
-        ) : (
+        {canEditRecord ? null : (
           // §13.4: a disabled form with no explanation is a dead end.
-          <p className="mt-4 text-body-sm text-ink-muted">
+          <p className="mt-3 text-body-sm text-ink-muted">
             You can read these details and record a pay change. Editing the joining and increment
             dates is HR&rsquo;s.
           </p>
@@ -537,7 +564,21 @@ export function EmploymentClient({
         isEdit={joiningEditAmount !== null}
       />
 
+      {/* -- KEYED HERE, not inside it. Reported as "edit shows the add model
+             instead of edit": the dialog opened with every field blank.
+
+             `CorrectRowDialog` seeds four `useState` calls from `row`, and a
+             `useState` initialiser runs ONCE, when that component mounts. It
+             was mounted from this page's first render with `row = null`, so
+             all four had already run against null before anybody pressed a
+             pencil — and re-rendering with a row set does not re-run them.
+
+             Its key was on the `<Dialog>` INSIDE it, which remounts the shadcn
+             shell and not the component holding the state: one level too deep
+             to do the job its comment claimed. The two dialogs above are keyed
+             at their call site and work. -- */}
       <CorrectRowDialog
+        key={correctingRow?.id ?? "closed"}
         row={correctingRow}
         profileId={person.id}
         onClose={() => setCorrectingRow(null)}
@@ -695,7 +736,12 @@ function SalaryDialog({
         ) : (
           <div className="space-y-4">
             <Field label="Effective from" required>
-              <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+              <DatePopoverInput
+                tone="field"
+                label="Effective from"
+                value={effectiveFrom}
+                onChange={setEffectiveFrom}
+              />
             </Field>
             {/* MONTHLY, like every other salary field. `MoneyInput` takes and
                 returns the ANNUAL figure, so `newCtc` still holds what it
@@ -939,12 +985,11 @@ function CorrectRowDialog({
   }
 
   return (
-    // Keyed on the row's own id, so opening a second row's Edit while this
-    // one is still mid-edit — or reopening after Cancel — always starts from
-    // THAT row's own stored values rather than whatever was last typed
-    // (P10-11's device: a reset effect would render once with the stale
-    // fields first, visible as them changing under the pointer).
-    <Dialog key={row?.id ?? "closed"} open={row !== null} onOpenChange={(v) => (v ? null : onClose())}>
+    // The key that does this work is at the CALL SITE. One here remounts the
+    // dialog shell and not the state above it, which is exactly why this
+    // opened blank — left off rather than kept as a decoration that reads
+    // like a guarantee.
+    <Dialog open={row !== null} onOpenChange={(v) => (v ? null : onClose())}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit this entry</DialogTitle>
@@ -958,7 +1003,12 @@ function CorrectRowDialog({
         {row ? (
           <div className="space-y-4">
             <Field label="Effective from" required>
-              <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+              <DatePopoverInput
+                tone="field"
+                label="Effective from"
+                value={effectiveFrom}
+                onChange={setEffectiveFrom}
+              />
             </Field>
             <Field label="Salary (monthly)" required>
               <MoneyInput

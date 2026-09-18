@@ -33,7 +33,8 @@ import { MoneyInput } from "@/components/appraise/money-input";
 import { saveProposal } from "@/lib/increment/actions";
 import type { EvaluationReport } from "@/lib/reports/types";
 import { formatDateTime } from "@/lib/utils/date";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";import { DatePopoverInput } from "@/components/appraise/date-popover";
+
 
 const RECOMMENDATIONS = [
   { value: "PROCEED", label: "Proceed" },
@@ -378,12 +379,11 @@ export function HrRail({ report }: { report: EvaluationReport }) {
                 Interview scheduled
                 <span className="font-normal normal-case tracking-normal">optional</span>
               </Label>
-              <Input
-                id="interview_scheduled"
-                type="date"
+              <DatePopoverInput
+                tone="field"
+                label="Interview scheduled"
                 value={interviewDate}
-                onChange={(e) => setInterviewDate(e.target.value)}
-                className="tabular min-h-11"
+                onChange={setInterviewDate}
               />
               <p className="font-sans text-body-sm text-ink-muted">
                 The date you will discuss this.

@@ -74,12 +74,24 @@ function monthGrid(year: number, month: number): Date[] {
 const PANEL_WIDTH = 280;
 const PANEL_HEIGHT_ESTIMATE = 320;
 
+/* -- The years this product's dates can plausibly fall in: a joining date is
+      historic (the roster already carries 2021), an increment date runs a few
+      years ahead. Built from the current year at MODULE LOAD rather than
+      hardcoded, so it does not quietly expire — and from a fixed span rather
+      than from the data, because a person hired earlier than anybody on the
+      roster today must still be enterable. -- */
+const THIS_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 36 }, (_, i) => THIS_YEAR - 30 + i);
+
 export function DatePopoverInput({
   value,
   onChange,
   label,
   dirty,
   className,
+  tone = "cell",
+  disabled = false,
+  min,
 }: {
   /** ISO `YYYY-MM-DD`, or "" for none — same contract `DateCell` always had. */
   value: string;
@@ -87,6 +99,31 @@ export function DatePopoverInput({
   label: string;
   dirty?: boolean;
   className?: string;
+  /**
+   * Where it is standing.
+   *
+   * `cell` is the grid: transparent until touched, tinted like its editable
+   * neighbours. `field` is an ordinary form control in a dialog, which has to
+   * match the `Input` beside it rather than announce itself.
+   *
+   * A prop rather than an override className at each call site, so a caller
+   * adding the sixth of these does not have to know which four utilities make
+   * it look right — the mistake that leaves one dialog looking unlike the
+   * others.
+   */
+  tone?: "cell" | "field";
+  disabled?: boolean;
+  /**
+   * The earliest date this field will accept, ISO.
+   *
+   * The day is drawn and refused rather than hidden, so a reader can see that
+   * the month has earlier days and that they are simply not offered — a
+   * calendar that silently starts on the 14th reads as broken.
+   *
+   * Never the only guard: the server enforces the same rule. This only means
+   * the picker does not offer something that will be rejected (§9).
+   */
+  min?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number; openUp: boolean } | null>(null);
@@ -177,11 +214,16 @@ export function DatePopoverInput({
         aria-label={label}
         aria-haspopup="dialog"
         aria-expanded={open}
+        disabled={disabled}
         className={cn(
-          "min-h-11 w-full rounded-input border border-transparent bg-warning-tint/40 px-2 text-left font-sans text-body-sm tabular text-ink",
+          "min-h-11 w-full rounded-input text-left font-sans text-body-sm tabular text-ink",
           "focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30",
+          tone === "field"
+            ? "border border-border bg-surface px-3"
+            : "border border-transparent bg-warning-tint/40 px-2",
           dirty && "border-primary bg-primary/10",
           !value && "text-ink-muted",
+          disabled && "cursor-not-allowed opacity-60",
           className,
         )}
       >
@@ -212,9 +254,44 @@ export function DatePopoverInput({
                 >
                   <ChevronLeft aria-hidden className="size-4" />
                 </button>
-                <p className="font-sans text-body-sm font-medium text-ink">
-                  {MONTH_NAMES[viewMonth]} {viewYear}
-                </p>
+                {/* -- PICK THE MONTH AND THE YEAR, do not walk to them.
+                       Reported as "calendar gets collapsed when user try to
+                       select year date month". Half of that was the native
+                       popup dismissing itself, which this component already
+                       replaced; the other half is that what replaced it had
+                       arrows and nothing else. A joining date of July 2021
+                       from a calendar opening on 2026 is sixty presses of a
+                       chevron, and on a sheet whose whole purpose is entering
+                       old dates that is not a calendar anybody can use.
+
+                       The arrows stay for the common case — the month either
+                       side. -- */}
+                <span className="flex items-center gap-1">
+                  <select
+                    value={viewMonth}
+                    onChange={(e) => setViewMonth(Number(e.target.value))}
+                    aria-label="Month"
+                    className="h-8 rounded-control border border-rule bg-surface px-1 font-sans text-body-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    {MONTH_NAMES.map((m, i) => (
+                      <option key={m} value={i}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={viewYear}
+                    onChange={(e) => setViewYear(Number(e.target.value))}
+                    aria-label="Year"
+                    className="tabular h-8 rounded-control border border-rule bg-surface px-1 font-sans text-body-sm text-ink focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  >
+                    {YEARS.map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </span>
                 <button
                   type="button"
                   onClick={() => shiftMonth(1)}
@@ -235,18 +312,23 @@ export function DatePopoverInput({
                   const inMonth = d.getMonth() === viewMonth;
                   const isSelected = selected !== null && sameDay(d, selected);
                   const isToday = sameDay(d, today);
+                  // String comparison is safe on ISO and avoids a timezone
+                  // round trip: `YYYY-MM-DD` sorts lexically as it does by date.
+                  const tooEarly = min !== undefined && toIso(d) < min;
                   return (
                     <button
                       key={toIso(d)}
                       type="button"
+                      disabled={tooEarly}
                       onClick={() => pick(d)}
                       aria-current={isToday ? "date" : undefined}
                       className={cn(
                         "min-h-8 rounded-control py-1 text-center text-body-sm tabular",
                         !inMonth && "text-ink-faint",
-                        inMonth && !isSelected && "text-ink hover:bg-surface-mute",
+                        inMonth && !isSelected && !tooEarly && "text-ink hover:bg-surface-mute",
                         isSelected && "bg-primary font-semibold text-white",
-                        isToday && !isSelected && "font-semibold text-primary",
+                        isToday && !isSelected && !tooEarly && "font-semibold text-primary",
+                        tooEarly && "cursor-not-allowed text-ink-faint/50",
                       )}
                     >
                       {d.getDate()}
@@ -266,7 +348,12 @@ export function DatePopoverInput({
                 >
                   Clear
                 </button>
-                <button type="button" onClick={() => pick(today)} className="min-h-8 px-1 text-body-sm text-primary">
+                <button
+                  type="button"
+                  disabled={min !== undefined && toIso(today) < min}
+                  onClick={() => pick(today)}
+                  className="min-h-8 px-1 text-body-sm text-primary disabled:cursor-not-allowed disabled:text-ink-faint"
+                >
                   Today
                 </button>
               </div>
@@ -274,6 +361,49 @@ export function DatePopoverInput({
             document.body,
           )
         : null}
+    </>
+  );
+}
+
+/**
+ * The same picker, for a form that is read with `FormData` on submit.
+ *
+ * `DatePopoverInput` is a BUTTON, so it carries no value into a form the way
+ * an `<input name=…>` does — which is why three fields on Settings › Users
+ * were still on the native picker after the rest of the product had moved off
+ * it. Half a dialog with a working calendar and half with the one that
+ * dismisses itself is worse than either.
+ *
+ * Holds its own value, seeded from `defaultValue`, and mirrors it into a
+ * hidden input under `name`. Uncontrolled by design: the surrounding form
+ * already treats these fields that way, and giving them a controlled contract
+ * would mean adding state to two long dialogs for no gain.
+ */
+export function DateFormField({
+  name,
+  defaultValue = "",
+  label,
+  disabled,
+  className,
+}: {
+  name: string;
+  defaultValue?: string | null;
+  label: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  const [value, setValue] = React.useState(defaultValue ?? "");
+  return (
+    <>
+      <input type="hidden" name={name} value={value} />
+      <DatePopoverInput
+        tone="field"
+        label={label}
+        value={value}
+        onChange={setValue}
+        disabled={disabled}
+        className={className}
+      />
     </>
   );
 }

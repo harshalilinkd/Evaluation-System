@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { DatePopoverInput } from "@/components/appraise/date-popover";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { excludeParticipant, reassignLead, updateCycle } from "@/lib/cycles/actions";
@@ -302,16 +302,16 @@ export function ExtendDatesDialog({
           {fields.map(([field, label, current]) => (
             <div key={field}>
               <Label htmlFor={field}>{label}</Label>
-              <Input
-                id={field}
-                type="date"
+              <DatePopoverInput
+                tone="field"
+                label={label}
                 className="mt-1.5 max-w-56"
                 // Floored at whichever is later: the current value or today. The
                 // server enforces the same rule (§9); this just means the picker
                 // does not offer a date that will be refused.
                 min={current && current > today() ? current : today()}
                 value={dates[field]}
-                onChange={(e) => setDates({ ...dates, [field]: e.target.value })}
+                onChange={(next) => setDates({ ...dates, [field]: next })}
               />
               <p className="tabular mt-1 text-body-sm text-ink-muted">
                 Currently {formatDate(current)}

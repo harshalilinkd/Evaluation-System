@@ -32,6 +32,7 @@ import { ACCESS_LEVELS,
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateFormField, DatePopoverInput } from "@/components/appraise/date-popover";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -1089,12 +1090,7 @@ function AddPersonDialog({
                 optional
                 hint="Used as the starting date for increment cycle calculations."
               >
-                <Input
-                  id="date_of_joining"
-                  name="date_of_joining"
-                  type="date"
-                  className="min-h-11 tabular"
-                />
+                <DateFormField name="date_of_joining" label="Date of joining" />
               </Field>
 
               <Field
@@ -1120,13 +1116,11 @@ function AddPersonDialog({
                 optional
                 hint="Leave blank for a new joiner."
               >
-                <Input
-                  id="last_increment_date"
-                  name="last_increment_date"
-                  type="date"
+                <DatePopoverInput
+                  tone="field"
+                  label="Last increment"
                   value={lastIncrementDate}
-                  onChange={(e) => setLastIncrementDate(e.target.value)}
-                  className="min-h-11 tabular"
+                  onChange={setLastIncrementDate}
                 />
               </Field>
 
@@ -1610,12 +1604,10 @@ function EditPersonDialog({
                 optional
                 hint="Used as the starting date for increment cycle calculations."
               >
-                <Input
-                  id="e_doj"
+                <DateFormField
                   name="date_of_joining"
-                  type="date"
-                  defaultValue={person.date_of_joining ?? ""}
-                  className="min-h-11 tabular"
+                  label="Date of joining"
+                  defaultValue={person.date_of_joining}
                 />
               </Field>
 
@@ -1639,12 +1631,10 @@ function EditPersonDialog({
                 optional
                 hint="Leave blank for a new joiner."
               >
-                <Input
-                  id="e_last_inc"
+                <DateFormField
                   name="last_increment_date"
-                  type="date"
-                  defaultValue={person.last_increment_date ?? ""}
-                  className="min-h-11 tabular"
+                  label="Last increment"
+                  defaultValue={person.last_increment_date}
                 />
               </Field>
 
@@ -1730,12 +1720,7 @@ function EditPersonDialog({
                 label="Effective from"
                 hint="A date before their current one is a correction to the past and will not move today's figure."
               >
-                <Input
-                  id="e_salary_from"
-                  name="salary_effective_from"
-                  type="date"
-                  className="min-h-11 tabular"
-                />
+                <DateFormField name="salary_effective_from" label="Salary effective from" />
               </Field>
 
               <Field id="e_salary_reason" label="Reason">
@@ -3027,12 +3012,11 @@ export function UsersTab({
 
                 <div className="space-y-1.5">
                   <Label htmlFor="pay_date">Effective from</Label>
-                  <Input
-                    id="pay_date"
-                    type="date"
+                  <DatePopoverInput
+                    tone="field"
+                    label="Effective from"
                     value={payDate}
-                    onChange={(e) => setPayDate(e.target.value)}
-                    className="min-h-11 tabular"
+                    onChange={setPayDate}
                   />
                   <p className="font-sans text-body-sm text-ink-muted">
                     When the new salary starts being paid. An annual increment dated here also moves
