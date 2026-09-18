@@ -2,7 +2,7 @@
 
 /** The spreadsheet grid. One implementation, shared by every table-first screen. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import {
   flexRender,
@@ -343,7 +343,17 @@ export function DataGrid<TData>({
     }));
   };
 
-  const gutter: ColumnDef<TData> = {
+  /* -- MEMOISED, BECAUSE A COLUMN'S `cell` IS ITS COMPONENT TYPE.
+        `flexRender` calls `React.createElement(cell, …)`, so rebuilding this
+        object on every render gave the gutter a new `cell` function, a new type and
+        therefore a full unmount on every render of the grid. Harmless while
+        it drew a button; not harmless once `rowLabel.cell` can be a text
+        input, which loses focus the moment its subtree is replaced.
+
+        A caller passing an inline `rowLabel` or `onRowClick` still defeats
+        this — the deps change every render — so the two that matter memoise
+        theirs. See `users-tab.tsx`. -- */
+  const gutter = useMemo<ColumnDef<TData>>(() => ({
     id: GUTTER_ID,
     // A spreadsheet's row gutter: it gives every row a stable handle to refer to
     // out loud, and it is what makes a long list feel countable. Not resizable —
@@ -387,7 +397,7 @@ export function DataGrid<TData>({
         {rowLabel ? rowLabel.value(row.original) : row.index + 1}
       </button>
       ),
-  };
+  }), [rowLabel, onRowClick, rowTitle]);
 
   /* -- The tick column sits BEFORE the gutter, where a spreadsheet's selector
         lives, and carries no heading text of its own — its header IS the

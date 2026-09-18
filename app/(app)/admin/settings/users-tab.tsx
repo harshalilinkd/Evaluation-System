@@ -2,7 +2,8 @@
 
 /** Settings → Users. HR creates people and decides their access level. */
 
-import { useActionState, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useActionState, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -1877,6 +1878,54 @@ function DeleteSubmit({ label = "Delete account" }: { label?: string }) {
       settled and looped the renderer. -- */
 const NO_BULK_RESULT: DeletePeopleState = {};
 
+/**
+ * THE DRAFTS, HANDED TO THE CELLS THROUGH CONTEXT RATHER THAN A CLOSURE.
+ *
+ * `flexRender` renders a column's `cell` with `React.createElement(cell, …)`,
+ * so the cell FUNCTION IS THE COMPONENT TYPE. A new identity is a new type,
+ * and React unmounts the old subtree rather than updating it.
+ *
+ * The columns memo used to list `cellValue`, `isDirty` and `setCell`, all of
+ * which change identity whenever `drafts` does. So every keystroke rebuilt
+ * all twenty-five column definitions, and with fifty-four people that is over
+ * a thousand cells unmounted and remounted per character — including the
+ * input being typed into, which is why it lost focus after one digit and why
+ * the sheet felt like it was ignoring the keyboard.
+ *
+ * P14-12 recorded this from the other direction: "a component created during
+ * render is a new type every render, so the subtree remounts and every
+ * control loses focus mid-interaction." `salary-history-tab.tsx` fixed the
+ * same fault the same way; this is that pattern, on the larger sheet.
+ */
+type UsersGridEditing = {
+  cellValue: <K extends keyof PersonPatch>(
+    row: PersonRow,
+    key: K,
+    fallback: PersonPatch[K],
+  ) => PersonPatch[K];
+  isDirty: (id: string, key: keyof PersonPatch) => boolean;
+  setCell: <K extends keyof PersonPatch>(id: string, key: K, value: PersonPatch[K]) => void;
+};
+
+const UsersEditingContext = createContext<UsersGridEditing | null>(null);
+
+/* -- A REAL COMPONENT, so the hook has somewhere legal to live.
+      A `cell` function IS a component to TanStack, but it is not one to
+      ESLint: rules-of-hooks goes by the NAME, and `cell` is lowercase.
+      One wrapper taking the render function, rather than fourteen named cell
+      components each repeating the same three lines. -- */
+function EditingCell({ children }: { children: (g: UsersGridEditing) => ReactNode }) {
+  return <>{children(useUsersGridEditing())}</>;
+}
+
+/* Called from inside a `cell`, which TanStack renders AS a component — so
+   hooks are legal there, and this is an ordinary consumer. */
+function useUsersGridEditing(): UsersGridEditing {
+  const value = useContext(UsersEditingContext);
+  if (!value) throw new Error("A roster cell was rendered outside the grid.");
+  return value;
+}
+
 export function UsersTab({
   people,
   departments,
@@ -2009,6 +2058,36 @@ export function UsersTab({
     [drafts],
   );
 
+  const editingValue = useMemo<UsersGridEditing>(
+    () => ({ cellValue, isDirty, setCell }),
+    [cellValue, isDirty, setCell],
+  );
+
+  const rowLabel = useMemo(
+    () => ({
+      header: "Employee ID",
+      value: (p: PersonRow) => p.employee_code || "—",
+      cell: tableEdit
+        ? (p: PersonRow) => (
+            <EditingCell>
+              {(g) => (
+                <TextCell
+                  value={g.cellValue(p, "employee_code", p.employee_code ?? "") ?? ""}
+                  onChange={(v) => g.setCell(p.id, "employee_code", v)}
+                  label={`Employee ID for ${p.full_name}`}
+                  dirty={g.isDirty(p.id, "employee_code")}
+                />
+              )}
+            </EditingCell>
+          )
+        : undefined,
+    }),
+    [tableEdit],
+  );
+
+  /* Stable, for the same reason: the gutter's memo lists it. */
+  const openPerson = useCallback((person: PersonRow) => setEditing(person), []);
+
   const changedCount = drafts.size;
   const salaryChanged = useMemo(
     () => [...drafts.values()].some((d) => d.current_ctc !== undefined),
@@ -2136,17 +2215,22 @@ export function UsersTab({
         header: "Name",
         size: 220,
         meta: { frozen: true },
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "full_name", row.original.full_name) ?? ""}
-              onChange={(v) => setCell(row.original.id, "full_name", v)}
-              label={`Name of ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "full_name")}
-            />
-          ) : (
-            <GridCell value={row.original.full_name} className="font-medium" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <TextCell
+                  value={g.cellValue(row.original, "full_name", row.original.full_name) ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "full_name", v)}
+                  label={`Name of ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "full_name")}
+                />
+              ) : (
+                <GridCell value={row.original.full_name} className="font-medium" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "email",
@@ -2169,71 +2253,91 @@ export function UsersTab({
         accessorKey: "work_email",
         header: "Official Email",
         size: 240,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "work_email", row.original.work_email ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "work_email", v)}
-              label={`Official email for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "work_email")}
-            />
-          ) : (
-            <GridCell value={dash(row.original.work_email)} className="tabular" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <TextCell
+                  value={g.cellValue(row.original, "work_email", row.original.work_email ?? "") ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "work_email", v)}
+                  label={`Official email for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "work_email")}
+                />
+              ) : (
+                <GridCell value={dash(row.original.work_email)} className="tabular" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "designation",
         header: "Designation",
         size: 180,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "designation", row.original.designation ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "designation", v)}
-              label={`Designation for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "designation")}
-            />
-          ) : (
-            <GridCell value={dash(row.original.designation)} />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <TextCell
+                  value={g.cellValue(row.original, "designation", row.original.designation ?? "") ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "designation", v)}
+                  label={`Designation for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "designation")}
+                />
+              ) : (
+                <GridCell value={dash(row.original.designation)} />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "department",
         header: "Department",
         size: 150,
         // §11 / P7-9: missing is not the same as empty, and never zero.
-        cell: ({ row }) =>
-          tableEdit ? (
-            <SelectCell
-              value={cellValue(row.original, "department_id", row.original.department_id) ?? ""}
-              onChange={(v) => setCell(row.original.id, "department_id", v === "" ? null : v)}
-              label={`Department for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "department_id")}
-              options={departments.map((d) => ({ value: d.id, label: d.name }))}
-            />
-          ) : (
-            <GridCell value={dash(row.original.department)} />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <SelectCell
+                  value={g.cellValue(row.original, "department_id", row.original.department_id) ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "department_id", v === "" ? null : v)}
+                  label={`Department for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "department_id")}
+                  options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                />
+              ) : (
+                <GridCell value={dash(row.original.department)} />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         id: "reports_to",
         header: "Reports to",
         size: 170,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <SelectCell
-              value={cellValue(row.original, "reports_to", row.original.reports_to) ?? ""}
-              onChange={(v) => setCell(row.original.id, "reports_to", v === "" ? null : v)}
-              label={`Who ${row.original.full_name} reports to`}
-              dirty={isDirty(row.original.id, "reports_to")}
-              blankLabel="Nobody"
-              options={people
-                .filter((p) => p.id !== row.original.id && p.is_active)
-                .map((p) => ({ value: p.id, label: p.full_name }))}
-            />
-          ) : (
-            <GridCell value={dash(row.original.reports_to_name)} />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <SelectCell
+                  value={g.cellValue(row.original, "reports_to", row.original.reports_to) ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "reports_to", v === "" ? null : v)}
+                  label={`Who ${row.original.full_name} reports to`}
+                  dirty={g.isDirty(row.original.id, "reports_to")}
+                  blankLabel="Nobody"
+                  options={people
+                    .filter((p) => p.id !== row.original.id && p.is_active)
+                    .map((p) => ({ value: p.id, label: p.full_name }))}
+                />
+              ) : (
+                <GridCell value={dash(row.original.reports_to_name)} />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "phone_e164",
@@ -2244,53 +2348,68 @@ export function UsersTab({
               fault rather than saying "invalid" on a grid of fifty-four rows
               (P11-12). Emptying it is refused for Backend Team (CONTACT-1) —
               in the action, because a screen is never the only guard. -- */
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "phone", row.original.phone_e164 ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "phone", v)}
-              label={`Mobile number for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "phone")}
-            />
-          ) : (
-            <GridCell value={dash(row.original.phone_e164)} className="tabular" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <TextCell
+                  value={g.cellValue(row.original, "phone", row.original.phone_e164 ?? "") ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "phone", v)}
+                  label={`Mobile number for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "phone")}
+                />
+              ) : (
+                <GridCell value={dash(row.original.phone_e164)} className="tabular" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "work_phone_e164",
         header: "Official Mobile No",
         size: 170,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <TextCell
-              value={cellValue(row.original, "work_phone", row.original.work_phone_e164 ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "work_phone", v)}
-              label={`Official mobile for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "work_phone")}
-            />
-          ) : (
-            <GridCell value={dash(row.original.work_phone_e164)} className="tabular" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <TextCell
+                  value={g.cellValue(row.original, "work_phone", row.original.work_phone_e164 ?? "") ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "work_phone", v)}
+                  label={`Official mobile for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "work_phone")}
+                />
+              ) : (
+                <GridCell value={dash(row.original.work_phone_e164)} className="tabular" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "date_of_joining",
         header: "Joined",
         size: 140,
-        cell: ({ row }) =>
-          tableEdit ? (
-            /* 0024: the ONE joining date. Moving it recomputes the whole
-               increment schedule through P19B-2's trigger, which is why it is
-               worth being able to correct here rather than only in a dialog. */
-            <DateCell
-              value={cellValue(row.original, "date_of_joining", row.original.date_of_joining ?? "") ?? ""}
-              onChange={(v) => setCell(row.original.id, "date_of_joining", v)}
-              label={`Joining date for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "date_of_joining")}
-            />
-          ) : (
-            // §0.10: DD-MM-YYYY throughout.
-            <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                /* 0024: the ONE joining date. Moving it recomputes the whole
+                   increment schedule through P19B-2's trigger, which is why it is
+                   worth being able to correct here rather than only in a dialog. */
+                <DateCell
+                  value={g.cellValue(row.original, "date_of_joining", row.original.date_of_joining ?? "") ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "date_of_joining", v)}
+                  label={`Joining date for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "date_of_joining")}
+                />
+              ) : (
+                // §0.10: DD-MM-YYYY throughout.
+                <GridCell value={row.original.date_of_joining ? formatDate(row.original.date_of_joining) : "—"} className="tabular" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         /* -- WHEN PROBATION ENDS — 0023's `confirmation_date`.
@@ -2302,28 +2421,33 @@ export function UsersTab({
         accessorKey: "confirmation_date",
         header: "Probation ends",
         size: 150,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <DateCell
-              value={
-                cellValue(row.original, "confirmation_date", row.original.confirmation_date ?? "") ??
-                ""
-              }
-              onChange={(v) => setCell(row.original.id, "confirmation_date", v)}
-              label={`Probation end date for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "confirmation_date")}
-            />
-          ) : (
-            <GridCell
-              // §0.10: DD-MM-YYYY. An em dash rather than a blank, because
-              // optional-and-unset is a fact and a blank cell reads as a
-              // rendering fault.
-              value={
-                row.original.confirmation_date ? formatDate(row.original.confirmation_date) : "—"
-              }
-              className="tabular"
-            />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <DateCell
+                  value={
+                    g.cellValue(row.original, "confirmation_date", row.original.confirmation_date ?? "") ??
+                    ""
+                  }
+                  onChange={(v) => g.setCell(row.original.id, "confirmation_date", v)}
+                  label={`Probation end date for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "confirmation_date")}
+                />
+              ) : (
+                <GridCell
+                  // §0.10: DD-MM-YYYY. An em dash rather than a blank, because
+                  // optional-and-unset is a fact and a blank cell reads as a
+                  // rendering fault.
+                  value={
+                    row.original.confirmation_date ? formatDate(row.original.confirmation_date) : "—"
+                  }
+                  className="tabular"
+                />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "track",
@@ -2333,38 +2457,48 @@ export function UsersTab({
            it wrong on import is exactly what HR needs to fix, and history is
            safe either way — a launched evaluation holds its own frozen
            questions (§5). */
-        cell: ({ row }) =>
-          tableEdit ? (
-            <SelectCell
-              value={cellValue(row.original, "track", (row.original.track ?? "STAFF") as "STAFF" | "WORKER") ?? "STAFF"}
-              onChange={(v) => setCell(row.original.id, "track", v as "STAFF" | "WORKER")}
-              label={`Team for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "track")}
-              options={[
-                { value: "STAFF", label: TRACK_LABELS.STAFF },
-                { value: "WORKER", label: TRACK_LABELS.WORKER },
-              ]}
-            />
-          ) : (
-            <GridCell value={row.original.track === "WORKER" ? TRACK_LABELS.WORKER : TRACK_LABELS.STAFF} />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <SelectCell
+                  value={g.cellValue(row.original, "track", (row.original.track ?? "STAFF") as "STAFF" | "WORKER") ?? "STAFF"}
+                  onChange={(v) => g.setCell(row.original.id, "track", v as "STAFF" | "WORKER")}
+                  label={`Team for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "track")}
+                  options={[
+                    { value: "STAFF", label: TRACK_LABELS.STAFF },
+                    { value: "WORKER", label: TRACK_LABELS.WORKER },
+                  ]}
+                />
+              ) : (
+                <GridCell value={row.original.track === "WORKER" ? TRACK_LABELS.WORKER : TRACK_LABELS.STAFF} />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "employment_type",
         header: "Employment",
         size: 130,
-        cell: ({ row }) =>
-          tableEdit ? (
-            <SelectCell
-              value={cellValue(row.original, "employment_type", row.original.employment_type as PersonPatch["employment_type"]) ?? ""}
-              onChange={(v) => setCell(row.original.id, "employment_type", (v || undefined) as PersonPatch["employment_type"])}
-              label={`Employment type for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "employment_type")}
-              options={Object.entries(EMPLOYMENT_LABELS).map(([value, label]) => ({ value, label }))}
-            />
-          ) : (
-            <GridCell value={employmentLabel(row.original.employment_type)} />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <SelectCell
+                  value={g.cellValue(row.original, "employment_type", row.original.employment_type as PersonPatch["employment_type"]) ?? ""}
+                  onChange={(v) => g.setCell(row.original.id, "employment_type", (v || undefined) as PersonPatch["employment_type"])}
+                  label={`Employment type for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "employment_type")}
+                  options={Object.entries(EMPLOYMENT_LABELS).map(([value, label]) => ({ value, label }))}
+                />
+              ) : (
+                <GridCell value={employmentLabel(row.original.employment_type)} />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         id: "joining_ctc",
@@ -2384,26 +2518,31 @@ export function UsersTab({
               disagreement for a person to interpret, not corrupted data. Before
               any rise, which is the common case, there is no such effect at
               all: today's salary moves with it. -- */
-        cell: ({ row }) =>
-          tableEdit ? (
-            <MoneyCell
-              annual={cellValue(row.original, "joining_ctc", row.original.joining_ctc ?? undefined) ?? null}
-              onChangeAnnual={(v) => setCell(row.original.id, "joining_ctc", v ?? undefined)}
-              label={`Joining salary for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "joining_ctc")}
-            />
-          ) : (
-            /* -- MONTHLY, because the cell beside it is typed monthly.
-                  This column read annual while `MoneyCell` two lines up takes a
-                  monthly figure, so one cell showed ₹1,80,000 until you clicked
-                  it and then showed ₹15,000. `moneyMonthly`'s own docstring
-                  names that as the bug it exists to remove, and this table was
-                  missed when the rest of the product moved (0061). -- */
-            <GridCell
-              value={moneyMonthly(row.original.joining_ctc)}
-              className="tabular"
-            />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <MoneyCell
+                  annual={g.cellValue(row.original, "joining_ctc", row.original.joining_ctc ?? undefined) ?? null}
+                  onChangeAnnual={(v) => g.setCell(row.original.id, "joining_ctc", v ?? undefined)}
+                  label={`Joining salary for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "joining_ctc")}
+                />
+              ) : (
+                /* -- MONTHLY, because the cell beside it is typed monthly.
+                      This column read annual while `MoneyCell` two lines up takes a
+                      monthly figure, so one cell showed ₹1,80,000 until you clicked
+                      it and then showed ₹15,000. `moneyMonthly`'s own docstring
+                      names that as the bug it exists to remove, and this table was
+                      missed when the rest of the product moved (0061). -- */
+                <GridCell
+                  value={moneyMonthly(row.original.joining_ctc)}
+                  className="tabular"
+                />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         id: "current_ctc",
@@ -2417,21 +2556,26 @@ export function UsersTab({
         // §5: salary is readable by HR_ADMIN and MD only, and this screen is
         // guarded to exactly those two. It appears here and nowhere a HOD or an
         // employee can reach.
-        cell: ({ row }) =>
-          tableEdit ? (
-            // Typed MONTHLY, stored annual — the conversion happens in the cell
-            // so the unit crosses the boundary exactly once (0061).
-            <MoneyCell
-              annual={cellValue(row.original, "current_ctc", row.original.current_ctc ?? undefined) ?? null}
-              onChangeAnnual={(v) => setCell(row.original.id, "current_ctc", v ?? undefined)}
-              label={`Salary for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "current_ctc")}
-            />
-          ) : (
-            // Monthly, matching the editable cell above and every other
-            // salary readout in the product.
-            <GridCell value={moneyMonthly(row.original.current_ctc)} className="tabular" />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                // Typed MONTHLY, stored annual — the conversion happens in the cell
+                // so the unit crosses the boundary exactly once (0061).
+                <MoneyCell
+                  annual={g.cellValue(row.original, "current_ctc", row.original.current_ctc ?? undefined) ?? null}
+                  onChangeAnnual={(v) => g.setCell(row.original.id, "current_ctc", v ?? undefined)}
+                  label={`Salary for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "current_ctc")}
+                />
+              ) : (
+                // Monthly, matching the editable cell above and every other
+                // salary readout in the product.
+                <GridCell value={moneyMonthly(row.original.current_ctc)} className="tabular" />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "last_increment_date",
@@ -2451,28 +2595,33 @@ export function UsersTab({
         header: "Review every",
         size: 130,
         meta: { align: "right" },
-        cell: ({ row }) =>
-          tableEdit ? (
-            <NumberCell
-              value={
-                cellValue(
-                  row.original,
-                  "increment_frequency_months",
-                  row.original.increment_frequency_months ?? undefined,
-                ) ?? null
-              }
-              onChange={(v) => setCell(row.original.id, "increment_frequency_months", v ?? undefined)}
-              label={`Months between salary reviews for ${row.original.full_name}`}
-              dirty={isDirty(row.original.id, "increment_frequency_months")}
-              min={1}
-              max={60}
-            />
-          ) : (
-            <GridCell
-              value={row.original.increment_frequency_months === null ? "—" : `${row.original.increment_frequency_months} months`}
-              className="tabular"
-            />
-          ),
+        cell: ({ row }) => (
+          <EditingCell>
+            {(g) =>
+              tableEdit ? (
+                <NumberCell
+                  value={
+                    g.cellValue(
+                      row.original,
+                      "increment_frequency_months",
+                      row.original.increment_frequency_months ?? undefined,
+                    ) ?? null
+                  }
+                  onChange={(v) => g.setCell(row.original.id, "increment_frequency_months", v ?? undefined)}
+                  label={`Months between salary reviews for ${row.original.full_name}`}
+                  dirty={g.isDirty(row.original.id, "increment_frequency_months")}
+                  min={1}
+                  max={60}
+                />
+              ) : (
+                <GridCell
+                  value={row.original.increment_frequency_months === null ? "—" : `${row.original.increment_frequency_months} months`}
+                  className="tabular"
+                />
+              )
+            }
+          </EditingCell>
+        ),
       },
       {
         accessorKey: "next_increment_date",
@@ -2538,7 +2687,12 @@ export function UsersTab({
           never become editable at all. The rest are the same story: `drafts`
           reaches these through `cellValue`/`isDirty`, so without them a typed
           character would not appear in its own cell. -- */
-    [activeAction, currentProfileId, tableEdit, cellValue, isDirty, setCell, departments, people],
+    /* -- `cellValue`, `isDirty` and `setCell` are NOT here, deliberately.
+          They change identity on every keystroke, and listing them rebuilt
+          every cell in the sheet as a new component type. The cells read them
+          from `UsersEditingContext` instead, which re-renders them without
+          replacing them. -- */
+    [activeAction, currentProfileId, tableEdit, departments, people],
   );
 
   return (
@@ -2799,80 +2953,69 @@ export function UsersTab({
         </p>
       ) : null}
 
-      <DataGrid
-        data={rows}
-        columns={columns}
-        storageKey="appraise.people.column-widths"
-        /* -- Raised with the two official columns (240 + 170). Left at 1480
-              they would have been squeezed out of their own declared widths and
-              the frozen name column would sit against a crushed grid. -- */
-        minWidth={1890}
-        /* -- The employee code IS the row number here (F58-style), so it takes
-              the gutter rather than sitting in a column beside a counter saying
-              the same thing. In EDIT MODE the gutter renders the field instead
-              of the open-button — safe because the row's ⋯ menu carries the
-              same action and is what a keyboard user reaches anyway. -- */
-        rowLabel={{
-          header: "Employee ID",
-          value: (p) => p.employee_code || "—",
-          cell: tableEdit
-            ? (p) => (
-                <TextCell
-                  value={cellValue(p, "employee_code", p.employee_code ?? "") ?? ""}
-                  onChange={(v) => setCell(p.id, "employee_code", v)}
-                  label={`Employee ID for ${p.full_name}`}
-                  dirty={isDirty(p.id, "employee_code")}
-                />
-              )
-            : undefined,
-        }}
-        /* -- Ticks only in delete mode, so the ordinary list is unchanged. The
-              header box covers the people SHOWN — never the whole roster — and
-              your own account is not among them. -- */
-        selection={
-          deleteMode
-            ? {
-                isSelected: (person) => selected.has(person.id),
-                onToggle: (person) => toggleSelected(person.id),
-                onToggleAll: toggleAllVisible,
-                allSelected: allVisibleSelected,
-                someSelected: someVisibleSelected,
-                label: (person) => `Select ${person.full_name}`,
-                allLabel: `Select all ${selectable.length} people shown`,
-                disabled: (person) =>
-                  person.id === currentProfileId
-                    ? { reason: "This is your own account and cannot be deleted." }
-                    : null,
-              }
-            : undefined
-        }
-        /* -- Clicking a row opens that person's record, in every mode.
-              Making it TICK the row while choosing who to delete was the
-              obvious move and is wrong: `onRowClick` is also what the gutter
-              button and the phone card's "Open person" button call, and both
-              say "Open" — a control that ticks a box while announcing that it
-              opens somebody is worse than one extra click. The tick has its own
-              control, on the row and on the card. -- */
-        onRowClick={(person) => setEditing(person)}
-        empty={
-          people.length === 0 ? (
-            <EmptyState
-              title="Nobody has been added yet"
-              body="Add the first person. Start with yourself, so you do not lock yourself out."
-            />
-          ) : (
-            <EmptyState
-              title="Nobody matches those filters"
-              body="Widen the search, or clear the status filter."
-            />
-          )
-        }
-        status={
-          <span className="tabular text-body-sm text-ink">
-            {rows.length} of {people.length} {people.length === 1 ? "person" : "people"}
-          </span>
-        }
-      />
+      <UsersEditingContext.Provider value={editingValue}>
+        <DataGrid
+          data={rows}
+          columns={columns}
+          storageKey="appraise.people.column-widths"
+          /* -- Raised with the two official columns (240 + 170). Left at 1480
+                they would have been squeezed out of their own declared widths and
+                the frozen name column would sit against a crushed grid. -- */
+          minWidth={1890}
+          /* -- The employee code IS the row number here (F58-style), so it takes
+                the gutter rather than sitting in a column beside a counter saying
+                the same thing. In EDIT MODE the gutter renders the field instead
+                of the open-button — safe because the row's ⋯ menu carries the
+                same action and is what a keyboard user reaches anyway. -- */
+          rowLabel={rowLabel}
+          /* -- Ticks only in delete mode, so the ordinary list is unchanged. The
+                header box covers the people SHOWN — never the whole roster — and
+                your own account is not among them. -- */
+          selection={
+            deleteMode
+              ? {
+                  isSelected: (person) => selected.has(person.id),
+                  onToggle: (person) => toggleSelected(person.id),
+                  onToggleAll: toggleAllVisible,
+                  allSelected: allVisibleSelected,
+                  someSelected: someVisibleSelected,
+                  label: (person) => `Select ${person.full_name}`,
+                  allLabel: `Select all ${selectable.length} people shown`,
+                  disabled: (person) =>
+                    person.id === currentProfileId
+                      ? { reason: "This is your own account and cannot be deleted." }
+                      : null,
+                }
+              : undefined
+          }
+          /* -- Clicking a row opens that person's record, in every mode.
+                Making it TICK the row while choosing who to delete was the
+                obvious move and is wrong: `onRowClick` is also what the gutter
+                button and the phone card's "Open person" button call, and both
+                say "Open" — a control that ticks a box while announcing that it
+                opens somebody is worse than one extra click. The tick has its own
+                control, on the row and on the card. -- */
+          onRowClick={openPerson}
+          empty={
+            people.length === 0 ? (
+              <EmptyState
+                title="Nobody has been added yet"
+                body="Add the first person. Start with yourself, so you do not lock yourself out."
+              />
+            ) : (
+              <EmptyState
+                title="Nobody matches those filters"
+                body="Widen the search, or clear the status filter."
+              />
+            )
+          }
+          status={
+            <span className="tabular text-body-sm text-ink">
+              {rows.length} of {people.length} {people.length === 1 ? "person" : "people"}
+            </span>
+          }
+        />
+      </UsersEditingContext.Provider>
 
       <AddPersonDialog
         open={addOpen}
