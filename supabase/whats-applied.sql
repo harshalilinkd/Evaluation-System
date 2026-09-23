@@ -171,6 +171,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0106_delete_launched_cycle', 'binned_cycle_deletable',
      'a cycle in the recycle bin can be destroyed, launched or not',
      'Without it 0009''s trigger refuses any cycle past DRAFT, so "Delete for good" fails on every cycle anybody would want removed. WITH it a binned cycle really is destroyed - answers, ratings and the frozen question set - while a LIVE one still cannot be, salary history survives detached, and the audit row remains.'),
+  ('0109_salary_is_joining_plus_increments', 'salary_is_a_sum',
+     'a salary is joining + every rise, and the sheet states the RISE',
+     'Without it the increment column is read as a NEW SALARY: a 2,000 rise typed into a box labelled Amount becomes a salary OF 2,000, and every screen then reports the last rise as what somebody is paid. Detected on rebuild_salary_chain walking FORWARD from the baseline — the function existing is not enough, because the direction is the whole change.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -643,6 +646,15 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'compute_due_items'
          and pg_get_functiondef(p.oid) like '%v_created := v_created + v_batch%')
+    /* -- Anchored on what 0109 WROTE — the chain walking FORWARD from the
+          baseline — not on the function merely existing. The direction IS the
+          migration: a `rebuild_salary_chain` that subtracted would satisfy a
+          name check and leave the reported bug in place. 0056's false positive
+          was exactly this shape from the other side. -- */
+    when 'salary_is_a_sum' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'rebuild_salary_chain'
+         and pg_get_functiondef(p.oid) like '%v_prev + coalesce(v_row.hike_amount%')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'

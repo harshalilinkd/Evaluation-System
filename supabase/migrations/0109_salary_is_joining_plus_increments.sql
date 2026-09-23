@@ -545,7 +545,7 @@ begin
     from (values ('rebuild_salary_chain'), ('record_increment'), ('correct_increment'), ('delete_increment')) t(n)
    where not exists (
      select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
-      where ns.nspname = 'public' and p.proname = t.n);
+      where ns.nspname = current_schema() and p.proname = t.n);
   if v_missing > 0 then
     raise exception '0109: % of the four functions were not created.', v_missing;
   end if;
@@ -555,7 +555,7 @@ begin
         only its own clause (F/0108). This is that lesson, applied. -- */
   select pg_get_functiondef(p.oid) into v_def
     from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
-   where ns.nspname = 'public' and p.proname = 'salary_history_is_append_only';
+   where ns.nspname = current_schema() and p.proname = 'salary_history_is_append_only';
   if v_def is null then
     raise exception '0109: salary_history_is_append_only is missing.';
   end if;
