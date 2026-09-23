@@ -17,30 +17,23 @@ export const EMPLOYMENT_COLUMNS: ReadonlyArray<{
   { header: "employee_code", required: true, hint: "must already exist in the system" },
   { header: "date_of_joining", hint: "DD-MM-YYYY" },
   { header: "last_increment_date", hint: "DD-MM-YYYY — blank for a new joiner" },
-  { header: "current_ctc", hint: "480000, or ₹4,80,000" },
+  /* -- NO SALARY COLUMN (0109). This sheet sets DATES and the review schedule.
+        A salary is joining plus every rise, so a figure stated here would be a
+        second answer to a question the ledger already answers — and 0028's own
+        row composed for it carries a null `hike_amount`, which under the new
+        model adds nothing to the sum, so it would go quietly uncounted.
+        Pay is entered on Settings › Salary history, on a person's Employment
+        page, or through the Users import. A sheet still carrying the column is
+        read and ignored. -- */
   { header: "employment_type", hint: "PERMANENT / PROBATION / CONTRACT / TRAINEE" },
   { header: "increment_frequency_months", hint: "12 if left blank" },
 ];
 
-/** An optional rupee figure. Empty means "not in this file", never zero. */
-const money = z.preprocess(
-  (value) => {
-    if (value === null || value === undefined) return undefined;
-    const text = String(value).replace(/[₹,\s]/g, "");
-    return text === "" ? undefined : Number(text);
-  },
-  z
-    .number({ invalid_type_error: "The salary is not a number" })
-    .positive("A salary must be more than zero")
-    .max(100_000_000, "That salary looks too large — check the figure")
-    .optional(),
-);
 
 export const employmentRowSchema = z.object({
   employee_code: z.string().trim().min(1, "The employee code is missing"),
   date_of_joining: z.string().optional(),
   last_increment_date: z.string().optional(),
-  current_ctc: money,
   employment_type: z
     .enum(["PERMANENT", "PROBATION", "CONTRACT", "TRAINEE"], {
       errorMap: () => ({ message: "Employment type must be PERMANENT, PROBATION, CONTRACT or TRAINEE" }),
@@ -77,7 +70,6 @@ export type EmploymentPreviewRow = {
     profile_id: string;
     date_of_joining?: string;
     last_increment_date?: string;
-    current_ctc?: number;
     employment_type?: string;
     increment_frequency_months?: number;
   };

@@ -271,7 +271,10 @@ export const createUserSchema = z.object({
         meets. -- */
   phone_required: z.boolean().default(true),
   joining_ctc: money("Joining salary"),
-  current_ctc: money("Current salary"),
+  /* -- NO `current_ctc` (0109). A salary is joining plus every rise, so there
+        is nothing here to state — and a field that is accepted and then
+        ignored is worse than one that is refused: the caller is told nothing,
+        and the figure simply does not appear. The rise below is what moves it. -- */
   last_increment_amount: money("Last increment amount"),
 
   /**

@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { commitEmploymentImport, previewEmploymentImport } from "@/lib/employment/actions";
 import { EMPLOYMENT_COLUMNS, employmentTemplate, type EmploymentPreviewRow } from "@/lib/employment/import";
-import { formatDate, formatInr } from "@/lib/utils/date";
+import { formatDate } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 import { SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog";
 
@@ -219,7 +219,7 @@ function ImportForm() {
           <table className="w-full min-w-[760px] border-collapse">
             <thead>
               <tr className="border-b border-rule bg-surface-mute">
-                {["Row", "Code", "Name", "Joined", "Last increment", "Current CTC", ""].map((h) => (
+                {["Row", "Code", "Name", "Joined", "Last increment", ""].map((h) => (
                   <th key={h} className="type-label px-4 py-2 text-left font-bold text-ink">
                     {h}
                   </th>
@@ -245,9 +245,6 @@ function ImportForm() {
                   </td>
                   <td className="px-4 py-2 tabular text-body-sm text-ink-muted">
                     {row.value?.last_increment_date ? formatDate(row.value.last_increment_date) : "—"}
-                  </td>
-                  <td className="px-4 py-2 tabular text-body-sm text-ink">
-                    {row.value?.current_ctc !== undefined ? formatInr(row.value.current_ctc) : "—"}
                   </td>
                   <td className="px-4 py-2 font-sans text-body-sm text-critical">{row.error ?? ""}</td>
                 </tr>

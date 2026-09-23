@@ -353,7 +353,7 @@ async function amendPerson(
         and no baseline. Anybody who has ever been paid anything on this system
         fails all three and is left exactly as they are. It fills a gap; it
         never overwrites an answer. -- */
-  const salaryOffered = input.joining_ctc !== undefined || input.current_ctc !== undefined;
+  const salaryOffered = input.joining_ctc !== undefined || (input.increments ?? []).length > 0;
 
   if (salaryOffered) {
     const [pay, record] = await Promise.all([
@@ -756,7 +756,7 @@ async function provisionPerson(
   const hasEmployment =
     Boolean(input.date_of_joining) ||
     input.joining_ctc !== undefined ||
-    input.current_ctc !== undefined;
+    input.last_increment_amount !== undefined;
 
   if (hasEmployment) {
     const { error: employmentError } = await supabase.from("employment_records").insert({

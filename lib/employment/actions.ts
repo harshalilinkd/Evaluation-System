@@ -587,7 +587,6 @@ async function buildEmploymentPreview(
         profile_id: person.id,
         ...(joining ? { date_of_joining: joining } : {}),
         ...(lastIncrement ? { last_increment_date: lastIncrement } : {}),
-        ...(parsed.data.current_ctc !== undefined ? { current_ctc: parsed.data.current_ctc } : {}),
         ...(parsed.data.employment_type ? { employment_type: parsed.data.employment_type } : {}),
         ...(parsed.data.increment_frequency_months !== undefined
           ? { increment_frequency_months: parsed.data.increment_frequency_months }
