@@ -522,7 +522,7 @@ export function EmploymentClient({
             A reset effect would render once with the stale values first, which
             is visible as the fields changing under the pointer (P10-11). -- */}
       <SalaryDialog
-        key={salaryMode ?? "closed"}
+        key={salaryMode ?? "salary-closed"}
         open={salaryOpen}
         mode={salaryMode ?? "change"}
         profileId={person.id}
@@ -578,7 +578,7 @@ export function EmploymentClient({
              to do the job its comment claimed. The two dialogs above are keyed
              at their call site and work. -- */}
       <CorrectRowDialog
-        key={correctingRow?.id ?? "closed"}
+        key={correctingRow?.id ?? "correct-closed"}
         row={correctingRow}
         profileId={person.id}
         onClose={() => setCorrectingRow(null)}
