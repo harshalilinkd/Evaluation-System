@@ -131,6 +131,41 @@ function slotKey(profileId: string, index: number) {
   return `${profileId}#${index}`;
 }
 
+/**
+ * HOW MANY "Increment N" COLUMN PAIRS THE SHEET DRAWS.
+ *
+ * Always one past the furthest anybody has got, so there is always a place to
+ * put the next rise and no separate "add a column" step.
+ *
+ * "Furthest" counts what is TYPED as well as what is stored, and that is the
+ * bug this answers. Reported as "i'm not getting option to add 1 more
+ * increment row": somebody with two saved rises got a third column, filled it,
+ * and then had nowhere to put a fourth until they saved and the page came back
+ * from the server. The spare was being consumed by the very draft that needed
+ * it, so the sheet ran out of room at exactly the moment it was being used —
+ * and that reads as a limit of three rather than as a round trip not yet made.
+ *
+ * A draft slot only counts once something is IN it. An empty spare that has
+ * merely been focused must not conjure the next one, or the sheet grows a
+ * column every time somebody tabs through it.
+ *
+ * Exported so it can be tested rather than restated: a probe that
+ * reimplements this rule is not a check of this rule.
+ */
+export function incrementColumnCount(
+  rows: ReadonlyArray<{ increments: ReadonlyArray<unknown> }>,
+  slotDrafts: ReadonlyMap<string, SlotDraft>,
+): number {
+  let furthest = Math.max(0, ...rows.map((r) => r.increments.length));
+  for (const [key, draft] of slotDrafts) {
+    const filled = (draft.effectiveFrom ?? "").trim() !== "" || (draft.amount ?? null) !== null;
+    if (!filled) continue;
+    const index = Number(key.split("#")[1]);
+    if (Number.isFinite(index)) furthest = Math.max(furthest, index);
+  }
+  return furthest + 1;
+}
+
 /* ---------- The cells, as real components ---------- */
 //
 // NAMED AND CAPITALISED because TanStack renders a `cell` with
@@ -288,9 +323,24 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
   const [saving, setSaving] = React.useState(false);
   const [result, setResult] = React.useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  // Always one column PAST whoever has the most, so there is always a place
-  // to add the next increment without a separate "add a column" step.
-  const maxIncrements = Math.max(0, ...rows.map((r) => r.increments.length)) + 1;
+  /* -- ALWAYS ONE PAST THE FURTHEST ANYBODY HAS GOT, so there is always a
+        place to put the next rise and no separate "add a column" step.
+
+        "Furthest" counts what is TYPED as well as what is stored. Reported as
+        "i'm not getting option to add 1 more increment row": somebody with two
+        saved rises got a third column, filled it, and then had nowhere to put
+        a fourth until they saved and the page came back from the server. The
+        spare was being consumed by the draft that needed it, so the sheet ran
+        out of room at exactly the moment it was being used — and HR reads that
+        as a limit of three rather than as a round trip they have not made yet.
+
+        A draft slot only counts once something is in it. An empty spare being
+        merely focused must not conjure the next one, or the sheet grows a
+        column every time somebody tabs through it. -- */
+  const maxIncrements = React.useMemo(
+    () => incrementColumnCount(rows, slotDrafts),
+    [rows, slotDrafts],
+  );
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -533,8 +583,13 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
           the input being typed into. See `GridEditing` above.
 
           `maxIncrements` stays because a new column pair really is a different
-          column set; it changes when the DATA gains a rise, never while
-          somebody is typing. -- */
+          column set. It now moves while somebody is typing, too — the spare
+          column follows drafts as well as saved rises — and that is safe for
+          the reason the paragraph above gives: every `cell` is a named
+          module-scope component, so recomputing this array hands React the
+          SAME component type at the same position under the same `cell.id`
+          key. Existing cells update; only the appended pair mounts. It was
+          the closures that remounted them, never the recompute. -- */
   }, [maxIncrements]);
 
   return (
