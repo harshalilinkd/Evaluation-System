@@ -1615,6 +1615,38 @@ export type Database = {
         Returns: Json;
       };
       /**
+       * 0109. A salary is what somebody joined on plus every rise since, and
+       * these three are the only way that sum is written.
+       *
+       * `record_increment` and `correct_increment` take THE RISE — the figure
+       * HR states — and derive previous/new/percent from it. `rebuild_salary_chain`
+       * is what they both end in, so nothing can recompute a salary for itself
+       * and disagree.
+       */
+      rebuild_salary_chain: {
+        Args: { p_profile_id: string };
+        Returns: number;
+      };
+      record_increment: {
+        Args: {
+          p_profile_id: string;
+          p_effective_from: string;
+          p_amount: number;
+          p_reason?: string;
+          p_note?: string | null;
+          p_evaluation_id?: string | null;
+        };
+        Returns: string;
+      };
+      correct_increment: {
+        Args: { p_id: string; p_effective_from: string; p_amount: number };
+        Returns: Json;
+      };
+      delete_increment: {
+        Args: { p_id: string };
+        Returns: undefined;
+      };
+      /**
        * The one door into an append-only table (0093). Corrects a REAL
        * salary_history row in place — id/profile_id/evaluation_id/recorded_by/
        * recorded_at cannot move even through this path, and the whole chain's

@@ -122,60 +122,11 @@ export async function saveEmployment(
   return { ok: true, data: { profileId: v.profileId } };
 }
 
-/* ---------- Salary change ---------- */
+/* -- THE OLD SALARY-CHANGE SCHEMA IS GONE WITH ITS FUNCTION (0109).
+      It described a NEW SALARY and derived the rise from it. A salary is now
+      joining plus every rise, so the figure that travels is the increment —
+      see `incrementSchema` further down. -- */
 
-const salarySchema = z.object({
-  profileId: z.string().uuid(),
-  effectiveFrom: z.string().min(1, "An effective-from date is required"),
-  newCtc: z.coerce.number().positive("The new CTC must be greater than zero"),
-  /* -- JOINING IS NOT A REVISION, so it is not on this list.
-        A joining salary is the baseline of the ledger, not a change to it, and
-        it lives in `employment_records.joining_ctc` where it cannot be
-        duplicated and cannot be compared against anything. Leaving it here let
-        somebody file "the first salary this person was ever paid" as a rise
-        over the salary they are on today — which is how a 620% hike got
-        written. `setJoiningSalary` below is its own path. -- */
-  reason: z.enum([
-    "ANNUAL_INCREMENT",
-    "PROMOTION",
-    "CORRECTION",
-    "MARKET_ADJUSTMENT",
-    // 0094. Not scheduled like the others — applies only where management
-    // has promised a performance-based raise 3 months after joining, which
-    // is not every employee.
-    "THREE_MONTH_INCREMENT",
-  ]),
-  /* -- OPTIONAL, at the owner's explicit instruction. This reverses P19-8,
-        which made it required on the reasoning that "optional would mean
-        usually blank, and a pay change with no explanation is the thing
-        somebody has to reconstruct from memory two years later."
-
-        That reasoning has not stopped being true, so the trade is recorded
-        rather than absorbed: the `reason` is still required and still carries
-        most of the meaning (a promotion explains itself), and `recorded_by` and
-        `effective_from` still say who and when. What is lost is the sentence
-        that distinguishes two promotions on the same day.
-
-        An empty string is stored as NULL rather than "": the history renders an
-        em dash for a missing note, and a blank string would render as nothing
-        at all and read as a rendering fault. -- */
-  note: z
-    .string()
-    .trim()
-    .max(500, "Keep the note under 500 characters")
-    .optional()
-    .transform((value) => (value && value.length > 0 ? value : null)),
-  evaluationId: z.string().uuid().nullable().optional(),
-});
-
-/**
- * Appends to salary_history and moves current_ctc.
- *
- * The previous figure, the hike and the percentage are all COMPUTED here from
- * the record, never accepted from the caller: a client that could send its own
- * `previous_ctc` could write a history that disagrees with the record it came
- * from, and the whole point of this table is that it is evidence.
- */
 /* ---------- The joining salary ---------- */
 
 const joiningSalarySchema = z.object({
@@ -286,167 +237,13 @@ export async function addJoiningSalary(input: {
   return { ok: true, data: { ok: true } };
 }
 
-export async function addSalaryChange(
-  input: Omit<z.input<typeof salarySchema>, "newCtc"> & { newCtc: string | number },
-): Promise<CycleResult<{ id: string }>> {
-  const auth = await requireHrOrMd();
-  if (!auth.ok) return auth;
-
-  const parsed = salarySchema.safeParse(input);
-  if (!parsed.success) {
-    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the highlighted fields.");
-  }
-  const v = parsed.data;
-  const supabase = await createClient();
-
-  const { data: record } = await supabase
-    .from("employment_records")
-    .select("current_ctc, joining_ctc")
-    .eq("profile_id", v.profileId)
-    .maybeSingle();
-
-  if (!record) {
-    return cycleError(
-      "NO_RECORD",
-      "This person has no employment record yet. Add their joining details first.",
-    );
-  }
-
-  /* -- WHAT CAME BEFORE THIS DATE — not what is being paid today.
-        This read `record.current_ctc`, which is the CURRENT figure whatever
-        date the new row carries. So recording a joining salary AFTER a later
-        raise had already been entered produced: previous = the later raise,
-        and a hike computed backwards. A ₹25,000 raise recorded first, then a
-        ₹1,80,000 joining salary dated nine months earlier, came out as a 620%
-        increase — a number that is not wrong by a rounding error, it is
-        describing an event that never happened, in the one table whose whole
-        job is to be evidence (P19-7).
-
-        The code twenty lines below already got this right for the OTHER half
-        of the same question: `supersedes` refuses to move today's figure when
-        the row is backdated. The two now reason the same way.
-
-        Strictly EARLIER, not on-or-before: a row effective the same day is not
-        what came before this one, and treating it as such would let two entries
-        made on one date each claim the other as their predecessor. -- */
-  const { data: preceding } = await supabase
-    .from("salary_history")
-    .select("new_ctc")
-    .eq("profile_id", v.profileId)
-    // Legacy JOINING rows are excluded: the baseline is the column now, and
-    // counting an old row as well would measure a revision against the same
-    // figure twice depending on which was written first.
-    .neq("reason", "JOINING")
-    .lt("effective_from", v.effectiveFrom)
-    .order("effective_from", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  /* -- A joining salary has nothing before it, by definition.
-        Belt and braces over the date lookup, for the case that produced this
-        report: HR entering history out of order. If somebody mis-dates a
-        joining salary after an existing row, the lookup would find a
-        predecessor and compute a hike for the first salary somebody was ever
-        paid, which is nonsense whatever the dates say. -- */
-  /* -- THE BASELINE IS THE FALLBACK.
-        First revision after joining → measured against `joining_ctc`, which is
-        what somebody actually started on. Every later one → against the
-        revision immediately before it. That is the spec and it is also just
-        how a pay ledger reads: each line explains itself against the line
-        above, and the top line is what they joined on.
-
-        Null only when there is neither — a person with no baseline recorded and
-        no history. The row still stands as "this is the salary from this date",
-        with the hike left null rather than invented (P19D-6). -- */
-  const previous =
-    preceding?.new_ctc !== null && preceding?.new_ctc !== undefined
-      ? Number(preceding.new_ctc)
-      : record.joining_ctc !== null && record.joining_ctc !== undefined
-        ? Number(record.joining_ctc)
-        : null;
-  const hikeAmount = previous === null ? null : Math.round((v.newCtc - previous) * 100) / 100;
-  const hikePct =
-    previous === null || previous === 0
-      ? null
-      : Math.round(((v.newCtc - previous) / previous) * 10000) / 100;
-
-  const { data: inserted, error } = await supabase
-    .from("salary_history")
-    .insert({
-      profile_id: v.profileId,
-      effective_from: v.effectiveFrom,
-      previous_ctc: previous,
-      new_ctc: v.newCtc,
-      hike_amount: hikeAmount,
-      hike_pct: hikePct,
-      reason: v.reason,
-      evaluation_id: v.evaluationId ?? null,
-      recorded_by: auth.session.profile.id,
-      note: v.note,
-    })
-    .select("id")
-    .single();
-
-  if (error || !inserted) {
-    return cycleError("SAVE_FAILED", `Could not record the salary change: ${error?.message ?? ""}`);
-  }
-
-  /* -- The record follows the history, through 0066's function.
-
-        THIS USED TO BE A BARE `.update()` HERE, and it had two faults.
-
-        It never touched `last_increment_date`, so recording an annual
-        increment moved the pay and left the increment cycle where it was —
-        and `next_increment_date` is derived from that column, so the calendar
-        and the nightly sweep went on chasing the old date. That is the bug
-        this was reported as.
-
-        And `employment: hr updates` (0023) is `using (is_hr())`, so for the MD
-        the update matched ZERO ROWS — which PostgREST reports as success. The
-        ledger gained a row, the record kept a null figure, and the screen said
-        it had worked. Third appearance of that class (FIX-14, the worker
-        sheet); a write that cannot fail is not a write.
-
-        One function now moves both, or neither. The result is READ, so a
-        refusal is a refusal rather than a silence. -- */
-  const { error: applyError } = await supabase.rpc("apply_salary_to_record", {
-    p_profile_id: v.profileId,
-    p_new_ctc: v.newCtc,
-    p_effective_from: v.effectiveFrom,
-    p_reason: v.reason,
-  });
-
-  if (applyError) {
-    /* -- The ledger row is already in and cannot be taken out — salary_history
-          is append-only by trigger for every caller (P19-3). So this reports
-          precisely what happened rather than pretending nothing did: the entry
-          stands, the record did not follow it. -- */
-    return cycleError(
-      "RECORD_NOT_UPDATED",
-      `The pay entry was recorded, but their employment record could not be updated: ${applyError.message}`,
-    );
-  }
-
-  // §12, and NO FIGURES in the diff. audit_log is readable by a lead for their
-  // own reports (0013), so a salary in a diff would walk straight past §5's
-  // confinement invariant. The row id is enough to find the record.
-  await supabase.rpc("log_admin_action", {
-    p_entity: "salary_history",
-    p_entity_id: inserted.id,
-    p_action: "salary.recorded",
-    p_diff: {
-      after: { profile_id: v.profileId, reason: v.reason, effective_from: v.effectiveFrom },
-    } as Json,
-  });
-
-  // /admin/people is a redirect now (Team review moved into Settings); the
-  // data it used to serve is read on /admin/settings, so that is what has to
-  // be revalidated for the tab to show the change without a manual refresh.
-  revalidatePath("/admin/settings");
-  revalidatePath("/admin/people");
-  revalidatePath("/admin/increments");
-  return { ok: true, data: { id: inserted.id } };
-}
+/* -- `addSalaryChange` IS GONE (0109), and that is deliberate rather than
+      tidying. It took a NEW SALARY and derived the rise between it and
+      whatever preceded the date. A salary is now joining plus every rise, so
+      that direction is the wrong way round — and an action of that shape left
+      where the next person reaches for it is the landmine this log keeps
+      having to remove (P22 had to delete a template for the same reason).
+      `recordIncrement` below takes the figure HR states. -- */
 
 /* ---------- Correcting a ledger row in place (0093) ---------- */
 
@@ -531,6 +328,139 @@ export async function correctSalaryHistoryEntry(
     ok: true,
     data: { figureMoved: Boolean(result.figure_moved), clockMoved: Boolean(result.clock_moved) },
   };
+}
+
+/* ---------- Recording a rise by its amount (0109) ---------- */
+
+const incrementSchema = z.object({
+  profileId: z.string().uuid(),
+  effectiveFrom: z.string().min(1, "An effective-from date is required."),
+  amount: z.coerce.number().positive("An increment has to be more than zero."),
+  reason: z
+    .enum(["ANNUAL_INCREMENT", "PROMOTION", "CORRECTION", "MARKET_ADJUSTMENT", "THREE_MONTH_INCREMENT"])
+    .default("ANNUAL_INCREMENT"),
+  note: z.string().trim().max(500).optional(),
+});
+
+/**
+ * A rise, stated the way HR states it.
+ *
+ * `addSalaryChange` above takes a NEW SALARY and derives the rise from what
+ * preceded it. This takes the rise and derives the salary. They describe the
+ * same event and both end in `rebuild_salary_chain`, so they cannot disagree
+ * about what the ledger becomes — but only one of them asks for the figure that
+ * is actually written on an increment letter, and this is it (0109).
+ *
+ * Nothing is computed here. The function is the one implementation of
+ * "joining + every rise", and a percentage worked out on this side would be a
+ * second answer to the number a pay decision is signed against (P21-2).
+ */
+export async function recordIncrement(
+  input: Omit<z.input<typeof incrementSchema>, "amount"> & { amount: string | number },
+): Promise<CycleResult<{ id: string }>> {
+  const auth = await requireHrOrMd();
+  if (!auth.ok) return auth;
+
+  const parsed = incrementSchema.safeParse(input);
+  if (!parsed.success) {
+    return cycleError("INVALID", parsed.error.issues[0]?.message ?? "Check the highlighted fields.");
+  }
+  const v = parsed.data;
+  const supabase = await createClient();
+
+  const { data, error } = await supabase.rpc("record_increment", {
+    p_profile_id: v.profileId,
+    p_effective_from: v.effectiveFrom,
+    p_amount: v.amount,
+    p_reason: v.reason,
+    p_note: v.note ?? null,
+  });
+
+  if (error) {
+    // The function raises a sentence somebody can act on for each refusal —
+    // not entitled, no employment record, a rise of nothing — so it is passed
+    // through rather than replaced with a generic failure (§0.7).
+    return cycleError("SAVE_FAILED", error.message);
+  }
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+  revalidatePath("/admin/increments");
+  revalidatePath(`/admin/people/${v.profileId}/employment`);
+  return { ok: true, data: { id: data as string } };
+}
+
+/**
+ * Correcting a rise that was typed wrong.
+ *
+ * 0093's `correctSalaryHistoryEntry` corrects a row by the NEW SALARY it
+ * produced, and stays — it is a legitimate way to say the same thing and is
+ * still what the report's own correction path uses. This one takes the figure
+ * the sheet shows. Both end in `rebuild_salary_chain`, so they cannot disagree
+ * about what the rest of the ledger becomes.
+ *
+ * The row's reason and note are deliberately untouched: correcting a mistyped
+ * amount is not a reason to rewrite why the rise was given.
+ */
+export async function correctIncrement(input: {
+  id: string;
+  profileId: string;
+  effectiveFrom: string;
+  amount: string | number;
+}): Promise<CycleResult<null>> {
+  const auth = await requireHrOrMd();
+  if (!auth.ok) return auth;
+
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return cycleError("INVALID", "An increment has to be more than zero.");
+  }
+  if (!input.effectiveFrom) {
+    return cycleError("INVALID", "An effective-from date is required.");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("correct_increment", {
+    p_id: input.id,
+    p_effective_from: input.effectiveFrom,
+    p_amount: amount,
+  });
+  if (error) return cycleError("SAVE_FAILED", error.message);
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+  revalidatePath("/admin/increments");
+  revalidatePath(`/admin/people/${input.profileId}/employment`);
+  return { ok: true, data: null };
+}
+
+/**
+ * Removing a rise that describes nothing — a row entered against the wrong
+ * person, or an import that filed a salary as an increment.
+ *
+ * Not a convenience: with no way to remove one, a mis-keyed pay line stays on
+ * somebody's record for ever and every later figure is computed against it.
+ * §17's "never delete a submitted layer" is about evaluation layers; this is a
+ * line that never described anything that happened. The function audits the row
+ * before it goes, because afterwards that audit row is the only evidence it
+ * existed (F5-3), and refuses one that came from a closed increment cycle.
+ */
+export async function removeIncrement(input: {
+  id: string;
+  profileId: string;
+}): Promise<CycleResult<null>> {
+  const auth = await requireHrOrMd();
+  if (!auth.ok) return auth;
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("delete_increment", { p_id: input.id });
+  if (error) return cycleError("SAVE_FAILED", error.message);
+
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/people");
+  revalidatePath("/admin/increments");
+  revalidatePath(`/admin/people/${input.profileId}/employment`);
+  return { ok: true, data: null };
 }
 
 /* ---------- Bulk import (P19) ---------- */

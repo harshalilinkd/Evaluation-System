@@ -73,7 +73,7 @@ const IMPORTABLE_ROLES = new Set<string>(ACCESS_LEVELS.map((level) => level.valu
 const SUGGESTED_ROLES = ACCESS_LEVELS.filter((level) => !level.always).map((level) => level.value);
 // The ONE implementation of "what a pay change is". Delegated to rather than
 // reimplemented — see the compensation block in `updatePerson`.
-import { addSalaryChange } from "@/lib/employment/actions";
+import { recordIncrement } from "@/lib/employment/actions";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import type { Json } from "@/types/database";
@@ -374,11 +374,14 @@ async function amendPerson(
       const ledger = buildLedger(input);
       const lastIncrementOn = newestRise(input);
 
-      /* -- The same two columns the create path writes, and for the same
-            reason: somebody joining on ₹1,80,000 with no rise yet IS on
-            ₹1,80,000, so leaving `current_ctc` blank would be false. -- */
+      /* -- OPENED AT THE BASELINE, never at a figure from the file (0109).
+            Somebody joining on ₹1,80,000 with no rise yet IS on ₹1,80,000, so
+            leaving it blank would be false — but a `current_salary` column is
+            no longer a fact the file can state, because a salary is joining
+            plus every rise. `rebuild_salary_chain` sets the real figure the
+            moment the rows are in. -- */
       const figures = {
-        current_ctc: input.current_ctc ?? input.joining_ctc ?? null,
+        current_ctc: input.joining_ctc ?? null,
         joining_ctc: input.joining_ctc ?? null,
         salary_effective_from: lastIncrementOn ?? input.date_of_joining ?? null,
         last_increment_date: lastIncrementOn,
@@ -427,6 +430,11 @@ async function amendPerson(
               error: `Their details and today's salary were saved, but the pay history was not: ${error.message}`,
             };
           }
+          /* -- AND THE SERVER RE-DERIVES IT. The rows above carry the amounts
+                from the file; what somebody is PAID is joining + those amounts,
+                and 0109 owns that sum. Working it out here as well would be a
+                second answer to the same question. -- */
+          await supabase.rpc("rebuild_salary_chain", { p_profile_id: profileId });
         }
       }
     }
@@ -541,59 +549,48 @@ function composeOpeningPay(
         received as a rise. A baseline that cannot be compared against anything
         cannot be got wrong that way. -- */
 
-  /* -- THE CHAIN IS ANCHORED ON TODAY'S SALARY AND WALKS BACKWARDS.
-        Forward from `joining_ctc` was the obvious direction and is the wrong
-        one: joining 25,000 plus a recorded rise of 5,000 comes to 30,000, and
-        if the record says they are on 32,000 today the ledger's newest row
-        would contradict the record it sits beside. Today's figure is the one
-        thing known for certain, so each rise is subtracted from it in turn and
-        the oldest `previous_ctc` falls where it falls — which is honest about
-        there having been earlier rises nobody typed in.
+  /* -- FORWARD FROM THE BASELINE (0109).
 
-        For a single entry this is byte-for-byte the arithmetic that was here
-        before, which is what makes it safe to widen rather than a second
-        algorithm sitting beside the first. -- */
-  if (input.current_ctc !== undefined && ledger.length > 0) {
-    let newCtc = input.current_ctc;
-    let newest = true;
+        It walked BACKWARDS from `current_ctc`, and the comment here gave the
+        reason: joining 25,000 plus a recorded rise of 5,000 comes to 30,000,
+        and if the record said 32,000 today the newest row would contradict the
+        record beside it. That held while today's figure was a fact somebody
+        typed. It is not one any more — a salary IS joining plus every rise to
+        date — so there is nothing left for the chain to contradict, and the
+        direction that reads the way HR states it is the one to keep.
 
-    for (const entry of ledger.slice().reverse()) {
-      /* The increment amount is what makes the previous figure knowable.
-         Failing that, the baseline does — which is what makes the FIRST
-         revision measure against what somebody joined on. */
-      const hike = entry.amount;
-      const previous = hike !== undefined ? newCtc - hike : (input.joining_ctc ?? null);
-      const usable = previous !== null && previous > 0;
+        `hike_amount` is the figure from the file. Everything else on the row is
+        derived, and `rebuild_salary_chain` re-derives all of it server-side
+        immediately afterwards — so these values are a first draft, not the
+        authority. That is deliberate: one implementation of the sum (0109),
+        and this is not it. -- */
+  let running = input.joining_ctc ?? null;
 
-      /* -- STOP BEFORE WRITING A ROW WE CANNOT STAND BEHIND.
-            The newest row's `new_ctc` is `current_ctc` — a figure on the
-            record. Every older row's is one this loop derived, and it is only
-            worth writing while the step above it worked out. Caught by the
-            suite: rises adding to more than the salary produced a row saying
-            somebody was moved to ₹1,000, which is not something anybody
-            typed. The newest row is still written with a null previous, which
-            is the long-standing behaviour for a rise with no amount. -- */
-      if (!usable && !newest) break;
+  for (const entry of ledger) {
+    const hike = entry.amount;
+    const previous = running;
+    const usable = previous !== null && previous > 0 && hike !== undefined;
+    const next = usable ? previous + (hike as number) : null;
 
-      salaryRows.push({
-        profile_id: profileId,
-        effective_from: entry.effective_from,
-        previous_ctc: usable ? previous : null,
-        new_ctc: newCtc,
-        hike_amount: hike ?? null,
-        hike_pct: usable && hike !== undefined ? Math.round((hike / previous) * 10000) / 100 : null,
-        reason: "ANNUAL_INCREMENT",
-        recorded_by: actorProfileId,
-        note,
-      });
+    /* -- A RISE WITH NO AMOUNT STOPS THE CHAIN rather than guessing at one.
+          The row would have nothing to add, and every row after it would then
+          be measured against a figure nobody supplied. -- */
+    if (hike === undefined) break;
 
-      /* Stop rather than guess. An entry with no amount leaves nothing to
-         subtract, and a previous figure at or below zero means the amounts do
-         not describe this salary — either way the older rows would be fiction. */
-      if (!usable || hike === undefined) break;
-      newCtc = previous;
-      newest = false;
-    }
+    salaryRows.push({
+      profile_id: profileId,
+      effective_from: entry.effective_from,
+      previous_ctc: usable ? previous : null,
+      new_ctc: next ?? hike,
+      hike_amount: hike,
+      hike_pct: usable ? Math.round((hike / (previous as number)) * 10000) / 100 : null,
+      reason: "ANNUAL_INCREMENT",
+      recorded_by: actorProfileId,
+      note,
+    });
+
+    if (next === null) break;
+    running = next;
   }
 
   return salaryRows;
@@ -774,7 +771,8 @@ async function provisionPerson(
             leaving `current_ctc` blank would be false. The two columns start
             equal and diverge at the first revision, which is the only thing
             that moves `current_ctc` afterwards. -- */
-      current_ctc: input.current_ctc ?? input.joining_ctc ?? null,
+      // Opened at the baseline; 0109 sets the real figure once the rises are in.
+      current_ctc: input.joining_ctc ?? null,
       joining_ctc: input.joining_ctc ?? null,
     });
 
@@ -821,6 +819,8 @@ async function provisionPerson(
           "The account was created, but their pay history was not saved. Open their Employment tab and add it.",
       };
     }
+    // 0109 owns the sum; these rows only carry the amounts it adds up.
+    await supabase.rpc("rebuild_salary_chain", { p_profile_id: profileId });
   }
 
   const { error: rolesError } = await supabase.from("user_roles").upsert(
@@ -1262,28 +1262,32 @@ export async function updatePerson(
      A pay change, IF one was typed. Blank means "not changing it", never
      "set it to nothing" — the same rule the bulk import follows (P19D-4).
 
-     DELEGATED, never reimplemented. `addSalaryChange` already computes the
-     previous figure, the hike and the percentage from the record rather than
-     accepting them from the caller (P19-7), appends to `salary_history` before
-     it moves `current_ctc`, refuses to let a backdated CORRECTION overwrite a
-     later figure (P19-9), and audits with no amount in the diff (P19-10). A
-     second write path here would be a second definition of what a pay change
-     is, and the two would disagree on the path nobody is watching (PC-1).
+     DELEGATED, never reimplemented. `recordIncrement` hands the amount to
+     `record_increment`, which derives the previous figure, the new salary and
+     the percentage rather than accepting them from the caller (P19-7), and
+     ends in `rebuild_salary_chain` — the one implementation of joining plus
+     every rise (0109). A second write path here would be a second definition
+     of what a pay change is, and the two would disagree on the path nobody is
+     watching (PC-1).
+
+     THE FIELD IS THE RISE, not a new salary. It was the total, and the hike
+     was worked out from it; HR states the increment, so that is what travels.
+     The form key is unchanged — only what the number means.
 
      It runs AFTER the employment upsert on purpose: it refuses outright when
      there is no `employment_records` row, and the block above is what creates
      one for somebody who has never had employment details set. */
-  const newCtc = String(formData.get("new_ctc") ?? "").replace(/[₹,\s]/g, "").trim();
-  if (newCtc) {
-    const salary = await addSalaryChange({
+  const raised = String(formData.get("new_ctc") ?? "").replace(/[₹,\s]/g, "").trim();
+  if (raised) {
+    const salary = await recordIncrement({
       profileId,
-      newCtc,
+      amount: raised,
       effectiveFrom: String(formData.get("salary_effective_from") ?? "").trim(),
-      // Validated by `addSalaryChange`'s own enum, not trusted here. The cast
+      // Validated by `recordIncrement`'s own enum, not trusted here. The cast
       // is derived from that function's parameter so the two cannot drift.
       reason: String(
         formData.get("salary_reason") ?? "",
-      ) as Parameters<typeof addSalaryChange>[0]["reason"],
+      ) as Parameters<typeof recordIncrement>[0]["reason"],
       note: String(formData.get("salary_note") ?? "").trim(),
     });
 

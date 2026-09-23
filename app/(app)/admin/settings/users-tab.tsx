@@ -35,7 +35,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { DateFormField, DatePopoverInput } from "@/components/appraise/date-popover";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -124,9 +123,7 @@ export type DepartmentOption = { id: string; name: string };
  * somebody else's edit would silently overwrite it on the way back. A patch
  * cannot: what was not touched is not sent.
  *
- * `current_ctc` is ANNUAL, as stored. The cell types monthly and converts, so
- * the unit crosses the boundary exactly once (0061, and the confusion FIX-20
- * was reported for).
+ * Salary is NOT among them (0109) — see the note on the type below.
  */
 export type PersonPatch = {
   employee_code?: string;
@@ -134,7 +131,11 @@ export type PersonPatch = {
   department_id?: string | null;
   reports_to?: string | null;
   employment_type?: "PERMANENT" | "CONTRACT" | "PROBATION" | "INTERN";
-  current_ctc?: number;
+  /* -- `current_ctc` is deliberately ABSENT, for the same reason
+        `last_increment_date` is. 0109 makes a salary joining + every rise to
+        date, so it is not a fact this sheet holds — it is the sum of the
+        ledger, and a cell that wrote it would be a second place to state a
+        number the ledger already answers. Recording a rise is what moves it. -- */
   /* -- The rest of what the CSV import writes, so a mistake made in a
         spreadsheet can be corrected on the screen that shows it.
 
@@ -171,23 +172,7 @@ export type PersonPatch = {
   joining_ctc?: number;
 };
 
-type SalaryReason =
-  | "ANNUAL_INCREMENT"
-  | "PROMOTION"
-  | "CORRECTION"
-  | "MARKET_ADJUSTMENT"
-  // 0094, at the owner's explicit instruction — not scheduled like the
-  // others: some employees are promised a performance-based raise 3 months
-  // after joining, and this is that reason, not a company-wide interval.
-  | "THREE_MONTH_INCREMENT";
 
-const SALARY_REASONS: Array<{ value: SalaryReason; label: string }> = [
-  { value: "ANNUAL_INCREMENT", label: "Annual increment" },
-  { value: "PROMOTION", label: "Promotion" },
-  { value: "MARKET_ADJUSTMENT", label: "Market adjustment" },
-  { value: "THREE_MONTH_INCREMENT", label: "3-month increment" },
-  { value: "CORRECTION", label: "Correction to an earlier entry" },
-];
 
 /** §11 / P7-9: absent is an em dash, never an empty cell and never a zero. */
 function dash(value: string | null | undefined): string {
@@ -1188,15 +1173,21 @@ function AddPersonDialog({
                 />
               </Field>
 
+              {/* -- THE RISE, not the salary it produced (0109).
+                    This asked for the current salary and derived the rise
+                    between the two. It is the other way round now, because that
+                    is the figure HR states: `last_increment_amount` has been in
+                    the schema since P19C-3 and the import has always read it;
+                    the dialog was the one place still asking for the total. -- */}
               {hasPriorIncrement ? (
                 <Field
-                  id="current_ctc"
-                  label="Current salary (optional)"
-                  error={createState.fieldErrors?.current_ctc}
+                  id="last_increment_amount"
+                  label="Increment amount (optional)"
+                  error={createState.fieldErrors?.last_increment_amount}
                 >
                   <Input
-                    id="current_ctc"
-                    name="current_ctc"
+                    id="last_increment_amount"
+                    name="last_increment_amount"
                     inputMode="numeric"
                     className="min-h-11 tabular"
                   />
@@ -1205,7 +1196,7 @@ function AddPersonDialog({
             </div>
             <p className="font-sans text-body-sm text-ink-muted">
               {hasPriorIncrement
-                ? "Figures may be typed with ₹ and commas. The joining salary is the baseline of their pay ledger; the current salary is filed against their last increment date, and the rise between the two is calculated for you."
+                ? "Figures may be typed with ₹ and commas. The joining salary is the baseline of their pay ledger, and the increment is what was added to it on that date — their current salary is the two together."
                 : "Figures may be typed with ₹ and commas. Their current salary is set to this automatically — with no increment recorded, the two are the same figure."}
             </p>
           </FormSection>
@@ -1714,9 +1705,14 @@ function EditPersonDialog({
               {/* Blank means "not changing it", never "set it to nothing" —
                   the rule the bulk import follows (P19D-4). Nothing below is
                   read unless this carries a figure. */}
+              {/* -- THE RISE, not the salary it produces (0109). A salary is
+                     joining plus every increment, so the figure to state is
+                     what is being added. The field name is unchanged because
+                     the form's own wiring reads it; only its meaning and its
+                     label moved, and the server reads it as an amount. -- */}
               <Field
                 id="e_new_ctc"
-                label="New salary"
+                label="Increment amount"
                 optional
                 hint="Leave blank to leave their pay alone. ₹ and commas are fine."
               >
@@ -2019,17 +2015,6 @@ export function UsersTab({
   const [drafts, setDrafts] = useState<Map<string, PersonPatch>>(new Map());
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
-  const [payOpen, setPayOpen] = useState(false);
-  const [payReason, setPayReason] = useState<SalaryReason>("ANNUAL_INCREMENT");
-  const [payDate, setPayDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [payNote, setPayNote] = useState("");
-  /* -- WHICH KIND OF EVENT a changed salary cell is, for the whole batch —
-        mirrors `lib/employment/bulk.ts`'s `salaryMode`. "change" is the
-        original behaviour: every edited cell appends a new ledger row.
-        "correct" is AT THE OWNER'S EXPLICIT INSTRUCTION (0093): the row that
-        already IS each person's current figure is edited in place instead —
-        no new entry, and it is not counted as a rise. -- */
-  const [payMode, setPayMode] = useState<"change" | "correct">("change");
 
   const setCell = useCallback(<K extends keyof PersonPatch>(id: string, key: K, value: PersonPatch[K]) => {
     setDrafts((prev) => {
@@ -2089,40 +2074,19 @@ export function UsersTab({
   const openPerson = useCallback((person: PersonRow) => setEditing(person), []);
 
   const changedCount = drafts.size;
-  const salaryChanged = useMemo(
-    () => [...drafts.values()].some((d) => d.current_ctc !== undefined),
-    [drafts],
-  );
 
   function leaveEditMode() {
     setTableEdit(false);
     setDrafts(new Map());
-    setPayOpen(false);
-    setPayMode("change");
   }
 
   async function saveTable() {
-    // A pay change has to say why and from when — `salary_history` is the
-    // evidence, and P19-8's reasoning holds however many people are in the
-    // batch. Asked ONCE for the batch rather than once per person.
-    if (salaryChanged && !payOpen) {
-      setPayOpen(true);
-      return;
-    }
-
     setSaving(true);
     setSaveResult(null);
     const result = await bulkUpdatePeople({
       patches: [...drafts.entries()].map(([profileId, patch]) => ({ profileId, ...patch })),
-      salaryMode: payMode,
-      // "correct" needs neither — the row being fixed keeps its own reason
-      // and date, and only the figure changes.
-      salaryReason: salaryChanged && payMode === "change" ? payReason : undefined,
-      salaryEffectiveFrom: salaryChanged && payMode === "change" ? payDate : undefined,
-      salaryNote: salaryChanged ? payNote : undefined,
     });
     setSaving(false);
-    setPayOpen(false);
 
     if (!result.ok) {
       setSaveResult({ tone: "error", text: result.error.message });
@@ -2135,11 +2099,7 @@ export function UsersTab({
       text:
         failed.length > 0
           ? `${result.data.updated} saved, ${failed.length} could not be: ${failed[0]?.error ?? ""}`
-          : `${result.data.updated} ${result.data.updated === 1 ? "person" : "people"} updated${
-              result.data.salaryChanges > 0
-                ? `, ${result.data.salaryChanges} pay ${payMode === "correct" ? (result.data.salaryChanges === 1 ? "figure" : "figures") : result.data.salaryChanges === 1 ? "change" : "changes"} ${payMode === "correct" ? "corrected" : "recorded"}`
-                : ""
-            }.`,
+          : `${result.data.updated} ${result.data.updated === 1 ? "person" : "people"} updated.`,
     });
 
     if (failed.length === 0) leaveEditMode();
@@ -2553,28 +2513,23 @@ export function UsersTab({
         header: "Current salary",
         size: 165,
         meta: { align: "right" },
-        // §5: salary is readable by HR_ADMIN and MD only, and this screen is
-        // guarded to exactly those two. It appears here and nowhere a HOD or an
-        // employee can reach.
+        /* -- READ-ONLY, at the owner's instruction, and not because it is
+              awkward to edit: a salary is what somebody joined on plus every
+              rise to date (0109), so there is no separate fact here for
+              anybody to type. It was editable, and typing into it appended a
+              rise of the difference — which worked, and meant the roster and
+              the pay ledger were two places the same number could be stated
+              and therefore two places it could disagree.
+
+              Changing what somebody is paid now means recording the increment,
+              on Settings › Salary history or their own Employment page. Both
+              end in the same rebuild, so the figure here follows on its own.
+
+              §5: readable by HR_ADMIN and MD only, and this screen is guarded
+              to exactly those two. It appears here and nowhere a HOD or an
+              employee can reach. -- */
         cell: ({ row }) => (
-          <EditingCell>
-            {(g) =>
-              tableEdit ? (
-                // Typed MONTHLY, stored annual — the conversion happens in the cell
-                // so the unit crosses the boundary exactly once (0061).
-                <MoneyCell
-                  annual={g.cellValue(row.original, "current_ctc", row.original.current_ctc ?? undefined) ?? null}
-                  onChangeAnnual={(v) => g.setCell(row.original.id, "current_ctc", v ?? undefined)}
-                  label={`Salary for ${row.original.full_name}`}
-                  dirty={g.isDirty(row.original.id, "current_ctc")}
-                />
-              ) : (
-                // Monthly, matching the editable cell above and every other
-                // salary readout in the product.
-                <GridCell value={moneyMonthly(row.original.current_ctc)} className="tabular" />
-              )
-            }
-          </EditingCell>
+          <GridCell value={moneyMonthly(row.original.current_ctc)} className="tabular" />
         ),
       },
       {
@@ -3105,150 +3060,11 @@ export function UsersTab({
         </DialogContent>
       </Dialog>
 
-      {/* -- WHY A PAY CHANGE STOPS TO ASK.
-            Every other cell on this grid is a fact and correcting one is a
-            correction. A salary is an EVENT: it appends to `salary_history`,
-            which is append-only for every caller (P19-3), and 0068 takes the
-            increment clock from that ledger's latest entry. P19-8 required a
-            reason for exactly this — "a pay change with no explanation is the
-            thing somebody has to reconstruct from memory two years later".
-
-            Asked ONCE for the batch, not once per person: twelve rises on the
-            same date for the same reason is the case this screen exists for,
-            and asking twelve times would send people back to the dialog they
-            were trying to escape. -- */}
-      <Dialog open={payOpen} onOpenChange={(open) => (open ? null : setPayOpen(false))}>
-        <DialogContent className="w-[min(96vw,520px)] border-rule">
-          <DialogHeader>
-            <DialogTitle className="text-display-sm text-ink">
-              {payMode === "correct" ? "Correcting, not a new change" : "Why are these salaries changing?"}
-            </DialogTitle>
-            <DialogDescription className="font-sans text-body-sm text-ink-muted">
-              {payMode === "correct" ? (
-                <>
-                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} figure
-                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1 ? "" : "s"}{" "}
-                  will be corrected on the row that already represents each person&rsquo;s current
-                  salary — nothing new is added, and it does not count as a rise or move their
-                  increment date.
-                </>
-              ) : (
-                <>
-                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length} pay{" "}
-                  {[...drafts.values()].filter((d) => d.current_ctc !== undefined).length === 1
-                    ? "change goes"
-                    : "changes go"}{" "}
-                  into the salary history with this reason and date.
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {/* -- THE CHOICE ITSELF, at the owner's explicit instruction (0093).
-                  A radio pair rather than a checkbox: the two are mutually
-                  exclusive readings of the same edited cells, never both at
-                  once, and a radio says that at a glance where a checkbox
-                  would not. -- */}
-            <fieldset className="space-y-2 rounded-card border border-rule p-3">
-              <legend className="px-1 font-sans text-body-sm font-medium text-ink">
-                What does typing a new number mean?
-              </legend>
-              <label className="flex cursor-pointer items-start gap-2.5">
-                <input
-                  type="radio"
-                  name="pay_mode"
-                  checked={payMode === "change"}
-                  onChange={() => setPayMode("change")}
-                  className="mt-1 size-4"
-                />
-                <span className="text-body-sm text-ink">
-                  <span className="font-medium">A new salary change</span>
-                  <span className="block text-ink-muted">
-                    Added to the history as a fresh entry — a rise, a promotion, a market
-                    adjustment. This is what &ldquo;Add salary change&rdquo; on a person&rsquo;s
-                    own page does too.
-                  </span>
-                </span>
-              </label>
-              <label className="flex cursor-pointer items-start gap-2.5">
-                <input
-                  type="radio"
-                  name="pay_mode"
-                  checked={payMode === "correct"}
-                  onChange={() => setPayMode("correct")}
-                  className="mt-1 size-4"
-                />
-                <span className="text-body-sm text-ink">
-                  <span className="font-medium">A correction — the same entry, fixed</span>
-                  <span className="block text-ink-muted">
-                    The figure was typed wrong. This edits the existing row instead of adding one —
-                    its date and reason stay exactly as they were.
-                  </span>
-                </span>
-              </label>
-            </fieldset>
-
-            {payMode === "change" ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay_reason">Reason</Label>
-                  <select
-                    id="pay_reason"
-                    value={payReason}
-                    onChange={(e) => setPayReason(e.target.value as SalaryReason)}
-                    className="min-h-11 w-full min-w-0 rounded-input border border-rule bg-surface px-3 font-sans text-body-sm text-ink"
-                  >
-                    {SALARY_REASONS.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="pay_date">Effective from</Label>
-                  <DatePopoverInput
-                    tone="field"
-                    label="Effective from"
-                    value={payDate}
-                    onChange={setPayDate}
-                  />
-                  <p className="font-sans text-body-sm text-ink-muted">
-                    When the new salary starts being paid. An annual increment dated here also moves
-                    their next increment date.
-                  </p>
-                </div>
-              </>
-            ) : null}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="pay_note">Note</Label>
-              <Textarea
-                id="pay_note"
-                value={payNote}
-                onChange={(e) => setPayNote(e.target.value)}
-                placeholder={
-                  payMode === "correct"
-                    ? "Optional. Left blank, each row keeps whatever note it already had."
-                    : "Optional. Anything the record should carry."
-                }
-                className="min-h-20"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" className="min-h-11" onClick={() => setPayOpen(false)}>
-              Back to the table
-            </Button>
-            <Button className="min-h-11" onClick={() => void saveTable()} disabled={saving}>
-              {saving ? "Saving…" : payMode === "correct" ? "Correct and save" : "Record and save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* -- THE PAY DIALOG IS GONE WITH THE CELL THAT RAISED IT (0109).
+            It asked why a salary was changing, because typing one here
+            appended a rise. A salary is now joining + every rise to date, so
+            there is nothing on this sheet to change and nothing to ask about;
+            a rise is recorded where the ledger is. -- */}
     </div>
   );
 }

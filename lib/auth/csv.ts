@@ -194,9 +194,13 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         An example row is what people copy, so it has to state the same unit the
         blank column means — a monthly default beside an annual example is the
         column contradicting itself. -- */
-  { key: "joining_ctc", header: "joining_ctc", hint: "25000" },
-  { key: "current_ctc", header: "current_ctc", hint: "32000" },
-  { key: "last_increment_amount", header: "last_increment_amount", hint: "5000" },
+  { key: "joining_ctc", header: "joining_ctc", hint: "25000 — what they started on" },
+  /* -- `current_ctc` IS NO LONGER A COLUMN (0109). A salary is what somebody
+        joined on plus every rise since, so it is worked out rather than
+        stated — and a file that could state it as well would be a second
+        answer to the same question, free to disagree with the rises beside it.
+        A sheet still carrying the column is read and ignored. -- */
+  { key: "last_increment_amount", header: "last_increment_amount", hint: "5000 — the RISE, not the new salary" },
   /* -- EARLIER RISES, one numbered pair each.
         `last_increment_*` records the newest rise and nothing before it, so a
         sheet carrying "Increment Amt 2025" and "Increment Amt 2026" lost one of
@@ -204,9 +208,9 @@ export const IMPORT_COLUMNS: ReadonlyArray<{
         the READER takes any `increment_N_*`, so a third year needs no change to
         this file — add the columns to the sheet and they are read. -- */
   { key: "increment_1_date", header: "increment_1_date", hint: "DD-MM-YYYY — the OLDER rise" },
-  { key: "increment_1_amount", header: "increment_1_amount", hint: "3000" },
+  { key: "increment_1_amount", header: "increment_1_amount", hint: "3000 — the RISE" },
   { key: "increment_2_date", header: "increment_2_date", hint: "DD-MM-YYYY" },
-  { key: "increment_2_amount", header: "increment_2_amount", hint: "4000" },
+  { key: "increment_2_amount", header: "increment_2_amount", hint: "4000 — the RISE" },
 ];
 
 /** `increment_7_date` / `increment_7_amount` — any year, without a code change. */

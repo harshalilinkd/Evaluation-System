@@ -28,8 +28,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   addJoiningSalary,
-  addSalaryChange,
-  correctSalaryHistoryEntry,
+  recordIncrement,
+  correctIncrement,
   saveEmployment,
 } from "@/lib/employment/actions";
 import type { EmploymentDetail } from "@/lib/employment/queries";
@@ -692,21 +692,27 @@ function SalaryDialog({
         number it cannot know. -- */
   const comparable = reason === "JOINING" ? null : currentCtc;
 
+  /* -- THE PREVIEW ADDS NOW, because the field is the RISE (0109).
+        It used to subtract: the box held a new salary and the hike was the
+        difference between it and today's figure. HR states the rise, so the
+        salary is the sum — and `record_increment` does exactly this on the
+        server, which is what keeps this a preview rather than a second
+        implementation of what somebody is paid. -- */
   const preview =
     comparable !== null && Number.isFinite(parsed) && parsed > 0
       ? {
-          hike: parsed - comparable,
-          pct: comparable === 0 ? null : Math.round(((parsed - comparable) / comparable) * 10000) / 100,
+          next: comparable + parsed,
+          pct: comparable === 0 ? null : Math.round((parsed / comparable) * 10000) / 100,
         }
       : null;
 
   async function submit() {
     setBusy(true);
     setError(null);
-    const result = await addSalaryChange({
+    const result = await recordIncrement({
       profileId,
       effectiveFrom,
-      newCtc,
+      amount: newCtc,
       reason: reason as (typeof REASONS)[number]["value"],
       note,
     });
@@ -744,17 +750,16 @@ function SalaryDialog({
               />
             </Field>
             {/* MONTHLY, like every other salary field. `MoneyInput` takes and
-                returns the ANNUAL figure, so `newCtc` still holds what it
-                always held and the action is untouched — the unit crosses in
-                one component rather than at a dozen call sites. */}
-            <Field label="New salary (monthly)" required>
+                returns the ANNUAL figure, so the unit crosses in one component
+                rather than at a dozen call sites. */}
+            <Field label="Increment amount (monthly)" required>
               <MoneyInput
                 value={newCtc === "" ? null : Number(newCtc)}
                 onValueChange={(annual) => setNewCtc(annual === null ? "" : String(annual))}
               />
               {preview ? (
                 <p className="tabular mt-1.5 text-body-sm text-ink-muted">
-                  {moneyMonthly(currentCtc)} → {moneyMonthly(parsed)} · hike {moneyMonthly(preview.hike)}
+                  {moneyMonthly(currentCtc)} + {moneyMonthly(parsed)} → {moneyMonthly(preview.next)}
                   {preview.pct === null ? "" : ` · ${preview.pct}%`}
                 </p>
               ) : null}
@@ -958,9 +963,8 @@ function CorrectRowDialog({
   onDone: () => void;
 }) {
   const [effectiveFrom, setEffectiveFrom] = React.useState(row?.effective_from ?? "");
-  const [newCtc, setNewCtc] = React.useState(row?.new_ctc != null ? String(row.new_ctc) : "");
-  const [reason, setReason] = React.useState(row?.reason ?? "ANNUAL_INCREMENT");
-  const [note, setNote] = React.useState(row?.note ?? "");
+  /* -- THE RISE, not the salary it produced (0109). -- */
+  const [amount, setAmount] = React.useState(row?.hike_amount != null ? String(row.hike_amount) : "");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -968,13 +972,15 @@ function CorrectRowDialog({
     if (!row) return;
     setBusy(true);
     setError(null);
-    const result = await correctSalaryHistoryEntry({
+    /* -- `correctIncrement` rather than 0093's `correctSalaryHistoryEntry`:
+          that one is told a NEW SALARY, and this box is the increment. Both
+          end in the same `rebuild_salary_chain`, so the rest of the ledger is
+          re-derived identically either way. -- */
+    const result = await correctIncrement({
       id: row.id,
       profileId,
       effectiveFrom,
-      newCtc,
-      reason: reason as (typeof REASONS)[number]["value"],
-      note,
+      amount,
     });
     setBusy(false);
     if (!result.ok) {
@@ -1010,26 +1016,18 @@ function CorrectRowDialog({
                 onChange={setEffectiveFrom}
               />
             </Field>
-            <Field label="Salary (monthly)" required>
+            <Field label="Increment amount (monthly)" required>
               <MoneyInput
-                value={newCtc === "" ? null : Number(newCtc)}
-                onValueChange={(annual) => setNewCtc(annual === null ? "" : String(annual))}
+                value={amount === "" ? null : Number(amount)}
+                onValueChange={(annual) => setAmount(annual === null ? "" : String(annual))}
               />
             </Field>
-            <Field label="Reason" required>
-              <select
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                className="h-10 w-full rounded-control border border-border bg-surface px-3 text-body-sm text-ink"
-              >
-                {REASONS.map((r) => (
-                  <option key={r.value} value={r.value}>{r.label}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Note" hint="Optional. Why this changed — somebody will read it in two years.">
-              <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-            </Field>
+            {/* -- THE REASON AND THE NOTE ARE NOT EDITED HERE any more.
+                   `correct_increment` changes the amount and the date and
+                   leaves the row's own reason and note exactly as they were —
+                   which is right: correcting a mistyped figure is not a reason
+                   to rewrite why the rise was given. Both are still set when
+                   the rise is recorded. -- */}
           </div>
         ) : null}
 

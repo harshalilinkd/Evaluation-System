@@ -47,7 +47,7 @@ import { byEmployeeCode } from "@/lib/utils/employee-code";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 
-type SlotDraft = { effectiveFrom?: string; newCtc?: number };
+type SlotDraft = { effectiveFrom?: string; amount?: number };
 type PersonDraft = { dateOfJoining?: string; joiningCtc?: number };
 
 /**
@@ -207,13 +207,32 @@ function IncrementAmountCell({ row, column }: CellContext<HistoryGridRow, unknow
   const draft = slotDrafts.get(slotKey(p.profileId, n));
   return editing ? (
     <MoneyCell
-      annual={draft?.newCtc ?? existing?.newCtc ?? null}
-      onChangeAnnual={(v) => setSlotField(p.profileId, n, "newCtc", v ?? undefined)}
+      annual={draft?.amount ?? existing?.amount ?? null}
+      onChangeAnnual={(v) => setSlotField(p.profileId, n, "amount", v ?? undefined)}
       label={`Increment ${n} amount for ${p.name}`}
-      dirty={draft?.newCtc !== undefined}
+      dirty={draft?.amount !== undefined}
     />
   ) : (
-    <GridCell value={existing ? bareMonthly(existing.newCtc) : "—"} className="tabular" />
+    <GridCell value={existing?.amount != null ? bareMonthly(existing.amount) : "—"} className="tabular" />
+  );
+}
+
+/* -- WHAT THE SHEET NOW ADDS UP TO, and the reason the sheet exists.
+      Read-only, and not because it is awkward to edit: a salary is
+      `joining_ctc` plus every rise to date (0109), so there is nothing here
+      for anybody to type. Changing it means adding an increment, which is the
+      column pair to the left.
+
+      Never recomputed in this component. `rebuild_salary_chain` is the one
+      implementation, and a second one drawn on screen is how a roster comes to
+      disagree with the ledger it is a summary of. -- */
+function CurrentSalaryCell({ row }: CellContext<HistoryGridRow, unknown>) {
+  const p = row.original;
+  return (
+    <GridCell
+      value={p.currentCtc != null ? bareMonthly(p.currentCtc) : "—"}
+      className="tabular font-medium"
+    />
   );
 }
 
@@ -329,7 +348,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         const draft = slotDrafts.get(slotKey(row.profileId, index));
         if (!draft) continue;
         const hasDate = Boolean(draft.effectiveFrom);
-        const hasAmount = draft.newCtc !== undefined;
+        const hasAmount = draft.amount !== undefined;
         if (hasDate !== hasAmount) {
           problems.push(`Increment ${index} for ${row.name} needs both a date and an amount.`);
         }
@@ -351,15 +370,16 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
     const patches = rows
       .map((row) => {
         const person = personDrafts.get(row.profileId);
-        const slots: Array<{ index: number; effectiveFrom: string; newCtc: number }> = [];
+        const slots: Array<{ index: number; effectiveFrom: string; amount: number }> = [];
 
         for (let index = 1; index <= maxIncrements; index += 1) {
           const draft = slotDrafts.get(slotKey(row.profileId, index));
           if (!draft) continue;
           const existing = row.increments[index - 1];
           const effectiveFrom = draft.effectiveFrom ?? existing?.effectiveFrom;
-          const newCtc = draft.newCtc ?? existing?.newCtc;
-          if (effectiveFrom && newCtc !== undefined) slots.push({ index, effectiveFrom, newCtc });
+          const amount = draft.amount ?? existing?.amount ?? undefined;
+          if (effectiveFrom && amount !== undefined && amount !== null)
+            slots.push({ index, effectiveFrom, amount });
         }
 
         if (!person && slots.length === 0) return null;
@@ -496,6 +516,14 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         ],
       });
     }
+
+    cols.push({
+      id: "currentCtc",
+      header: "Current salary",
+      size: 150,
+      meta: { align: "right" },
+      cell: CurrentSalaryCell,
+    });
 
     return cols;
     /* -- ONE DEPENDENCY, and it is the one that genuinely changes the SHAPE of

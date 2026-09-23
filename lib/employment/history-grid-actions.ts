@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { checkRole } from "@/lib/auth/guards";
-import { addSalaryChange, correctSalaryHistoryEntry } from "@/lib/employment/actions";
+
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,7 +14,8 @@ const slotSchema = z.object({
   /** 1-based — "Increment 1" is index 1, matching the column header. */
   index: z.number().int().min(1).max(60),
   effectiveFrom: z.string().min(1),
-  newCtc: z.number().positive(),
+  /** THE RISE (0109). What somebody is paid is derived from it, never typed. */
+  amount: z.number().positive(),
 });
 
 const personPatchSchema = z.object({
@@ -125,23 +126,21 @@ export async function saveEmploymentHistoryGrid(
         const at = existing[slot.index - 1];
 
         if (at) {
-          // ALREADY THERE — a correction, in place. The row's own reason and
-          // note are untouched; only the figure and the date move.
-          const result = await correctSalaryHistoryEntry({
-            id: at.id,
-            profileId,
-            effectiveFrom: slot.effectiveFrom,
-            newCtc: slot.newCtc,
-            reason: at.reason as
-              | "ANNUAL_INCREMENT"
-              | "PROMOTION"
-              | "CORRECTION"
-              | "MARKET_ADJUSTMENT"
-              | "THREE_MONTH_INCREMENT",
-            note: at.note ?? undefined,
+          /* -- ALREADY THERE — a correction, in place. The row's own reason and
+                note are untouched; only the rise and the date move.
+
+                `correct_increment` rather than 0093's
+                `correct_salary_history_entry`: that one is told a NEW SALARY,
+                and this sheet's Amount column is the rise. Both end in the same
+                `rebuild_salary_chain`, so they cannot disagree about what the
+                rest of the ledger becomes. -- */
+          const { error } = await supabase.rpc("correct_increment", {
+            p_id: at.id,
+            p_effective_from: slot.effectiveFrom,
+            p_amount: slot.amount,
           });
-          if (!result.ok) {
-            rows.push({ profileId, ok: false, error: `Increment ${slot.index}: ${result.error.message}` });
+          if (error) {
+            rows.push({ profileId, ok: false, error: `Increment ${slot.index}: ${error.message}` });
             failed = true;
             break;
           }
@@ -151,22 +150,25 @@ export async function saveEmploymentHistoryGrid(
           // not act on a figure it has already moved past) sees the change.
           existing[slot.index - 1] = { ...at, effective_from: slot.effectiveFrom };
         } else if (slot.index === existing.length + 1) {
-          // THE NEXT ONE IN SEQUENCE — a genuine new rise.
-          const result = await addSalaryChange({
-            profileId,
-            effectiveFrom: slot.effectiveFrom,
-            newCtc: slot.newCtc,
-            reason: "ANNUAL_INCREMENT",
-            note: undefined,
+          // THE NEXT ONE IN SEQUENCE — a genuine new rise, by its amount.
+          const { data: newId, error } = await supabase.rpc("record_increment", {
+            p_profile_id: profileId,
+            p_effective_from: slot.effectiveFrom,
+            p_amount: slot.amount,
+            p_reason: "ANNUAL_INCREMENT",
           });
-          if (!result.ok) {
-            rows.push({ profileId, ok: false, error: `Increment ${slot.index}: ${result.error.message}` });
+          if (error || !newId) {
+            rows.push({
+              profileId,
+              ok: false,
+              error: `Increment ${slot.index}: ${error?.message ?? "could not be recorded."}`,
+            });
             failed = true;
             break;
           }
           added += 1;
           existing.push({
-            id: result.data.id,
+            id: newId,
             effective_from: slot.effectiveFrom,
             reason: "ANNUAL_INCREMENT",
             note: null,
