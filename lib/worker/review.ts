@@ -331,6 +331,21 @@ export async function reviewWorkerAppraisal(
     };
   }
 
+  /* -- AND THE HAND-UP IS HR'S, the mirror of the rule above. It admitted the
+        MD as well, so an MD-only session could send an appraisal to itself —
+        pointless, and it left the screen (which now offers the button to HR
+        alone) and the server disagreeing about whose step this is. Somebody
+        holding both roles passes both checks, which is what their roles say. -- */
+  if (outcome === "SEND_TO_MD" && !auth.session.roles.includes("HR_ADMIN")) {
+    return {
+      ok: false,
+      error: {
+        code: "NOT_PERMITTED",
+        message: "HR sends a production appraisal to management once the salary is set.",
+      },
+    };
+  }
+
   /* -- AN UNPRICED RECOMMENDATION DOES NOT GO UP. This is the reported bug.
 
         The supervisor recommends a PERCENTAGE and is shown no amount at all

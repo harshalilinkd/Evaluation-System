@@ -25,5 +25,5 @@ export default async function Page({
     return <ErrorState title="Not available" body={review.error.message} />;
   }
 
-  return <WorkerReviewClient activity={await getWorkerActivity(evaluationId)} isMd={roles.includes("MD")} review={review.data} cycleId={cycleId} />;
+  return <WorkerReviewClient activity={await getWorkerActivity(evaluationId)} isMd={roles.includes("MD")} isHr={roles.includes("HR_ADMIN")} review={review.data} cycleId={cycleId} />;
 }

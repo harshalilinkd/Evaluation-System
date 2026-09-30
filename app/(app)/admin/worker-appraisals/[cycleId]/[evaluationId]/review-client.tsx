@@ -82,6 +82,7 @@ export function WorkerReviewClient({
   review,
   cycleId,
   isMd,
+  isHr,
   activity,
 }: {
   review: WorkerReview;
@@ -91,6 +92,14 @@ export function WorkerReviewClient({
   /** Decides which single ending this person is offered. The SERVER decides
       whether they may take it — a screen is not a guard (§9). */
   isMd: boolean;
+  /* -- HR, AS ITS OWN FLAG, because "not the MD" is not the same as "HR".
+        This screen took `isMd` alone and read everybody else as HR, which is
+        right for two of the three people on this roster and wrong for the
+        third: somebody holding HR_ADMIN AND MD was shown the MD's "still with
+        HR, it reaches you when they send it up" — told to wait for the one
+        person who had to press the button, which was themselves. Reported as
+        "send to management option not showing". -- */
+  isHr: boolean;
 }) {
   const router = useRouter();
   const [remarks, setRemarks] = React.useState("");
@@ -503,7 +512,12 @@ export function WorkerReviewClient({
               even sharing state, a reader cannot tell which one is "the" one.
               The panel is the record of how the figure got here; the finish
               card is where it is settled. -- */
-        readOnly={closed || review.status === "REVIEWED"}
+        /* -- AND READ-ONLY BEFORE THE HAND-UP FOR ANYONE WHO IS NOT HR. Pricing
+              is HR's step; an MD-only reader could type here and then had no
+              button that would send it anywhere, which is a figure stranded in
+              a browser. They set their amount in the sign-off card once it
+              reaches them. -- */
+        readOnly={closed || review.status === "REVIEWED" || !isHr}
         mdIsSettling={isMd && withMd}
         supervisorName={review.supervisorName}
         mdApproval={review.mdApproval}
@@ -566,10 +580,21 @@ export function WorkerReviewClient({
                 form's three signatures imply, and it is secondary because most
                 sheets do not need it. -- */}
           <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* -- WHAT HAPPENS WHEN THIS PERSON PRESSES THE BUTTON BESIDE IT.
+                  It read "Closing is final. Send it to management instead if
+                  the MD should sign it." to everybody before the hand-up —
+                  including the MD, who has no button there, and HR, who has
+                  not been able to close since 0090 made that the MD's alone.
+                  A sentence describing an action nobody on the screen can take
+                  is the confusion that was reported. -- */}
             <p className="font-sans text-body-sm text-ink-muted">
               {withMd
-                ? "Signing this off closes it. Nothing can be changed afterwards."
-                : "Closing is final. Send it to management instead if the MD should sign it."}
+                ? isMd
+                  ? "Approving closes it and records the figure. Nothing can be changed afterwards."
+                  : "Management approves it and closes it, or sends it back to you."
+                : isHr
+                  ? "Once the salary is saved, send it to management. The MD approves it or sends it back."
+                  : "HR prices it first, then sends it to you for approval."}
             </p>
             <div className="flex flex-wrap gap-2">
               {/* Nothing is pressable against a status that has already moved.
@@ -594,8 +619,15 @@ export function WorkerReviewClient({
                     option was to approve: `returnWorkerToHr` did not exist, so
                     the second pair of eyes could agree or do nothing, which is
                     not a decision (AMEND-2). -- */}
+              {/* -- HR FIRST, THEN "NOT HR". It was MD first, then "not MD" —
+                    and someone holding both roles is both, so the MD branch won
+                    and HR's only button never rendered for them. Each stage
+                    now asks whether this person holds the role THAT STAGE
+                    needs: before the hand-up that is HR, after it the MD. A
+                    person holding both acts as HR here and as the MD once it
+                    reaches them, which is exactly what their two roles say. -- */}
               {!withMd ? (
-                isMd ? (
+                !isHr ? (
                   <p className="font-sans text-body-sm text-ink-muted">
                     Still with HR. It reaches you when they send it up.
                   </p>

@@ -47,6 +47,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         actually saved. -- */
   const [salaryError, setSalaryError] = React.useState<string | null>(null);
   const [thanked, setThanked] = React.useState(false);
+  /* A save already on the wire when the submit returns is not stopped by
+     `thanked` — it closed over the render that started it. The ref is read
+     live, so a late response cannot put a warning on a submitted sheet. */
+  const submittedRef = React.useRef(false);
   const [comment, setComment] = React.useState(sheet.overallComment);
   const [training, setTraining] = React.useState<boolean | null>(sheet.trainingRequired);
   const [saveState, setSaveState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -64,7 +68,17 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
   );
 
   const isSelf = sheet.layer === "SELF";
-  const readOnly = !sheet.isOpen;
+  /* -- LOCKED THE MOMENT THE SUBMIT RETURNS, not when the refresh lands.
+        `sheet.isOpen` only turns false once `router.refresh()` brings new props,
+        and in that gap the autosave was still live — a tab switch fires
+        `visibilitychange`, which fires `persist`, which sent the salary block
+        to a server that had just moved the appraisal on and refused it. The
+        refusal set `salaryError`, and client state survives a refresh, so the
+        sheet then read "The salary block was not saved … you can still submit"
+        over a salary that HAD been saved and an appraisal already with HR.
+        Both halves of that sentence were false. `thanked` is set on the same
+        line as the success, so nothing can save after it. -- */
+  const readOnly = !sheet.isOpen || thanked;
 
   const answered = sheet.questions.filter((q) => answers[q.questionId]).length;
 
@@ -198,10 +212,10 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
           comment,
           trainingRequired: training,
         });
-        setSalaryError(reviewResult.ok ? null : reviewResult.error.message);
+        if (!submittedRef.current) setSalaryError(reviewResult.ok ? null : reviewResult.error.message);
       } else if (sheet.salary) {
         const salaryResult = await saveWorkerSalary(sheet.evaluationId, salary);
-        setSalaryError(salaryResult.ok ? null : salaryResult.error.message);
+        if (!submittedRef.current) setSalaryError(salaryResult.ok ? null : salaryResult.error.message);
       }
 
       return true;
@@ -295,6 +309,9 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       setError(result.error.message);
       return;
     }
+    submittedRef.current = true;
+    setSalaryError(null);
+    setError(null);
     setThanked(true);
     router.refresh();
   }
