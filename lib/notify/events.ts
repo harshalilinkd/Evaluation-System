@@ -762,31 +762,83 @@ export async function notifyIfNowWithHr(evaluationId: string): Promise<Transitio
  * people on the round gets one message naming the count, because six identical
  * WhatsApps in a minute is how a channel stops being read (P22-12).
  */
+/**
+ * Send ONE team leader their sheet, and SAY WHETHER IT WENT.
+ *
+ * Split out of `notifyWorkerRoundOpened`, which swallowed every outcome — the
+ * failure AND the success. That is right for the launch itself (PW-2: a
+ * provider outage must not turn a committed round into a reported failure) and
+ * wrong as the only behaviour available, because it left HR with no way to
+ * learn that nothing had been sent. On a development server nothing IS sent:
+ * `resolveAppUrl` refuses a localhost address, since WhatsApp will not make a
+ * private URL tappable and a phone cannot reach a laptop (P28-1) — so every
+ * production launch reported plain success while delivering nothing at all.
+ *
+ * The notice comes back so a caller can report it. Nothing is swallowed here;
+ * the caller decides whether a failure is worth failing over.
+ */
+export async function notifyWorkerSheetAssigned(input: {
+  evaluationId: string;
+  raterId: string;
+  workerName: string;
+  /** How many OTHER workers this rater got in the same breath, for the subject. */
+  alsoCount?: number;
+  cycleName: string;
+  periodLabel: string;
+  dueOn: string | null;
+}): Promise<TransitionNotice> {
+  const supabase = await createClient();
+
+  const { data: rater } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone_e164, work_email, work_phone_e164, departments(name)")
+    .eq("id", input.raterId)
+    .maybeSingle();
+
+  if (!rater) {
+    return { sent: 0, failed: 0, problems: ["That team leader no longer exists."] };
+  }
+
+  const also = input.alsoCount ?? 0;
+  const subject =
+    also > 0
+      ? `${input.workerName} and ${also} other${also === 1 ? "" : "s"}`
+      : input.workerName;
+
+  const vars = {
+    leadName: rater.full_name,
+    employeeName: subject,
+    department: rater.departments?.name ?? "Production Team",
+    period: `${input.cycleName} · ${input.periodLabel}`,
+    dueDate: input.dueOn ? formatDate(input.dueOn) : "as soon as you can",
+  };
+
+  return deliver({
+    template: "workerRatingInvite",
+    evaluationId: input.evaluationId,
+    profileId: input.raterId,
+    person: rater,
+    audience: "staff",
+    staffPath: "/worker-team",
+    render: (link) => workerRatingInvite({ ...vars, link }),
+    vars,
+  });
+}
+
 export async function notifyWorkerRoundOpened(input: {
   cycleName: string;
   periodLabel: string;
   dueOn: string | null;
   /** One entry per evaluation just opened. */
   opened: ReadonlyArray<{ evaluationId: string; raterId: string; workerName: string }>;
-}): Promise<void> {
+}): Promise<TransitionNotice> {
+  const notice: TransitionNotice = { sent: 0, failed: 0, problems: [] };
   try {
-    if (input.opened.length === 0) return;
-
-    const supabase = await createClient();
+    if (input.opened.length === 0) return notice;
 
     const raterIds = [...new Set(input.opened.map((o) => o.raterId))];
-    const { data: people } = await supabase
-      .from("profiles")
-      .select("id, full_name, email, phone_e164, work_email, work_phone_e164, departments(name)")
-      .in("id", raterIds);
-
-    const byId = new Map((people ?? []).map((p) => [p.id, p]));
-    const due = input.dueOn ? formatDate(input.dueOn) : "as soon as you can";
 
     for (const raterId of raterIds) {
-      const rater = byId.get(raterId);
-      if (!rater) continue;
-
       const mine = input.opened.filter((o) => o.raterId === raterId);
       const first = mine[0];
       if (!first) continue;
@@ -795,39 +847,32 @@ export async function notifyWorkerRoundOpened(input: {
             evaluation id is the FIRST one, so the bell and the email button
             land on a real sheet rather than on a list they then have to
             search. -- */
-      const subject =
-        mine.length === 1
-          ? first.workerName
-          : `${first.workerName} and ${mine.length - 1} other${mine.length === 2 ? "" : "s"}`;
-
-      await deliver({
-        template: "workerRatingInvite",
+      const one = await notifyWorkerSheetAssigned({
         evaluationId: first.evaluationId,
-        profileId: raterId,
-        person: rater,
-        audience: "staff",
-        staffPath: "/worker-team",
-        render: (link) =>
-          workerRatingInvite({
-            leadName: rater.full_name,
-            employeeName: subject,
-            department: rater.departments?.name ?? "Production Team",
-            period: `${input.cycleName} · ${input.periodLabel}`,
-            dueDate: due,
-            link,
-          }),
-        vars: {
-          leadName: rater.full_name,
-          employeeName: subject,
-          department: rater.departments?.name ?? "Production Team",
-          period: `${input.cycleName} · ${input.periodLabel}`,
-          dueDate: due,
-        },
+        raterId,
+        workerName: first.workerName,
+        alsoCount: mine.length - 1,
+        cycleName: input.cycleName,
+        periodLabel: input.periodLabel,
+        dueOn: input.dueOn,
       });
+
+      notice.sent += one.sent;
+      notice.failed += one.failed;
+      notice.problems.push(...one.problems);
     }
-  } catch {
-    /* -- Swallowed on purpose. The round is committed and audited before this
-          runs; a provider outage, a missing key or a team leader with no phone
-          must never be reported as a launch that failed (PW-2). -- */
+  } catch (cause) {
+    /* -- STILL NOT THROWN, and now not silent either. The round is committed
+          and audited before this runs, so a provider outage or a missing key
+          must never be reported as a launch that failed (PW-2) — but the
+          caller is told, rather than being left to assume the messages went.
+          Swallowing the outcome as well as the exception is what let a launch
+          that delivered nothing report plain success. -- */
+    notice.problems.push(
+      cause instanceof Error && cause.message
+        ? cause.message
+        : "The sheets could not be sent.",
+    );
   }
+  return notice;
 }

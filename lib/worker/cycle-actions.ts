@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 
 import { checkRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
-import { notifyWorkerRoundOpened } from "@/lib/notify/events";
+import { notifyWorkerRoundOpened, notifyWorkerSheetAssigned } from "@/lib/notify/events";
 import type { Json } from "@/types/database";
 
 /*
@@ -139,7 +139,7 @@ export type WorkerAssignment = {
 export async function launchWorkerCycle(
   cycleId: string,
   assignments: WorkerAssignment[],
-): Promise<WorkerResult<{ opened: number }>> {
+): Promise<WorkerResult<{ opened: number; sent: number; failed: number; problems: string[] }>> {
   const auth = await guard();
   if (!auth.ok) return fail(auth.error.code, auth.error.message);
   if (assignments.length === 0) return fail("NO_PARTICIPANTS", "Add at least one worker first.");
@@ -445,8 +445,14 @@ export async function launchWorkerCycle(
 
   /* -- AFTER THE COMMIT, and it cannot throw (PW-2). The round is durable and
         audited by this point; a provider outage or a team leader with no phone
-        must never turn a launched round into a reported failure. -- */
-  await notifyWorkerRoundOpened({
+        must never turn a launched round into a reported failure.
+
+        WHAT IT CANNOT DO ANY MORE IS SAY NOTHING. The outcome was discarded
+        here, so a launch that reached nobody was indistinguishable from one
+        that reached everybody — and on a development server it reaches nobody
+        every time, because `resolveAppUrl` refuses a localhost address (P28-1).
+        The notice rides back on the success so the dialog can say so. -- */
+  const notice = await notifyWorkerRoundOpened({
     cycleName: cycle.name,
     periodLabel: cycle.period_label,
     dueOn: cycle.supervisor_due_on,
@@ -454,7 +460,209 @@ export async function launchWorkerCycle(
   });
 
   revalidate(cycleId);
-  return { ok: true, data: { opened } };
+  return {
+    ok: true,
+    data: { opened, sent: notice.sent, failed: notice.failed, problems: notice.problems },
+  };
+}
+
+/* ======================================================= resend the sheet == */
+
+/**
+ * Send a team leader their sheet again.
+ *
+ * There was no way to do this at all. A production round sends once, at launch,
+ * from a function that swallowed the result — so a message that never arrived
+ * could not be diagnosed and could not be retried. The staff side has had a
+ * whole distribution screen with a per-person resend since P11; this is the
+ * narrow equivalent for one row.
+ *
+ * Unlike the launch, this one REPORTS. Somebody pressing Send again is asking a
+ * question, and "we tried" is not an answer to it (§0.7).
+ */
+export async function resendWorkerSheet(
+  evaluationId: string,
+): Promise<WorkerResult<{ sent: number; failed: number; problems: string[] }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  const { data: evaluation } = await supabase
+    .from("worker_evaluations")
+    .select("id, cycle_id, worker_id, supervisor_id, supervisor_submitted_at, excluded_at")
+    .eq("id", evaluationId)
+    .maybeSingle();
+
+  if (!evaluation) return fail("NOT_FOUND", "That appraisal no longer exists.");
+  if (evaluation.excluded_at) return fail("WITHDRAWN", "That appraisal has been withdrawn.");
+  if (!evaluation.supervisor_id) {
+    return fail("NO_RATER", "Nobody is assigned to fill this sheet in, so there is nobody to send it to.");
+  }
+  /* -- A SUBMITTED SHEET IS NOT RESENT. The message says "please fill this
+        in", and it has been filled in — sending it again asks somebody to do
+        work they have already done, and points them at a form that is now
+        read-only (§8 locks a layer on its own submission). -- */
+  if (evaluation.supervisor_submitted_at) {
+    return fail("ALREADY_IN", "That sheet has already been filled in, so there is nothing to chase.");
+  }
+
+  const [{ data: cycle }, { data: worker }] = await Promise.all([
+    supabase
+      .from("worker_cycles")
+      .select("name, period_label, supervisor_due_on")
+      .eq("id", evaluation.cycle_id)
+      .maybeSingle(),
+    supabase.from("profiles").select("full_name").eq("id", evaluation.worker_id).maybeSingle(),
+  ]);
+
+  if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
+
+  /* -- THE SEND CAN THROW, and the one that will throw here is the common one.
+        `absoluteUrl` raises rather than returning when the app URL is missing
+        or private — deliberately, because WhatsApp will not make a localhost
+        link tappable and a phone cannot reach a laptop (P28). Its message
+        names the variable and the fix, which is exactly what somebody needs;
+        letting it propagate out of a server action replaces it with Next's own
+        transport error, which explains nothing (FIX-15's F15-4).
+
+        Caught here and not in `notifyWorkerSheetAssigned`, so the launch keeps
+        its own swallow (PW-2) and this keeps its report. -- */
+  let notice;
+  try {
+    notice = await notifyWorkerSheetAssigned({
+      evaluationId,
+      raterId: evaluation.supervisor_id,
+      workerName: worker?.full_name ?? "a worker",
+      cycleName: cycle.name,
+      periodLabel: cycle.period_label,
+      dueOn: cycle.supervisor_due_on,
+    });
+  } catch (cause) {
+    return {
+      ok: true,
+      data: {
+        sent: 0,
+        failed: 0,
+        problems: [
+          cause instanceof Error && cause.message
+            ? cause.message
+            : "Nothing was sent, and no reason was given.",
+        ],
+      },
+    };
+  }
+
+  await supabase.rpc("log_admin_action", {
+    p_entity: "worker_evaluation",
+    p_entity_id: evaluationId,
+    p_action: "worker_sheet.resent",
+    p_diff: { sent: notice.sent, failed: notice.failed } as Json,
+  });
+
+  revalidate(evaluation.cycle_id);
+  return { ok: true, data: notice };
+}
+
+/* ==================================================== change who fills it == */
+
+/**
+ * Point an appraisal at a different team leader, or a different supervisor.
+ *
+ * The only control on a row was Delete, so HR who picked the wrong person had
+ * one way out: destroy the appraisal and start the round again. That is what
+ * was done, and it is what stranded three rounds — an ACTIVE round with no
+ * appraisals left in it renders no row, and the board is reachable only from a
+ * row (see `deleteWorkerAppraisal`).
+ *
+ * REFUSED ONCE THE SHEET IS IN, for the reason P19B-14 gives on the staff side:
+ * a submitted layer carries its author in `submitted_by`, and moving the rater
+ * afterwards attributes one person's ratings to another. Before that it is
+ * simply a correction — nobody has done any work to misattribute.
+ */
+export async function reassignWorkerRaters(
+  evaluationId: string,
+  input: { supervisorId?: string | null; reviewerId?: string | null },
+): Promise<WorkerResult<{ id: string }>> {
+  const auth = await guard();
+  if (!auth.ok) return fail(auth.error.code, auth.error.message);
+
+  const supabase = await createClient();
+
+  const { data: evaluation } = await supabase
+    .from("worker_evaluations")
+    .select("id, cycle_id, status, supervisor_id, reviewer_id, supervisor_submitted_at, excluded_at")
+    .eq("id", evaluationId)
+    .maybeSingle();
+
+  if (!evaluation) return fail("NOT_FOUND", "That appraisal no longer exists.");
+  if (evaluation.excluded_at) return fail("WITHDRAWN", "That appraisal has been withdrawn.");
+  if (evaluation.supervisor_submitted_at) {
+    return fail(
+      "ALREADY_IN",
+      "The sheet has already been filled in, so who filled it cannot be changed — the ratings would be attributed to somebody who did not make them.",
+    );
+  }
+
+  const supervisorId =
+    input.supervisorId === undefined ? evaluation.supervisor_id : input.supervisorId;
+  const reviewerId =
+    input.reviewerId === undefined ? evaluation.reviewer_id : input.reviewerId;
+
+  if (!supervisorId) return fail("INVALID_INPUT", "Choose who fills the sheet in.");
+  if (!reviewerId) return fail("INVALID_INPUT", "Choose who reviews the ratings.");
+
+  /* -- THE SUPERVISOR MUST HOLD THE ACCESS LEVEL, re-checked here and not
+        trusted from the dialog. This action takes any payload (§9), and the
+        rule is the one thing worth guaranteeing about somebody who recommends
+        a pay rise: that the company gave them the standing. The TEAM LEADER is
+        deliberately not checked — a line manager rates their own people
+        whatever access level they hold, at the owner's instruction. -- */
+  const { data: grant } = await supabase
+    .from("user_roles")
+    .select("profile_id")
+    .eq("profile_id", reviewerId)
+    .eq("role", "SUPERVISOR")
+    .maybeSingle();
+
+  if (!grant) {
+    return fail(
+      "NOT_A_SUPERVISOR",
+      "That person does not hold the Supervisor access level, so they cannot review ratings or recommend a rise. Grant it on Settings › Users.",
+    );
+  }
+
+  if (supervisorId === evaluation.supervisor_id && reviewerId === evaluation.reviewer_id) {
+    return { ok: true, data: { id: evaluationId } };
+  }
+
+  /* -- `.select()` IS THE DETECTION, not decoration. A PostgREST update that
+        matches no row is a SUCCESS with zero rows, so without this a refusal
+        would report as saved — the silent-write class this log has recorded
+        nine times (FIX-14, F15-14, 0066, 0069, F22-5, F24-4, F60-17). -- */
+  const { data: updated, error } = await supabase
+    .from("worker_evaluations")
+    .update({ supervisor_id: supervisorId, reviewer_id: reviewerId })
+    .eq("id", evaluationId)
+    .select("id");
+
+  if (error) return fail("QUERY_FAILED", error.message);
+  if (!updated || updated.length === 0) {
+    return fail("REFUSED", "That change was not saved. You may not have permission to make it.");
+  }
+
+  await supabase.rpc("log_admin_action", {
+    p_entity: "worker_evaluation",
+    p_entity_id: evaluationId,
+    p_action: "worker_evaluation.reassigned",
+    p_diff: {
+      before: { supervisor_id: evaluation.supervisor_id, reviewer_id: evaluation.reviewer_id },
+      after: { supervisor_id: supervisorId, reviewer_id: reviewerId },
+    } as Json,
+  });
+
+  revalidate(evaluation.cycle_id);
+  return { ok: true, data: { id: evaluationId } };
 }
 
 /* ====================================================== addWorkersToRound == */
@@ -966,7 +1174,7 @@ export async function deleteWorkerRoundForever(
  */
 export async function deleteWorkerAppraisal(
   evaluationId: string,
-): Promise<WorkerResult<{ id: string }>> {
+): Promise<WorkerResult<{ id: string; roundBinned: boolean }>> {
   const auth = await guard();
   if (!auth.ok) return fail(auth.error.code, auth.error.message);
 
@@ -988,6 +1196,39 @@ export async function deleteWorkerAppraisal(
     return fail("DELETE_REFUSED", error.message.replace(/^.*?:\s*/, "").trim() || error.message);
   }
 
+  /* -- AND IF THAT WAS THE LAST ONE, THE ROUND GOES TO THE BIN WITH IT.
+        Production Appraisals lists APPRAISALS (FIX-48 — the rounds list was
+        deleted at the owner's instruction), and the per-round board is reachable
+        only from a row on it. So an ACTIVE round holding no appraisals renders
+        nothing, can be opened from nowhere, cannot be launched again
+        (`ALREADY_LAUNCHED`) and cannot be binned — the bin dialog lives on the
+        board. It is stranded, permanently and invisibly.
+
+        Three of them were sitting in the live database, all from exactly this:
+        launch, then delete the only appraisal. The launch already refuses to
+        open a round that opened nobody (see above); nothing covered a round
+        emptied afterwards, which is the same dead end arrived at later.
+
+        BINNED rather than destroyed: it lands in Settings › Recycle bin where
+        it is visible and restorable, which is FIX-17's model and the reason
+        that screen exists. Deleting the appraisal is the deliberate act; losing
+        the round as well should be recoverable. -- */
+  let roundBinned = false;
+  if (evaluation?.cycle_id) {
+    const { count } = await supabase
+      .from("worker_evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("cycle_id", evaluation.cycle_id);
+
+    if ((count ?? 0) === 0) {
+      const binned = await moveWorkerRoundToBin(
+        evaluation.cycle_id,
+        "The last appraisal in it was deleted.",
+      );
+      roundBinned = binned.ok;
+    }
+  }
+
   revalidate(evaluation?.cycle_id ?? undefined);
-  return { ok: true, data: { id: evaluationId } };
+  return { ok: true, data: { id: evaluationId, roundBinned } };
 }

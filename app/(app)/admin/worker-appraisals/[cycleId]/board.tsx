@@ -4,7 +4,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Send, Trash2 } from "lucide-react";
 
 import {
   AddWorkersDialog,
@@ -36,7 +36,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deleteWorkerAppraisal } from "@/lib/worker/cycle-actions";
+import {
+  deleteWorkerAppraisal,
+  reassignWorkerRaters,
+  resendWorkerSheet,
+} from "@/lib/worker/cycle-actions";
 import type { ColumnDef } from "@tanstack/react-table";
 
 export type BoardRow = {
@@ -47,6 +51,7 @@ export type BoardRow = {
   /* -- The TEAM LEADER: who fills the tick sheet. `supervisor_id` on the row,
         and the column is named for what the person does rather than what the
         column has been called since 0047 (0100). -- */
+  supervisorId: string | null;
   supervisorName: string;
   supervisorEmail: string | null;
   selfIn: boolean;
@@ -55,6 +60,7 @@ export type BoardRow = {
   supervisorSubmittedAt: string | null;
   handedOver: boolean;
   /** 0100: the supervisor reviewing the ratings, where one is assigned. */
+  reviewerId: string | null;
   reviewerName: string | null;
   reviewerEmail: string | null;
   status: string;
@@ -79,6 +85,17 @@ export type BoardRow = {
   roundName: string;
   roundPeriod: string;
   nextIncrementDate: string | null;
+  /* -- WHETHER THE SHEET ACTUALLY WENT. Read from `notifications_log`, never
+        inferred from the round having launched: a launched round proves the
+        appraisals were OPENED, which is a different fact from a message
+        arriving, and treating the two as one is what let a launch that reached
+        nobody report plain success. -- */
+  sheet: {
+    status: "SENT" | "FAILED" | null;
+    at: string | null;
+    error: string | null;
+    attempts: number;
+  };
 };
 
 /**
@@ -146,6 +163,171 @@ function nextStep(
  * rating invite as personal: printing one address and sending to another is
  * worse than printing none.
  */
+/**
+ * WAS THE SHEET SENT.
+ *
+ * Module scope, because TanStack renders a `cell` with
+ * `createElement(cell, ctx)` — the function IS the component type, and one
+ * built during render is a new type every render, so the subtree remounts
+ * (P14-12, and the focus-loss bug that came from it).
+ *
+ * NEVER A COLOUR ALONE (§13.8): each state has its own word, and a failure
+ * carries the provider's own text in `title` rather than a paraphrase —
+ * "number not on WhatsApp" and "invalid token" need different fixes, and
+ * rewording them is how somebody chases the wrong one (P23-6).
+ */
+function SheetCell({ row }: { row: BoardRow }) {
+  const { sheet } = row;
+
+  if (!row.supervisorName || row.supervisorName === "—") {
+    return <GridCell value="—" />;
+  }
+
+  if (sheet.status === null) {
+    /* -- NOT AN ERROR AND NOT A BLANK. The appraisal exists and the sheet can
+          be filled in from the app whether or not a message went — so this
+          says what did not happen, not that something is broken. -- */
+    return (
+      <span className="block min-w-0">
+        <span className="block truncate text-body-sm text-warning">Not sent</span>
+        <span className="block truncate text-body-sm text-ink-muted">Send it below</span>
+      </span>
+    );
+  }
+
+  if (sheet.status === "FAILED") {
+    return (
+      <span className="block min-w-0" title={sheet.error ?? undefined}>
+        <span className="block truncate text-body-sm font-medium text-critical">
+          Could not send
+        </span>
+        <span className="block truncate text-body-sm text-ink-muted">
+          {sheet.error ?? "The provider gave no reason."}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="block min-w-0">
+      <span className="block truncate text-body-sm text-ink">Sent</span>
+      <span className="block truncate text-body-sm text-ink-muted">
+        {sheet.at ? formatDate(sheet.at) : ""}
+        {sheet.attempts > 2 ? ` · ${Math.ceil(sheet.attempts / 2)} tries` : ""}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The two pickers, and the Save that goes with them.
+ *
+ * Its own component and KEYED ON THE ROW at the call site, because it seeds two
+ * `useState` from props — and a `useState` initialiser runs once, at mount. Held
+ * inside the dialog without a key it would have been mounted from the board's
+ * first render with `row = null` and never re-read (the bug the Employment
+ * page's comment records, arrived at one level down).
+ */
+function RaterFields({
+  row,
+  raters,
+  busy,
+  error,
+  onCancel,
+  onSave,
+}: {
+  row: BoardRow;
+  raters: readonly RaterRow[];
+  busy: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSave: (supervisorId: string, reviewerId: string) => void;
+}) {
+  const [supervisorId, setSupervisorId] = React.useState(row.supervisorId ?? "");
+  const [reviewerId, setReviewerId] = React.useState(row.reviewerId ?? "");
+
+  /* -- THE PERSON ALREADY ON THE ROW IS ALWAYS OFFERED, even when they hold no
+        Supervisor grant — a team leader is whoever the worker reports to,
+        "despite their access level", so dropping them would make the current
+        answer unselectable and force a permission change to keep things as they
+        are. The same widening the launch dialog does. -- */
+  const teamLeaders =
+    row.supervisorId && !raters.some((r) => r.id === row.supervisorId)
+      ? [{ id: row.supervisorId, name: row.supervisorName, designation: null }, ...raters]
+      : raters;
+
+  const label = (r: RaterRow) => (r.designation ? `${r.name} · ${r.designation}` : r.name);
+
+  return (
+    <>
+      <div className="space-y-4">
+        <label className="block">
+          <span className="mb-1.5 block font-sans text-body-sm font-medium text-ink">
+            Team leader — fills in the ratings
+          </span>
+          <select
+            value={supervisorId}
+            onChange={(e) => setSupervisorId(e.target.value)}
+            className="min-h-11 w-full rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+          >
+            <option value="">Choose a team leader</option>
+            {teamLeaders.map((r) => (
+              <option key={r.id} value={r.id}>
+                {label(r)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block font-sans text-body-sm font-medium text-ink">
+            Supervisor — reviews them and recommends the rise
+          </span>
+          <select
+            value={reviewerId}
+            onChange={(e) => setReviewerId(e.target.value)}
+            className="min-h-11 w-full rounded-input border border-rule bg-surface px-2 font-sans text-body-sm text-ink"
+          >
+            <option value="">Choose a supervisor</option>
+            {raters.map((r) => (
+              <option key={r.id} value={r.id}>
+                {label(r)}
+              </option>
+            ))}
+          </select>
+          {/* -- Said before the press, in the same words the action refuses
+                with, so the form cannot accept what the server then rejects
+                (P13-6). -- */}
+          {raters.length === 0 ? (
+            <span className="mt-1.5 block font-sans text-body-sm text-critical">
+              Nobody holds the Supervisor access level. Grant it on Settings › Users.
+            </span>
+          ) : null}
+        </label>
+      </div>
+
+      {error ? (
+        <p role="alert" className="font-sans text-body-sm text-critical">
+          {error}
+        </p>
+      ) : null}
+
+      <DialogFooter>
+        <Button variant="ghost" className="min-h-11" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          className="min-h-11"
+          disabled={busy || !supervisorId || !reviewerId}
+          onClick={() => onSave(supervisorId, reviewerId)}
+        >
+          {busy ? "Saving…" : "Save"}
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
 function PersonCell({ name, email }: { name: string | null; email: string | null }) {
   if (!name) return <GridCell value="—" />;
   return (
@@ -268,6 +450,19 @@ export function WorkerBoard({
   const [deleteBusy, setDeleteBusy] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
+  /* -- Send the sheet again, and change who fills it in. Both held here for
+        the same reason `deleting` is: the row-detail dialog closes when one of
+        these opens, so a subject read off that dialog would vanish with it. -- */
+  const [resending, setResending] = React.useState<BoardRow | null>(null);
+  const [resendBusy, setResendBusy] = React.useState(false);
+  const [resendNote, setResendNote] = React.useState<
+    { tone: "ok" | "error"; text: string } | null
+  >(null);
+
+  const [editing, setEditing] = React.useState<BoardRow | null>(null);
+  const [editBusy, setEditBusy] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
+
   const [filter, setFilter] = React.useState<
     "all" | "waiting" | "supervisor" | "ready" | "md" | "closed"
   >("all");
@@ -358,6 +553,17 @@ export function WorkerBoard({
           ) : (
             <GridCell value="Straight to HR" className="text-ink-muted" />
           ),
+      },
+      {
+        /* -- BETWEEN the team leader and whether they filled it in, because
+              that is the order the two facts happen in: the sheet goes out,
+              then it comes back. Reported as "no status shown like sent or
+              not" — there was no such column anywhere on this board, and the
+              only way to find out was to ring the person. -- */
+        id: "sheet",
+        header: "Sheet sent",
+        size: 180,
+        cell: ({ row }) => <SheetCell row={row.original} />,
       },
       {
         id: "supervisor",
@@ -527,27 +733,73 @@ export function WorkerBoard({
             at the end of eleven columns and a "Delete" label there would read
             as another field. HR only — the MD reads this board and does not
             curate it, and the function refuses them regardless (§9). -- */
+      /* -- SEND AGAIN, and CHANGE WHO FILLS IT IN.
+            Delete was the ONLY control on a row, so HR who picked the wrong
+            person, or whose message never arrived, had exactly one way out:
+            destroy the appraisal and run the round again. That is what was
+            done, and it is what stranded three rounds — an ACTIVE round with
+            no appraisals renders no row, and the board is reachable only from
+            a row (see `deleteWorkerAppraisal`).
+
+            Both are hidden once the sheet is in: there is nothing left to
+            chase, and moving the rater afterwards would attribute their
+            ratings to somebody who did not make them (P19B-14). A control that
+            would be refused is not drawn (§13.4). -- */
       ...(mdView
         ? []
         : [
             {
-              id: "delete",
+              id: "controls",
               header: "",
-              size: 56,
+              size: 132,
               enableResizing: false,
               cell: ({ row }: { row: { original: BoardRow } }) => (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDeleteError(null);
-                    setDeleting(row.original);
-                  }}
-                  aria-label={`Delete ${row.original.workerName}'s appraisal`}
-                  title={`Delete ${row.original.workerName}'s appraisal`}
-                  className="inline-flex size-8 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-critical-tint hover:text-critical"
-                >
-                  <Trash2 aria-hidden className="size-4" />
-                </button>
+                <span className="flex items-center gap-1">
+                  {row.original.supervisorIn ? null : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResendNote(null);
+                          setResending(row.original);
+                        }}
+                        aria-label={`Send ${row.original.workerName}'s sheet again`}
+                        title={
+                          row.original.sheet.status === null
+                            ? `Send ${row.original.workerName}'s sheet`
+                            : `Send ${row.original.workerName}'s sheet again`
+                        }
+                        className="inline-flex size-11 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-surface-mute hover:text-ink lg:size-8"
+                      >
+                        <Send aria-hidden className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditError(null);
+                          setEditing(row.original);
+                        }}
+                        aria-label={`Change who fills in ${row.original.workerName}'s sheet`}
+                        title={`Change who fills in ${row.original.workerName}'s sheet`}
+                        className="inline-flex size-11 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-surface-mute hover:text-ink lg:size-8"
+                      >
+                        <Pencil aria-hidden className="size-4" />
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleting(row.original);
+                    }}
+                    aria-label={`Delete ${row.original.workerName}'s appraisal`}
+                    title={`Delete ${row.original.workerName}'s appraisal`}
+                    className="inline-flex size-11 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-critical-tint hover:text-critical lg:size-8"
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                  </button>
+                </span>
               ),
             } as ColumnDef<BoardRow>,
           ]),
@@ -791,7 +1043,9 @@ export function WorkerBoard({
        // neither is squeezed below the address it now carries.
        // 110 narrower: the unnamed Review column is gone and its job moved
        // onto the sentence in "What happens next".
-       minWidth={1300}
+       // +180 for "Sheet sent" and +76 for the two new row controls, so no
+       // column is squeezed below the two lines it now carries.
+       minWidth={1556}
         empty={
           <EmptyState
             title={filter === "all" ? "Nobody is in this round" : "Nothing matches"}
@@ -828,10 +1082,24 @@ export function WorkerBoard({
             </DialogTitle>
             <DialogDescription className="font-sans text-body-sm text-ink-muted">
               This removes their ratings, both comments, the training answer, the increment
-              recommendation and the frozen sheet they were given. The round and everybody else in
-              it are untouched. It cannot be undone and there is no recycle bin for one appraisal.
+              recommendation and the frozen sheet they were given. It cannot be undone and there is
+              no recycle bin for one appraisal.
             </DialogDescription>
           </DialogHeader>
+
+          {/* -- AND IF IT IS THE LAST ONE, SAY SO BEFORE THE PRESS.
+                A round with no appraisals left renders no row, and this board
+                is reachable only from a row — so the round would disappear
+                from the product entirely. It goes to the recycle bin with the
+                appraisal now, and somebody about to press this needs to know
+                that is what they are doing (§13.4). -- */}
+          {deleting && rows.filter((r) => r.cycleId === deleting.cycleId).length === 1 ? (
+            <p className="rounded-control bg-warning-tint px-3 py-2 font-sans text-body-sm text-ink">
+              This is the only appraisal in{" "}
+              <span className="font-medium">{deleting.roundName}</span>, so the round goes to
+              Settings › Recycle bin with it. You can restore it from there.
+            </p>
+          ) : null}
 
           {deleteError ? (
             <p role="alert" className="font-sans text-body-sm text-critical">
@@ -863,6 +1131,154 @@ export function WorkerBoard({
               Delete for good
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- SEND IT AGAIN, AND SAY WHAT HAPPENED.
+            A production round sent once, at launch, from a function that
+            discarded the result — so a message that never arrived could not be
+            diagnosed and could not be retried. Unlike the launch, this one
+            reports: somebody pressing Send is asking a question, and "we tried"
+            is not an answer to it (§0.7). -- */}
+      <Dialog
+        open={resending !== null}
+        onOpenChange={(open) => {
+          if (open) return;
+          setResending(null);
+          setResendNote(null);
+        }}
+      >
+        <DialogContent className="w-[min(96vw,480px)] border-rule">
+          <DialogHeader>
+            <DialogTitle className="text-display-sm text-ink">
+              {resending?.sheet.status === null ? "Send the sheet" : "Send the sheet again"}
+            </DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              {resending
+                ? `${resending.supervisorName} gets a message with a link to ${resending.workerName}'s sheet, on WhatsApp and by email wherever we have one.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          {resending && resending.sheet.status === "FAILED" && resending.sheet.error ? (
+            <p className="rounded-control bg-critical-tint px-3 py-2 font-sans text-body-sm text-ink">
+              Last time: {resending.sheet.error}
+            </p>
+          ) : null}
+
+          {resendNote ? (
+            <p
+              role={resendNote.tone === "error" ? "alert" : undefined}
+              className={cn(
+                "font-sans text-body-sm",
+                resendNote.tone === "error" ? "text-critical" : "text-ink",
+              )}
+            >
+              {resendNote.text}
+            </p>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => {
+                setResending(null);
+                setResendNote(null);
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              className="min-h-11"
+              disabled={resendBusy}
+              onClick={async () => {
+                if (!resending) return;
+                setResendBusy(true);
+                setResendNote(null);
+                const result = await resendWorkerSheet(resending.id);
+                setResendBusy(false);
+
+                if (!result.ok) {
+                  setResendNote({ tone: "error", text: result.error.message });
+                  return;
+                }
+
+                /* -- THE OUTCOME, NOT "DONE". `sent: 0` is the case this whole
+                      change exists for — on a development server every send is
+                      refused because the app URL is localhost (P28-1), and
+                      reporting that as success is exactly what hid it. -- */
+                const { sent, failed, problems } = result.data;
+                if (sent > 0) {
+                  setResendNote({
+                    tone: "ok",
+                    text: `Sent to ${resending.supervisorName}${
+                      failed > 0 ? `, though one channel failed: ${problems[0] ?? ""}` : "."
+                    }`,
+                  });
+                } else {
+                  setResendNote({
+                    tone: "error",
+                    text:
+                      problems[0] ??
+                      "Nothing was sent, and the provider gave no reason. Check Settings › Messages.",
+                  });
+                }
+                router.refresh();
+              }}
+            >
+              {resendBusy ? "Sending…" : "Send it"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* -- CHANGE WHO FILLS IT IN, without destroying the appraisal.
+            Delete was the only control on a row, so a wrong pick meant deleting
+            and running the round again — which is what stranded three rounds.
+            Refused once the sheet is in, because moving the rater afterwards
+            attributes their ratings to somebody who did not make them
+            (P19B-14); the button is not drawn in that case either. -- */}
+      <Dialog
+        open={editing !== null}
+        onOpenChange={(open) => (open ? null : setEditing(null))}
+      >
+        <DialogContent className="w-[min(96vw,560px)] border-rule">
+          <DialogHeader>
+            <DialogTitle className="text-display-sm text-ink">
+              Who fills in {editing?.workerName}&rsquo;s sheet?
+            </DialogTitle>
+            <DialogDescription className="font-sans text-body-sm text-ink-muted">
+              The team leader ticks the eight qualities. Their supervisor then reviews those ticks
+              and records the comment, the training answer and the recommended rise.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editing ? (
+            <RaterFields
+              key={editing.id}
+              row={editing}
+              raters={raters}
+              busy={editBusy}
+              error={editError}
+              onCancel={() => setEditing(null)}
+              onSave={async (supervisorId, reviewerId) => {
+                setEditBusy(true);
+                setEditError(null);
+                const result = await reassignWorkerRaters(editing.id, {
+                  supervisorId,
+                  reviewerId,
+                });
+                setEditBusy(false);
+                if (!result.ok) {
+                  setEditError(result.error.message);
+                  return;
+                }
+                setEditing(null);
+                router.refresh();
+              }}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
 

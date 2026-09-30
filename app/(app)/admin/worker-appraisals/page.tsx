@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth/guards";
 import { createClient } from "@/lib/supabase/server";
 import { CONTACT_COLUMNS, contactFor } from "@/lib/notify/contacts";
 import { listWorkerRaters } from "@/lib/worker/raters";
+import { sheetDeliveryFor } from "@/lib/worker/sheet-delivery";
 
 export const metadata: Metadata = { title: "Production appraisals" };
 
@@ -255,6 +256,12 @@ export default async function Page({
     ),
   );
 
+  /* -- Was the sheet actually sent? Read back per appraisal rather than
+        inferred from the round having launched — those are two different
+        facts, and treating them as one is what let a launch that reached
+        nobody report plain success. -- */
+  const deliveryOf = await sheetDeliveryFor(evaluationIds);
+
   return (
     <WorkerBoard
       /* Null is the whole signal: no single round, so the Round column appears
@@ -265,9 +272,11 @@ export default async function Page({
         id: r.id,
         workerId: r.worker_id,
         workerName: nameOf.get(r.worker_id) ?? "—",
+        supervisorId: r.supervisor_id,
         supervisorName: r.supervisor_id ? (nameOf.get(r.supervisor_id) ?? "—") : "—",
         supervisorEmail: r.supervisor_id ? (emailOf.get(r.supervisor_id) ?? null) : null,
         // 0100: the supervisor who reviews those ratings, where one is assigned.
+        reviewerId: r.reviewer_id,
         reviewerName: r.reviewer_id ? (nameOf.get(r.reviewer_id) ?? "—") : null,
         reviewerEmail: r.reviewer_id ? (emailOf.get(r.reviewer_id) ?? null) : null,
         selfIn: Boolean(r.self_submitted_at) || r.self_skipped,
@@ -285,6 +294,7 @@ export default async function Page({
         currentCtc: employmentOf.get(r.worker_id)?.current_ctc ?? null,
         lastIncrementDate: employmentOf.get(r.worker_id)?.last_increment_date ?? null,
         nextIncrementDate: employmentOf.get(r.worker_id)?.next_increment_date ?? null,
+        sheet: deliveryOf.get(r.id) ?? { status: null, at: null, error: null, attempts: 0 },
         cycleId: r.cycle_id,
         roundName: cycleOf.get(r.cycle_id)?.name ?? "—",
         roundPeriod: cycleOf.get(r.cycle_id)?.period_label ?? "",
