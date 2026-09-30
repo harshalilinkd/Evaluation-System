@@ -74,6 +74,11 @@ export type WorkerSheet = {
   isSubmitted: boolean;
   /** Open for writing: the record is OPEN and this layer is neither in nor skipped. */
   isOpen: boolean;
+  /* For the progress tracker — where the appraisal has got to since. */
+  status: string;
+  reviewerName: string | null;
+  ratedAt: string | null;
+  reviewedAt: string | null;
 };
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -99,7 +104,7 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
   const { data: evaluation } = await supabase
     .from("worker_evaluations")
     .select(
-      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, self_submitted_at, supervisor_submitted_at, self_skipped, supervisor_skipped",
+      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, self_submitted_at, supervisor_submitted_at, reviewer_submitted_at, self_skipped, supervisor_skipped",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -204,13 +209,20 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
         ])
       : [{ data: null }, { data: null }];
 
-  const { data: supervisor } = evaluation.supervisor_id
-    ? await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", evaluation.supervisor_id)
-        .maybeSingle()
-    : { data: null };
+  /* -- The team leader AND the supervisor who reviews them, in one trip. The
+        supervisor's name is for the progress tracker; the profiles policy may
+        not admit a team leader to a peer's row, and then it is simply null and
+        the tracker says "Supervisor" — the read is not widened to get it. -- */
+  const raterIds = [evaluation.supervisor_id, evaluation.reviewer_id].filter(
+    (v): v is string => Boolean(v),
+  );
+  const { data: raterPeople } = raterIds.length
+    ? await supabase.from("profiles").select("id, full_name").in("id", raterIds)
+    : { data: [] as { id: string; full_name: string }[] };
+  const nameOf = new Map((raterPeople ?? []).map((p) => [p.id, p.full_name]));
+  const supervisor = evaluation.supervisor_id
+    ? { full_name: nameOf.get(evaluation.supervisor_id) ?? null }
+    : null;
 
   return {
     ok: true,
@@ -281,6 +293,12 @@ export async function getWorkerSheet(evaluationId: string): Promise<Result<Worke
               },
       isSubmitted: submittedAt !== null,
       isOpen: evaluation.status === "OPEN" && submittedAt === null && !skipped,
+      status: evaluation.status,
+      reviewerName: evaluation.reviewer_id
+        ? (nameOf.get(evaluation.reviewer_id) ?? (hasReviewer ? "Supervisor" : null))
+        : null,
+      ratedAt: evaluation.supervisor_submitted_at,
+      reviewedAt: evaluation.reviewer_submitted_at,
     },
   };
 }

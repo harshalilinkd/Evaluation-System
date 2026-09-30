@@ -920,9 +920,9 @@ export function WorkerBoard({
             active={filter === "all"}
           />
           <KpiCard
-            label="In progress"
+            label="Being rated"
             value={inProgress}
-            caption="with their supervisor"
+            caption="with the team leader"
             tone="plain"
             onSelect={() => toggle("waiting")}
             active={filter === "waiting"}
@@ -944,26 +944,24 @@ export function WorkerBoard({
           <KpiCard
             label={mdView ? "Under HR review" : "Ready for you"}
             value={readyCount}
-            caption={mdView ? "with HR, not yet sent up" : "filled in, not yet reviewed"}
+            caption={mdView ? "with HR, not yet sent up" : "set the salary, send it up"}
             tone="final"
             onSelect={() => toggle("ready")}
             active={filter === "ready"}
           />
-          {/* -- Hidden at zero for HR, because most rounds never use Send to
-                 MD and a permanent zero teaches people to ignore a column.
-                 ALWAYS shown to the MD: it is THEIR queue, and "nothing needs
-                 you" is the answer they came for. An absent card is not that
-                 answer — it is no answer at all. -- */}
-          {withMd > 0 || mdView ? (
-            <KpiCard
-              label={mdView ? "Ready for you" : "With management"}
-              value={withMd}
-              caption={mdView ? "sent up for you to sign off" : "sent to the MD to sign off"}
-              tone="lead"
-              onSelect={() => toggle("md")}
-              active={filter === "md"}
-            />
-          ) : null}
+          {/* Shown to everybody, always. It was hidden at zero for HR because
+              most rounds never used Send to MD — but management approval is
+              required on every production appraisal now, so this stage is
+              never a permanent zero, and it is where HR looks to see what is
+              waiting on the MD. */}
+          <KpiCard
+            label={mdView ? "Ready for you" : "With management"}
+            value={withMd}
+            caption={mdView ? "sent up for you to sign off" : "sent to the MD to sign off"}
+            tone="lead"
+            onSelect={() => toggle("md")}
+            active={filter === "md"}
+          />
           <KpiCard
             label="Closed"
             value={closedCount}
@@ -994,10 +992,24 @@ export function WorkerBoard({
               I do now" for the whole round rather than for one row. HR fills
               neither sheet, and a screen that does not say so leaves somebody
               looking for a button that should not exist. -- */}
+        {/* -- THE FLOW, IN ONE LINE. It said "each supervisor completes it"
+              and "it reaches you when they submit" — the pre-0100 flow, with
+              no team leader and no review step, on a board whose own tiles now
+              show both. -- */}
         <p className="font-sans text-body-sm text-ink-muted">
-          You do not fill the sheet. Each supervisor completes it from{" "}
-          <span className="font-medium text-ink">Production Team</span> in their own menu, and it reaches
-          you when they submit. The worker fills nothing.
+          {mdView ? (
+            <>
+              The team leader rates, their supervisor reviews, HR sets the salary — then it comes to
+              you to approve or send back.
+            </>
+          ) : (
+            <>
+              The team leader rates each worker from{" "}
+              <span className="font-medium text-ink">Production Team</span>, their supervisor
+              reviews, then it reaches you: set the salary and send it to management. The worker
+              fills nothing.
+            </>
+          )}
         </p>
       </div>
 

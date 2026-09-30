@@ -8,6 +8,7 @@ import { CheckCircle2, Loader2, Send } from "lucide-react";
 
 import { FormActionBar } from "@/components/appraise/form-action-bar";
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
+import { WorkerProgress } from "@/components/appraise/worker-progress";
 import { SubmittedDialog } from "@/components/appraise/submitted-dialog";
 import { TickScale } from "@/components/appraise/tick-scale";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,11 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         actually saved. -- */
   const [salaryError, setSalaryError] = React.useState<string | null>(null);
   const [thanked, setThanked] = React.useState(false);
+  /* -- SEPARATE FROM `thanked`, and that is a fix to my own last change. The
+        sheet was locked on `thanked` — but closing the thank-you sets that
+        back to false, which reopened the sheet for editing until the
+        refresh landed. This one is set once and never cleared. -- */
+  const [submitted, setSubmitted] = React.useState(false);
   /* A save already on the wire when the submit returns is not stopped by
      `thanked` — it closed over the render that started it. The ref is read
      live, so a late response cannot put a warning on a submitted sheet. */
@@ -78,7 +84,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
         over a salary that HAD been saved and an appraisal already with HR.
         Both halves of that sentence were false. `thanked` is set on the same
         line as the success, so nothing can save after it. -- */
-  const readOnly = !sheet.isOpen || thanked;
+  const readOnly = !sheet.isOpen || submitted;
 
   const answered = sheet.questions.filter((q) => answers[q.questionId]).length;
 
@@ -310,6 +316,7 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       return;
     }
     submittedRef.current = true;
+    setSubmitted(true);
     setSalaryError(null);
     setError(null);
     setThanked(true);
@@ -397,15 +404,50 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
       {/* -- What happens to it, said once.
             The worker fills nothing and sees nothing: this is the paper tick
             sheet, which has one column and a Supervisor Signature under it. -- */}
-      <p className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-        You are rating {sheet.workerName}. HR reads this afterwards; it is not shown to them.
-      </p>
-
-      {sheet.isSubmitted ? (
-        <p className="flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 font-sans text-body-sm text-ink">
-          <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
-          This is in. It cannot be changed now.
+      {/* -- WHO READS IT NEXT, said accurately. It read "HR reads this
+            afterwards" on every sheet — wrong wherever a supervisor reviews the
+            ratings first, which since 0100 is every new round. A team leader
+            told their work goes to HR is surprised when their supervisor
+            messages them about it. -- */}
+      {readOnly ? null : (
+        <p className="rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
+          {sheet.hasReviewer
+            ? `You are rating ${sheet.workerName}. When you submit, ${sheet.reviewerName ?? "their supervisor"} reviews your ratings, then HR sets the salary. ${sheet.workerName} does not see this.`
+            : sheet.alsoDecides
+              ? `You are rating ${sheet.workerName} and recording the decision below. When you submit it goes to HR, who set the salary. ${sheet.workerName} does not see this.`
+              : `You are rating ${sheet.workerName}. When you submit it goes to HR. ${sheet.workerName} does not see this.`}
         </p>
+      )}
+
+      {/* -- AFTER SUBMITTING: WHERE IT WENT, not only that it is locked. "This is
+            in. It cannot be changed now." said what the team leader could no
+            longer do and nothing about what happened to their work. The same
+            tracker the supervisor, HR and management see. -- */}
+      {sheet.isSubmitted || submitted ? (
+        <>
+          <p className="flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 font-sans text-body-sm text-ink">
+            <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
+            Submitted. Your ratings are locked; you can read them below.
+          </p>
+          <WorkerProgress
+            input={{
+              status:
+                submitted && sheet.status === "OPEN"
+                  ? sheet.hasReviewer
+                    ? "PENDING_SUPERVISOR"
+                    : "PENDING_REVIEW"
+                  : sheet.status,
+              teamLeader: sheet.supervisorName,
+              reviewer: sheet.reviewerName,
+              combined: sheet.alsoDecides,
+              ratedAt: sheet.ratedAt ?? (submitted ? new Date().toISOString() : null),
+              reviewedAt: sheet.reviewedAt,
+              sentUpAt: null,
+              approvedAt: null,
+            }}
+            viewer={{ teamLeader: true, reviewer: sheet.alsoDecides }}
+          />
+        </>
       ) : null}
 
       <div className="card-surface divide-y divide-rule p-0">
@@ -745,8 +787,8 @@ export function WorkerSheetForm({ sheet }: { sheet: WorkerSheet }) {
                 ? `Your ratings and your decision for ${sheet.workerName} are recorded and are with HR. Nothing more is needed from you.`
                 : `Your ratings for ${sheet.workerName} are recorded. HR will read them alongside their own answers.`
         }
-        actionLabel="Done"
-        onAction={() => setThanked(false)}
+        actionLabel={isSelf ? "Done" : "Back to Production Team"}
+        onAction={() => (isSelf ? setThanked(false) : router.push("/worker-team"))}
       />
     </div>
   );

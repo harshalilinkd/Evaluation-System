@@ -5,7 +5,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Download, Loader2, Printer } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Printer } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,61 +22,12 @@ import { returnWorkerToHr, reviewWorkerAppraisal, type WorkerReview } from "@/li
 import { SALARY_TINT } from "@/components/appraise/salary-tones";
 import { cn } from "@/lib/utils";
 import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
+import { WorkerProgress } from "@/components/appraise/worker-progress";
+import { TICK_WORD, TickTable } from "@/components/appraise/worker-tick";
 import { saveWorkerSalaryAsHr } from "@/lib/worker/review";
 import type { WorkerActivity } from "@/lib/worker/review";
 import { formatDateTime } from "@/lib/utils/date";
 
-const TICK_WORD: Record<string, string> = {
-  EXCELLENT: "Excellent",
-  SATISFACTORY: "Satisfactory",
-  NEEDS_IMPROVEMENT: "Needs improvement",
-};
-
-/* -- The LEAD tier, because the supervisor is who said it (§13.1).
-      One column now, so there is no other colour to be distinguished FROM — but
-      a tier still means what it means everywhere else, and reaching for a
-      different hue because this screen happens to have one column is how a
-      reserved colour stops being reserved. -- */
-/* -- THREE RATINGS THAT LOOK DIFFERENT, because they are.
-      Every tick rendered in the SAME pink pill — so a sheet with one "Needs
-      improvement" among seven "Satisfactory" read as eight identical badges,
-      and the one row worth finding was the hardest to find. Colour that means
-      nothing is worse than no colour: it implies a distinction and then
-      withholds it.
-
-      It was also `bg-lead-tint` / `text-lead`, which is §13.1's HOD hue used
-      decoratively on something that is not a layer at all — the rule the
-      notification bell's placeholder dot broke in the same way (N1-16).
-
-      AN ORDINAL RAMP IN INK, plus one status accent. Excellent is the strongest
-      weight, Satisfactory the quiet middle, and Needs improvement takes
-      `critical` because it IS the attention case and is the only one anybody
-      acts on. No tier hue, no new token, and it reads as a document rather than
-      a dashboard — which is what this page is.
-
-      §13.8: never colour alone. The word is the signal; the treatment only
-      makes it findable, and "Not answered" stays plain text so an absence
-      cannot be mistaken for a rating. §6.2 holds too — no numeral appears here,
-      the 5/3/1 analytics mapping stays off a worker's own sheet. -- */
-const TICK_STYLE: Record<string, string> = {
-  EXCELLENT: "bg-surface-mute font-medium text-ink",
-  SATISFACTORY: "bg-surface-mute text-ink-muted",
-  NEEDS_IMPROVEMENT: "bg-critical-tint font-medium text-critical",
-};
-
-function Tick({ value }: { value: string | null }) {
-  if (!value) return <span className="font-sans text-body-sm text-ink-faint">Not answered</span>;
-  return (
-    <span
-      className={cn(
-        "inline-flex rounded-pill px-2.5 py-1 font-sans text-body-sm",
-        TICK_STYLE[value] ?? "bg-surface-mute text-ink",
-      )}
-    >
-      {TICK_WORD[value] ?? value}
-    </span>
-  );
-}
 
 export function WorkerReviewClient({
   review,
@@ -125,9 +76,6 @@ export function WorkerReviewClient({
         (P13-6), so the wording of the refusal is the same on both sides. -- */
   const recommendsAChange =
     review.salary?.salaryChanged === true || review.salary?.incrementPct != null;
-  const priced =
-    !recommendsAChange ||
-    (review.salary?.oldCtc != null && review.salary?.newCtc != null);
 
   /* -- THE SALARY DRAFT LIVES HERE, not inside the panel, and that is the fix
         for the second half of the report.
@@ -167,6 +115,8 @@ export function WorkerReviewClient({
   );
   const [newCtc, setNewCtc] = React.useState<number | null>(savedNewCtc);
   const salaryDirty = oldCtc !== savedOldCtc || newCtc !== savedNewCtc;
+  /* What is on screen, not what was last saved — see the Send button. */
+  const pricedNow = !recommendsAChange || (oldCtc != null && newCtc != null);
 
   /* -- HR AND THE MD ON ONE RECORD, kept in step.
         Asked for as "changes made in one screen should be visible to the
@@ -337,17 +287,25 @@ export function WorkerReviewClient({
         </div>
       </div>
 
-      {closed ? (
-        <p className="flex items-center gap-2 rounded-card bg-success-tint px-4 py-3 font-sans text-body-sm text-ink">
-          <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden />
-          Closed. Nothing further is needed.
-        </p>
-      ) : withMd ? (
-        <p className="flex items-center gap-2 rounded-card bg-accent px-4 py-3 font-sans text-body-sm text-accent-foreground">
-          <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-          HR has reviewed this and sent it to management. It closes when they sign it off.
-        </p>
-      ) : null}
+      {/* -- WHERE IT IS, AND WHOSE TURN, BEFORE ANYTHING ELSE.
+            There was a banner once it reached management and another once it
+            closed — and nothing at all while it sat with HR, which is exactly
+            the stage HR opens this screen to act on. The tracker answers the
+            question for every stage and every reader, and says "your turn"
+            only to the person the step is waiting on. -- */}
+      <WorkerProgress
+        input={{
+          status: review.status,
+          teamLeader: review.supervisorName,
+          reviewer: review.reviewerName,
+          combined: review.reviewerName !== null && !review.twoAuthors,
+          ratedAt: review.stages.supervisorSubmittedAt,
+          reviewedAt: review.stages.reviewerSubmittedAt,
+          sentUpAt: review.stages.sentUpAt,
+          approvedAt: review.stages.closedAt,
+        }}
+        viewer={{ hr: isHr, md: isMd }}
+      />
 
       {/* ---------- The sheet ----------
             ONE COLUMN. The supervisor fills it and the worker does not, so
@@ -366,45 +324,15 @@ export function WorkerReviewClient({
 
             The tick is RIGHT-ALIGNED so eight of them share an edge; a ragged
             column of pills is most of what looks untidy at a glance. -- */}
-      <div className="card-surface overflow-x-auto">
-        <table className="w-full min-w-[22rem]">
-          <thead>
-            <tr className="border-b border-rule">
-              <th scope="col" className="type-label px-5 py-3 text-left text-ink-muted">
-                Quality
-              </th>
-              <th scope="col" className="type-label px-5 py-3 text-right text-ink-muted">
-                {review.supervisorName ?? "Supervisor"} ticked
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {review.rows.map((row) => (
-              <tr
-                key={row.questionId}
-                className={cn(
-                  "border-b border-rule last:border-b-0",
-                  // §11: the overall is what the whole sheet resolves to, so it
-                  // is marked rather than sitting as an eighth identical row.
-                  row.isOverall && "bg-surface-mute/60",
-                )}
-              >
-                <td
-                  className={cn(
-                    "px-5 py-3 font-sans text-body-sm text-ink",
-                    row.isOverall && "font-medium",
-                  )}
-                >
-                  {row.text}
-                </td>
-                <td className="px-5 py-3 text-right">
-                  <Tick value={row.supervisor} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <TickTable
+        heading={`${review.supervisorName ?? "Team leader"} ticked`}
+        rows={review.rows.map((row) => ({
+          questionId: row.questionId,
+          text: row.text,
+          isOverall: row.isOverall,
+          tick: row.supervisor,
+        }))}
+      />
 
 
       {/* ---------- What the supervisor added ---------- */}
@@ -639,28 +567,35 @@ export function WorkerReviewClient({
                         from the other end: HR sent an 8% recommendation up with
                         no figures, and the MD approved an amount nobody had
                         written down. -- */
+                  /* -- ONE PRESS: SAVE THE FIGURES, THEN SEND THEM UP.
+                        It was two buttons in two cards — Save in the salary
+                        panel, Send down here — and Send stayed greyed out until
+                        the first had been pressed. That is the trap that sent
+                        an MD the previous figure (FIX-44), and it was answered
+                        by blocking the button, which just moved the confusion:
+                        HR saw a disabled Send and a red sentence about saving.
+
+                        `finish` already saves first when the figures have
+                        changed and stops if that fails, so the block guarded
+                        against nothing. Enabled, and it says what it will do.
+
+                        "Priced" is judged on what is TYPED, not on what was
+                        last saved — otherwise figures entered but not yet saved
+                        would read as missing, and the button would refuse the
+                        very press that saves them. The server re-checks after
+                        the save regardless (§9). -- */
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       onClick={() => void finish("SEND_TO_MD")}
-                      disabled={busy || !priced || salaryDirty}
+                      disabled={busy || !pricedNow}
                       className="min-h-11"
                     >
                       {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-                      Send to management
+                      {salaryDirty ? "Save and send to management" : "Send to management"}
                     </Button>
-                    {!priced ? (
+                    {!pricedNow ? (
                       <p className="font-sans text-body-sm text-critical">
-                        Set the current and new salary above first — management approves an amount.
-                      </p>
-                    ) : salaryDirty ? (
-                      /* -- THE REPORTED BUG, from the other end. HR was sent it
-                            back, typed 17,000, and pressed this without saving.
-                            The MD opened it and saw the old figure — the new one
-                            had never left the browser. FIX-41's guard passed
-                            because the appraisal WAS priced, just not with what
-                            was on screen. Stale is not absent. -- */
-                      <p className="font-sans text-body-sm text-critical">
-                        Save the salary above first — management would otherwise be sent the previous figure.
+                        Enter the current and new salary above first — management approves an amount.
                       </p>
                     ) : null}
                   </div>

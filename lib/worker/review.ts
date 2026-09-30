@@ -26,6 +26,8 @@ export type WorkerReview = {
   department: string | null;
   designation: string | null;
   supervisorName: string | null;
+  /** 0100: who reviews the team leader's ticks. Null where nobody does. */
+  reviewerName: string | null;
   cycleName: string;
   periodLabel: string;
   status: string;
@@ -83,6 +85,10 @@ export type WorkerReview = {
    */
   stages: {
     supervisorSubmittedAt: string | null;
+    /** When the supervisor sent their review on to HR. */
+    reviewerSubmittedAt: string | null;
+    /** When HR sent it to management — from the audit row, see above. */
+    sentUpAt: string | null;
     mdReviewedAt: string | null;
     closedAt: string | null;
   };
@@ -107,7 +113,7 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
   const { data: evaluation } = await supabase
     .from("worker_evaluations")
     .select(
-      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, overall_tick, supervisor_submitted_at, md_reviewed_at, closed_at",
+      "id, cycle_id, worker_id, supervisor_id, reviewer_id, status, overall_tick, supervisor_submitted_at, reviewer_submitted_at, md_reviewed_at, closed_at",
     )
     .eq("id", evaluationId)
     .maybeSingle();
@@ -124,7 +130,12 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
       supabase
         .from("profiles")
         .select("id, full_name, designation, departments(name)")
-        .in("id", [evaluation.worker_id, evaluation.supervisor_id].filter((v): v is string => Boolean(v))),
+        .in(
+          "id",
+          [evaluation.worker_id, evaluation.supervisor_id, evaluation.reviewer_id].filter(
+            (v): v is string => Boolean(v),
+          ),
+        ),
       supabase
         .from("worker_evaluation_questions")
         .select("question_id, text, is_overall, sort_order")
@@ -153,6 +164,20 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
 
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
   const worker = byId.get(evaluation.worker_id);
+
+  /* -- WHEN HR SENT IT UP. No column records it — the hand-up is a status
+        move, and `worker.sent_to_md` is the audit row it writes (§12). Read
+        for the progress tracker, which has to date every step it marks done
+        or it is asserting something nobody can check. The NEWEST, because an
+        appraisal the MD sent back is sent up again. -- */
+  const { data: sentUp } = await supabase
+    .from("audit_log")
+    .select("created_at")
+    .eq("entity_id", evaluationId)
+    .eq("action", "worker.sent_to_md")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   /* -- THE MD'S APPROVAL, and only once it exists.
 
@@ -200,6 +225,9 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
       supervisorName: evaluation.supervisor_id
         ? (byId.get(evaluation.supervisor_id)?.full_name ?? null)
         : null,
+      reviewerName: evaluation.reviewer_id
+        ? (byId.get(evaluation.reviewer_id)?.full_name ?? null)
+        : null,
       cycleName: cycle?.name ?? "",
       periodLabel: cycle?.period_label ?? "",
       status: evaluation.status,
@@ -239,6 +267,8 @@ export async function getWorkerReview(evaluationId: string): Promise<Result<Work
       mdApproval,
       stages: {
         supervisorSubmittedAt: evaluation.supervisor_submitted_at,
+        reviewerSubmittedAt: evaluation.reviewer_submitted_at,
+        sentUpAt: sentUp?.created_at ?? null,
         mdReviewedAt: evaluation.md_reviewed_at,
         closedAt: evaluation.closed_at,
       },

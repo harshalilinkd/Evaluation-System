@@ -67,6 +67,10 @@ export type WorkerReviewSheet = {
   isOpen: boolean;
   /** They have sent it on; it is with HR. */
   isSent: boolean;
+  /* For the progress tracker: where the appraisal is and when the review went
+     on. The reviewer is the viewer here, so the tracker says "You". */
+  status: string;
+  reviewedAt: string | null;
 };
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
@@ -195,6 +199,8 @@ export async function getWorkerReviewSheet(
       trainingRequired: decision?.training_required ?? response?.training_required ?? null,
       isOpen: evaluation.status === "PENDING_SUPERVISOR" && !evaluation.reviewer_skipped,
       isSent: evaluation.reviewer_submitted_at !== null,
+      status: evaluation.status,
+      reviewedAt: evaluation.reviewer_submitted_at,
     },
   };
 }

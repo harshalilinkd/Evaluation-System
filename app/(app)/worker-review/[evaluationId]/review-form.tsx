@@ -17,7 +17,8 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
 
 import { FormLetterhead } from "@/components/appraise/form-letterhead";
-import { TickScale } from "@/components/appraise/tick-scale";
+import { TICK_WORD, TickTable } from "@/components/appraise/worker-tick";
+import { WorkerProgress } from "@/components/appraise/worker-progress";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,11 +32,6 @@ import {
   type WorkerReviewSheet,
 } from "@/lib/worker/review-sheet";
 
-const TICK_WORD: Record<string, string> = {
-  EXCELLENT: "Excellent",
-  SATISFACTORY: "Satisfactory",
-  NEEDS_IMPROVEMENT: "Needs improvement",
-};
 
 export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
   const router = useRouter();
@@ -58,29 +54,93 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
     [salaryChanged, pct, comment, training],
   );
 
-  async function persist(): Promise<boolean> {
-    if (readOnly) return true;
-    setBusy(true);
-    /* -- Cleared BEFORE the send, not on the response. Clearing it afterwards
-          uses the snapshot the request left with, so anything typed while it
-          was in flight is marked clean and never sent again (F16-6). -- */
-    setDirty(false);
-    const result = await saveWorkerReview(sheet.evaluationId, input);
-    setBusy(false);
-    if (!result.ok) {
-      setDirty(true);
-      setError(result.error.message);
-      return false;
+  /* -- THE LATEST DRAFT, for a save that fires later than the render that
+        scheduled it. Synced in an effect, never assigned during render (F6-3). -- */
+  const latest = React.useRef(input);
+  React.useEffect(() => {
+    latest.current = input;
+  }, [input]);
+
+  /* Set on a successful send, and read live — a save already on the wire must
+     not land on, or put an error over, a review that has been sent on. */
+  const sentRef = React.useRef(false);
+
+  /* -- ONE WRITE AT A TIME, joined rather than raced. Holding the promise lets a
+        second caller wait for the first instead of being told the server was up
+        to date when nothing had been sent (F16-8). -- */
+  const inFlight = React.useRef<Promise<boolean> | null>(null);
+  const [saving, setSaving] = React.useState(false);
+
+  const persist = React.useCallback(async (): Promise<boolean> => {
+    if (readOnly || sentRef.current) return true;
+    if (inFlight.current) await inFlight.current;
+
+    const run = (async (): Promise<boolean> => {
+      setSaving(true);
+      /* -- Cleared BEFORE the send, not on the response. Clearing it afterwards
+            uses the snapshot the request left with, so anything typed while it
+            was in flight is marked clean and never sent again (F16-6). -- */
+      setDirty(false);
+      try {
+        const result = await saveWorkerReview(sheet.evaluationId, latest.current);
+        if (sentRef.current) return true;
+        if (!result.ok) {
+          setDirty(true);
+          setError(result.error.message);
+          return false;
+        }
+        setSaved(new Date());
+        setError(null);
+        return true;
+      } catch {
+        setDirty(true);
+        setError("The connection dropped before your review reached us. It is still on screen.");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    })();
+
+    inFlight.current = run;
+    try {
+      return await run;
+    } finally {
+      if (inFlight.current === run) inFlight.current = null;
     }
-    setSaved(new Date());
-    setError(null);
-    return true;
-  }
+  }, [readOnly, sheet.evaluationId]);
+
+  /* -- AUTOSAVE, which this screen did not have. The team leader's sheet has
+        saved itself since it was built; the supervisor's review — a comment, a
+        training answer and a pay recommendation — saved only when somebody
+        pressed Save, so closing the tab lost it. §13.6: never lose a
+        half-filled form. -- */
+  React.useEffect(() => {
+    if (!dirty || readOnly) return;
+    const timer = setTimeout(() => void persist(), 1200);
+    return () => clearTimeout(timer);
+  }, [dirty, input, readOnly, persist]);
+
+  /* `visibilitychange` as well as unload: iOS Safari does not reliably fire
+     unload when an app is backgrounded, which is exactly when a phone user
+     leaves a form (P12-11). */
+  React.useEffect(() => {
+    if (!dirty || readOnly) return;
+    const flush = () => void persist();
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [dirty, readOnly, persist]);
 
   async function send() {
     if (readOnly) return;
     setBusy(true);
     setError(null);
+    // A draft save still on the wire finishes first, so the two cannot land
+    // out of order.
+    if (inFlight.current) await inFlight.current;
     const result = await submitWorkerReview(sheet.evaluationId, input);
     setBusy(false);
     if (!result.ok) {
@@ -88,6 +148,8 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
       setError(result.error.message);
       return;
     }
+    sentRef.current = true;
+    setError(null);
     setSent(true);
     router.refresh();
   }
@@ -106,6 +168,23 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
           ? "You have recommended a new salary but no percentage. HR has nothing to price without one."
           : null;
 
+  /* -- The same tracker HR and management see, so all four people are looking
+        at one picture of one appraisal. The status is taken as PENDING_REVIEW
+        the moment the send returns, because the props only catch up when the
+        refresh lands — and the tracker must not show the step just finished as
+        still waiting. -- */
+  const progress = {
+    status: sent && sheet.status === "PENDING_SUPERVISOR" ? "PENDING_REVIEW" : sheet.status,
+    teamLeader: sheet.ratedBy,
+    reviewer: "Supervisor",
+    combined: false,
+    ratedAt: sheet.ratedAt,
+    reviewedAt: sheet.reviewedAt ?? (sent ? new Date().toISOString() : null),
+    sentUpAt: null,
+    approvedAt: null,
+  };
+  const viewer = { reviewer: true, teamLeader: sheet.ratedByYou };
+
   if (sent || sheet.isSent) {
     return (
       <div className="space-y-6">
@@ -115,13 +194,14 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
           <div>
             <p className="font-sans text-body-lg text-ink">Sent to HR</p>
             <p className="mt-1 font-sans text-body-sm text-ink-muted">
-              {sheet.workerName}&rsquo;s appraisal is with HR now. They price the increment and
-              management approves it.
+              {sheet.workerName}&rsquo;s appraisal is with HR now. They set the salary and send it
+              to management for approval. Nothing more is needed from you.
             </p>
           </div>
         </div>
-        <Button variant="secondary" className="min-h-11" onClick={() => router.push("/worker-team")}>
-          Back to your team
+        <WorkerProgress input={progress} viewer={viewer} />
+        <Button className="min-h-11" onClick={() => router.push("/worker-team")}>
+          Back to Production Team
         </Button>
       </div>
     );
@@ -152,11 +232,12 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
         </dl>
       </div>
 
+      <WorkerProgress input={progress} viewer={viewer} />
+
       {/* ---------- The team leader's ticks, read-only ----------
             The supervisor does not re-rate: they read what the team leader
-            recorded and decide what follows from it. Drawn with the shared
-            `TickScale` in read-only mode rather than a second renderer, so a
-            tick looks the same wherever it is shown (P9-1). */}
+            recorded and decide what follows from it. Drawn as the shared
+            `TickTable` HR reads, so a rating looks the same on both screens. */}
       <div className="space-y-4">
         <div>
           <h2 className="font-sans text-body-lg text-ink">
@@ -171,29 +252,15 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
           </p>
         </div>
 
-        {sheet.rows.map((row) => (
-          <div key={row.questionId} className="card-surface space-y-3 p-4 sm:p-5">
-            <div>
-              <p className="font-sans text-body-lg text-ink">{row.text}</p>
-              {row.helpText ? (
-                <p className="hidden font-sans text-body-sm text-ink-muted sm:block">
-                  {row.helpText}
-                </p>
-              ) : null}
-            </div>
-            {row.tick ? (
-              <TickScale
-                value={row.tick}
-                tier="lead"
-                readOnly
-                label={row.text}
-                name={row.questionId}
-              />
-            ) : (
-              <p className="font-sans text-body-sm text-ink-muted">Not answered.</p>
-            )}
-          </div>
-        ))}
+        {/* -- ONE TABLE, NOT EIGHT CARDS. Each rating was a card redrawing the
+              whole three-cell scale in read-only mode — about two screenfuls of
+              a phone to read eight words, all before the part the supervisor
+              actually fills in. The same shared table HR reads, so a rating
+              looks the same on both screens. -- */}
+        <TickTable
+          heading={sheet.ratedByYou ? "You ticked" : `${sheet.ratedBy ?? "Team leader"} ticked`}
+          rows={sheet.rows}
+        />
       </div>
 
       {/* -- What the team leader wrote, if anything. Read-only, and above the
@@ -403,18 +470,18 @@ export function WorkerReviewForm({ sheet }: { sheet: WorkerReviewSheet }) {
               </p>
             ) : saved ? (
               <p className="order-last font-sans text-body-sm text-ink-muted sm:order-first sm:mr-auto">
-                Saved {saved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                Saved {saved.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata" })}
               </p>
             ) : null}
 
             <Button
               variant="secondary"
               className="min-h-11"
-              disabled={busy || !dirty}
+              disabled={busy || saving || !dirty}
               onClick={() => void persist()}
             >
-              {busy ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden /> : null}
-              Save
+              {saving ? <Loader2 className="mr-1.5 size-4 animate-spin" aria-hidden /> : null}
+              {saving ? "Saving…" : dirty ? "Save" : "Saved"}
             </Button>
             <Button className="min-h-11" disabled={busy || blocker !== null} onClick={() => void send()}>
               {busy ? (
