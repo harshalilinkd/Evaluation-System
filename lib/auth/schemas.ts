@@ -163,6 +163,41 @@ export const ACCESS_LEVELS: ReadonlyArray<{
 /** The set the database will actually accept for `app_role`. */
 const ROLE_VALUES = new Set<string>(ACCESS_LEVELS.map((level) => level.value));
 
+/**
+ * A salary needs the date it starts from.
+ *
+ * A joining salary with no joining date is half a record: the figure lands, but
+ * `salary_effective_from` is null — so the next CORRECTION overwrites today's
+ * pay unconditionally (P19-9) — and there is no date to count the first
+ * increment from, so nobody is ever reminded about it. Reported as "I added a
+ * salary but not the joining date and it saved without any alert".
+ *
+ * ONE RULE, called by the dialog before it submits and by `createUser` after
+ * it parses, in the same words, so the form can never accept what the server
+ * then refuses (P13-6). The browser half exists so the refusal arrives beside
+ * the field with everything else still typed; the server half is the guard
+ * (§9). Keyed by the field the fix belongs in.
+ */
+export function salaryDateProblems(input: {
+  joiningSalary: number | null | undefined;
+  dateOfJoining: string | null | undefined;
+  incrementAmount: number | null | undefined;
+  lastIncrementDate: string | null | undefined;
+}): Record<string, string> {
+  const problems: Record<string, string> = {};
+  const has = (v: unknown) => v !== null && v !== undefined && String(v).trim() !== "";
+
+  if (has(input.joiningSalary) && !has(input.dateOfJoining)) {
+    problems.date_of_joining =
+      "Add their date of joining — the joining salary is counted from that date.";
+  }
+  if (has(input.incrementAmount) && !has(input.lastIncrementDate)) {
+    problems.last_increment_date =
+      "Add the date of that increment — an amount cannot be placed without it.";
+  }
+  return problems;
+}
+
 export const createUserSchema = z.object({
   full_name: z.string().trim().min(2, "Enter their full name").max(120),
   email: emailSchema,

@@ -14,6 +14,7 @@ import {
   emailSchema,
   MIN_PASSWORD_LENGTH,
   newPasswordSchema,
+  salaryDateProblems,
   type AppRole,
   type CreateUserInput,
 } from "@/lib/auth/schemas";
@@ -143,6 +144,22 @@ export async function createUser(
     employment_type: String(formData.get("employment_type") ?? "PERMANENT"),
     last_increment_date: formData.get("last_increment_date") ?? "",
     increment_frequency_months: formData.get("increment_frequency_months") ?? 12,
+    /* -- THE SALARY, WHICH THIS ACTION NEVER READ. The dialog has posted
+          `joining_ctc` and `last_increment_amount` since the day it gained a
+          Compensation section, and this list — built field by field — had no
+          line for either. So every salary typed into "Add someone" was
+          dropped before validation even ran, the account saved without a
+          word, and the audit row said `salary_recorded: false` over a figure
+          HR had typed. Reported as "the system accepted it without any alert
+          but the salary did not get saved".
+
+          It survived because nothing fails: both fields are optional, so their
+          absence is a valid form. The CSV import reads them itself, which is
+          why every imported person has a salary and every hand-added one did
+          not. The dialog now posts the ANNUAL figure (its box shows monthly);
+          the suite checks that every field any dialog posts is read here. -- */
+    joining_ctc: formData.get("joining_ctc") ?? "",
+    last_increment_amount: formData.get("last_increment_amount") ?? "",
   });
 
   if (!parsed.success) {
@@ -152,6 +169,18 @@ export async function createUser(
       fieldErrors[key] ??= issue.message;
     }
     return { error: "Check the highlighted fields.", fieldErrors };
+  }
+
+  /* A salary needs the date it starts from — the same rule the dialog checks
+     before it submits, so this only fires for a caller that skipped it. */
+  const dateProblems = salaryDateProblems({
+    joiningSalary: parsed.data.joining_ctc,
+    dateOfJoining: parsed.data.date_of_joining,
+    incrementAmount: parsed.data.last_increment_amount,
+    lastIncrementDate: parsed.data.last_increment_date,
+  });
+  if (Object.keys(dateProblems).length > 0) {
+    return { error: "Check the highlighted fields.", fieldErrors: dateProblems };
   }
 
   /* -- The one refusal that CAN apply on a create: naming the same person as

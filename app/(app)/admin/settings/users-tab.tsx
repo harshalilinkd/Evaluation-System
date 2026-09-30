@@ -29,6 +29,7 @@ import { DateCell, MoneyCell, NumberCell, SelectCell, TextCell } from "@/compone
 import { ACCESS_LEVELS,
   defaultPasswordFor,
   MIN_PASSWORD_LENGTH,
+  salaryDateProblems,
 } from "@/lib/auth/schemas";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,7 +67,7 @@ import { DIALOG_PAD, SHEET_ON_MOBILE } from "@/components/appraise/sheet-dialog"
 // salary here now goes through moneyMonthly, so no cell can render an annual
 // figure without the compiler noticing. Same device F20-2 used.
 import { formatDate } from "@/lib/utils/date";
-import { moneyMonthly } from "@/components/appraise/money-input";
+import { MoneyInput, moneyMonthly } from "@/components/appraise/money-input";
 import type { Enums } from "@/types/database";
 import { TRACK_FORM_LABELS, TRACK_LABELS } from "@/lib/forms/labels";
 import { byEmployeeCode } from "@/lib/utils/employee-code";
@@ -729,6 +730,17 @@ function AddPersonDialog({
   const [lastIncrementDate, setLastIncrementDate] = useState("");
   const hasPriorIncrement = lastIncrementDate.trim() !== "";
 
+  /* -- THE TWO SALARY FIGURES, held as the ANNUAL amount the database stores.
+        The boxes show and take the MONTHLY figure, because that is what HR
+        types everywhere else in the app; `MoneyInput` does the conversion in
+        one place. A bare box posted as-is would have stored 15,000 a month as
+        15,000 a year — out by twelve, low enough to look plausible. -- */
+  const [joiningAnnual, setJoiningAnnual] = useState<number | null>(null);
+  const [incrementAnnual, setIncrementAnnual] = useState<number | null>(null);
+  /* Refusals caught before submitting, so they arrive beside the field with
+     everything else still typed. The server re-checks with the same rule. */
+  const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+
   /* -- The name and the password, controlled, so the second can follow the
         first. `passwordTouched` is the whole of the design: it is a DEFAULT
         that stops the moment HR types their own, never a rule that overwrites
@@ -761,6 +773,10 @@ function AddPersonDialog({
     setFullName("");
     setPassword("");
     setPasswordTouched(false);
+    setLastIncrementDate("");
+    setJoiningAnnual(null);
+    setIncrementAnnual(null);
+    setClientErrors({});
   }
 
   // Close on success, so the new row is visible in the table behind. A failure
@@ -819,6 +835,20 @@ function AddPersonDialog({
           <form
             key={createState.createdId ?? "new"}
             action={createAction}
+            /* -- A salary without its date is stopped HERE, before the action
+                  runs, so the message lands beside the date field and nothing
+                  typed is lost. The server applies the same rule regardless. -- */
+            onSubmit={(event) => {
+              const data = new FormData(event.currentTarget);
+              const problems = salaryDateProblems({
+                joiningSalary: joiningAnnual,
+                dateOfJoining: String(data.get("date_of_joining") ?? ""),
+                incrementAmount: hasPriorIncrement ? incrementAnnual : null,
+                lastIncrementDate,
+              });
+              setClientErrors(problems);
+              if (Object.keys(problems).length > 0) event.preventDefault();
+            }}
             className="flex min-h-0 flex-1 flex-col"
           >
           <div className={cn("min-h-0 flex-1 space-y-2 overflow-y-auto py-5", DIALOG_PAD)}>
@@ -1086,8 +1116,13 @@ function AddPersonDialog({
               <Field
                 id="date_of_joining"
                 label="Date of joining"
-                optional
-                hint="Used as the starting date for increment cycle calculations."
+                optional={joiningAnnual === null}
+                hint={
+                  joiningAnnual === null
+                    ? "Used as the starting date for increment cycle calculations."
+                    : "Needed with a joining salary — the salary is counted from this date."
+                }
+                error={clientErrors.date_of_joining || createState.fieldErrors?.date_of_joining}
               >
                 <DateFormField name="date_of_joining" label="Date of joining" />
               </Field>
@@ -1114,7 +1149,14 @@ function AddPersonDialog({
                 label="Last increment"
                 optional
                 hint="Leave blank for a new joiner."
+                error={clientErrors.last_increment_date || createState.fieldErrors?.last_increment_date}
               >
+                {/* -- POSTED, which it never was. The picker is controlled so the
+                      increment field below can appear, and a controlled picker
+                      has no `name` — so the date HR chose here was never sent,
+                      and the server read an empty string. The same hidden-input
+                      pattern `DateFormField` uses. -- */}
+                <input type="hidden" name="last_increment_date" value={lastIncrementDate} />
                 <DatePopoverInput
                   tone="field"
                   label="Last increment"
@@ -1165,11 +1207,23 @@ function AddPersonDialog({
                 label="Joining salary (optional)"
                 error={createState.fieldErrors?.joining_ctc}
               >
-                <Input
+                {/* The box takes the MONTHLY figure; the hidden input posts the
+                    ANNUAL one the database stores. */}
+                <input type="hidden" name="joining_ctc" value={joiningAnnual ?? ""} />
+                <MoneyInput
                   id="joining_ctc"
-                  name="joining_ctc"
-                  inputMode="numeric"
-                  className="min-h-11 tabular"
+                  value={joiningAnnual}
+                  onValueChange={(annual) => {
+                    setJoiningAnnual(annual);
+                    // Clearing the salary clears the date requirement with it.
+                    if (annual === null) {
+                      setClientErrors((current) => {
+                        const next = { ...current };
+                        delete next.date_of_joining;
+                        return next;
+                      });
+                    }
+                  }}
                 />
               </Field>
 
@@ -1185,19 +1239,23 @@ function AddPersonDialog({
                   label="Increment amount (optional)"
                   error={createState.fieldErrors?.last_increment_amount}
                 >
-                  <Input
-                    id="last_increment_amount"
+                  <input
+                    type="hidden"
                     name="last_increment_amount"
-                    inputMode="numeric"
-                    className="min-h-11 tabular"
+                    value={incrementAnnual ?? ""}
+                  />
+                  <MoneyInput
+                    id="last_increment_amount"
+                    value={incrementAnnual}
+                    onValueChange={setIncrementAnnual}
                   />
                 </Field>
               ) : null}
             </div>
             <p className="font-sans text-body-sm text-ink-muted">
               {hasPriorIncrement
-                ? "Figures may be typed with ₹ and commas. The joining salary is the baseline of their pay ledger, and the increment is what was added to it on that date — their current salary is the two together."
-                : "Figures may be typed with ₹ and commas. Their current salary is set to this automatically — with no increment recorded, the two are the same figure."}
+                ? "Type monthly figures — the yearly amount shows underneath each. The joining salary is their starting pay, and the increment is what was added on that date; their current salary is the two together."
+                : "Type the monthly figure — the yearly amount shows underneath. With no increment yet, this is also their current salary."}
             </p>
           </FormSection>
 
