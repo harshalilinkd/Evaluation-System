@@ -354,7 +354,12 @@ async function amendPerson(
         untouched on a re-import, and this obeys that: a record where a real
         salary change has since set the date matches nothing and is left exactly
         as it is. It fills a gap; it never overwrites an answer. -- */
-  const startedOn = newestRise(input) ?? (input.date_of_joining || null);
+  /* -- 0110: A JOINING SALARY COUNTS FROM THE 1ST OF THE NEXT MONTH, at the
+        owner's instruction — and the database owns that rule, so this no
+        longer writes the joining DAY. It leaves the date empty where there
+        is no rise, and `fill_salary_start` fills it; the function only ever
+        fills an EMPTY date, so nothing already recorded is overwritten. -- */
+  const startedOn = newestRise(input);
   if (startedOn) {
     await supabase
       .from("employment_records")
@@ -412,7 +417,8 @@ async function amendPerson(
       const figures = {
         current_ctc: input.joining_ctc ?? null,
         joining_ctc: input.joining_ctc ?? null,
-        salary_effective_from: lastIncrementOn ?? input.date_of_joining ?? null,
+        // 0110: filled by `fill_salary_start` below where there is no rise.
+        salary_effective_from: lastIncrementOn ?? null,
         last_increment_date: lastIncrementOn,
       };
 
@@ -468,6 +474,14 @@ async function amendPerson(
       }
     }
   }
+
+  /* -- 0110: the start date where it is still EMPTY — the 1st of the month
+        after joining, for somebody with a joining salary and no rise. Called
+        for every re-imported person because the function itself decides:
+        it never touches a date that is already there, never dates a record
+        with no joining salary, and leaves anybody with a rise to that rise.
+        Not fatal — their details are saved either way. -- */
+  await supabase.rpc("fill_salary_start", { p_profile_id: profileId });
 
   /* -- Rule 4. Everyone holds EMPLOYEE and it is never removed (P8-3). -- */
   const wanted = new Set<string>(["EMPLOYEE", ...input.roles]);
@@ -776,7 +790,12 @@ async function provisionPerson(
         or as moving today's pay (P19-9), so leaving it null made every imported
         person's first correction unconditionally overwrite their current
         salary. -- */
-  const salaryEffectiveFrom = lastIncrementOn ?? input.date_of_joining ?? null;
+  /* -- 0110: A JOINING SALARY COUNTS FROM THE 1ST OF THE NEXT MONTH, at the
+        owner's instruction — and the database owns that rule, so this no
+        longer writes the joining DAY. It leaves the date empty where there
+        is no rise, and `fill_salary_start` fills it; the function only ever
+        fills an EMPTY date, so nothing already recorded is overwritten. -- */
+  const salaryEffectiveFrom = lastIncrementOn ?? null;
 
   /* -- The employment record, when there is anything to put in it.
         Created here rather than on a second screen: the increment reminder is
@@ -850,6 +869,24 @@ async function provisionPerson(
     }
     // 0109 owns the sum; these rows only carry the amounts it adds up.
     await supabase.rpc("rebuild_salary_chain", { p_profile_id: profileId });
+  }
+
+  /* -- The start date, where the record has a joining salary and nothing has
+        dated it — the 1st of the month after joining (0110). After the pay
+        rows, so a rise on file dates it instead. Reported rather than
+        swallowed: a blank date makes the next correction overwrite today's pay
+        (P19-9), and HR should be told to set it. -- */
+  if (hasEmployment && input.joining_ctc !== undefined) {
+    const { error: startError } = await supabase.rpc("fill_salary_start", {
+      p_profile_id: profileId,
+    });
+    if (startError) {
+      return {
+        ok: false,
+        error:
+          "The account was created, but the date their salary starts from was not set. Open their Employment tab and check it.",
+      };
+    }
   }
 
   const { error: rolesError } = await supabase.from("user_roles").upsert(

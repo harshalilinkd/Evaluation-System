@@ -174,6 +174,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0109_salary_is_joining_plus_increments', 'salary_is_a_sum',
      'a salary is joining + every rise, and the sheet states the RISE',
      'Without it the increment column is read as a NEW SALARY: a 2,000 rise typed into a box labelled Amount becomes a salary OF 2,000, and every screen then reports the last rise as what somebody is paid. Detected on rebuild_salary_chain walking FORWARD from the baseline — the function existing is not enough, because the direction is the whole change.'),
+  ('0110_salary_starts_month_after_joining', 'salary_start_filled',
+     'a joining salary counts from the 1st of the month after joining',
+     'Without it a joining salary saved from the Employment tab, the roster or the salary sheet leaves the start date BLANK, and a blank date makes the next correction overwrite today''s pay rather than fixing the past. Detected on set_joining_salary calling fill_salary_start — the helper existing alone is not enough. It only ever fills an EMPTY date; existing dates are never moved.'),
   ('0088_invite_token_second_reviewer', 'invite_layer_lead2',
      'invite_tokens accepts a LEAD_2 link',
      'Without it, LAUNCHING A CYCLE FOR ANYBODY WITH A SECOND REVIEWER FAILS OUTRIGHT with "An invite link can only be scoped to the SELF or LEAD layer." — 0084 taught issue_invite_token who a LEAD_2 token belongs to and left the guard, the CHECK and the due-date branch knowing two layers.'),
@@ -655,6 +658,10 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'rebuild_salary_chain'
          and pg_get_functiondef(p.oid) like '%v_prev + coalesce(v_row.hike_amount%')
+    when 'salary_start_filled' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'set_joining_salary'
+         and pg_get_functiondef(p.oid) like '%fill_salary_start(p_profile_id)%')
     when 'merge_ok' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'merge_evaluation_answers'

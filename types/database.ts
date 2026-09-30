@@ -1615,6 +1615,19 @@ export type Database = {
         Returns: Json;
       };
       /**
+       * 0110. A joining salary counts from the 1st of the month after joining.
+       * `fill_salary_start` is the only writer and fills an EMPTY date only —
+       * never one already recorded. Returns the date now on the record.
+       */
+      fill_salary_start: {
+        Args: { p_profile_id: string };
+        Returns: string | null;
+      };
+      salary_start_for_joining: {
+        Args: { p_joined: string };
+        Returns: string | null;
+      };
+      /**
        * 0109. A salary is what somebody joined on plus every rise since, and
        * these three are the only way that sum is written.
        *
