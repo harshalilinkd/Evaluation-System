@@ -370,11 +370,22 @@ export function WizardClient({
             ? isIncrementDue(person.nextIncrementOn)
             : true;
 
-      out[person.id] = initial
-        ? { included: existing.has(person.id), leadId: existing.get(person.id) ?? person.reportsTo }
-        : // P10: "Include (checkbox, default on)" and the lead defaults from
-          // profiles.reports_to — the reporting line the company already keeps.
-          { included: startsIncluded, leadId: person.reportsTo };
+      /* -- THE MD IS NEVER A PARTICIPANT, and is never ticked.
+            The people step hides them (`appraisable` filters `isMd`) and its
+            count leaves them out — but this state was built from EVERYBODY, so
+            an MD-only profile started ticked, invisibly. With no manager on
+            their profile they then blocked Continue with "Alisha Pandav has no
+            manager", naming somebody who was not on the screen and could not
+            be unticked there. They would also have been sent in the saved
+            draft and the launch. Forced off here, including on a resumed draft
+            that had them, so every reader of `state` agrees with the screen. -- */
+      out[person.id] = person.isMd
+        ? { included: false, leadId: person.reportsTo }
+        : initial
+          ? { included: existing.has(person.id), leadId: existing.get(person.id) ?? person.reportsTo }
+          : // P10: "Include (checkbox, default on)" and the lead defaults from
+            // profiles.reports_to — the reporting line the company already keeps.
+            { included: startsIncluded, leadId: person.reportsTo };
     }
     return out;
   });
@@ -843,7 +854,12 @@ export function WizardClient({
         const existing = current[person.id];
         out[person.id] = {
           leadId: existing?.leadId ?? person.reportsTo,
-          included: next === "INCREMENT" ? isIncrementDue(person.nextIncrementOn) : true,
+          // Never the MD — see where `state` is first built.
+          included: person.isMd
+            ? false
+            : next === "INCREMENT"
+              ? isIncrementDue(person.nextIncrementOn)
+              : true,
         };
       }
       return out;
