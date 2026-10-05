@@ -120,6 +120,7 @@ export function SalaryBand({
   evaluationId,
   status,
   isHr,
+  isMd,
   index,
   selfOverall,
   leadOverall,
@@ -128,6 +129,8 @@ export function SalaryBand({
   evaluationId: string;
   status: string;
   isHr: boolean;
+  /** Holds the MD role. Somebody holding BOTH approves as the MD. */
+  isMd: boolean;
   /** Counted by the page, so the sequence closes up when a band is absent. */
   index: number;
   /* -- The two stored layer averages. Passed in rather than re-derived here:
@@ -242,7 +245,16 @@ export function SalaryBand({
         evaluationId={evaluationId}
         currentCtc={currentCtc}
         firstName={firstName}
-        isHr={isHr}
+        /* -- READ-ONLY FOR HR *WITHOUT* MD, not for anybody holding HR.
+              The card took `isHr` alone, so somebody holding HR AND MD got
+              HR's read-only view — "This step is the Managing Director's"
+              — and could not approve, although they are the MD and the
+              server (requireMd, 0090's is_md arm) accepts them. Reported as
+              "Harshali has all the MD and HR access and still is not able
+              to approve salary". The same mistake the production review
+              screen had: asking "are you HR?" where the question is "are
+              you the MD?". -- */
+        isHr={isHr && !isMd}
         status={status}
       />
 

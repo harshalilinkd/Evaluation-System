@@ -29,6 +29,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
         view. RLS refuses them the SELF layer regardless. -- */
   const session = await requireRole(["HR_ADMIN", "MD"]);
   const isHr = session.roles.includes("HR_ADMIN");
+  const isMd = session.roles.includes("MD");
 
   /* -- The audience decides whether the salary block EXISTS on the object. It
         is passed explicitly rather than inferred inside the builder, so the one
@@ -199,6 +200,7 @@ export default async function Page({ params }: { params: Promise<{ evaluationId:
               evaluationId={evaluationId}
               status={data.header.status}
               isHr={isHr}
+              isMd={isMd}
               index={bandNo("salary")}
               selfOverall={data.summary.selfOverall}
               leadOverall={data.summary.leadOverall}
