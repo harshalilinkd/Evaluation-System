@@ -174,6 +174,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0109_salary_is_joining_plus_increments', 'salary_is_a_sum',
      'a salary is joining + every rise, and the sheet states the RISE',
      'Without it the increment column is read as a NEW SALARY: a 2,000 rise typed into a box labelled Amount becomes a salary OF 2,000, and every screen then reports the last rise as what somebody is paid. Detected on rebuild_salary_chain walking FORWARD from the baseline — the function existing is not enough, because the direction is the whole change.'),
+  ('0111_worker_close_applies_pay', 'worker_close_pays',
+     'approving a production appraisal applies the approved salary',
+     'Without it management closes the appraisal and the worker is never paid the rise: the approved figure stays on the closed sheet and their current salary and pay history do not move. Detected on close_worker_appraisal calling record_increment.'),
   ('0110_salary_starts_month_after_joining', 'salary_start_filled',
      'a joining salary counts from the 1st of the month after joining',
      'Without it a joining salary saved from the Employment tab, the roster or the salary sheet leaves the start date BLANK, and a blank date makes the next correction overwrite today''s pay rather than fixing the past. Detected on set_joining_salary calling fill_salary_start — the helper existing alone is not enough. It only ever fills an EMPTY date; existing dates are never moved.'),
@@ -658,6 +661,10 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'rebuild_salary_chain'
          and pg_get_functiondef(p.oid) like '%v_prev + coalesce(v_row.hike_amount%')
+    when 'worker_close_pays' then exists (
+      select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname = 'close_worker_appraisal'
+         and pg_get_functiondef(p.oid) like '%record_increment(%')
     when 'salary_start_filled' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'set_joining_salary'

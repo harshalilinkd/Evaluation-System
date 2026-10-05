@@ -1053,12 +1053,34 @@ export async function restoreWorkerRound(cycleId: string): Promise<WorkerResult<
 
   const { data: cycle } = await supabase
     .from("worker_cycles")
-    .select("id, name, deleted_at")
+    .select("id, name, status, deleted_at")
     .eq("id", cycleId)
     .maybeSingle();
 
   if (!cycle) return fail("NOT_FOUND", "That round no longer exists.");
   if (!cycle.deleted_at) return fail("NOT_BINNED", "That round is not in the recycle bin.");
+
+  /* -- AN EMPTY ROUND IS NOT RESTORED, because it would restore into nothing.
+        Production Appraisals lists APPRAISALS, so a launched round with none
+        left renders no row and cannot be reached — it is exactly the stranded
+        state `deleteWorkerAppraisal` bins rounds to avoid. Reported as "I
+        restored a production appraisal but it is not showing": the appraisal
+        had been deleted, which is permanent, and only its empty round came
+        back. Saying so here is the answer they needed at the moment of
+        pressing. A DRAFT round is the exception — it never had anybody and is
+        meant to be launched. -- */
+  if (cycle.status !== "DRAFT") {
+    const { count } = await supabase
+      .from("worker_evaluations")
+      .select("id", { count: "exact", head: true })
+      .eq("cycle_id", cycleId);
+    if ((count ?? 0) === 0) {
+      return fail(
+        "EMPTY_ROUND",
+        "This round has no appraisals left — they were deleted, and deleting an appraisal is permanent, so restoring the round would bring back nothing. Start a new round for that worker instead.",
+      );
+    }
+  }
 
   const { error } = await supabase
     .from("worker_cycles")

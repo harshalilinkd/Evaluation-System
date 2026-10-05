@@ -1108,8 +1108,24 @@ export function WorkerBoard({
           {deleting && rows.filter((r) => r.cycleId === deleting.cycleId).length === 1 ? (
             <p className="rounded-control bg-warning-tint px-3 py-2 font-sans text-body-sm text-ink">
               This is the only appraisal in{" "}
-              <span className="font-medium">{deleting.roundName}</span>, so the round goes to
-              Settings › Recycle bin with it. You can restore it from there.
+              <span className="font-medium">{deleting.roundName}</span>, so the empty round goes to
+              Settings › Recycle bin. Restoring the round will <span className="font-medium">not</span>{" "}
+              bring this appraisal back.
+            </p>
+          ) : null}
+
+          {/* -- AN APPROVED ONE IS SAID SEPARATELY. It was deleted after
+                management had approved it, and the round was then restored in
+                the hope of getting it back — the line above used to say "you
+                can restore it from there", which read as the appraisal. A
+                closed appraisal is a signed record; deleting it loses the
+                approval itself. The pay change it made stays on the worker's
+                Employment tab. -- */}
+          {deleting?.status === "CLOSED" ? (
+            <p className="rounded-control bg-critical-tint px-3 py-2 font-sans text-body-sm text-ink">
+              This appraisal is <span className="font-medium">approved and closed</span>. Deleting
+              it removes the signed record for good. Any salary change it made stays on their
+              Employment tab.
             </p>
           ) : null}
 
