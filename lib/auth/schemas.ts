@@ -178,6 +178,11 @@ const ROLE_VALUES = new Set<string>(ACCESS_LEVELS.map((level) => level.value));
  * the field with everything else still typed; the server half is the guard
  * (§9). Keyed by the field the fix belongs in.
  */
+/** One sentence, used by the schema, the edit path and the dialog, so the
+ *  three cannot drift into saying different things about one rule. */
+export const JOINING_DATE_REQUIRED =
+  "Enter their date of joining — their reviews and increments are counted from it";
+
 export function salaryDateProblems(input: {
   joiningSalary: number | null | undefined;
   dateOfJoining: string | null | undefined;
@@ -305,6 +310,13 @@ export const createUserSchema = z.object({
         above: a boolean the importer sets to relax a rule the form always
         meets. -- */
   phone_required: z.boolean().default(true),
+  /* -- A JOINING DATE IS REQUIRED ON THE FORM, at the owner's instruction.
+        Every review and increment date is counted from it (0076): somebody
+        entered without one never appears on Evaluation Due, never reaches an
+        increment, and has nowhere for a joining salary to start (0110). The
+        importer sets this false and NOTES the gap instead, for the reason
+        `phone_required` gives: one bad row imports nothing (P19C-8). -- */
+  joining_required: z.boolean().default(true),
   joining_ctc: money("Joining salary"),
   /* -- NO `current_ctc` (0109). A salary is joining plus every rise, so there
         is nothing here to state — and a field that is accepted and then
@@ -352,6 +364,13 @@ export const createUserSchema = z.object({
         code: z.ZodIssueCode.custom,
         path: ["phone"],
         message: "Enter a mobile number — this is where their form link is sent",
+      });
+    }
+    if (value.joining_required && !value.date_of_joining?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["date_of_joining"],
+        message: JOINING_DATE_REQUIRED,
       });
     }
   });

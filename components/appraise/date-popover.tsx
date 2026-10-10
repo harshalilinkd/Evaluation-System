@@ -72,7 +72,8 @@ function monthGrid(year: number, month: number): Date[] {
 }
 
 const PANEL_WIDTH = 280;
-const PANEL_HEIGHT_ESTIMATE = 320;
+// Measured: the grid, the header and the Clear/Today row come to ~343px.
+const PANEL_HEIGHT_ESTIMATE = 350;
 
 /* -- The years this product's dates can plausibly fall in: a joining date is
       historic (the roster already carries 2021), an increment date runs a few
@@ -127,6 +128,24 @@ export function DatePopoverInput({
 }) {
   const [open, setOpen] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number; openUp: boolean } | null>(null);
+  /* -- WHERE THE PANEL IS DRAWN. Reported from Settings › Users as "the
+        calendar closes when I try to add the joining date".
+
+        A modal dialog (Radix) makes everything OUTSIDE itself unclickable —
+        it sets `pointer-events: none` on the body and traps focus inside the
+        dialog. A panel portalled to the body inherits that, so a click on a
+        day fell straight through it onto the dialog's overlay; the outside-
+        click handler below then saw the overlay and closed the calendar. The
+        month and year selects could not even open, because the focus trap
+        pulled focus back into the dialog the moment they took it.
+
+        So inside a dialog the panel is portalled INTO that dialog, where clicks
+        and focus are allowed. Positioned absolutely against it rather than
+        fixed to the viewport: the dialog is `transform`ed to centre itself,
+        which makes it the containing block for anything positioned inside
+        it, so viewport coordinates would land in the wrong place. Outside a
+        dialog (the data grids) nothing changes. -- */
+  const [host, setHost] = React.useState<HTMLElement | null>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
   const panelRef = React.useRef<HTMLDivElement>(null);
 
@@ -137,7 +156,35 @@ export function DatePopoverInput({
 
   function openPopover() {
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) {
+    const dialog = triggerRef.current?.closest<HTMLElement>('[role="dialog"]') ?? null;
+    if (rect && dialog) {
+      // Coordinates inside the dialog's own box, including how far it has
+      // been scrolled — an absolutely positioned child scrolls with it.
+      const box = dialog.getBoundingClientRect();
+      const originTop = box.top + dialog.clientTop;
+      const originLeft = box.left + dialog.clientLeft;
+      const visibleBottom = originTop + dialog.clientHeight;
+      /* -- The dialog CLIPS what overflows it (it scrolls), so the panel has
+            to fit inside its visible box or the lower weeks are cut off and
+            unreachable. Below the field if it fits, above if that fits, and
+            otherwise shifted up until it does — covering the field briefly is
+            better than a calendar with half its days missing. -- */
+      const need = PANEL_HEIGHT_ESTIMATE + 8;
+      const roomBelow = visibleBottom - rect.bottom;
+      const roomAbove = rect.top - originTop;
+      const top =
+        roomBelow >= need
+          ? rect.bottom + 4
+          : roomAbove >= need
+            ? rect.top - 4 - PANEL_HEIGHT_ESTIMATE
+            : Math.max(originTop + 8, visibleBottom - need);
+      const left = Math.min(rect.left - originLeft, dialog.clientWidth - PANEL_WIDTH - 8);
+      setCoords({
+        top: top - originTop + dialog.scrollTop,
+        left: Math.max(8, left) + dialog.scrollLeft,
+        openUp: false,
+      });
+    } else if (rect) {
       const openUp =
         rect.bottom + PANEL_HEIGHT_ESTIMATE > window.innerHeight && rect.top > PANEL_HEIGHT_ESTIMATE;
       // Kept clear of the right edge on a narrow phone, same reasoning every
@@ -145,6 +192,7 @@ export function DatePopoverInput({
       const left = Math.min(rect.left, window.innerWidth - PANEL_WIDTH - 8);
       setCoords({ top: openUp ? rect.top - 4 : rect.bottom + 4, left: Math.max(8, left), openUp });
     }
+    setHost(dialog);
     const base = selected ?? today;
     setViewYear(base.getFullYear());
     setViewMonth(base.getMonth());
@@ -237,7 +285,7 @@ export function DatePopoverInput({
               role="dialog"
               aria-label={`Choose a date — ${label}`}
               style={{
-                position: "fixed",
+                position: host ? "absolute" : "fixed",
                 top: coords.top,
                 left: coords.left,
                 transform: coords.openUp ? "translateY(-100%)" : undefined,
@@ -358,7 +406,7 @@ export function DatePopoverInput({
                 </button>
               </div>
             </div>,
-            document.body,
+            host ?? document.body,
           )
         : null}
     </>

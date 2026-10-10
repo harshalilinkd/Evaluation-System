@@ -28,6 +28,7 @@ import { bulkUpdatePeople } from "@/lib/employment/bulk";
 import { DateCell, MoneyCell, NumberCell, SelectCell, TextCell } from "@/components/appraise/editable-cell";
 import { ACCESS_LEVELS,
   defaultPasswordFor,
+  JOINING_DATE_REQUIRED,
   MIN_PASSWORD_LENGTH,
   salaryDateProblems,
 } from "@/lib/auth/schemas";
@@ -846,6 +847,11 @@ function AddPersonDialog({
                 incrementAmount: hasPriorIncrement ? incrementAnnual : null,
                 lastIncrementDate,
               });
+              // Required for everybody (the schema says why). Checked here so the
+              // message lands beside the field with everything else still typed.
+              if (!String(data.get("date_of_joining") ?? "").trim()) {
+                problems.date_of_joining = JOINING_DATE_REQUIRED;
+              }
               setClientErrors(problems);
               if (Object.keys(problems).length > 0) event.preventDefault();
             }}
@@ -1116,12 +1122,7 @@ function AddPersonDialog({
               <Field
                 id="date_of_joining"
                 label="Date of joining"
-                optional={joiningAnnual === null}
-                hint={
-                  joiningAnnual === null
-                    ? "Used as the starting date for increment cycle calculations."
-                    : "Needed with a joining salary — the salary is counted from this date."
-                }
+                hint="Required. Their reviews, increments and joining salary are all counted from this date."
                 error={clientErrors.date_of_joining || createState.fieldErrors?.date_of_joining}
               >
                 <DateFormField name="date_of_joining" label="Date of joining" />
@@ -1664,8 +1665,8 @@ function EditPersonDialog({
               <Field
                 id="e_doj"
                 label="Date of joining"
-                optional
-                hint="Used as the starting date for increment cycle calculations."
+                hint="Required. Their reviews, increments and joining salary are all counted from this date."
+                error={state.fieldErrors?.date_of_joining}
               >
                 <DateFormField
                   name="date_of_joining"

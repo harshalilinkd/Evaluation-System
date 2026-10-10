@@ -12,6 +12,7 @@ import {
   createUserSchema,
   defaultPasswordFor,
   emailSchema,
+  JOINING_DATE_REQUIRED,
   MIN_PASSWORD_LENGTH,
   newPasswordSchema,
   salaryDateProblems,
@@ -1070,6 +1071,16 @@ export async function updatePerson(
 
   // §10 wants E.164 with +91 as the default, and the normaliser says WHAT is
   // wrong rather than returning null (P11-12).
+  /* -- The joining date, required on this path exactly as on create. Without
+        it the create rule is cosmetic: a date could be entered and then
+        cleared on the very next screen. Same sentence, from one constant. -- */
+  if (!String(formData.get("date_of_joining") ?? "").trim()) {
+    return {
+      error: "Check the highlighted fields.",
+      fieldErrors: { date_of_joining: JOINING_DATE_REQUIRED },
+    };
+  }
+
   let phoneE164: string | null = null;
   const phone = String(formData.get("phone") ?? "").trim();
   if (!phone && track === "STAFF") {
@@ -2378,6 +2389,8 @@ export async function importUsers(
       email_supplied: emailText !== "",
       // A blank number NOTES rather than refuses here — see the schema.
       phone_required: false,
+      // A blank joining date NOTES rather than refuses here, for the same reason.
+      joining_required: false,
       password,
       track,
       department_id: departmentId ?? "",
@@ -2430,6 +2443,9 @@ export async function importUsers(
       leadMissing ? `no manager — nobody has ${record.reports_to}` : null,
       coMissing ? `no second reviewer — nobody has ${record.second_reviewer}` : null,
       noMobile ? "no mobile number — their form link can only go by email" : null,
+      !parsed.data.date_of_joining?.trim()
+        ? "no joining date — they will not appear on the review schedule until one is added"
+        : null,
     ].filter(Boolean);
 
     prepared.push({
