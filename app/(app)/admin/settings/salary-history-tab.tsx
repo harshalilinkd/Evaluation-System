@@ -47,7 +47,10 @@ import { byEmployeeCode } from "@/lib/utils/employee-code";
 import { formatDate, formatInr } from "@/lib/utils/date";
 import { cn } from "@/lib/utils";
 
-type SlotDraft = { effectiveFrom?: string; amount?: number };
+/* -- `amount: null` means the box was CLEARED, which is different from
+      `undefined` (never touched). Clearing both the date and the amount of an
+      increment already on record is how it is removed. -- */
+type SlotDraft = { effectiveFrom?: string; amount?: number | null };
 type PersonDraft = { dateOfJoining?: string; joiningCtc?: number };
 
 /**
@@ -242,8 +245,8 @@ function IncrementAmountCell({ row, column }: CellContext<HistoryGridRow, unknow
   const draft = slotDrafts.get(slotKey(p.profileId, n));
   return editing ? (
     <MoneyCell
-      annual={draft?.amount ?? existing?.amount ?? null}
-      onChangeAnnual={(v) => setSlotField(p.profileId, n, "amount", v ?? undefined)}
+      annual={draft?.amount !== undefined ? draft.amount : (existing?.amount ?? null)}
+      onChangeAnnual={(v) => setSlotField(p.profileId, n, "amount", v)}
       label={`Increment ${n} amount for ${p.name}`}
       dirty={draft?.amount !== undefined}
     />
@@ -398,14 +401,48 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
         const draft = slotDrafts.get(slotKey(row.profileId, index));
         if (!draft) continue;
         const hasDate = Boolean(draft.effectiveFrom);
-        const hasAmount = draft.amount !== undefined;
+        const hasAmount = draft.amount != null;
         if (hasDate !== hasAmount) {
           problems.push(`Increment ${index} for ${row.name} needs both a date and an amount.`);
         }
       }
+      /* -- An increment ALREADY ON RECORD with only one of its two boxes
+            cleared is neither a correction nor a removal. Said plainly rather
+            than guessed at. -- */
+      row.increments.forEach((_, i) => {
+        const draft = slotDrafts.get(slotKey(row.profileId, i + 1));
+        if (!draft) return;
+        const dateCleared = draft.effectiveFrom !== undefined && draft.effectiveFrom.trim() === "";
+        const amountCleared = draft.amount === null;
+        if (dateCleared !== amountCleared) {
+          problems.push(
+            `Increment ${i + 1} for ${row.name}: to remove it, clear both its date and its amount. To correct it, fill both in.`,
+          );
+        }
+      });
     }
     return problems;
   }, [rows, slotDrafts, maxIncrements]);
+
+  /* -- What Save will REMOVE, listed before it is pressed. A removal changes
+        somebody's current salary, so it is never a side effect nobody saw. -- */
+  const removals = React.useMemo(() => {
+    const list: Array<{ profileId: string; index: number; name: string }> = [];
+    for (const row of rows) {
+      row.increments.forEach((_, i) => {
+        const draft = slotDrafts.get(slotKey(row.profileId, i + 1));
+        if (
+          draft &&
+          draft.effectiveFrom !== undefined &&
+          draft.effectiveFrom.trim() === "" &&
+          draft.amount === null
+        ) {
+          list.push({ profileId: row.profileId, index: i + 1, name: row.name });
+        }
+      });
+    }
+    return list;
+  }, [rows, slotDrafts]);
 
   function leaveEditMode() {
     setEditing(false);
@@ -414,22 +451,29 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
     setSlotDrafts(new Map());
   }
 
-  async function save() {
-    if (incomplete.length > 0) return;
+  /** True when everything saved, so the details pop-up knows to close. */
+  async function save(): Promise<boolean> {
+    if (incomplete.length > 0) return false;
 
     const patches = rows
       .map((row) => {
         const person = personDrafts.get(row.profileId);
-        const slots: Array<{ index: number; effectiveFrom: string; amount: number }> = [];
+        const slots: Array<
+          { index: number; effectiveFrom: string; amount: number } | { index: number; remove: true }
+        > = [];
 
         for (let index = 1; index <= maxIncrements; index += 1) {
           const draft = slotDrafts.get(slotKey(row.profileId, index));
           if (!draft) continue;
           const existing = row.increments[index - 1];
-          const effectiveFrom = draft.effectiveFrom ?? existing?.effectiveFrom;
-          const amount = draft.amount ?? existing?.amount ?? undefined;
-          if (effectiveFrom && amount !== undefined && amount !== null)
-            slots.push({ index, effectiveFrom, amount });
+          if (removals.some((r) => r.profileId === row.profileId && r.index === index)) {
+            slots.push({ index, remove: true });
+            continue;
+          }
+          const effectiveFrom =
+            draft.effectiveFrom !== undefined ? draft.effectiveFrom : existing?.effectiveFrom;
+          const amount = draft.amount !== undefined ? draft.amount : (existing?.amount ?? null);
+          if (effectiveFrom && amount !== null) slots.push({ index, effectiveFrom, amount });
         }
 
         if (!person && slots.length === 0) return null;
@@ -442,7 +486,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
 
-    if (patches.length === 0) return;
+    if (patches.length === 0) return false;
 
     setSaving(true);
     setResult(null);
@@ -451,7 +495,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
 
     if (!outcome.ok) {
       setResult({ tone: "error", text: outcome.error.message });
-      return;
+      return false;
     }
 
     const failed = outcome.data.rows.filter((r) => !r.ok);
@@ -461,6 +505,9 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
     }
     if (outcome.data.added > 0) {
       parts.push(`${outcome.data.added} new increment${outcome.data.added === 1 ? "" : "s"} added`);
+    }
+    if (outcome.data.removed > 0) {
+      parts.push(`${outcome.data.removed} increment${outcome.data.removed === 1 ? "" : "s"} removed`);
     }
     setResult({
       tone: failed.length > 0 ? "error" : "ok",
@@ -472,6 +519,7 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
             }`,
     });
     if (failed.length === 0) leaveEditMode();
+    return failed.length === 0;
   }
 
   const editingValue = React.useMemo<GridEditing>(
@@ -665,8 +713,20 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
           <span className="font-medium">Change a number that is already there</span> to fix a typo —
           the same entry is corrected, nothing new is added.{" "}
           <span className="font-medium">Type into an empty Increment column</span> to record a real
-          new rise. Figures are typed and shown per month; the exact yearly figure is stored
-          automatically.
+          new rise. <span className="font-medium">Clear both the date and the amount</span> of an
+          increment to remove it. Figures are typed and shown per month; the exact yearly figure is
+          stored automatically.
+        </p>
+      ) : null}
+
+      {removals.length > 0 && incomplete.length === 0 ? (
+        <p className="flex items-start gap-2 rounded-control border border-warning/40 bg-warning-tint px-4 py-3 font-sans text-body-sm text-ink">
+          <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+          <span>
+            Saving will <span className="font-medium">remove</span>{" "}
+            {removals.map((r) => `Increment ${r.index} for ${r.name}`).join(", ")}. Their current
+            salary is worked out again without it.
+          </span>
         </p>
       ) : null}
 
@@ -708,20 +768,77 @@ export function SalaryHistoryTab({ rows }: { rows: HistoryGridRow[] }) {
               editing them belongs there rather than as a second pencil column
               competing with the row itself. `close` dismisses the dialog: it
               would otherwise sit over the row it had just opened for editing. -- */
-        rowActions={(person, close) => (
-          <Button
-            variant="outline"
-            className="min-h-11"
-            onClick={() => {
-              setEditing(false);
-              setRowEditing(person.profileId);
-              close();
-            }}
-          >
-            <Pencil aria-hidden className="size-4" />
-            Edit this row
-          </Button>
-        )}
+        rowActions={(person, close) => {
+          /* -- WHILE THIS ROW IS BEING EDITED the pop-up's boxes are live
+                inputs, so the pop-up has to carry Save and Cancel itself.
+                Reported as "after editing, save option not given": the only
+                Save was in the toolbar BEHIND the pop-up, and nothing in it
+                said so. The warnings that block Save are repeated here for
+                the same reason — the page's own copy of them is covered. -- */
+          if (editing || rowEditing === person.profileId) {
+            const mine = changedProfiles.has(person.profileId);
+            const blocker = incomplete.find((line) => line.includes(person.name));
+            const removing = removals.filter((r) => r.profileId === person.profileId);
+            return (
+              <div className="flex w-full flex-col gap-3">
+                {blocker ? (
+                  <p className="flex items-start gap-2 rounded-control border border-warning/40 bg-warning-tint px-3 py-2 text-body-sm text-ink">
+                    <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+                    {blocker}
+                  </p>
+                ) : removing.length > 0 ? (
+                  <p className="flex items-start gap-2 rounded-control border border-warning/40 bg-warning-tint px-3 py-2 text-body-sm text-ink">
+                    <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-warning" />
+                    Saving will remove {removing.map((r) => `Increment ${r.index}`).join(", ")}. Their
+                    current salary is worked out again without it.
+                  </p>
+                ) : null}
+                {result?.tone === "error" ? (
+                  <p role="alert" className="rounded-control border border-critical/40 bg-critical-tint px-3 py-2 text-body-sm text-critical">
+                    {result.text}
+                  </p>
+                ) : null}
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    variant="ghost"
+                    className="min-h-11"
+                    disabled={saving}
+                    onClick={() => {
+                      leaveEditMode();
+                      close();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="min-h-11"
+                    disabled={saving || !mine || incomplete.length > 0}
+                    onClick={async () => {
+                      if (await save()) close();
+                    }}
+                  >
+                    {saving ? "Saving…" : mine ? "Save" : "Nothing changed yet"}
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <Button
+              variant="outline"
+              className="min-h-11"
+              onClick={() => {
+                setEditing(false);
+                setRowEditing(person.profileId);
+                // Stays open: the boxes above turn into inputs right here, and
+                // Save appears beneath them.
+              }}
+            >
+              <Pencil aria-hidden className="size-4" />
+              Edit this row
+            </Button>
+          );
+        }}
         empty={
           <EmptyState
             title="Nobody matches that"

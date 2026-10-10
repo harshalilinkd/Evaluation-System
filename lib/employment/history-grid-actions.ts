@@ -10,13 +10,24 @@ import { checkRole } from "@/lib/auth/guards";
 import { cycleError, type CycleResult } from "@/lib/cycles/schema";
 import { createClient } from "@/lib/supabase/server";
 
-const slotSchema = z.object({
-  /** 1-based — "Increment 1" is index 1, matching the column header. */
-  index: z.number().int().min(1).max(60),
-  effectiveFrom: z.string().min(1),
-  /** THE RISE (0109). What somebody is paid is derived from it, never typed. */
-  amount: z.number().positive(),
-});
+const slotSchema = z.union([
+  z.object({
+    /** 1-based — "Increment 1" is index 1, matching the column header. */
+    index: z.number().int().min(1).max(60),
+    effectiveFrom: z.string().min(1),
+    /** THE RISE (0109). What somebody is paid is derived from it, never typed. */
+    amount: z.number().positive(),
+  }),
+  /* -- REMOVE an increment that is already on record: the sheet sends this
+        when both its date and its amount have been cleared. It goes through
+        `delete_increment` (0109), which is HR/MD-gated, refuses a rise that
+        came from a closed increment cycle, audits it, and rebuilds the
+        current salary from what is left. -- */
+  z.object({
+    index: z.number().int().min(1).max(60),
+    remove: z.literal(true),
+  }),
+]);
 
 const personPatchSchema = z.object({
   profileId: z.string().uuid(),
@@ -35,6 +46,7 @@ export type HistoryGridSaveResult = {
   updated: number;
   corrected: number;
   added: number;
+  removed: number;
   rows: HistoryGridRowOutcome[];
 };
 
@@ -74,6 +86,7 @@ export async function saveEmploymentHistoryGrid(
   const rows: HistoryGridRowOutcome[] = [];
   let corrected = 0;
   let added = 0;
+  let removed = 0;
 
   for (const patch of parsed.data.patches) {
     const { profileId } = patch;
@@ -121,9 +134,39 @@ export async function saveEmploymentHistoryGrid(
       const existing = existingRows ?? [];
       const sortedSlots = [...patch.slots].sort((a, b) => a.index - b.index);
 
+      /* -- REMOVALS FIRST, by the row id each position held when this save
+            began. Positions are what the sheet showed; resolving them to ids
+            up front means removing Increment 2 cannot shift what "Increment 3"
+            refers to for a correction in the same batch. -- */
+      const removeIds = new Set<string>();
+      for (const slot of sortedSlots) {
+        if (!("remove" in slot)) continue;
+        const at = existing[slot.index - 1];
+        if (!at) {
+          rows.push({ profileId, ok: false, error: `Increment ${slot.index} is not on record, so there is nothing to remove.` });
+          failed = true;
+          break;
+        }
+        removeIds.add(at.id);
+      }
+      for (const id of removeIds) {
+        if (failed) break;
+        const index = existing.findIndex((r) => r.id === id) + 1;
+        const { error } = await supabase.rpc("delete_increment", { p_id: id });
+        if (error) {
+          rows.push({ profileId, ok: false, error: `Increment ${index}: ${error.message}` });
+          failed = true;
+          break;
+        }
+        removed += 1;
+      }
+
       for (const slot of sortedSlots) {
         if (failed) break;
+        if ("remove" in slot) continue;
         const at = existing[slot.index - 1];
+        // A position whose row was just removed takes no correction.
+        if (at && removeIds.has(at.id)) continue;
 
         if (at) {
           /* -- ALREADY THERE — a correction, in place. The row's own reason and
@@ -196,5 +239,5 @@ export async function saveEmploymentHistoryGrid(
   revalidatePath("/admin/people");
   revalidatePath("/admin/increments");
 
-  return { ok: true, data: { updated, corrected, added, rows } };
+  return { ok: true, data: { updated, corrected, added, removed, rows } };
 }

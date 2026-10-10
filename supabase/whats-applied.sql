@@ -174,6 +174,9 @@ with expected(migration, kind, object_name, why_it_matters) as (values
   ('0109_salary_is_joining_plus_increments', 'salary_is_a_sum',
      'a salary is joining + every rise, and the sheet states the RISE',
      'Without it the increment column is read as a NEW SALARY: a 2,000 rise typed into a box labelled Amount becomes a salary OF 2,000, and every screen then reports the last rise as what somebody is paid. Detected on rebuild_salary_chain walking FORWARD from the baseline — the function existing is not enough, because the direction is the whole change.'),
+  ('0113_increment_audit_call', 'increment_audit_ok',
+     'an increment already on record can be corrected or removed',
+     'Without it every correction or removal of an existing increment fails with "function log_admin_action(...) does not exist" and the change is rolled back: the salary sheet can add rises but never fix or remove one. Detected on BOTH functions having no six-argument audit call left - the functions existing is not enough, 0109 created them with the fault.'),
   ('0111_worker_close_applies_pay', 'worker_close_pays',
      'approving a production appraisal applies the approved salary',
      'Without it management closes the appraisal and the worker is never paid the rise: the approved figure stays on the closed sheet and their current salary and pay history do not move. Detected on close_worker_appraisal calling record_increment.'),
@@ -661,6 +664,10 @@ select
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'rebuild_salary_chain'
          and pg_get_functiondef(p.oid) like '%v_prev + coalesce(v_row.hike_amount%')
+    when 'increment_audit_ok' then (
+      select count(*) = 2 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+       where n.nspname = 'public' and p.proname in ('correct_increment', 'delete_increment')
+         and pg_get_functiondef(p.oid) !~ 'log_admin_action\(\s*''[^'']*''\s*,\s*[^,]+,\s*''[^'']*''\s*,\s*null\s*,\s*null\s*,')
     when 'worker_close_pays' then exists (
       select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
        where n.nspname = 'public' and p.proname = 'close_worker_appraisal'
