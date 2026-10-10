@@ -612,32 +612,64 @@ function HrProposal({
               line beneath says which it is, so the label can never claim an
               authorship the number does not have. -- */}
         <h3 className="font-sans text-display-sm text-ink">Manager recommended hike</h3>
-        {managerPct !== null ? (
-          <p className="font-sans text-body-sm text-ink-muted">
-            {pctInput.trim() !== "" && Number(pctInput) !== managerPct
-              ? `Changed from ${data.recommendedIsAverage ? "the managers'" : "the manager's"} ${managerPct}%. The MD sees both.`
-              : `${data.recommendedIsAverage ? "The managers'" : "The manager's"} recommendation of ${managerPct}%.`}
-          </p>
-        ) : null}
-        {/* -- BOTH figures, named, wherever two managers were asked.
-               An average printed on its own is a number nobody can check, and
-               the two it came from are the reason a second opinion was
-               collected at all. Shown even when only one has answered, because
-               "waiting on the Design Coordinator" is exactly what HR needs to
-               know before proposing a figure. -- */}
-        {data.coManagerName !== null ? (
-          <p className="font-sans text-body-sm text-ink-muted">
-            {data.managerHikePct !== null
-              ? `Manager ${data.managerHikePct}%`
-              : "Manager — not answered"}
-            {" · "}
-            {data.coManagerHikePct !== null
-              ? `${coLeadRole(data.coManagerDesignation, data.coManagerName)} ${data.coManagerHikePct}%`
-              : `${coLeadRole(data.coManagerDesignation, data.coManagerName)} — not answered`}
-            {data.recommendedIsAverage
-              ? `. The average is ${data.recommendedHikePct}%.`
-              : ". Waiting on the second reviewer before an average can be taken."}
-          </p>
+        {/* -- THE MANAGERS' FIGURES ARE WHAT THIS CARD IS DECIDED FROM, so they
+               sit in a tinted block at body size rather than as 12px muted
+               captions — reported as easy to miss. `primary`, never a tier hue:
+               pink means "the manager said this" on a rating, and a block of it
+               here would read as a rating (§13.1). The figures carry the weight
+               so the eye lands on the numbers, not on the words around them. -- */}
+        {managerPct !== null || data.coManagerName !== null ? (
+          <div className="space-y-1 rounded-input bg-primary/5 px-4 py-3">
+            {managerPct !== null ? (
+              <p className="font-sans text-body text-ink">
+                {pctInput.trim() !== "" && Number(pctInput) !== managerPct ? (
+                  <>
+                    Changed from {data.recommendedIsAverage ? "the managers'" : "the manager's"}{" "}
+                    <span className="font-semibold tabular">{managerPct}%</span>. The MD sees both.
+                  </>
+                ) : (
+                  <>
+                    {data.recommendedIsAverage ? "The managers'" : "The manager's"} recommendation of{" "}
+                    <span className="font-semibold tabular">{managerPct}%</span>.
+                  </>
+                )}
+              </p>
+            ) : null}
+            {/* -- BOTH figures, named, wherever two managers were asked.
+                   An average printed on its own is a number nobody can check,
+                   and the two it came from are the reason a second opinion was
+                   collected at all. Shown even when only one has answered,
+                   because "waiting on the Design Coordinator" is exactly what
+                   HR needs to know before proposing a figure. -- */}
+            {data.coManagerName !== null ? (
+              <p className="font-sans text-body text-ink">
+                {data.managerHikePct !== null ? (
+                  <>
+                    Manager <span className="font-semibold tabular">{data.managerHikePct}%</span>
+                  </>
+                ) : (
+                  "Manager — not answered"
+                )}
+                {" · "}
+                {data.coManagerHikePct !== null ? (
+                  <>
+                    {coLeadRole(data.coManagerDesignation, data.coManagerName)}{" "}
+                    <span className="font-semibold tabular">{data.coManagerHikePct}%</span>
+                  </>
+                ) : (
+                  `${coLeadRole(data.coManagerDesignation, data.coManagerName)} — not answered`
+                )}
+                {data.recommendedIsAverage ? (
+                  <>
+                    . The average is{" "}
+                    <span className="font-semibold tabular">{data.recommendedHikePct}%</span>.
+                  </>
+                ) : (
+                  ". Waiting on the second reviewer before an average can be taken."
+                )}
+              </p>
+            ) : null}
+          </div>
         ) : null}
 
         {error ? <Notice tone="error">{error}</Notice> : null}
