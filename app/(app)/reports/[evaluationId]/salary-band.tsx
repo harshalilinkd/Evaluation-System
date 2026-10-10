@@ -624,12 +624,23 @@ function HrProposal({
               <p className="font-sans text-body text-ink">
                 {pctInput.trim() !== "" && Number(pctInput) !== managerPct ? (
                   <>
-                    Changed from {data.recommendedIsAverage ? "the managers'" : "the manager's"}{" "}
+                    Changed from{" "}
+                    {data.recommendedIsAverage && coLabel
+                      ? `the manager and ${coLabel} recommendation of`
+                      : "the manager's"}{" "}
                     <span className="font-semibold tabular">{managerPct}%</span>. The MD sees both.
                   </>
                 ) : (
                   <>
-                    {data.recommendedIsAverage ? "The managers'" : "The manager's"} recommendation of{" "}
+                    {/* -- Names the second reviewer by DESIGNATION, at the
+                           owner's instruction ("Coordinator or whatever they
+                           have"); `coLeadRole` falls back to their first name
+                           where no designation is on record, never to "second
+                           reviewer", which is a slot rather than a role. -- */}
+                    {data.recommendedIsAverage && coLabel
+                      ? `The manager and ${coLabel}`
+                      : "The manager's"}{" "}
+                    recommendation of{" "}
                     <span className="font-semibold tabular">{managerPct}%</span>.
                   </>
                 )}
