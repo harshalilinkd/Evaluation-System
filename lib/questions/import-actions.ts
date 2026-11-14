@@ -74,11 +74,30 @@ export async function commitQuestionImport(
   csvText: string,
   fileName: string,
   createDepartments: boolean,
+  /* -- WHICH FORM THIS FILE IS FOR, chosen once for the whole import rather
+        than per row. No new CSV column: the owner has already rejected a
+        per-question "which cycles ask this?" control in the single-question
+        editor, on the grounds that the Evaluation/Increment TAB already
+        answers it (editor-pane.tsx's own comment records the instruction).
+        A `cycle_scope` cell on every row of a spreadsheet would be the same
+        jargon moved into the file. This is the plain-language equivalent —
+        the dialog asks once, in the same three words the builder already
+        uses — and it applies only to a question this import CREATES; one
+        matched to existing text by it keeps whatever scope it already had. -- */
+  cycleScope: "BOTH" | "EVALUATION_ONLY" | "INCREMENT_ONLY",
 ): Promise<CommitResult> {
   // §9 as amended: HR writes configuration, the MD reads it. `ADMIN_ROLES`
   // would hand the MD a write, which AMEND-2 deliberately took back.
   const auth = await checkRole(["HR_ADMIN"]);
   if (!auth.ok) return { ok: false, error: auth.error.message };
+
+  // The RPC is granted to `authenticated` and callable directly with any
+  // payload (0034's own comment makes the point about `existing_id`), so this
+  // is not trusted blindly even though the dialog can only ever send one of
+  // the three values.
+  if (!["BOTH", "EVALUATION_ONLY", "INCREMENT_ONLY"].includes(cycleScope)) {
+    return { ok: false, error: "That is not a form this import can be scoped to." };
+  }
 
   const context = await readContext();
   if (!context) return { ok: false, error: "Could not read the question bank." };
@@ -130,6 +149,7 @@ export async function commitQuestionImport(
       is_required: row.isRequired,
       existing_id: row.existingId ?? null,
       sort_order: next,
+      cycle_scope: cycleScope,
     };
   });
 

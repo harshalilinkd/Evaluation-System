@@ -63,6 +63,13 @@ export function QuestionImportDialog({
   const [fileName, setFileName] = React.useState("");
   const [preview, setPreview] = React.useState<ImportPreview | null>(null);
   const [confirmDepartments, setConfirmDepartments] = React.useState(false);
+  /* -- WHICH FORM THIS FILE IS FOR, asked once for the whole file rather than
+        per row (see the matching comment on `commitQuestionImport`). Defaults
+        to "Both forms", which is exactly what every import did before this —
+        a file nobody has a reason to scope still behaves as it always has. -- */
+  const [cycleScope, setCycleScope] = React.useState<"BOTH" | "EVALUATION_ONLY" | "INCREMENT_ONLY">(
+    "BOTH",
+  );
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [done, setDone] = React.useState<string | null>(null);
@@ -88,7 +95,7 @@ export function QuestionImportDialog({
   async function commit() {
     setBusy(true);
     setError(null);
-    const result = await commitQuestionImport(csvText, fileName, confirmDepartments);
+    const result = await commitQuestionImport(csvText, fileName, confirmDepartments, cycleScope);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -104,6 +111,7 @@ export function QuestionImportDialog({
     setFileName("");
     setPreview(null);
     setConfirmDepartments(false);
+    setCycleScope("BOTH");
     setError(null);
     setDone(null);
   }
@@ -149,6 +157,54 @@ export function QuestionImportDialog({
           {/* ---------- Step 1 ---------- */}
           {!preview && !done ? (
             <div className="space-y-4">
+              {/* -- WHICH FORM THIS FILE IS FOR, asked once, in plain words.
+                     Reported as a department's questions landing on the
+                     Increment form as well as the Evaluation one — every
+                     question an import creates has always been scoped to
+                     "Both" with no way to say otherwise. Not a per-row CSV
+                     column: the owner has already turned down a "which
+                     cycles ask this?" control on the single-question editor,
+                     on the grounds that the tab you are on already answers
+                     it. This is that same answer, asked once for the whole
+                     file rather than once per row. -- */}
+              <div>
+                <p className="text-body-sm font-medium text-ink">Which form is this for?</p>
+                <div
+                  role="radiogroup"
+                  aria-label="Which form this import is for"
+                  className="mt-1.5 inline-flex flex-wrap gap-1 rounded-control bg-surface-mute p-1"
+                >
+                  {(
+                    [
+                      { value: "BOTH" as const, label: "Both forms" },
+                      { value: "EVALUATION_ONLY" as const, label: "Evaluation form only" },
+                      { value: "INCREMENT_ONLY" as const, label: "Increment form only" },
+                    ]
+                  ).map((option) => {
+                    const active = cycleScope === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => setCycleScope(option.value)}
+                        className={cn(
+                          "min-h-9 rounded-sm px-3 py-1.5 text-body-sm font-medium transition-colors",
+                          active ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-body-sm text-ink-muted">
+                  Only a question this import creates. One that already exists keeps the forms it
+                  is already on.
+                </p>
+              </div>
+
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -201,6 +257,15 @@ export function QuestionImportDialog({
           {/* ---------- Step 2 ---------- */}
           {preview && !preview.fatal && !done ? (
             <div className="space-y-3">
+              {/* -- Only said when it is NOT the unremarkable default — a new
+                     question going on both forms needs no confirmation, since
+                     that is what every import has always done. -- */}
+              {cycleScope !== "BOTH" ? (
+                <p className="rounded-control border-l-2 border-l-primary bg-primary/5 px-3 py-2 text-body-sm text-ink">
+                  Any new question here will be added to the{" "}
+                  <strong>{cycleScope === "EVALUATION_ONLY" ? "Evaluation" : "Increment"} form only.</strong>
+                </p>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2 text-body-sm">
                 <span className="rounded-pill bg-success-tint px-2.5 py-1 text-success">
                   {counts?.new ?? 0} new
