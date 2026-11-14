@@ -8,6 +8,7 @@ import { Check, Eye, ListTree, Loader2, PencilLine, TriangleAlert, Undo2 } from 
 
 import { BuilderTabs } from "@/app/(app)/admin/form-builder/builder-tabs";
 import { EditorPane } from "@/app/(app)/admin/form-builder/editor-pane";
+import { ExportQuestionsButton } from "@/app/(app)/admin/form-builder/export-questions-button";
 import { PreviewPane } from "@/app/(app)/admin/form-builder/preview-pane";
 import { StructurePane } from "@/app/(app)/admin/form-builder/structure-pane";
 import type { SectionRow } from "@/app/(app)/admin/form-builder/sections-dialog";
@@ -22,6 +23,10 @@ import { DEPARTMENT_SECTION, SECTION_ORDER } from "@/lib/forms/labels";
 import type { QuestionSection } from "@/lib/forms/types";
 import type { FormDefinition, FormQuestion } from "@/lib/forms/types";
 import { estimateFill } from "@/lib/questions/estimate";
+import {
+  exportEvaluationFormQuestions,
+  exportIncrementFormQuestions,
+} from "@/lib/questions/form-export";
 import { cn } from "@/lib/utils";
 import { formatTime } from "@/lib/utils/date";
 
@@ -207,8 +212,12 @@ export function BuilderClient({
       className="flex h-[calc(100dvh-var(--topbar,64px))] flex-col gap-3 p-3.5"
     >
       {/* ---------- Form Builder / Question Bank ---------- */}
-      <div className="shrink-0">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <BuilderTabs />
+        <ExportQuestionsButton
+          label={cycleType === "INCREMENT" ? "Download increment questions" : "Download evaluation questions"}
+          action={cycleType === "INCREMENT" ? exportIncrementFormQuestions : exportEvaluationFormQuestions}
+        />
       </div>
 
       {/* ---------- The standing banner ---------- */}
